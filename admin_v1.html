@@ -612,6 +612,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="btn-group">
 <input type="text" id="srcClienti" placeholder="🔍 Cerca..." oninput="renderClienti()" style="padding:6px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem;width:200px">
 <button class="btn btn-ok btn-sm" onclick="apiCall('geocodeAll',{},'POST').then(r=>{toast('Geocodificati '+r.updated+' clienti','ok');refreshData()})">🌍 Geocodifica</button>
+<button class="btn btn-ok btn-sm" onclick="openModal('modalCliente')">+ Nuovo Cliente</button>
 </div>
 </div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
@@ -627,6 +628,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="btn-group">
 <input type="text" id="srcMacch" placeholder="🔍 Cerca..." oninput="renderMacchine()" style="padding:6px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem;width:200px">
 <select id="filtMacchCli" onchange="renderMacchine()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti i clienti</option></select>
+<button class="btn btn-primary btn-sm" onclick="openModal('modalMacchina')">+ Nuova Macchina</button>
 </div>
 </div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
@@ -638,7 +640,9 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <!-- ========== SEC: AUTOMEZZI ========== -->
 <section class="sec" id="secAutomezzi">
 <div class="card">
-<div class="card-head"><h3>🚐 Flotta Automezzi</h3></div>
+<div class="card-head"><h3>🚐 Flotta Automezzi</h3>
+<button class="btn btn-primary btn-sm" onclick="openModal('modalAutomezzo')">+ Nuovo Automezzo</button>
+</div>
 <div class="card-body" id="furgGrid"></div>
 </div>
 </section>
@@ -646,7 +650,9 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <!-- ========== SEC: TECNICI ========== -->
 <section class="sec" id="secTecnici">
 <div class="card">
-<div class="card-head"><h3>👥 Tecnici & Staff</h3></div>
+<div class="card-head"><h3>👥 Tecnici & Staff</h3>
+<button class="btn btn-primary btn-sm" onclick="openModal('modalUtente')">+ Nuovo Utente</button>
+</div>
 <div class="card-body np">
 <table class="tbl"><thead><tr><th>Foto</th><th>Nome</th><th>Ruolo</th><th>Squadra</th><th>Automezzo</th><th>Base</th><th>Telefono</th><th>Email</th><th>Attivo</th><th></th></tr></thead><tbody id="tblTecnici"></tbody></table>
 </div>
@@ -1273,6 +1279,123 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 </div>
 
+<!-- MODAL: Nuovo Utente -->
+<div class="modal-overlay" id="modalUtente">
+<div class="modal modal-lg">
+<div class="modal-head"><h2>👤 Nuovo Utente</h2><button class="close" onclick="closeModal('modalUtente')">✕</button></div>
+<div class="modal-body">
+<div class="field-row">
+<div class="field"><label>Nome</label><input type="text" id="nuNome" placeholder="Marco"></div>
+<div class="field"><label>Cognome</label><input type="text" id="nuCognome" placeholder="Rossi"></div>
+</div>
+<div class="field-row">
+<div class="field"><label>Username</label><input type="text" id="nuUsername" placeholder="marco.rossi"></div>
+<div class="field"><label>Password</label><input type="password" id="nuPassword" placeholder="••••••••"></div>
+</div>
+<div class="field-row">
+<div class="field"><label>Ruolo</label><select id="nuRuolo"><option value="">Seleziona ruolo</option><option value="admin">Admin</option><option value="caposquadra">Caposquadra</option><option value="tecnico">Tecnico</option><option value="magazziniere">Magazziniere</option><option value="commerciale">Commerciale</option></select></div>
+<div class="field"><label>Squadra</label><select id="nuSquadra"><option value="">Seleziona squadra</option></select></div>
+</div>
+<div class="field-row">
+<div class="field"><label>Automezzo</label><select id="nuAutomezzo"><option value="">Nessuno</option></select></div>
+<div class="field"><label>Base</label><input type="text" id="nuBase" placeholder="Sede principale"></div>
+</div>
+<div class="field-row">
+<div class="field"><label>Telefono</label><input type="tel" id="nuTelefono" placeholder="+39 06 1234567"></div>
+<div class="field"><label>Email</label><input type="email" id="nuEmail" placeholder="marco@azienda.it"></div>
+</div>
+</div>
+<div class="modal-foot">
+<button class="btn btn-outline" onclick="closeModal('modalUtente')">Annulla</button>
+<button class="btn btn-primary" onclick="saveUtente()">💾 Salva Utente</button>
+</div>
+</div>
+</div>
+
+<!-- MODAL: Nuovo Cliente -->
+<div class="modal-overlay" id="modalCliente">
+<div class="modal modal-lg">
+<div class="modal-head"><h2>🏢 Nuovo Cliente</h2><button class="close" onclick="closeModal('modalCliente')">✕</button></div>
+<div class="modal-body">
+<div class="field"><label>Nome Cliente</label><input type="text" id="ncNome" placeholder="Azienda ABC"></div>
+<div class="field-row">
+<div class="field"><label>Città</label><input type="text" id="ncCitta" placeholder="Roma"></div>
+<div class="field"><label>Provincia</label><input type="text" id="ncProv" placeholder="RM" maxlength="2"></div>
+<div class="field"><label>CAP</label><input type="text" id="ncCap" placeholder="00100" maxlength="5"></div>
+</div>
+<div class="field"><label>Indirizzo</label><input type="text" id="ncIndirizzo" placeholder="Via Roma 1"></div>
+<div class="field-row">
+<div class="field"><label>Telefono</label><input type="tel" id="ncTelefono" placeholder="+39 06 1234567"></div>
+<div class="field"><label>Email</label><input type="email" id="ncEmail" placeholder="info@azienda.it"></div>
+</div>
+<div class="field-row">
+<div class="field"><label>Contratto</label><input type="text" id="ncContratto" placeholder="NUM_2024_001"></div>
+</div>
+<div class="field"><label>Note</label><textarea id="ncNote" rows="2" placeholder="Informazioni aggiuntive..."></textarea></div>
+</div>
+<div class="modal-foot">
+<button class="btn btn-outline" onclick="closeModal('modalCliente')">Annulla</button>
+<button class="btn btn-primary" onclick="saveCliente()">💾 Salva Cliente</button>
+</div>
+</div>
+</div>
+
+<!-- MODAL: Nuova Macchina -->
+<div class="modal-overlay" id="modalMacchina">
+<div class="modal modal-lg">
+<div class="modal-head"><h2>⚙️ Nuova Macchina</h2><button class="close" onclick="closeModal('modalMacchina')">✕</button></div>
+<div class="modal-body">
+<div class="field"><label>Cliente</label><select id="nmCliente"></select></div>
+<div class="field-row">
+<div class="field"><label>Tipo</label><input type="text" id="nmTipo" placeholder="Robot da mungitura"></div>
+<div class="field"><label>Modello</label><input type="text" id="nmModello" placeholder="Lely A4"></div>
+</div>
+<div class="field-row">
+<div class="field"><label>Numero Seriale</label><input type="text" id="nmSeriale" placeholder="SN123456"></div>
+<div class="field"><label>Anno Installazione</label><input type="number" id="nmAnno" placeholder="2023" min="2000" max="2099"></div>
+</div>
+<div class="field-row">
+<div class="field"><label>Ore di Lavoro</label><input type="number" id="nmOre" placeholder="0" min="0"></div>
+</div>
+<div class="field-row">
+<div class="field"><label>Ultimo Tagliando</label><input type="date" id="nmUltimoTag"></div>
+<div class="field"><label>Prossimo Tagliando</label><input type="date" id="nmProssTag"></div>
+</div>
+<div class="field"><label>Garanzia Fino A</label><input type="date" id="nmGaranzia"></div>
+<div class="field"><label>Note</label><textarea id="nmNote" rows="2" placeholder="Informazioni aggiuntive..."></textarea></div>
+</div>
+<div class="modal-foot">
+<button class="btn btn-outline" onclick="closeModal('modalMacchina')">Annulla</button>
+<button class="btn btn-primary" onclick="saveMacchina()">💾 Salva Macchina</button>
+</div>
+</div>
+</div>
+
+<!-- MODAL: Nuovo Automezzo -->
+<div class="modal-overlay" id="modalAutomezzo">
+<div class="modal modal-lg">
+<div class="modal-head"><h2>🚐 Nuovo Automezzo</h2><button class="close" onclick="closeModal('modalAutomezzo')">✕</button></div>
+<div class="modal-body">
+<div class="field-row">
+<div class="field"><label>Targa</label><input type="text" id="naTarga" placeholder="AB123CD"></div>
+<div class="field"><label>Descrizione</label><input type="text" id="naDesc" placeholder="Furgone Mertz bianco"></div>
+</div>
+<div class="field"><label>Allestimento</label><input type="text" id="naAllestimento" placeholder="Scaffalature + Frigorifero"></div>
+<div class="field"><label>Status</label><select id="naStatus"><option value="">Seleziona stato</option><option value="disponibile">Disponibile</option><option value="in_uso">In Uso</option><option value="in_officina">In Officina</option><option value="dismesso">Dismesso</option></select></div>
+<div class="field-row">
+<div class="field"><label>Prossimo Controllo</label><input type="date" id="naControllo"></div>
+<div class="field"><label>Km Attuali</label><input type="number" id="naKm" placeholder="0" min="0"></div>
+</div>
+<div class="field"><label>Assegnatario (Tecnico)</label><select id="naAssegnatario"><option value="">Nessuno</option></select></div>
+<div class="field"><label>Note</label><textarea id="naNote" rows="2" placeholder="Informazioni aggiuntive..."></textarea></div>
+</div>
+<div class="modal-foot">
+<button class="btn btn-outline" onclick="closeModal('modalAutomezzo')">Annulla</button>
+<button class="btn btn-primary" onclick="saveAutomezzo()">💾 Salva Automezzo</button>
+</div>
+</div>
+</div>
+
 <script>
 // ============ GLOBAL STATE ============
 let DATA={},USER=null,MAP=null,MARKERS=[],AI_PLAN=null;
@@ -1387,6 +1510,7 @@ function populateSelects(){
   const automezziList=(DATA.automezzi||[]).filter(f=>!f.Obsoleto);
   const tipi=(DATA.tipiIntervento||[]).filter(t=>t.Attivo);
   const pris=(DATA.priorita||[]).filter(p=>p.Attivo);
+  const squadreList=(DATA.squadre||[]).filter(s=>!s.Obsoleto);
 
   const fillSel=(id,items,fmt)=>{const s=$(id);if(!s)return;const v=s.value;const first=s.options[0]?.textContent||'';s.innerHTML='<option value="">'+first+'</option>';items.forEach(i=>{const o=document.createElement('option');o.value=i.ID;o.textContent=fmt(i);s.appendChild(o)});if(v)s.value=v};
   const fillMulti=(id,items,fmt)=>{const s=$(id);if(!s)return;s.innerHTML='';items.forEach(i=>{const o=document.createElement('option');o.value=i.ID;o.textContent=fmt(i);s.appendChild(o)})};
@@ -1413,6 +1537,13 @@ function populateSelects(){
   fillSel('mgTecnico',tecs,tecFmt);
   // Installazione
   fillSel('miCliente',clis,cliFmt);fillMulti('miTecnici',tecs,tecFmt);
+  // Nuovo Utente
+  fillSel('nuSquadra',squadreList,s=>s.Nome||s.ID);fillSel('nuAutomezzo',automezziList,f=>f.Targa||f.Descrizione||f.ID);
+  // Nuovo Cliente (no additional selects needed)
+  // Nuova Macchina
+  fillSel('nmCliente',clis,cliFmt);
+  // Nuovo Automezzo
+  fillSel('naAssegnatario',tecs,tecFmt);
   // Filtri
   fillSel('filtPianoTec',tecs,tecFmt);fillSel('calFiltroTec',tecs,tecFmt);fillSel('mapFiltroTec',tecs,tecFmt);fillSel('kpiTecnico',tecs,tecFmt);
   fillSel('filtMacchCli',clis,cliFmt);
@@ -2012,8 +2143,113 @@ function renderConfig(){
     <div class="field"><label>${k}</label><input type="text" class="cfg-input" data-key="${k}" value="${cfg[k]||''}"></div>
   </div>`).join(''):'<p class="empty">Nessuna configurazione trovata</p>';
 }
-function saveConfig(){toast('Configurazione: modifica i valori nel foglio Config di Google Sheets','info')}
+function saveConfig(){
+  const configObj={};
+  document.querySelectorAll('.cfg-input').forEach(input=>{
+    const key=input.getAttribute('data-key');
+    const val=input.value;
+    if(key&&val) configObj[key]=val;
+  });
+  if(Object.keys(configObj).length===0){toast('Nessuna configurazione da salvare','warn');return}
+  apiCall('saveConfig',{config:configObj},'POST')
+    .then(r=>{toast('Configurazione salvata!','ok')})
+    .catch(e=>{toast(e.message,'err')})
+}
 
+// ============ NEW SAVE FUNCTIONS ============
+async function saveUtente(){
+  const data={
+    Nome:$('nuNome').value,
+    Cognome:$('nuCognome').value,
+    Username:$('nuUsername').value,
+    password:$('nuPassword').value,
+    Ruolo:$('nuRuolo').value,
+    SquadraID:$('nuSquadra').value,
+    AutomezzoID:$('nuAutomezzo').value,
+    Base:$('nuBase').value,
+    Telefono:$('nuTelefono').value,
+    Email:$('nuEmail').value,
+    TenantID:(DATA.utenti&&DATA.utenti[0])?DATA.utenti[0].TenantID:''
+  };
+  if(!data.Nome||!data.Cognome||!data.Username){toast('Compila nome, cognome e username','warn');return}
+  if(!data.password){toast('Inserisci una password','warn');return}
+  try{
+    await apiCall('createUtente',{data},'POST');
+    toast('Utente creato!','ok');
+    closeModal('modalUtente');
+    await refreshData();
+    populateSelects();
+  }catch(e){toast(e.message,'err')}
+}
+
+async function saveCliente(){
+  const data={
+    Nome:$('ncNome').value,
+    Citta:$('ncCitta').value,
+    Prov:$('ncProv').value,
+    Indirizzo:$('ncIndirizzo').value,
+    CAP:$('ncCap').value,
+    Telefono:$('ncTelefono').value,
+    Email:$('ncEmail').value,
+    Contratto:$('ncContratto').value,
+    Note:$('ncNote').value,
+    TenantID:(DATA.utenti&&DATA.utenti[0])?DATA.utenti[0].TenantID:''
+  };
+  if(!data.Nome){toast('Inserisci il nome del cliente','warn');return}
+  try{
+    await apiCall('createCliente',{data},'POST');
+    toast('Cliente creato!','ok');
+    closeModal('modalCliente');
+    await refreshData();
+    populateSelects();
+  }catch(e){toast(e.message,'err')}
+}
+
+async function saveMacchina(){
+  const data={
+    ClienteID:$('nmCliente').value,
+    Tipo:$('nmTipo').value,
+    Modello:$('nmModello').value,
+    Seriale:$('nmSeriale').value,
+    AnnoInstallazione:$('nmAnno').value,
+    OreLavoro:$('nmOre').value,
+    UltimoTagliando:$('nmUltimoTag').value,
+    ProssimoTagliando:$('nmProssTag').value,
+    GaranziaFino:$('nmGaranzia').value,
+    Note:$('nmNote').value,
+    TenantID:(DATA.utenti&&DATA.utenti[0])?DATA.utenti[0].TenantID:''
+  };
+  if(!data.ClienteID||!data.Tipo||!data.Modello){toast('Compila cliente, tipo e modello','warn');return}
+  try{
+    await apiCall('createMacchina',{data},'POST');
+    toast('Macchina creata!','ok');
+    closeModal('modalMacchina');
+    await refreshData();
+    populateSelects();
+  }catch(e){toast(e.message,'err')}
+}
+
+async function saveAutomezzo(){
+  const data={
+    Targa:$('naTarga').value,
+    Descrizione:$('naDesc').value,
+    Allestimento:$('naAllestimento').value,
+    Status:$('naStatus').value,
+    ProssimoControllo:$('naControllo').value,
+    AssegnatarioID:$('naAssegnatario').value,
+    KmAttuali:$('naKm').value,
+    Note:$('naNote').value,
+    TenantID:(DATA.utenti&&DATA.utenti[0])?DATA.utenti[0].TenantID:''
+  };
+  if(!data.Targa||!data.Descrizione||!data.Status){toast('Compila targa, descrizione e status','warn');return}
+  try{
+    await apiCall('createAutomezzo',{data},'POST');
+    toast('Automezzo creato!','ok');
+    closeModal('modalAutomezzo');
+    await refreshData();
+    populateSelects();
+  }catch(e){toast(e.message,'err')}
+}
 
 // ============ SAVE FUNCTIONS ============
 async function saveOrdine(){
