@@ -1007,10 +1007,12 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
   <th>Provincia</th>
   <th>Stato</th>
   <th>Titolare</th>
-  <th>Robot</th>
-  <th>Juno</th>
-  <th>Vector</th>
-  <th>Tot. Assets</th>
+  <th title="Lely Astronaut (robot mungitura)">🤖 Astro</th>
+  <th title="Lely Juno (spingi-foraggio)">🔄 Juno</th>
+  <th title="Lely Vector (alimentazione)">🍽️ Vector</th>
+  <th title="Discovery / Collector (pulizia)">🧹 Disc.</th>
+  <th title="Calm / Cosmix / Nautilus / Luna / Shuttle / CRS / LD Reader">📦 Altri</th>
+  <th>Tot.</th>
   <th style="width:50px"></th>
 </tr></thead>
 <tbody id="anagClientiBody"></tbody>
@@ -2374,22 +2376,35 @@ function renderAnagClients(list){
   const stats=$('anagStats');
   if(stats){
     const attivi=list.filter(c=>c.StatoCliente==='Attivo').length;
-    const totRobot=list.reduce((s,c)=>s+(c.QtyAstronaut||0),0);
-    const totJuno=list.reduce((s,c)=>s+(c.QtyJuno||0),0);
-    const totVector=list.reduce((s,c)=>s+(c.QtyVector||0),0);
+    const sum=(f)=>list.reduce((s,c)=>s+(c[f]||0),0);
+    const totAstro=sum('QtyAstronaut');
+    const totJuno=sum('QtyJuno');
+    const totVector=sum('QtyVector');
+    const totDisc=sum('QtyDiscoverySsw')+sum('QtyDiscoveryCollector')+sum('QtyCollectorC2')+sum('QtyDiscoveryBucket');
+    const totCalm=sum('QtyCalm');const totCosmix=sum('QtyCosmix');const totNautilus=sum('QtyNautilus');
+    const totLuna=sum('QtyLuna');const totShuttle=sum('QtyShuttle');const totCrs=sum('QtyCrs');const totLdr=sum('QtyLdReader');
+    const totAltri=totCalm+totCosmix+totNautilus+totLuna+totShuttle+totCrs+totLdr;
     stats.innerHTML=`
       <div class="stat-card"><div class="stat-val">${list.length}</div><div class="stat-lbl">Clienti</div></div>
       <div class="stat-card"><div class="stat-val">${attivi}</div><div class="stat-lbl">Attivi</div></div>
-      <div class="stat-card"><div class="stat-val">${totRobot}</div><div class="stat-lbl">Robot</div></div>
-      <div class="stat-card"><div class="stat-val">${totJuno}</div><div class="stat-lbl">Juno</div></div>
-      <div class="stat-card"><div class="stat-val">${totVector}</div><div class="stat-lbl">Vector</div></div>
+      <div class="stat-card"><div class="stat-val">${totAstro}</div><div class="stat-lbl">🤖 Astronaut</div></div>
+      <div class="stat-card"><div class="stat-val">${totJuno}</div><div class="stat-lbl">🔄 Juno</div></div>
+      <div class="stat-card"><div class="stat-val">${totVector}</div><div class="stat-lbl">🍽️ Vector</div></div>
+      <div class="stat-card"><div class="stat-val">${totDisc}</div><div class="stat-lbl">🧹 Discovery</div></div>
+      <div class="stat-card"><div class="stat-val">${totCalm}</div><div class="stat-lbl">🍼 Calm</div></div>
+      <div class="stat-card"><div class="stat-val">${totCosmix}</div><div class="stat-lbl">⚖️ Cosmix</div></div>
+      <div class="stat-card"><div class="stat-val">${totNautilus}</div><div class="stat-lbl">🐚 Nautilus</div></div>
+      <div class="stat-card"><div class="stat-val">${totAltri}</div><div class="stat-lbl">📦 Altri</div></div>
     `;
   }
   const tb=$('anagClientiBody');
   if(!tb)return;
   if(!list.length){tb.innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--muted)">Nessun cliente. Importa il file XLSX.</td></tr>';return}
   tb.innerHTML=list.map((c,i)=>{
-    const tot=(c.QtyAstronaut||0)+(c.QtyJuno||0)+(c.QtyVector||0)+(c.QtyDiscoveryCollector||0)+(c.QtyCollectorC2||0)+(c.QtyDiscoverySsw||0)+(c.QtyCalm||0)+(c.QtyCosmix||0)+(c.QtyNautilus||0)+(c.QtyLuna||0)+(c.QtyShuttle||0)+(c.QtyCrs||0);
+    const disc=(c.QtyDiscoverySsw||0)+(c.QtyDiscoveryCollector||0)+(c.QtyCollectorC2||0)+(c.QtyDiscoveryBucket||0);
+    const altri=(c.QtyCalm||0)+(c.QtyCosmix||0)+(c.QtyNautilus||0)+(c.QtyLuna||0)+(c.QtyShuttle||0)+(c.QtyCrs||0)+(c.QtyLdReader||0)+(c.QtyConsumabili||0);
+    const tot=(c.QtyAstronaut||0)+(c.QtyJuno||0)+(c.QtyVector||0)+disc+altri;
+    const hi=(v)=>v>0?`<strong>${v}</strong>`:`<span style="color:var(--muted)">0</span>`;
     return `<tr onclick="openAnagDetail('${c.CodiceM3}')" style="cursor:pointer">
       <td>${i+1}</td>
       <td><strong>${c.NomeAccount||'-'}</strong></td>
@@ -2398,9 +2413,11 @@ function renderAnagClients(list){
       <td>${c.ProvinciaFatturazione||''}</td>
       <td><span class="badge ${c.StatoCliente==='Attivo'?'badge-ok':'badge-warn'}">${c.StatoCliente||'-'}</span></td>
       <td>${c.TitolareAccount||''}</td>
-      <td>${c.QtyAstronaut||0}</td>
-      <td>${c.QtyJuno||0}</td>
-      <td>${c.QtyVector||0}</td>
+      <td>${hi(c.QtyAstronaut||0)}</td>
+      <td>${hi(c.QtyJuno||0)}</td>
+      <td>${hi(c.QtyVector||0)}</td>
+      <td>${hi(disc)}</td>
+      <td>${hi(altri)}</td>
       <td><strong>${tot}</strong></td>
       <td><button class="btn btn-xs" onclick="event.stopPropagation();openAnagDetail('${c.CodiceM3}')">👁️</button></td>
     </tr>`;
