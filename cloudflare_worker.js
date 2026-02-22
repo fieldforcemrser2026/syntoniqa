@@ -502,9 +502,13 @@ async function handlePost(action, body, env) {
     }
 
     case 'updateUtente': {
-      const { id, password, userId: _u3, operatoreId: _op3, ...updates } = body;
+      const { id, password, userId: _u3, operatoreId: _op3, tenant_id: _t, ...updates } = body;
       if (password) updates.password_hash = await hashPassword(password);
       updates.updated_at = new Date().toISOString();
+      // Remove null FK fields to avoid FK violations
+      for (const k of Object.keys(updates)) {
+        if (updates[k] === null && (k.endsWith('_id') || k === 'squadra_id' || k === 'automezzo_id')) delete updates[k];
+      }
       await sb(env, `utenti?id=eq.${id}`, 'PATCH', updates);
       await wlog('utente', id, 'updated', body.operatoreId);
       return ok();
@@ -520,8 +524,9 @@ async function handlePost(action, body, env) {
     }
 
     case 'updateCliente': {
-      const { id, userId: _u, operatoreId: _op, ...updates } = body;
+      const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
       updates.updated_at = new Date().toISOString();
+      for (const k of Object.keys(updates)) { if (updates[k] === null && k.endsWith('_id')) delete updates[k]; }
       await sb(env, `clienti?id=eq.${id}`, 'PATCH', updates);
       return ok();
     }
@@ -535,7 +540,8 @@ async function handlePost(action, body, env) {
     }
 
     case 'updateMacchina': {
-      const { id, userId: _u, operatoreId: _op, ...updates } = body;
+      const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
+      for (const k of Object.keys(updates)) { if (updates[k] === null && k.endsWith('_id')) delete updates[k]; }
       await sb(env, `macchine?id=eq.${id}`, 'PATCH', updates);
       return ok();
     }
@@ -549,7 +555,8 @@ async function handlePost(action, body, env) {
     }
 
     case 'updateAutomezzo': {
-      const { id, userId: _u, operatoreId: _op, ...updates } = body;
+      const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
+      for (const k of Object.keys(updates)) { if (updates[k] === null && k.endsWith('_id')) delete updates[k]; }
       await sb(env, `automezzi?id=eq.${id}`, 'PATCH', updates);
       return ok();
     }

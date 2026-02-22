@@ -612,7 +612,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="btn-group">
 <input type="text" id="srcClienti" placeholder="🔍 Cerca..." oninput="renderClienti()" style="padding:6px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem;width:200px">
 <button class="btn btn-ok btn-sm" onclick="apiCall('geocodeAll',{},'POST').then(r=>{toast('Geocodificati '+r.updated+' clienti','ok');refreshData()})">🌍 Geocodifica</button>
-<button class="btn btn-ok btn-sm" onclick="openModal('modalCliente')">+ Nuovo Cliente</button>
+<button class="btn btn-ok btn-sm" onclick="openNewCliente()">+ Nuovo Cliente</button>
 </div>
 </div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
@@ -628,7 +628,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="btn-group">
 <input type="text" id="srcMacch" placeholder="🔍 Cerca..." oninput="renderMacchine()" style="padding:6px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem;width:200px">
 <select id="filtMacchCli" onchange="renderMacchine()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti i clienti</option></select>
-<button class="btn btn-primary btn-sm" onclick="openModal('modalMacchina')">+ Nuova Macchina</button>
+<button class="btn btn-primary btn-sm" onclick="openNewMacchina()">+ Nuova Macchina</button>
 </div>
 </div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
@@ -641,7 +641,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <section class="sec" id="secAutomezzi">
 <div class="card">
 <div class="card-head"><h3>🚐 Flotta Automezzi</h3>
-<button class="btn btn-primary btn-sm" onclick="openModal('modalAutomezzo')">+ Nuovo Automezzo</button>
+<button class="btn btn-primary btn-sm" onclick="openNewAutomezzo()">+ Nuovo Automezzo</button>
 </div>
 <div class="card-body" id="furgGrid"></div>
 </div>
@@ -651,7 +651,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <section class="sec" id="secTecnici">
 <div class="card">
 <div class="card-head"><h3>👥 Tecnici & Staff</h3>
-<button class="btn btn-primary btn-sm" onclick="openModal('modalUtente')">+ Nuovo Utente</button>
+<button class="btn btn-primary btn-sm" onclick="openNewUtente()">+ Nuovo Utente</button>
 </div>
 <div class="card-body np">
 <table class="tbl"><thead><tr><th>Foto</th><th>Nome</th><th>Ruolo</th><th>Squadra</th><th>Automezzo</th><th>Base</th><th>Telefono</th><th>Email</th><th>Attivo</th><th></th></tr></thead><tbody id="tblTecnici"></tbody></table>
@@ -1829,7 +1829,7 @@ function renderClienti(){
     <td>${c.Telefono?`<a href="tel:${c.Telefono}">${c.Telefono}</a>`:'—'}</td>
     <td>${c.Contratto||'—'}</td>
     <td>${c.Latitudine&&c.Longitudine?'<span class="tag tag-ok">📍</span>':'<span class="tag tag-gray">—</span>'}</td>
-    <td><button class="btn btn-ghost btn-xs" onclick="showDetail('cliente','${c.ID}')">👁️</button></td>
+    <td><button class="btn btn-ghost btn-xs" onclick="editCliente('${c.ID}')">✏️</button><button class="btn btn-ghost btn-xs" onclick="showDetail('cliente','${c.ID}')">👁️</button></td>
   </tr>`).join(''):'<tr><td colspan="8" class="empty"><p>Nessun cliente trovato</p></td></tr>';
 }
 
@@ -1850,7 +1850,7 @@ function renderMacchine(){
     <td>${m.OreLavoro||'—'}</td>
     <td>${m.ProssimoTagliando||'—'}</td>
     <td>${gar?'<span class="tag tag-ok">✅ Attiva</span>':'<span class="tag tag-gray">Scaduta</span>'}</td>
-    <td><button class="btn btn-ghost btn-xs" onclick="showDetail('macchina','${m.ID}')">👁️</button></td>
+    <td><button class="btn btn-ghost btn-xs" onclick="editMacchina('${m.ID}')">✏️</button><button class="btn btn-ghost btn-xs" onclick="showDetail('macchina','${m.ID}')">👁️</button></td>
   </tr>`}).join(''):'<tr><td colspan="8" class="empty"><p>Nessuna macchina trovata</p></td></tr>';
 }
 
@@ -1871,6 +1871,7 @@ function renderAutomezzi(){
           <div>👤 Assegnato: <strong>${f.AssegnatarioID?getName(DATA.utenti||[],f.AssegnatarioID):'—'}</strong></div>
           <div>🔧 Prossimo controllo: ${ctrl?`<span class="tag tag-err">⚠️ ${fmtDate(f.ProssimoControllo)}</span>`:`<span>${fmtDate(f.ProssimoControllo)}</span>`}</div>
         </div>
+        <div style="margin-top:10px;text-align:right"><button class="btn btn-outline btn-xs" onclick="editAutomezzo('${f.ID}')">✏️ Modifica</button></div>
       </div>
     </div>`}).join('')+'</div>':'<div class="empty"><div class="ico">🚐</div><p>Nessun automezzo configurato</p></div>';
 }
@@ -1894,7 +1895,7 @@ function renderTecnici(){
     <td>${t.Telefono?`<a href="tel:${t.Telefono}">${t.Telefono}</a>`:'—'}</td>
     <td>${t.Email||'—'}</td>
     <td>${t.Attivo?'<span class="tag tag-ok">Attivo</span>':'<span class="tag tag-gray">Inattivo</span>'}</td>
-    <td><label class="btn btn-outline" style="font-size:.75rem;padding:4px 8px;cursor:pointer">📷<input type="file" accept="image/*" style="display:none" onchange="uploadFotoTec('${t.ID}',this)"></label></td>
+    <td><button class="btn btn-ghost btn-xs" onclick="editUtente('${t.ID}')">✏️</button><label class="btn btn-outline" style="font-size:.75rem;padding:4px 8px;cursor:pointer;margin-left:2px">📷<input type="file" accept="image/*" style="display:none" onchange="uploadFotoTec('${t.ID}',this)"></label></td>
   </tr>`}).join('');
 }
 async function uploadFotoTec(tecId,input){
@@ -2156,13 +2157,65 @@ function saveConfig(){
     .catch(e=>{toast(e.message,'err')})
 }
 
-// ============ NEW SAVE FUNCTIONS ============
+// ============ EDIT STATE ============
+var EDITING={utente:null,cliente:null,macchina:null,automezzo:null};
+
+// ============ EDIT OPEN FUNCTIONS ============
+function editUtente(id){
+  const u=(DATA.utenti||[]).find(x=>x.ID===id);if(!u)return;
+  EDITING.utente=id;
+  $('nuNome').value=u.Nome||'';$('nuCognome').value=u.Cognome||'';
+  $('nuUsername').value=u.Username||'';$('nuPassword').value='';
+  $('nuRuolo').value=u.Ruolo||'tecnico';
+  $('nuSquadra').value=u.SquadraID||'';$('nuAutomezzo').value=u.AutomezzoID||'';
+  $('nuBase').value=u.Base||'';$('nuTelefono').value=u.Telefono||'';$('nuEmail').value=u.Email||'';
+  document.querySelector('#modalUtente .modal-head h2').textContent='✏️ Modifica Utente';
+  openModal('modalUtente');
+}
+function editCliente(id){
+  const c=(DATA.clienti||[]).find(x=>x.ID===id);if(!c)return;
+  EDITING.cliente=id;
+  $('ncNome').value=c.Nome||'';$('ncCitta').value=c.Citta||'';$('ncProv').value=c.Prov||'';
+  $('ncIndirizzo').value=c.Indirizzo||'';$('ncCap').value=c.CAP||'';
+  $('ncTelefono').value=c.Telefono||'';$('ncEmail').value=c.Email||'';
+  $('ncContratto').value=c.Contratto||'';$('ncNote').value=c.Note||'';
+  document.querySelector('#modalCliente .modal-head h2').textContent='✏️ Modifica Cliente';
+  openModal('modalCliente');
+}
+function editMacchina(id){
+  const m=(DATA.macchine||[]).find(x=>x.ID===id);if(!m)return;
+  EDITING.macchina=id;
+  $('nmCliente').value=m.ClienteID||'';$('nmTipo').value=m.Tipo||'';$('nmModello').value=m.Modello||'';
+  $('nmSeriale').value=m.Seriale||'';$('nmAnno').value=m.AnnoInstallazione||'';
+  $('nmOre').value=m.OreLavoro||'';$('nmUltimoTag').value=m.UltimoTagliando||'';
+  $('nmProssTag').value=m.ProssimoTagliando||'';$('nmGaranzia').value=m.GaranziaFino||'';
+  $('nmNote').value=m.Note||'';
+  document.querySelector('#modalMacchina .modal-head h2').textContent='✏️ Modifica Macchina';
+  openModal('modalMacchina');
+}
+function editAutomezzo(id){
+  const f=(DATA.automezzi||[]).find(x=>x.ID===id);if(!f)return;
+  EDITING.automezzo=id;
+  $('naTarga').value=f.Targa||'';$('naDesc').value=f.Descrizione||'';
+  $('naAllestimento').value=f.Allestimento||'';$('naStatus').value=f.Status||'disponibile';
+  $('naControllo').value=f.ProssimoControllo||'';$('naAssegnatario').value=f.AssegnatarioID||'';
+  $('naKm').value=f.KmAttuali||'';$('naNote').value=f.Note||'';
+  document.querySelector('#modalAutomezzo .modal-head h2').textContent='✏️ Modifica Automezzo';
+  openModal('modalAutomezzo');
+}
+
+// ============ RESET MODAL ON NEW ============
+function openNewUtente(){EDITING.utente=null;['nuNome','nuCognome','nuUsername','nuPassword','nuBase','nuTelefono','nuEmail'].forEach(id=>{if($(id))$(id).value=''});$('nuRuolo').value='tecnico';$('nuSquadra').value='';$('nuAutomezzo').value='';document.querySelector('#modalUtente .modal-head h2').textContent='👤 Nuovo Utente';openModal('modalUtente')}
+function openNewCliente(){EDITING.cliente=null;['ncNome','ncCitta','ncProv','ncIndirizzo','ncCap','ncTelefono','ncEmail','ncContratto','ncNote'].forEach(id=>{if($(id))$(id).value=''});document.querySelector('#modalCliente .modal-head h2').textContent='🏢 Nuovo Cliente';openModal('modalCliente')}
+function openNewMacchina(){EDITING.macchina=null;['nmTipo','nmModello','nmSeriale','nmAnno','nmOre','nmUltimoTag','nmProssTag','nmGaranzia','nmNote'].forEach(id=>{if($(id))$(id).value=''});$('nmCliente').value='';document.querySelector('#modalMacchina .modal-head h2').textContent='⚙️ Nuova Macchina';openModal('modalMacchina')}
+function openNewAutomezzo(){EDITING.automezzo=null;['naTarga','naDesc','naAllestimento','naKm','naControllo','naNote'].forEach(id=>{if($(id))$(id).value=''});$('naStatus').value='disponibile';$('naAssegnatario').value='';document.querySelector('#modalAutomezzo .modal-head h2').textContent='🚐 Nuovo Automezzo';openModal('modalAutomezzo')}
+
+// ============ SAVE FUNCTIONS (CREATE + UPDATE) ============
 async function saveUtente(){
   const data={
     Nome:$('nuNome').value,
     Cognome:$('nuCognome').value,
     Username:$('nuUsername').value,
-    password:$('nuPassword').value,
     Ruolo:$('nuRuolo').value,
     SquadraID:$('nuSquadra').value||null,
     AutomezzoID:$('nuAutomezzo').value||null,
@@ -2171,70 +2224,78 @@ async function saveUtente(){
     Email:$('nuEmail').value||null,
     TenantID:(DATA.utenti&&DATA.utenti[0])?DATA.utenti[0].TenantID:null
   };
-  if(!data.Nome||!data.Cognome||!data.Username){toast('Compila nome, cognome e username','warn');return}
-  if(!data.password){toast('Inserisci una password','warn');return}
+  if(!data.Nome||!data.Cognome){toast('Compila nome e cognome','warn');return}
   try{
-    await apiCall('createUtente',{data},'POST');
-    toast('Utente creato!','ok');
-    closeModal('modalUtente');
-    await refreshData();
-    populateSelects();
+    if(EDITING.utente){
+      data.id=EDITING.utente;
+      if($('nuPassword').value) data.password=$('nuPassword').value;
+      await apiCall('updateUtente',data,'POST');
+      toast('Utente aggiornato!','ok');
+    }else{
+      if(!data.Username){toast('Inserisci username','warn');return}
+      data.password=$('nuPassword').value;
+      if(!data.password){toast('Inserisci una password','warn');return}
+      await apiCall('createUtente',{data},'POST');
+      toast('Utente creato!','ok');
+    }
+    closeModal('modalUtente');EDITING.utente=null;
+    await refreshData();populateSelects();
   }catch(e){toast(e.message,'err')}
 }
 
 async function saveCliente(){
   const data={
     Nome:$('ncNome').value,
-    Citta:$('ncCitta').value,
-    Prov:$('ncProv').value,
-    Indirizzo:$('ncIndirizzo').value,
-    CAP:$('ncCap').value,
-    Telefono:$('ncTelefono').value,
-    Email:$('ncEmail').value,
-    Contratto:$('ncContratto').value,
-    Note:$('ncNote').value,
-    TenantID:(DATA.utenti&&DATA.utenti[0])?DATA.utenti[0].TenantID:''
+    Citta:$('ncCitta').value||null,Prov:$('ncProv').value||null,
+    Indirizzo:$('ncIndirizzo').value||null,CAP:$('ncCap').value||null,
+    Telefono:$('ncTelefono').value||null,Email:$('ncEmail').value||null,
+    Contratto:$('ncContratto').value||null,Note:$('ncNote').value||null,
+    TenantID:(DATA.utenti&&DATA.utenti[0])?DATA.utenti[0].TenantID:null
   };
   if(!data.Nome){toast('Inserisci il nome del cliente','warn');return}
   try{
-    await apiCall('createCliente',{data},'POST');
-    toast('Cliente creato!','ok');
-    closeModal('modalCliente');
-    await refreshData();
-    populateSelects();
+    if(EDITING.cliente){
+      data.id=EDITING.cliente;
+      await apiCall('updateCliente',data,'POST');
+      toast('Cliente aggiornato!','ok');
+    }else{
+      await apiCall('createCliente',{data},'POST');
+      toast('Cliente creato!','ok');
+    }
+    closeModal('modalCliente');EDITING.cliente=null;
+    await refreshData();populateSelects();
   }catch(e){toast(e.message,'err')}
 }
 
 async function saveMacchina(){
   const data={
-    ClienteID:$('nmCliente').value,
-    Tipo:$('nmTipo').value,
-    Modello:$('nmModello').value,
-    Seriale:$('nmSeriale').value,
+    ClienteID:$('nmCliente').value,Tipo:$('nmTipo').value,Modello:$('nmModello').value,
+    Seriale:$('nmSeriale').value||null,
     AnnoInstallazione:$('nmAnno').value?parseInt($('nmAnno').value):null,
     OreLavoro:$('nmOre').value?parseInt($('nmOre').value):null,
-    UltimoTagliando:$('nmUltimoTag').value||null,
-    ProssimoTagliando:$('nmProssTag').value||null,
-    GaranziaFino:$('nmGaranzia').value||null,
-    Note:$('nmNote').value||null,
+    UltimoTagliando:$('nmUltimoTag').value||null,ProssimoTagliando:$('nmProssTag').value||null,
+    GaranziaFino:$('nmGaranzia').value||null,Note:$('nmNote').value||null,
     TenantID:(DATA.utenti&&DATA.utenti[0])?DATA.utenti[0].TenantID:null
   };
   if(!data.ClienteID||!data.Tipo||!data.Modello){toast('Compila cliente, tipo e modello','warn');return}
   try{
-    await apiCall('createMacchina',{data},'POST');
-    toast('Macchina creata!','ok');
-    closeModal('modalMacchina');
-    await refreshData();
-    populateSelects();
+    if(EDITING.macchina){
+      data.id=EDITING.macchina;
+      await apiCall('updateMacchina',data,'POST');
+      toast('Macchina aggiornata!','ok');
+    }else{
+      await apiCall('createMacchina',{data},'POST');
+      toast('Macchina creata!','ok');
+    }
+    closeModal('modalMacchina');EDITING.macchina=null;
+    await refreshData();populateSelects();
   }catch(e){toast(e.message,'err')}
 }
 
 async function saveAutomezzo(){
   const data={
-    Targa:$('naTarga').value,
-    Descrizione:$('naDesc').value,
-    Allestimento:$('naAllestimento').value,
-    Status:$('naStatus').value,
+    Targa:$('naTarga').value,Descrizione:$('naDesc').value,
+    Allestimento:$('naAllestimento').value||null,Status:$('naStatus').value,
     ProssimoControllo:$('naControllo').value||null,
     AssegnatarioID:$('naAssegnatario').value||null,
     KmAttuali:$('naKm').value?parseInt($('naKm').value):null,
@@ -2243,11 +2304,16 @@ async function saveAutomezzo(){
   };
   if(!data.Targa||!data.Descrizione||!data.Status){toast('Compila targa, descrizione e status','warn');return}
   try{
-    await apiCall('createAutomezzo',{data},'POST');
-    toast('Automezzo creato!','ok');
-    closeModal('modalAutomezzo');
-    await refreshData();
-    populateSelects();
+    if(EDITING.automezzo){
+      data.id=EDITING.automezzo;
+      await apiCall('updateAutomezzo',data,'POST');
+      toast('Automezzo aggiornato!','ok');
+    }else{
+      await apiCall('createAutomezzo',{data},'POST');
+      toast('Automezzo creato!','ok');
+    }
+    closeModal('modalAutomezzo');EDITING.automezzo=null;
+    await refreshData();populateSelects();
   }catch(e){toast(e.message,'err')}
 }
 
