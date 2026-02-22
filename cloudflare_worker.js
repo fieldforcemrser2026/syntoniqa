@@ -116,7 +116,7 @@ function normalizeBody(raw) {
 }
 
 // Supabase REST helper
-async function sb(env, table, method = 'GET', body = null, params = '') {
+async function sb(env, table, method = 'GET', body = null, params = '', extraHeaders = {}) {
   const url = `${env.SUPABASE_URL}/rest/v1/${table}${params}`;
   const res = await fetch(url, {
     method,
@@ -125,6 +125,7 @@ async function sb(env, table, method = 'GET', body = null, params = '') {
       'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
       'Content-Type': 'application/json',
       'Prefer': method === 'POST' ? 'return=representation' : 'return=minimal',
+      ...extraHeaders,
     },
     body: body ? JSON.stringify(body) : null,
   });
@@ -1303,6 +1304,102 @@ Rispondi SOLO con JSON array: [{ "urgenzaId": "...", "tecnicoId": "...", "data":
       if (!canale_id || !userId) return err('canale_id e userId richiesti');
       await sb(env, 'chat_membri', 'POST', { id: `${canale_id}_${userId}`, canale_id, utente_id: userId }).catch(() => {});
       return ok();
+    }
+
+    // ============ ANAGRAFICA (Clienti + Assets) ============
+
+    case 'getAnagraficaClienti': {
+      const search = body.search || '';
+      let url = 'anagrafica_clienti?select=*&order=nome_account.asc&limit=500';
+      if (search) url += `&or=(nome_account.ilike.*${search}*,nome_interno.ilike.*${search}*,codice_m3.ilike.*${search}*,citta_fatturazione.ilike.*${search}*)`;
+      const data = await sb(env, url, 'GET');
+      return ok(data.map(pascalizeRecord));
+    }
+
+    case 'getAnagraficaCliente': {
+      const { id, codice_m3 } = body;
+      let url = 'anagrafica_clienti?select=*';
+      if (id) url += `&id=eq.${id}`;
+      else if (codice_m3) url += `&codice_m3=eq.${codice_m3}`;
+      else return err('id o codice_m3 richiesto');
+      const data = await sb(env, url, 'GET');
+      if (!data.length) return err('Cliente non trovato', 404);
+      return ok(pascalizeRecord(data[0]));
+    }
+
+    case 'getAnagraficaAssets': {
+      const { codice_m3, search } = body;
+      let url = 'anagrafica_assets?select=*&order=gruppo_attrezzatura.asc,nome_asset.asc&limit=2000';
+      if (codice_m3) url += `&codice_m3=eq.${codice_m3}`;
+      if (search) url += `&or=(nome_asset.ilike.*${search}*,numero_serie.ilike.*${search}*,modello.ilike.*${search}*,nome_account.ilike.*${search}*)`;
+      const data = await sb(env, url, 'GET');
+      return ok(data.map(pascalizeRecord));
+    }
+
+    case 'importAnagraficaClienti': {
+      const rows = body.rows || [];
+      if (!rows.length) return err('rows richiesto (array)');
+      const results = { inserted: 0, errors: [] };
+      for (const row of rows) {
+        const fields = {};
+        for (const [k, v] of Object.entries(row)) {
+          if (v !== null && v !== undefined && v !== '') fields[toSnake(k)] = v;
+        }
+        try {
+          await sb(env, 'anagrafica_clienti', 'POST', fields, null, { 'Prefer': 'return=minimal,resolution=merge-duplicates' });
+          results.inserted++;
+        } catch (e) {
+          results.errors.push({ nome: fields.nome_account || '?', err: e.message });
+        }
+      }
+      return ok(results);
+    }
+
+    case 'importAnagraficaAssets': {
+      const rows = body.rows || [];
+      if (!rows.length) return err('rows richiesto (array)');
+      // Verify existing codice_m3
+      const clienti = await sb(env, 'anagrafica_clienti?select=codice_m3', 'GET');
+      const validM3 = new Set(clienti.filter(c => c.codice_m3).map(c => c.codice_m3));
+      const results = { inserted: 0, skipped: 0, errors: [] };
+      // Batch insert
+      const batch = [];
+      for (const row of rows) {
+        const fields = {};
+        for (const [k, v] of Object.entries(row)) {
+          if (v !== null && v !== undefined && v !== '') fields[toSnake(k)] = v;
+        }
+        if (fields.codice_m3 && !validM3.has(fields.codice_m3)) {
+          fields.codice_m3 = null;
+        }
+        batch.push(fields);
+      }
+      // Insert in chunks of 100
+      for (let i = 0; i < batch.length; i += 100) {
+        const chunk = batch.slice(i, i + 100);
+        try {
+          await sb(env, 'anagrafica_assets', 'POST', chunk, null, { 'Prefer': 'return=minimal' });
+          results.inserted += chunk.length;
+        } catch (e) {
+          // Fallback: one by one
+          for (const row of chunk) {
+            try {
+              await sb(env, 'anagrafica_assets', 'POST', row, null, { 'Prefer': 'return=minimal' });
+              results.inserted++;
+            } catch (e2) {
+              results.skipped++;
+            }
+          }
+        }
+      }
+      return ok(results);
+    }
+
+    case 'clearAnagrafica': {
+      // Admin only: delete all anagrafica data for re-import
+      await sb(env, 'anagrafica_assets?id=neq.00000000-0000-0000-0000-000000000000', 'DELETE');
+      await sb(env, 'anagrafica_clienti?id=neq.00000000-0000-0000-0000-000000000000', 'DELETE');
+      return ok({ cleared: true });
     }
 
     default:

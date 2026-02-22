@@ -406,6 +406,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <button class="nav-item" onclick="showSec('richieste',this)"><span class="ico">📝</span>Richieste<span class="badge" id="badgeRich" style="display:none">0</span></button>
 <div class="nav-label">Anagrafiche</div>
 <button class="nav-item" onclick="showSec('clienti',this)"><span class="ico">🏢</span>Clienti</button>
+<button class="nav-item" onclick="showSec('anagrafica',this)"><span class="ico">📋</span>Anagrafica</button>
 <button class="nav-item" onclick="showSec('macchine',this)"><span class="ico">⚙️</span>Macchine</button>
 <button class="nav-item" onclick="showSec('automezzi',this)"><span class="ico">🚐</span>Automezzi</button>
 <button class="nav-item" onclick="showSec('tecnici',this)"><span class="ico">👥</span>Tecnici</button>
@@ -982,6 +983,78 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 </section>
 
+<!-- ========== SEC: ANAGRAFICA ========== -->
+<section class="sec" id="secAnagrafica">
+
+<!-- LISTA CLIENTI -->
+<div id="anagListView">
+<div class="sec-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+  <h2>📋 Anagrafica Clienti & Assets</h2>
+  <div style="display:flex;gap:8px;align-items:center">
+    <input type="text" id="anagSearch" placeholder="Cerca cliente, città, M3..." style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:.8125rem;width:260px" oninput="filterAnagClients()">
+    <button class="btn btn-sm" onclick="loadAnagClients()" title="Ricarica">🔄</button>
+    <label class="btn btn-sm btn-primary" style="cursor:pointer">📤 Importa XLSX<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importAnagXlsx(this.files[0])"></label>
+  </div>
+</div>
+<div id="anagStats" style="display:flex;gap:16px;margin:12px 0;flex-wrap:wrap"></div>
+<div class="table-wrap">
+<table class="tbl" id="anagClientiTable">
+<thead><tr>
+  <th style="width:30px">#</th>
+  <th>Nome Account</th>
+  <th>Nome Interno</th>
+  <th>Città</th>
+  <th>Provincia</th>
+  <th>Stato</th>
+  <th>Titolare</th>
+  <th>Robot</th>
+  <th>Juno</th>
+  <th>Vector</th>
+  <th>Tot. Assets</th>
+  <th style="width:50px"></th>
+</tr></thead>
+<tbody id="anagClientiBody"></tbody>
+</table>
+</div>
+</div>
+
+<!-- DETTAGLIO CLIENTE -->
+<div id="anagDetailView" style="display:none">
+<button class="btn btn-sm" onclick="closeAnagDetail()" style="margin-bottom:12px">← Torna alla lista</button>
+<div class="card" id="anagClienteCard" style="margin-bottom:16px">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+    <div>
+      <h2 id="anagClienteNome" style="margin:0"></h2>
+      <p id="anagClienteInfo" style="color:var(--muted);margin:4px 0 0"></p>
+    </div>
+    <div id="anagClienteBadges" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+  </div>
+  <div id="anagClienteDetails" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:16px"></div>
+  <div id="anagClienteQty" style="margin-top:16px"></div>
+</div>
+<div class="card">
+  <h3 style="margin:0 0 12px">🔧 Assets del Cliente</h3>
+  <div id="anagAssetsSummary" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
+  <div class="table-wrap">
+  <table class="tbl" id="anagAssetsTable">
+  <thead><tr>
+    <th>#</th>
+    <th>Gruppo</th>
+    <th>Modello</th>
+    <th>N. Serie</th>
+    <th>Data Install.</th>
+    <th>Status</th>
+    <th>RH/LH</th>
+    <th>Note</th>
+  </tr></thead>
+  <tbody id="anagAssetsBody"></tbody>
+  </table>
+  </div>
+</div>
+</div>
+
+</section>
+
 <!-- ========== SEC: CHAT INTERNA ========== -->
 <section class="sec" id="secChat">
 <div style="display:grid;grid-template-columns:280px 1fr;gap:0;height:calc(100vh - var(--header) - 40px)">
@@ -1457,6 +1530,7 @@ function showSec(id,btn){
   if(id==='kpi')loadKPIWithCharts();
   if(id==='planner')setTimeout(()=>initPlanner(),100);
   if(id==='chat')loadChatCanali();
+  if(id==='anagrafica'){closeAnagDetail();loadAnagClients()}
   $('sidebar').classList.remove('open');$('sideOverlay').classList.remove('show');
 }
 
@@ -2269,6 +2343,283 @@ function openNewCanale(){
     .then(()=>{toast('Canale creato!','ok');loadChatCanali()})
     .catch(e=>toast(e.message,'err'));
 }
+
+// ============ ANAGRAFICA ============
+var ANAG_CLIENTI=[];
+var ANAG_CURRENT=null;
+
+async function loadAnagClients(){
+  try{
+    const data=await apiCall('getAnagraficaClienti',{},'POST');
+    ANAG_CLIENTI=data||[];
+    renderAnagClients(ANAG_CLIENTI);
+  }catch(e){toast('Errore caricamento anagrafica: '+e.message,'err')}
+}
+
+function filterAnagClients(){
+  const q=($('anagSearch')?.value||'').toLowerCase();
+  if(!q){renderAnagClients(ANAG_CLIENTI);return}
+  const filtered=ANAG_CLIENTI.filter(c=>{
+    return (c.NomeAccount||'').toLowerCase().includes(q)||
+           (c.NomeInterno||'').toLowerCase().includes(q)||
+           (c.CodiceM3||'').toLowerCase().includes(q)||
+           (c.CittaFatturazione||'').toLowerCase().includes(q)||
+           (c.ProvinciaFatturazione||'').toLowerCase().includes(q);
+  });
+  renderAnagClients(filtered);
+}
+
+function renderAnagClients(list){
+  // Stats
+  const stats=$('anagStats');
+  if(stats){
+    const attivi=list.filter(c=>c.StatoCliente==='Attivo').length;
+    const totRobot=list.reduce((s,c)=>s+(c.QtyAstronaut||0),0);
+    const totJuno=list.reduce((s,c)=>s+(c.QtyJuno||0),0);
+    const totVector=list.reduce((s,c)=>s+(c.QtyVector||0),0);
+    stats.innerHTML=`
+      <div class="stat-card"><div class="stat-val">${list.length}</div><div class="stat-lbl">Clienti</div></div>
+      <div class="stat-card"><div class="stat-val">${attivi}</div><div class="stat-lbl">Attivi</div></div>
+      <div class="stat-card"><div class="stat-val">${totRobot}</div><div class="stat-lbl">Robot</div></div>
+      <div class="stat-card"><div class="stat-val">${totJuno}</div><div class="stat-lbl">Juno</div></div>
+      <div class="stat-card"><div class="stat-val">${totVector}</div><div class="stat-lbl">Vector</div></div>
+    `;
+  }
+  const tb=$('anagClientiBody');
+  if(!tb)return;
+  if(!list.length){tb.innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--muted)">Nessun cliente. Importa il file XLSX.</td></tr>';return}
+  tb.innerHTML=list.map((c,i)=>{
+    const tot=(c.QtyAstronaut||0)+(c.QtyJuno||0)+(c.QtyVector||0)+(c.QtyDiscoveryCollector||0)+(c.QtyCollectorC2||0)+(c.QtyDiscoverySsw||0)+(c.QtyCalm||0)+(c.QtyCosmix||0)+(c.QtyNautilus||0)+(c.QtyLuna||0)+(c.QtyShuttle||0)+(c.QtyCrs||0);
+    return `<tr onclick="openAnagDetail('${c.CodiceM3}')" style="cursor:pointer">
+      <td>${i+1}</td>
+      <td><strong>${c.NomeAccount||'-'}</strong></td>
+      <td>${c.NomeInterno||''}</td>
+      <td>${c.CittaFatturazione||''}</td>
+      <td>${c.ProvinciaFatturazione||''}</td>
+      <td><span class="badge ${c.StatoCliente==='Attivo'?'badge-ok':'badge-warn'}">${c.StatoCliente||'-'}</span></td>
+      <td>${c.TitolareAccount||''}</td>
+      <td>${c.QtyAstronaut||0}</td>
+      <td>${c.QtyJuno||0}</td>
+      <td>${c.QtyVector||0}</td>
+      <td><strong>${tot}</strong></td>
+      <td><button class="btn btn-xs" onclick="event.stopPropagation();openAnagDetail('${c.CodiceM3}')">👁️</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function openAnagDetail(m3){
+  $('anagListView').style.display='none';
+  $('anagDetailView').style.display='block';
+  try{
+    const cliente=await apiCall('getAnagraficaCliente',{codice_m3:m3},'POST');
+    ANAG_CURRENT=cliente;
+    $('anagClienteNome').textContent=cliente.NomeAccount||'Cliente';
+    $('anagClienteInfo').textContent=[cliente.NomeInterno,`M3: ${cliente.CodiceM3}`,`P.IVA: ${cliente.PartitaIva||'-'}`].filter(Boolean).join(' · ');
+
+    // Badges
+    $('anagClienteBadges').innerHTML=`
+      <span class="badge ${cliente.StatoCliente==='Attivo'?'badge-ok':'badge-warn'}">${cliente.StatoCliente||'-'}</span>
+      ${cliente.TipoCliente?'<span class="badge">'+cliente.TipoCliente+'</span>':''}
+      ${cliente.ContrattoAssistenza?'<span class="badge badge-ok">📝 Contratto</span>':''}
+    `;
+
+    // Details grid
+    $('anagClienteDetails').innerHTML=`
+      <div><small style="color:var(--muted)">Indirizzo</small><br>${cliente.ViaFatturazione||''}<br>${cliente.CapFatturazione||''} ${cliente.CittaFatturazione||''} (${cliente.ProvinciaFatturazione||''})</div>
+      <div><small style="color:var(--muted)">Contatti</small><br>📞 ${cliente.Telefono||'-'}<br>📧 ${cliente.Email||'-'}</div>
+      <div><small style="color:var(--muted)">Responsabile</small><br>${cliente.TitolareAccount||'-'}</div>
+      <div><small style="color:var(--muted)">Codici</small><br>Account: ${cliente.AccountNumber||'-'}<br>DANEA: ${cliente.CodiceDanea||'-'}<br>Service Area: ${cliente.ServiceArea||'-'}</div>
+      ${cliente.Lat?'<div><small style="color:var(--muted)">GPS</small><br>'+cliente.Lat+', '+cliente.Lng+'</div>':''}
+    `;
+
+    // Product quantities
+    const prods=[
+      ['Astronaut',cliente.QtyAstronaut],['A5',cliente.QtyAstronautA5],['A4',cliente.QtyAstronautA4],['A3',cliente.QtyAstronautA3],['A2',cliente.QtyAstronautA2],
+      ['Juno',cliente.QtyJuno],['Vector',cliente.QtyVector],['Discovery',cliente.QtyDiscoverySsw],['Collector',cliente.QtyCollectorC2],
+      ['Discovery Coll.',cliente.QtyDiscoveryCollector],['Calm',cliente.QtyCalm],['Cosmix',cliente.QtyCosmix],
+      ['Nautilus',cliente.QtyNautilus],['Luna',cliente.QtyLuna],['Shuttle',cliente.QtyShuttle],['CRS',cliente.QtyCrs],['LD Reader',cliente.QtyLdReader]
+    ].filter(p=>p[1]>0);
+    $('anagClienteQty').innerHTML=prods.length?
+      '<h4 style="margin:0 0 8px">Prodotti installati</h4><div style="display:flex;gap:8px;flex-wrap:wrap">'+prods.map(p=>`<span class="badge" style="font-size:.8125rem">${p[0]}: <strong>${p[1]}</strong></span>`).join('')+'</div>':'';
+
+    // Load assets
+    const assets=await apiCall('getAnagraficaAssets',{codice_m3:m3},'POST');
+    renderAnagAssets(assets||[]);
+  }catch(e){toast('Errore: '+e.message,'err')}
+}
+
+function renderAnagAssets(assets){
+  // Summary by group
+  const groups={};
+  assets.forEach(a=>{const g=a.GruppoAttrezzatura||'Altro';groups[g]=(groups[g]||0)+1});
+  $('anagAssetsSummary').innerHTML=Object.entries(groups).map(([g,n])=>`<span class="badge">${g}: <strong>${n}</strong></span>`).join('');
+
+  const tb=$('anagAssetsBody');
+  if(!assets.length){tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--muted)">Nessun asset trovato</td></tr>';return}
+  tb.innerHTML=assets.map((a,i)=>`<tr>
+    <td>${i+1}</td>
+    <td><strong>${a.GruppoAttrezzatura||'-'}</strong></td>
+    <td>${a.Modello||'-'}</td>
+    <td><code>${a.NumeroSerie||'-'}</code></td>
+    <td>${a.DataInstallazione||'-'}</td>
+    <td><span class="badge ${a.Status==='Attivo'?'badge-ok':'badge-warn'}">${a.Status||'-'}</span></td>
+    <td>${a.RhLh||''}</td>
+    <td>${a.Note||''}</td>
+  </tr>`).join('');
+}
+
+function closeAnagDetail(){
+  $('anagDetailView').style.display='none';
+  $('anagListView').style.display='block';
+  ANAG_CURRENT=null;
+}
+
+// Import XLSX via browser (SheetJS)
+async function importAnagXlsx(file){
+  if(!file)return;
+  toast('Caricamento XLSX in corso...','info');
+
+  // Load SheetJS dynamically
+  if(!window.XLSX){
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    document.head.appendChild(s);
+    await new Promise(r=>{s.onload=r;setTimeout(r,5000)});
+  }
+  if(!window.XLSX){toast('Errore caricamento libreria XLSX','err');return}
+
+  const reader=new FileReader();
+  reader.onload=async function(e){
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+
+      // 1. Parse Clienti sheet
+      let cliSheet=wb.Sheets['Clienti'];
+      if(!cliSheet){toast('Foglio "Clienti" non trovato!','err');return}
+      const cliRows=XLSX.utils.sheet_to_json(cliSheet,{range:1,defval:null});
+
+      const clienti=[];
+      for(const r of cliRows){
+        const nome=r['Nome account'];
+        const m3=r['Numero cliente M3 OPT'];
+        if(!nome&&!m3)continue;
+        const m3s=m3?String(Math.floor(Number(m3))):'';
+        clienti.push({
+          IdAccount:r['id Account']||null,AccountNumber:r['Account Number ']||null,
+          CodiceDanea:r['Codice DANEA']?String(r['Codice DANEA']):null,
+          CodiceM3:m3s||null,PartitaIva:r['Partita IVA OPT']?String(Math.floor(Number(r['Partita IVA OPT']))):null,
+          NomeAccount:nome,NomeDanea:r['Nome Danea']||null,NomeInterno:r['Nome Interno']||null,
+          Lat:r['lat']||null,Lng:r['long']||null,
+          TitolareAccount:r['Titolare account']||null,Telefono:r['Telefono']?String(r['Telefono']):null,
+          Email:r['E-mail di fatturazione']||null,
+          StatoCliente:r['Stato del cliente']||null,Status:r['Status']||null,
+          TipoCliente:r['Tipo di cliente']||null,DataCreazione:r['Data creazione']||null,
+          ViaFatturazione:r['Via fatturazione']||null,CittaFatturazione:r['Città fatturazione']||null,
+          ProvinciaFatturazione:r['Stato/Provincia fatturazione']||null,CapFatturazione:r['CAP fatturazione']?String(r['CAP fatturazione']):null,
+          ViaSpedizioni:r['Via spedizioni']||null,CittaSpedizioni:r['Città spedizioni']||null,
+          ProvinciaSpedizioni:r['Stato/Provincia spedizioni']||null,CapSpedizioni:r['CAP spedizioni']?String(r['CAP spedizioni']):null,
+          ServiceArea:r['Service Area']||null,
+          ContrattoAssistenza:r['Contratto di assi']||null,
+          QtyAstronaut:Math.floor(Number(r['Lely Astronaut']||0)),
+          QtyAstronautA5:Math.floor(Number(r['Lely Astronaut A5']||0)),
+          QtyAstronautA4:Math.floor(Number(r['Lely Astronaut A4']||0)),
+          QtyAstronautA3:Math.floor(Number(r['Lely Astronaut A3']||0)),
+          QtyAstronautA2:Math.floor(Number(r['Lely Astronaut A2']||0)),
+          QtyDiscoveryBucket:Math.floor(Number(r['Discovery Bucket']||0)),
+          QtyCollectorC2:Math.floor(Number(r['Lely Collector C2']||0)),
+          QtyDiscoveryCollector:Math.floor(Number(r['Lely Discovery Collector']||0)),
+          QtyDiscoverySsw:Math.floor(Number(r['Lely Discovery S/SW']||0)),
+          QtyJuno:Math.floor(Number(r['Lely Juno']||0)),
+          QtyVector:Math.floor(Number(r['Lely Vector']||0)),
+          QtyLdReader:Math.floor(Number(r['LD Reader']||0)),
+          QtyShuttle:Math.floor(Number(r['Shuttle']||0)),
+          QtyLuna:Math.floor(Number(r['Luna']||0)),
+          QtyCalm:Math.floor(Number(r['Calm']||0)),
+          QtyCosmix:Math.floor(Number(r['Cosmix']||0)),
+          QtyNautilus:Math.floor(Number(r['Nautilus']||0)),
+          QtyCrs:Math.floor(Number(r['CRS']||0)),
+          QtyConsumabili:Math.floor(Number(r['consumabili']||0))
+        });
+      }
+
+      // 2. Parse Assets sheet
+      let asSheet=wb.Sheets['Assets'];
+      const assets=[];
+      if(asSheet){
+        const asRows=XLSX.utils.sheet_to_json(asSheet,{defval:null});
+        for(const r of asRows){
+          const serie=r['Numero di serie'];
+          if(!serie)continue;
+          const movex=r['Movex']?String(Math.floor(Number(r['Movex']))):'';
+          assets.push({
+            IdAccount:r['ID account']||null,IdAsset:r['ID asset']||null,
+            CodiceM3:movex||null,NomeAccount:r['Nome account']||null,
+            TitolareAccount:r['Titolare account']||null,
+            NomeAsset:r['Nome asset']||null,NumeroSerie:String(serie),
+            Modello:r['Modello']||null,GruppoAttrezzatura:r['Gruppo Attrezzatura']||null,
+            Descrizione:r['Descrizione']||null,
+            DataInstallazione:r['Data di installazione']||null,
+            DataCreazione:r['Data creazione']||null,
+            DataUltimaModifica:r['Data ultima modifica']||null,
+            Status:'Attivo',TipoFoglio:'Assets'
+          });
+        }
+      }
+
+      // 3. Parse individual asset sheets for extra coverage
+      const movexSheet=wb.Sheets['MOVEX'];
+      const movexMap={};
+      if(movexSheet){
+        const mvRows=XLSX.utils.sheet_to_json(movexSheet,{defval:null});
+        mvRows.forEach(r=>{if(r.CLIENTE&&r.MOVEX)movexMap[String(r.CLIENTE).trim().toUpperCase()]=String(Math.floor(Number(r.MOVEX)))});
+      }
+      const nomeInternoMap={};
+      clienti.forEach(c=>{if(c.NomeInterno&&c.CodiceM3)nomeInternoMap[c.NomeInterno.toUpperCase()]=c.CodiceM3});
+      const seenSeries=new Set(assets.map(a=>a.NumeroSerie));
+
+      function resolveM3(cli,mvx){
+        if(mvx){const m=String(mvx).replace(/\.0$/,'').replace(/^0+/,'');if(m)return m}
+        if(!cli)return null;
+        const up=String(cli).trim().toUpperCase();
+        return nomeInternoMap[up]||movexMap[up]||null;
+      }
+
+      const sheetCfgs={ROBOT:{hr:3,cc:0,mc:1,sc:8,dc:10},JUNO:{hr:3,cc:1,mc:11,sc:3,dc:4},VECTOR:{hr:3,cc:0,mc:1,sc:3,dc:7},DISCOVERY:{hr:3,cc:0,mc:1,sc:3,dc:7},COLLECTOR:{hr:3,cc:0,mc:1,sc:3,dc:7}};
+      for(const[sname,cfg] of Object.entries(sheetCfgs)){
+        const ws=wb.Sheets[sname];if(!ws)continue;
+        const allRows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+        for(let ri=cfg.hr+1;ri<allRows.length;ri++){
+          const row=allRows[ri];if(!row)continue;
+          const cli=row[cfg.cc];if(!cli)continue;
+          const serie=row[cfg.sc];if(!serie)continue;
+          const serieStr=String(serie).replace(/\.0$/,'');
+          if(seenSeries.has(serieStr))continue;
+          seenSeries.add(serieStr);
+          assets.push({CodiceM3:resolveM3(cli,row[cfg.mc]),NomeAccount:String(cli),NumeroSerie:serieStr,Modello:sname,GruppoAttrezzatura:sname,DataInstallazione:row[cfg.dc]||null,Status:'Attivo',TipoFoglio:sname});
+        }
+      }
+
+      toast(`Parsati: ${clienti.length} clienti, ${assets.length} assets. Importazione...`,'info');
+
+      // 4. Clear existing + import
+      await apiCall('clearAnagrafica',{},'POST').catch(()=>{});
+      const r1=await apiCall('importAnagraficaClienti',{rows:clienti},'POST');
+      toast(`Clienti: ${r1.inserted} importati`,'ok');
+      const r2=await apiCall('importAnagraficaAssets',{rows:assets},'POST');
+      toast(`Assets: ${r2.inserted} importati`,'ok');
+
+      loadAnagClients();
+    }catch(ex){
+      console.error(ex);
+      toast('Errore import: '+ex.message,'err');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// Auto-load when section is shown
+var _origShowSec=typeof showSec==='function'?showSec:null;
+// We'll hook into showSec after page load
 
 // ============ EDIT STATE ============
 var EDITING={utente:null,cliente:null,macchina:null,automezzo:null};
