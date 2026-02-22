@@ -1,0 +1,8 @@
+name = "syntoniqa-mrs-api"
+main = "cloudflare_worker.js"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# NON mettere valori reali qui — usa i secrets di Cloudflare (passo 4 del runbook)
+# I secrets si configurano con: wrangler secret put NOME_SECRET

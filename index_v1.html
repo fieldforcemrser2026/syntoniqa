@@ -1,0 +1,1294 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#050C14">
+<link rel="manifest" href="manifest.json">
+<title>Syntoniqa Tecnico v1.0</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="white_label_config.js"></script>
+<script>
+/* WHITE-LABEL BOOT - Syntoniqa Tecnico v1.0 */
+;(function(){
+  var cfg = window.SYNTONIQA_CONFIG;
+  if(!cfg) return;
+  var r = document.documentElement.style;
+  var co = cfg.colors||{};
+  if(co.primary)       r.setProperty('--c1', co.primary);
+  if(co.primary_dark)  r.setProperty('--c2', co.primary_dark);
+  if(co.primary_light) r.setProperty('--c3', co.primary_light);
+  var mt = document.querySelector('meta[name="theme-color"]');
+  if(mt && co.primary) mt.content = co.primary;
+  var br = cfg.brand||{};
+  if(br.nome) document.title = br.nome + ' Tecnico';
+  if(br.favicon_url){
+    var lk=document.createElement('link'); lk.rel='icon'; lk.href=br.favicon_url;
+    document.head.appendChild(lk);
+  }
+  function applyBrand(){
+    var nome    = br.nome    || 'Syntoniqa';
+    var tagline = br.tagline || 'Portale Tecnico';
+    // Login lockup
+    var logoDiv = document.querySelector('.login-box div[style*="font-size:2.5rem"]');
+    if(logoDiv){
+      if(br.logo_url){
+        logoDiv.innerHTML='<img src="'+br.logo_url+'" style="height:'+(br.logo_height||'48px')+';max-width:180px;object-fit:contain" alt="'+nome+'">';
+        logoDiv.style.fontSize='';
+      } else {
+        var ini=nome.replace(/[^A-Z0-9]/gi,'').substring(0,2).toUpperCase();
+        var col=(co.primary||'#00C9A7');
+        logoDiv.innerHTML='<div style="width:64px;height:64px;background:'+col+';border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto;box-shadow:0 6px 20px '+col+'55"><span style="font-size:1.5rem;font-weight:900;color:#fff">'+ini+'</span></div>';
+        logoDiv.style.fontSize='';
+      }
+    }
+    var bn=document.getElementById('brandName'); if(bn) bn.textContent=nome;
+    var bs=document.getElementById('brandSub');  if(bs) bs.textContent=tagline;
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', applyBrand);
+  } else { applyBrand(); }
+})();
+</script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap');
+:root{
+--font:'DM Sans',system-ui,sans-serif;
+--mono:'JetBrains Mono',monospace;
+--c1:#00C9A7;--c2:#050C14;--c3:#3B7EF7;
+--ok:#10B981;--ok2:#059669;--warn:#F59E0B;--err:#EF4444;
+--info:#3B82F6;--purple:#8B5CF6;
+--gray:#6B7280;--gray2:#9CA3AF;--gray3:#D1D5DB;--gray4:#F3F4F6;--gray5:#F9FAFB;
+--dark:#111827;--dark2:#1F2937;
+--white:#FFFFFF;
+--hh:52px;--nh:64px;
+--shadow:0 1px 3px rgba(0,0,0,.08);
+--shadow-lg:0 8px 24px rgba(0,0,0,.12);
+--radius:12px;--radius-sm:8px;
+--safe-b:env(safe-area-inset-bottom,0px);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:var(--font);background:#050C14;color:var(--dark);min-height:100vh;min-height:100dvh;line-height:1.5;font-size:14px;overflow-x:hidden}
+::-webkit-scrollbar{display:none}
+
+/* ===== LOGIN ===== */
+.login{position:fixed;inset:0;background:linear-gradient(160deg,var(--c2),var(--c1));display:flex;justify-content:center;align-items:center;padding:24px;z-index:9000}
+.login.hidden{display:none}
+.login-box{background:var(--white);padding:40px 28px;border-radius:20px;width:100%;max-width:360px;box-shadow:var(--shadow-lg)}
+.login-box h1{font-size:1.375rem;font-weight:700;color:var(--dark);text-align:center;margin-bottom:4px;letter-spacing:-.02em}
+.login-box .sub{color:var(--gray);text-align:center;font-size:.8125rem;margin-bottom:28px}
+.login-box .loading{text-align:center;padding:32px}
+.spin{display:inline-block;width:28px;height:28px;border:3px solid var(--gray3);border-top-color:var(--c1);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ===== FORM ===== */
+.field{margin-bottom:14px}
+.field label{display:block;font-size:.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--gray);margin-bottom:5px}
+.field input,.field select,.field textarea{width:100%;padding:11px 14px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.875rem;font-family:var(--font);color:var(--dark);background:var(--white);transition:border-color .2s;-webkit-appearance:none}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--c1);outline:none;box-shadow:0 0 0 3px rgba(178,34,34,.1)}
+.field textarea{resize:vertical;min-height:70px}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* ===== BUTTONS ===== */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 20px;border:none;border-radius:var(--radius-sm);font-size:.875rem;font-weight:600;cursor:pointer;font-family:var(--font);transition:all .15s;letter-spacing:-.01em;-webkit-appearance:none}
+.btn:active{transform:scale(.97);opacity:.9}
+.btn-primary{background:var(--c1);color:var(--white)}
+.btn-ok{background:var(--ok);color:var(--white)}
+.btn-warn{background:var(--warn);color:var(--white)}
+.btn-err{background:var(--err);color:var(--white)}
+.btn-info{background:var(--info);color:var(--white)}
+.btn-outline{background:var(--white);border:1.5px solid var(--gray3);color:var(--dark)}
+.btn-ghost{background:transparent;color:var(--gray);padding:8px}
+.btn-sm{padding:8px 14px;font-size:.8125rem}
+.btn-block{width:100%}
+.btn-group{display:flex;gap:8px}
+
+/* ===== HEADER ===== */
+.hdr{position:fixed;top:0;left:0;right:0;height:var(--hh);background:var(--c1);color:var(--white);display:flex;align-items:center;justify-content:space-between;padding:0 16px;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.hdr h1{font-size:.9375rem;font-weight:700;letter-spacing:-.02em}
+.hdr .badge-bell{position:relative}
+.hdr .badge-bell .dot{position:absolute;top:-2px;right:-2px;width:8px;height:8px;background:var(--warn);border-radius:50%;border:2px solid var(--c1)}
+.hdr button{background:none;border:none;color:var(--white);font-size:1.25rem;cursor:pointer;padding:6px}
+
+/* ===== BOTTOM NAV ===== */
+.bnav{position:fixed;bottom:0;left:0;right:0;height:var(--nh);background:var(--white);border-top:1px solid #E5E7EB;display:flex;justify-content:space-around;align-items:center;z-index:100;padding-bottom:var(--safe-b)}
+.bnav button{display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;color:var(--gray2);font-size:.625rem;font-family:var(--font);font-weight:500;cursor:pointer;padding:6px 12px;transition:.15s;position:relative}
+.bnav button .ico{font-size:1.25rem}
+.bnav button.active{color:var(--c1);font-weight:600}
+.bnav button .nbadge{position:absolute;top:0;right:4px;background:var(--err);color:var(--white);font-size:.5625rem;font-weight:700;padding:1px 5px;border-radius:8px;min-width:14px;text-align:center}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;font-size:.75rem}
+.cal-hdr{font-weight:600;color:var(--gray);padding:4px;font-size:.625rem;text-transform:uppercase}
+.cal-day{padding:8px 4px;border-radius:var(--radius-sm);cursor:pointer;position:relative}
+.cal-day:active{background:var(--gray4)}
+.cal-day.today{background:var(--c1);color:var(--white);font-weight:700}
+.cal-day.other{color:var(--gray3)}
+.cal-day .dot{width:5px;height:5px;border-radius:50%;display:inline-block;position:absolute;bottom:2px;left:50%;transform:translateX(-50%)}
+
+/* ===== CONTENT ===== */
+.app{display:none;padding-top:var(--hh);padding-bottom:calc(var(--nh) + 8px)}
+.page{display:none;padding:12px 16px}
+.page.active{display:block}
+
+/* ===== CARDS ===== */
+.card{background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-bottom:12px}
+.card-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--gray4)}
+.card-head h3{font-size:.875rem;font-weight:600}
+.card-body{padding:14px 16px}
+.card-body.np{padding:0}
+
+/* ===== INTERVENTION ITEM ===== */
+.int-item{padding:14px 16px;border-bottom:1px solid var(--gray4);display:flex;gap:12px;align-items:flex-start;cursor:pointer;transition:background .1s}
+.int-item:active{background:var(--gray5)}
+.int-item .time-block{min-width:48px;text-align:center}
+.int-item .time-block .time{font-size:1rem;font-weight:700;color:var(--c1)}
+.int-item .time-block .date{font-size:.625rem;color:var(--gray);text-transform:uppercase}
+.int-item .info{flex:1;min-width:0}
+.int-item .info h4{font-size:.875rem;font-weight:600;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.int-item .info p{font-size:.75rem;color:var(--gray);margin-bottom:4px}
+.int-item .arrow{color:var(--gray3);font-size:1rem;align-self:center}
+
+/* ===== TAGS ===== */
+.tag{display:inline-flex;align-items:center;gap:3px;padding:2px 9px;border-radius:16px;font-size:.6875rem;font-weight:600}
+.tag-ok{background:#D1FAE5;color:#065F46}
+.tag-warn{background:#FEF3C7;color:#92400E}
+.tag-err{background:#FEE2E2;color:#991B1B}
+.tag-info{background:#DBEAFE;color:#1E40AF}
+.tag-purple{background:#EDE9FE;color:#5B21B6}
+.tag-gray{background:var(--gray4);color:#374151}
+
+/* ===== KPI MINI ===== */
+.kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.kpi-mini{background:var(--white);border-radius:var(--radius-sm);padding:12px;text-align:center;box-shadow:var(--shadow)}
+.kpi-mini .val{font-size:1.375rem;font-weight:700;letter-spacing:-.02em}
+.kpi-mini .lbl{font-size:.625rem;color:var(--gray);text-transform:uppercase;letter-spacing:.03em;margin-top:2px}
+
+/* ===== SLA BAR ===== */
+.sla-bar{height:5px;background:var(--gray3);border-radius:3px;overflow:hidden;margin-top:4px}
+.sla-bar .fill{height:100%;border-radius:3px}
+
+/* ===== WORKFLOW ===== */
+.wf-mini{display:flex;gap:3px;flex-wrap:wrap;margin-top:4px}
+.wf-dot{width:8px;height:8px;border-radius:50%;background:var(--gray3)}
+.wf-dot.done{background:var(--ok)}
+.wf-dot.active{background:var(--c1);box-shadow:0 0 0 3px rgba(178,34,34,.2)}
+
+/* ===== ORDINE CARD ===== */
+.ord-card{padding:14px 16px;border-bottom:1px solid var(--gray4)}
+.ord-card h4{font-size:.875rem;font-weight:600;margin-bottom:4px}
+.ord-card .meta{font-size:.75rem;color:var(--gray);margin-bottom:6px}
+
+/* ===== NOTIF ITEM ===== */
+.notif-item{padding:14px 16px;border-bottom:1px solid var(--gray4);display:flex;gap:12px}
+.notif-item.unread{background:#FEF3C7}
+.notif-item .dot-n{width:10px;height:10px;border-radius:50%;background:var(--c1);flex-shrink:0;margin-top:4px}
+.notif-item .dot-n.read{background:var(--gray3)}
+.notif-item .n-info{flex:1}
+
+/* ===== MAP ===== */
+#mapTec{height:calc(100vh - var(--hh) - var(--nh) - 60px);min-height:300px;border-radius:var(--radius);z-index:1}
+
+/* ===== MODAL (bottom sheet) ===== */
+.sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:5000;opacity:0;pointer-events:none;transition:opacity .2s}
+.sheet-overlay.show{opacity:1;pointer-events:auto}
+.sheet{position:fixed;bottom:0;left:0;right:0;background:var(--white);border-radius:20px 20px 0 0;max-height:85vh;display:flex;flex-direction:column;z-index:5001;transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1)}
+.sheet-overlay.show .sheet{transform:translateY(0)}
+.sheet .handle{width:36px;height:4px;border-radius:2px;background:var(--gray3);margin:10px auto 0}
+.sheet-head{padding:14px 20px 10px;display:flex;align-items:center;justify-content:space-between}
+.sheet-head h2{font-size:1rem;font-weight:700}
+.sheet-head button{background:none;border:none;font-size:1.125rem;color:var(--gray);cursor:pointer;padding:4px 8px}
+.sheet-body{padding:0 20px 24px;overflow-y:auto;flex:1;padding-bottom:calc(24px + var(--safe-b))}
+
+/* ===== TOAST ===== */
+.toast-c{position:fixed;top:calc(var(--hh) + 8px);left:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:6px}
+.toast{padding:12px 16px;border-radius:var(--radius-sm);color:var(--white);font-size:.8125rem;font-weight:500;box-shadow:var(--shadow-lg);animation:tIn .3s ease}
+.toast.ok{background:var(--ok)}.toast.err{background:var(--err)}.toast.warn{background:var(--warn)}.toast.info{background:var(--info)}
+@keyframes tIn{from{opacity:0;transform:translateY(-16px)}to{opacity:1;transform:translateY(0)}}
+
+/* ===== EMPTY ===== */
+.empty{text-align:center;padding:40px 20px;color:var(--gray)}
+.empty .ico{font-size:2.5rem;margin-bottom:8px;opacity:.5}
+</style>
+</head>
+<body>
+<div class="toast-c" id="toasts"></div>
+
+<!-- ===== LOGIN ===== -->
+<div class="login" id="loginScreen">
+<div class="login-box">
+<div style="display:flex;justify-content:center;margin-bottom:6px"><svg width="64" height="64" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="200" rx="40" fill="#050C14"/><circle cx="78" cy="100" r="42" fill="none" stroke="#00C9A7" stroke-width="8"/><circle cx="122" cy="100" r="42" fill="none" stroke="#3B7EF7" stroke-width="8"/><path d="M 90 72 Q 100 100 90 128" fill="none" stroke="#00C9A7" stroke-width="5" stroke-linecap="round"/><path d="M 110 72 Q 100 100 110 128" fill="none" stroke="#3B7EF7" stroke-width="5" stroke-linecap="round"/></svg></div>
+<h1 id="brandName">Syntoniqa</h1>
+<p class="sub" id="brandSub">Portale Tecnico v1.0</p>
+<div id="loginLoad" class="loading"><div class="spin"></div><p style="margin-top:10px;font-size:.8125rem;color:var(--gray)">Connessione...</p></div>
+<form id="loginForm" onsubmit="return doLogin(event)" style="display:none">
+<div class="field"><label>Username</label><input type="text" id="inpUser" required placeholder="nome.cognome" autocomplete="username"></div>
+<div class="field"><label>Password</label><input type="password" id="inpPwd" required placeholder="••••••" autocomplete="current-password"></div>
+<div id="loginErr" style="color:var(--err);font-size:.8125rem;margin-bottom:10px;display:none"></div>
+<button class="btn btn-primary btn-block" id="btnLogin" type="submit">Accedi</button>
+</form>
+</div>
+</div>
+
+<!-- ===== HEADER ===== -->
+<header class="hdr" id="hdr" style="display:none">
+<h1 id="hdrTitle">🏠 Oggi</h1>
+<div style="display:flex;gap:6px;align-items:center">
+<span id="hdrDate" style="font-size:.6875rem;opacity:.7"></span>
+<button class="badge-bell" onclick="goPage('notifiche')" id="bellBtn">🔔</button>
+<span id="offlineBadge" style="display:none;background:#F59E0B;color:white;font-size:.65rem;font-weight:700;padding:2px 6px;border-radius:10px;margin-left:4px" title="Operazioni in coda offline">0</span>
+</div>
+</header>
+
+<!-- ===== MAIN ===== -->
+<main class="app" id="app">
+
+<!-- PAGE: OGGI (HOME) -->
+<div class="page active" id="pgOggi">
+<div class="kpi-row" id="homeKpi"></div>
+<div class="card">
+<div class="card-head"><h3>📋 Interventi Oggi</h3></div>
+<div class="card-body np" id="homeList"></div>
+</div>
+<div class="card" id="homeUrgBox" style="display:none">
+<div class="card-head"><h3>🚨 Urgenze Attive</h3></div>
+<div class="card-body np" id="homeUrg"></div>
+</div>
+<div class="card" id="homeRepBox" style="display:none">
+<div class="card-head"><h3>📞 Reperibilità Attiva</h3></div>
+<div class="card-body" id="homeRep"></div>
+</div>
+</div>
+
+<!-- PAGE: INTERVENTI -->
+<div class="page" id="pgInterventi">
+<div style="display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;-webkit-overflow-scrolling:touch">
+<button class="btn btn-sm btn-primary" onclick="filtInt('')" id="fAll">Tutti</button>
+<button class="btn btn-sm btn-outline" onclick="filtInt('pianificato')" id="fPian">📅 Pianif.</button>
+<button class="btn btn-sm btn-outline" onclick="filtInt('in_corso')" id="fCorso">âš¡ In Corso</button>
+<button class="btn btn-sm btn-outline" onclick="filtInt('completato')" id="fComp">✅ Fatti</button>
+</div>
+<div class="card"><div class="card-body np" id="intList"></div></div>
+</div>
+
+<!-- PAGE: URGENZE -->
+<div class="page" id="pgUrgenze">
+<div id="urgList"></div>
+</div>
+
+<!-- PAGE: ORDINI -->
+<div class="page" id="pgOrdini">
+<button class="btn btn-info btn-block" style="margin-bottom:12px" onclick="openSheet('shOrdine')">+ Nuovo Ordine Ricambi</button>
+<div id="ordList"></div>
+</div>
+
+<!-- PAGE: MAPPA -->
+<div class="page" id="pgMappa">
+<div id="mapTec"></div>
+<div style="display:flex;gap:8px;margin-top:10px">
+<button class="btn btn-sm btn-ok" onclick="openGMaps()" style="flex:1">📍 Google Maps</button>
+<button class="btn btn-sm btn-outline" onclick="refreshMap()" style="flex:1">🔄 Aggiorna</button>
+</div>
+<div id="mapMeta" style="margin-top:6px;font-size:.75rem;color:var(--gray)"></div>
+</div>
+
+<!-- PAGE: NOTIFICHE -->
+<div class="page" id="pgNotifiche">
+<div class="card"><div class="card-head"><h3>🔔 Notifiche</h3><button class="btn btn-ghost btn-sm" onclick="markAllRead()">Lette tutte</button></div><div class="card-body np" id="notList"></div></div>
+</div>
+
+<!-- PAGE: REPERIBILITA -->
+<div class="page" id="pgReperibilita">
+<div id="repList"></div>
+</div>
+
+<!-- PAGE: RICHIESTE -->
+<div class="page" id="pgRichieste">
+<button class="btn btn-primary btn-block" style="margin-bottom:12px" onclick="openSheet('shRichiesta')">+ Nuova Richiesta</button>
+<div id="richList"></div>
+</div>
+<!-- PAGE: CALENDARIO -->
+<div class="page" id="pgCalendario">
+<div class="card">
+<div class="card-head">
+<button onclick="calMobileNav(-1)" style="background:none;border:none;font-size:1.2rem;cursor:pointer">â—€</button>
+<h3 id="calMobTitle" style="flex:1;text-align:center;font-size:.9375rem">—</h3>
+<button onclick="calMobileNav(1)" style="background:none;border:none;font-size:1.2rem;cursor:pointer">â–¶</button>
+</div>
+<div class="card-body">
+<div class="cal-grid" id="calMobGrid"></div>
+</div>
+</div>
+<div id="calMobDetail" style="margin-top:12px"></div>
+</div>
+<!-- PAGE: TRASFERTE -->
+<div class="page" id="pgTrasferte">
+<button class="btn btn-primary btn-block" style="margin-bottom:12px" onclick="openSheet('shTrasferta')">+ Nuova Trasferta</button>
+<div id="trasfList"></div>
+</div>
+<!-- PAGE: CLIENTI (sola lettura) -->
+<div class="page" id="pgClienti">
+<div class="field" style="margin-bottom:12px"><input type="text" id="srcCliMob" placeholder="🔍 Cerca cliente per nome, città..." oninput="renderCliMob()" style="width:100%"></div>
+<div id="cliMobList"></div>
+</div>
+<!-- PAGE: MACCHINE (sola lettura) -->
+<div class="page" id="pgMacchine">
+<div class="field" style="margin-bottom:12px"><input type="text" id="srcMacMob" placeholder="🔍 Cerca per tipo, modello, seriale..." oninput="renderMacMob()" style="width:100%"></div>
+<div id="macMobList"></div>
+</div>
+<!-- PAGE: DOCUMENTI AZIENDALI -->
+<div class="page" id="pgDocumenti">
+<div class="field" style="margin-bottom:12px"><input type="text" id="srcDocMob" placeholder="🔍 Cerca documento per nome, tag..." oninput="renderDocMob()" style="width:100%"></div>
+<div id="docMobList"></div>
+</div>
+<!-- PAGE: PROFILO -->
+<div class="page" id="pgProfilo">
+<div style="text-align:center;padding:24px 0 16px">
+<div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--c2),var(--c1));display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:1.5rem;font-weight:700;color:var(--white)" id="profAvatar">MC</div>
+<h2 style="font-size:1.125rem;font-weight:700" id="profName">—</h2>
+<p style="font-size:.8125rem;color:var(--gray)" id="profRole">—</p>
+</div>
+<div class="card" id="profCard"></div>
+<div style="padding:16px"><button class="btn btn-outline btn-block" onclick="logout()">🚪 Esci</button></div>
+</div>
+
+</main>
+
+<!-- ===== BOTTOM NAV ===== -->
+<nav class="bnav" id="bnav" style="display:none">
+<button class="active" onclick="goPage('oggi')" data-p="oggi"><span class="ico">🏠</span>Oggi</button>
+<button onclick="goPage('interventi')" data-p="interventi"><span class="ico">📋</span>Interventi</button>
+<button onclick="goPage('urgenze')" data-p="urgenze"><span class="ico">🚨</span>Urgenze</button>
+<button onclick="goPage('ordini')" data-p="ordini"><span class="ico">📦</span>Ordini</button>
+<button onclick="goPage('mappa')" data-p="mappa"><span class="ico">🗺️</span>Mappa</button>
+<button onclick="openSheet('shAltro')" data-p="altro"><span class="ico">⋯</span>Altro</button>
+</nav>
+
+
+<!-- ===== BOTTOM SHEETS ===== -->
+
+<!-- Sheet: Dettaglio Intervento -->
+<div class="sheet-overlay" id="shInt" onclick="if(event.target===this)closeSheet('shInt')">
+<div class="sheet">
+<div class="handle"></div>
+<div class="sheet-head"><h2 id="siTitle">Intervento</h2><button onclick="closeSheet('shInt')">✕</button></div>
+<div class="sheet-body" id="siBody"></div>
+</div>
+</div>
+
+<!-- Sheet: Completa Intervento -->
+<div class="sheet-overlay" id="shCompleta" onclick="if(event.target===this)closeSheet('shCompleta')">
+<div class="sheet">
+<div class="handle"></div>
+<div class="sheet-head"><h2>✅ Completa Intervento</h2><button onclick="closeSheet('shCompleta')">✕</button></div>
+<div class="sheet-body">
+<input type="hidden" id="scId">
+<input type="hidden" id="scTemplateId">
+<!-- Checklist dinamica -->
+<div id="scChecklistBox" style="display:none;margin-bottom:16px">
+<label style="font-weight:600;font-size:.8125rem;margin-bottom:8px;display:block">📋 Checklist</label>
+<div id="scChecklistVoci" style="display:flex;flex-direction:column;gap:6px"></div>
+</div>
+<div class="field-row">
+<div class="field"><label>Km Percorsi</label><input type="number" id="scKm" placeholder="0" min="0" inputmode="decimal"></div>
+<div class="field"><label>Ore Lavorate</label><input type="number" id="scOre" placeholder="0" step="0.5" min="0" inputmode="decimal"></div>
+</div>
+<div class="field"><label>Valutazione Cliente (1-5)</label><input type="number" id="scVoto" placeholder="—" min="1" max="5" inputmode="numeric"></div>
+<div class="field"><label>Note Completamento</label><textarea id="scNote" rows="3" placeholder="Descrivi il lavoro svolto..."></textarea></div>
+<!-- Allegati: foto + file -->
+<div style="margin-top:12px">
+<label style="font-weight:600;font-size:.8125rem;margin-bottom:8px;display:block">📎 Allegati</label>
+<div style="display:flex;gap:8px;margin-bottom:8px">
+<label class="btn btn-outline" style="flex:1;text-align:center;cursor:pointer">📷 Foto<input type="file" accept="image/*" capture="environment" style="display:none" onchange="addAllegatoFile(this)"></label>
+<label class="btn btn-outline" style="flex:1;text-align:center;cursor:pointer">📎 File<input type="file" style="display:none" onchange="addAllegatoFile(this)"></label>
+</div>
+<div id="scAllegatiPreview" style="display:flex;flex-direction:column;gap:6px"></div>
+</div>
+<div style="display:flex;gap:8px;margin-top:16px">
+<button class="btn btn-outline" onclick="closeSheet('shCompleta')" style="flex:1">Annulla</button>
+<button class="btn btn-ok" onclick="completaInt()" style="flex:1">✅ Conferma</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Sheet: Dettaglio Urgenza -->
+<div class="sheet-overlay" id="shUrg" onclick="if(event.target===this)closeSheet('shUrg')">
+<div class="sheet">
+<div class="handle"></div>
+<div class="sheet-head"><h2 id="suTitle">🚨 Urgenza</h2><button onclick="closeSheet('shUrg')">✕</button></div>
+<div class="sheet-body" id="suBody"></div>
+</div>
+</div>
+
+<!-- Sheet: Nuovo Ordine -->
+<div class="sheet-overlay" id="shOrdine" onclick="if(event.target===this)closeSheet('shOrdine')">
+<div class="sheet">
+<div class="handle"></div>
+<div class="sheet-head"><h2>📦 Nuovo Ordine</h2><button onclick="closeSheet('shOrdine')">✕</button></div>
+<div class="sheet-body">
+<div class="field"><label>Codice Ricambio</label><input type="text" id="soCodice" placeholder="LY-12345"></div>
+<div class="field"><label>Descrizione</label><input type="text" id="soDesc" placeholder="Descrizione pezzo"></div>
+<div class="field-row">
+<div class="field"><label>Quantità</label><input type="number" id="soQta" value="1" min="1" inputmode="numeric"></div>
+<div class="field"><label>Cliente</label><select id="soCliente"><option value="">—</option></select></div>
+</div>
+<div class="field"><label>Note</label><textarea id="soNote" rows="2"></textarea></div>
+<div style="display:flex;gap:8px;margin-top:16px">
+<button class="btn btn-outline" onclick="closeSheet('shOrdine')" style="flex:1">Annulla</button>
+<button class="btn btn-info" onclick="saveOrdine()" style="flex:1">📦 Crea</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Sheet: Nuova Richiesta -->
+<div class="sheet-overlay" id="shRichiesta" onclick="if(event.target===this)closeSheet('shRichiesta')">
+<div class="sheet">
+<div class="handle"></div>
+<div class="sheet-head"><h2>📝 Nuova Richiesta</h2><button onclick="closeSheet('shRichiesta')">✕</button></div>
+<div class="sheet-body">
+<div class="field"><label>Tipo</label><select id="srTipo"><option value="ferie">Ferie</option><option value="permesso">Permesso</option><option value="malattia">Malattia</option><option value="altro">Altro</option></select></div>
+<div class="field-row">
+<div class="field"><label>Dal</label><input type="date" id="srDal"></div>
+<div class="field"><label>Al</label><input type="date" id="srAl"></div>
+</div>
+<div class="field"><label>Motivo</label><textarea id="srMotivo" rows="3" placeholder="Motivo della richiesta..."></textarea></div>
+<div style="display:flex;gap:8px;margin-top:16px">
+<button class="btn btn-outline" onclick="closeSheet('shRichiesta')" style="flex:1">Annulla</button>
+<button class="btn btn-primary" onclick="saveRichiesta()" style="flex:1">📤 Invia</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Sheet: Nuova Trasferta -->
+<div class="sheet-overlay" id="shTrasferta" onclick="if(event.target===this)closeSheet('shTrasferta')">
+<div class="sheet">
+<div class="handle"></div>
+<div class="sheet-head"><h2>🧳 Nuova Trasferta</h2><button onclick="closeSheet('shTrasferta')">✕</button></div>
+<div class="sheet-body">
+<div class="field"><label>Destinazione (Cliente)</label><select id="stCliente"></select></div>
+<div class="field-row">
+<div class="field"><label>Dal</label><input type="date" id="stDal"></div>
+<div class="field"><label>Al</label><input type="date" id="stAl"></div>
+</div>
+<div class="field"><label>Motivo</label><textarea id="stMotivo" rows="3" placeholder="Motivo della trasferta..."></textarea></div>
+<div style="display:flex;gap:8px;margin-top:16px">
+<button class="btn btn-outline" onclick="closeSheet('shTrasferta')" style="flex:1">Annulla</button>
+<button class="btn btn-primary" onclick="saveTrasferta()" style="flex:1">📤 Invia</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Sheet: Altro (menu) -->
+<div class="sheet-overlay" id="shAltro" onclick="if(event.target===this)closeSheet('shAltro')">
+<div class="sheet">
+<div class="handle"></div>
+<div class="sheet-head"><h2>⋯ Altro</h2><button onclick="closeSheet('shAltro')">✕</button></div>
+<div class="sheet-body" style="padding:0 0 24px">
+<div onclick="closeSheet('shAltro');goPage('calendario')" style="padding:16px 20px;border-bottom:1px solid var(--gray4);cursor:pointer;display:flex;justify-content:space-between"><span>📅 Calendario</span><span style="color:var(--gray3)">›</span></div>
+<div onclick="closeSheet('shAltro');goPage('trasferte')" style="padding:16px 20px;border-bottom:1px solid var(--gray4);cursor:pointer;display:flex;justify-content:space-between"><span>🧳 Trasferte</span><span style="color:var(--gray3)">›</span></div>
+<div onclick="closeSheet('shAltro');goPage('clienti')" style="padding:16px 20px;border-bottom:1px solid var(--gray4);cursor:pointer;display:flex;justify-content:space-between"><span>🏢 Clienti</span><span style="color:var(--gray3)">›</span></div>
+<div onclick="closeSheet('shAltro');goPage('macchine')" style="padding:16px 20px;border-bottom:1px solid var(--gray4);cursor:pointer;display:flex;justify-content:space-between"><span>⚙️ Macchine</span><span style="color:var(--gray3)">›</span></div>
+<div onclick="closeSheet('shAltro');goPage('documenti')" style="padding:16px 20px;border-bottom:1px solid var(--gray4);cursor:pointer;display:flex;justify-content:space-between"><span>📁 Documenti Aziendali</span><span style="color:var(--gray3)">›</span></div>
+<div onclick="closeSheet('shAltro');goPage('reperibilita')" style="padding:16px 20px;border-bottom:1px solid var(--gray4);cursor:pointer;display:flex;justify-content:space-between"><span>📞 Reperibilità</span><span style="color:var(--gray3)">›</span></div>
+<div onclick="closeSheet('shAltro');goPage('richieste')" style="padding:16px 20px;border-bottom:1px solid var(--gray4);cursor:pointer;display:flex;justify-content:space-between"><span>📝 Richieste Ferie / Permessi</span><span style="color:var(--gray3)">›</span></div>
+<div onclick="closeSheet('shAltro');goPage('notifiche')" style="padding:16px 20px;border-bottom:1px solid var(--gray4);cursor:pointer;display:flex;justify-content:space-between"><span>🔔 Notifiche</span><span style="color:var(--gray3)">›</span></div>
+<div onclick="closeSheet('shAltro');goPage('profilo')" style="padding:16px 20px;cursor:pointer;display:flex;justify-content:space-between"><span>👤 Il Mio Profilo</span><span style="color:var(--gray3)">›</span></div>
+</div>
+</div>
+</div>
+
+<script>
+// ============ STATE ============
+let D={},U=null,MAP=null,MK=[],intF='';
+const API='https://syntoniqa-api.YOUR_SUBDOMAIN.workers.dev';
+const TK='MRS_Syntoniqa_2026_MBGOAT';
+// ============ OFFLINE QUEUE ============
+const OQ_KEY='ff8_offlineQueue';
+function oqGet(){try{return JSON.parse(localStorage.getItem(OQ_KEY)||'[]')}catch(e){return[]}}
+function oqSave(q){localStorage.setItem(OQ_KEY,JSON.stringify(q))}
+function oqAdd(action,data){const q=oqGet();q.push({action,data,ts:Date.now()});oqSave(q);oqUpdateBadge()}
+function oqUpdateBadge(){const n=oqGet().length;const b=document.getElementById('offlineBadge');if(b)b.style.display=n?'block':'none';if(b)b.textContent=n}
+async function oqSync(){
+  const q=oqGet();if(!q.length)return;
+  let ok=0,fail=[];
+  for(const item of q){
+    try{await api(item.action,item.data,'POST');ok++}catch(e){fail.push(item)}
+  }
+  oqSave(fail);oqUpdateBadge();
+  if(ok)toast(`✅ ${ok} operazioni sincronizzate`,'ok');
+  if(fail.length)toast(`⚠️ ${fail.length} ancora in coda`,'warn');
+}
+window.addEventListener('online',()=>{toast('🌐 Connessione ripristinata — sincronizzazione...','info');setTimeout(oqSync,2000)});
+window.addEventListener('offline',()=>{toast('📡 Sei offline — le operazioni verranno salvate localmente','warn')});
+function isOnline(){return navigator.onLine}
+// ============ HELPERS ============
+const $=id=>document.getElementById(id);
+const td=()=>new Date().toISOString().split('T')[0];
+const fd=d=>{if(!d)return'—';const p=String(d).substring(0,10).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:'—'};
+const fdt=d=>{if(!d)return'—';try{return new Date(d).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}catch{return'—'}};
+const ft=d=>d?(d+'').substring(0,5):'—';
+const gn=(list,id)=>{const o=(list||[]).find(x=>x.ID===id);return o?(o.Nome||'')+(o.Cognome?' '+o.Cognome:''):id||'—'};
+const gc=(list,id)=>{const o=(list||[]).find(x=>x.ID===id);return o?.Colore||'#6B7280'};
+const stag=s=>{const m={'pianificato':['tag-info','📅'],'in_corso':['tag-warn','⚡'],'completato':['tag-ok','✅'],'aperta':['tag-err','🔴'],'assegnata':['tag-warn','👤'],'schedulata':['tag-info','📅'],'in_corso':['tag-warn','⚡'],'risolta':['tag-ok','✅'],'richiesto':['tag-info','📝'],'preso_in_carico':['tag-warn','👋'],'ordinato':['tag-purple','📦'],'in_arrivo':['tag-info','🚚'],'arrivato':['tag-ok','✅'],'attiva':['tag-ok','✅'],'in_attesa':['tag-warn','⏳'],'approvata':['tag-ok','✅'],'rifiutata':['tag-err','❌']};const x=m[s]||['tag-gray',''];return`<span class="tag ${x[0]}">${x[1]} ${s||'—'}</span>`};
+function toast(m,t='info'){const d=document.createElement('div');d.className='toast '+t;d.textContent=m;$('toasts').appendChild(d);setTimeout(()=>d.remove(),3500)}
+function openSheet(id){$(id).classList.add('show')}
+function closeSheet(id){$(id).classList.remove('show')}
+
+// ============ NAVIGATION ============
+function goPage(name){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.bnav button').forEach(b=>b.classList.remove('active'));
+  const pg=$('pg'+name.charAt(0).toUpperCase()+name.slice(1));
+  if(pg)pg.classList.add('active');
+  const btn=document.querySelector(`.bnav button[data-p="${name}"]`);
+  if(btn)btn.classList.add('active');
+ const t={'oggi':'🏠 Oggi','interventi':'📋 Interventi','urgenze':'🚨 Urgenze','ordini':'📦 Ordini','mappa':'🗺️ Percorso','clienti':'🏢 Clienti','trasferte':'🧳 Trasferte','macchine':'⚙️ Macchine','calendario':'📅 Calendario','notifiche':'🔔 Notifiche','reperibilita':'📞 Reperibilità','richieste':'📝 Richieste','documenti':'📁 Documenti','profilo':'👤 Profilo'};
+  $('hdrTitle').textContent=t[name]||name;
+  window.scrollTo(0,0);
+ if(name==='mappa')setTimeout(initMap,150);
+  if(name==='calendario')renderCalMobile();
+}
+// ============ CALENDARIO MOBILE ============
+let calMobDate=new Date();
+function renderCalMobile(){
+  const y=calMobDate.getFullYear(),m=calMobDate.getMonth();
+  $('calMobTitle').textContent=new Date(y,m).toLocaleDateString('it-IT',{month:'long',year:'numeric'});
+  const first=new Date(y,m,1),last=new Date(y,m+1,0);
+  const startDay=(first.getDay()+6)%7;
+  const piano=my(D.piano).filter(p=>p.Data);
+  const todayStr=new Date().toISOString().slice(0,10);
+  let html='<div class="cal-hdr">L</div><div class="cal-hdr">M</div><div class="cal-hdr">M</div><div class="cal-hdr">G</div><div class="cal-hdr">V</div><div class="cal-hdr">S</div><div class="cal-hdr">D</div>';
+  const prevLast=new Date(y,m,0).getDate();
+  for(let i=startDay-1;i>=0;i--)html+='<div class="cal-day other">'+(prevLast-i)+'</div>';
+  for(let d=1;d<=last.getDate();d++){
+    const ds=y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    const dayItems=piano.filter(p=>p.Data===ds);
+    const isToday=ds===todayStr;
+    const dotColor=dayItems.length>0?(dayItems.some(p=>p.Stato==='in_corso')?'var(--c1)':dayItems.some(p=>p.Stato==='completato')?'var(--ok)':'#3B82F6'):'';
+    html+='<div class="cal-day'+(isToday?' today':'')+'" onclick="showCalMobDay(\''+ds+'\')">'+d+(dayItems.length>0?'<span class="dot" style="background:'+dotColor+'"></span>':'')+'</div>';
+  }
+  const rem=7-((startDay+last.getDate())%7);
+  if(rem<7)for(let i=1;i<=rem;i++)html+='<div class="cal-day other">'+i+'</div>';
+  $('calMobGrid').innerHTML=html;
+  $('calMobDetail').innerHTML='';
+}
+function calMobileNav(dir){calMobDate.setMonth(calMobDate.getMonth()+dir);renderCalMobile()}
+function showCalMobDay(ds){
+  const items=my(D.piano).filter(p=>p.Data===ds);
+  const label=new Date(ds+'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'});
+  if(!items.length){$('calMobDetail').innerHTML='<div class="card"><div class="card-body" style="text-align:center;color:var(--gray);padding:20px">Nessun intervento per '+label+'</div></div>';return}
+  $('calMobDetail').innerHTML='<div style="font-weight:600;font-size:.8125rem;margin-bottom:8px;padding:0 4px">'+label+' — '+items.length+' interventi</div>'+items.map(p=>{
+    const tc=gc(D.tipiIntervento,p.TipoInterventoID);
+    return'<div class="card" onclick="showInt(\''+p.ID+'\')" style="border-left:3px solid '+tc+'"><div class="card-body" style="padding:10px 14px"><div style="display:flex;justify-content:space-between;margin-bottom:2px"><strong>'+(p.OraInizio||'—')+'</strong>'+stag(p.Stato)+'</div><div style="font-size:.8125rem">'+gn(D.clienti,p.ClienteID)+'</div><div style="font-size:.75rem;color:var(--gray)">'+gn(D.tipiIntervento,p.TipoInterventoID)+'</div></div></div>'}).join('');
+}
+// ============ API ============
+const OFFLINE_ACTIONS=['updatePiano','compileChecklist','createAllegato','uploadFile','createRichiesta','createOrdine','createTrasferta'];
+async function api(action,data={},method='GET'){
+  let url=API,opts={};
+  if(method==='GET'){url+='?'+new URLSearchParams({action,token:TK,...data})}
+  else{opts={method:'POST',headers:{'Content-Type':'application/json','X-Token':TK},body:JSON.stringify({action,userId:U?.ID||'',...data})}}
+  try{
+    const r=await fetch(url,opts);const j=await r.json();
+    if(!j.success)throw new Error(j.error||'Errore');
+    return j.data !== undefined ? j.data : j;
+  }catch(e){
+    if(!navigator.onLine&&method==='POST'&&OFFLINE_ACTIONS.includes(action)){
+      oqAdd(action,{...data,userId:U?.ID||''});
+      toast('📡 Salvato offline — verrà sincronizzato','warn');
+      return{_offline:true};
+    }
+    throw e;
+  }
+}
+async function refresh(){try{D=await api('getAll',{userId:U?.ID||''});if(U&&U.ID){const fresh=(D.utenti||[]).find(x=>x.ID===U.ID);if(fresh)U={...fresh}}renderAll()}catch(e){toast('Errore: '+e.message,'err')}}
+
+// ============ INIT & AUTH ============
+document.addEventListener('DOMContentLoaded',init);
+async function init(){
+  try{
+    D=await api('getAll');applyConfig();
+    $('loginLoad').style.display='none';$('loginForm').style.display='block';
+    const s=localStorage.getItem('sq1tec');
+    if(s){const o=JSON.parse(s);const u=(D.utenti||[]).find(x=>x.ID===o.id);if(u){U=u;enterApp()}}
+  }catch(e){$('loginLoad').innerHTML='<div style="color:var(--err)">❌ '+e.message+'</div>'}
+}
+function applyConfig(){
+  const c=D.config||{};
+  if(c.colore_primario){document.documentElement.style.setProperty('--c1',c.colore_primario);document.querySelector('meta[name=theme-color]')?.setAttribute('content',c.colore_primario)}
+  if(c.colore_secondario)document.documentElement.style.setProperty('--c2',c.colore_secondario);
+  if(c.azienda_nome)$('brandName').textContent=c.azienda_nome;
+}
+async function doLogin(e){
+  e.preventDefault();$('btnLogin').disabled=true;$('loginErr').style.display='none';
+  try{
+    const r=await api('login',{username:$('inpUser').value.trim(),password:$('inpPwd').value},'POST');
+    if(!r.user)throw new Error('Credenziali non valide');
+    U=r.user;localStorage.setItem('sq1tec',JSON.stringify({id:U.ID}));enterApp();
+  }catch(e){$('loginErr').textContent=e.message;$('loginErr').style.display='block'}
+  finally{$('btnLogin').disabled=false}return false;
+}
+function logout(){localStorage.removeItem('sq1tec');location.reload()}
+function enterApp(){
+  // Merge user data from full utenti array for complete profile
+  if(U&&U.ID){const full=(D.utenti||[]).find(x=>x.ID===U.ID);if(full)U={...full,...U}}
+  $('loginScreen').classList.add('hidden');$('hdr').style.display='flex';$('app').style.display='block';$('bnav').style.display='flex';
+  $('hdrDate').textContent=new Date().toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'});
+  fillSelects();renderAll();oqUpdateBadge();
+  // Sync offline queue if online
+  if(isOnline()&&oqGet().length)setTimeout(oqSync,3000);
+  // Refresh every 2 min
+  setInterval(refresh,120000);
+}
+function fillSelects(){
+  const cls=(D.clienti||[]).filter(c=>!c.Obsoleto);
+  const s=$('soCliente');if(s){s.innerHTML='<option value="">—</option>';cls.forEach(c=>{const o=document.createElement('option');o.value=c.ID;o.textContent=c.Nome;s.appendChild(o)})}
+const st=$('stCliente');if(st){st.innerHTML='<option value="">—</option>';cls.forEach(c=>{const o=document.createElement('option');o.value=c.ID;o.textContent=c.Nome;st.appendChild(o)})}
+}
+
+// ============ MY ITEMS ============
+function my(list){return(list||[]).filter(p=>!p.Obsoleto&&(p.TecnicoID===U?.ID||p.TecnicoAssegnato===U?.ID||(p.TecniciIDs||'').includes(U?.ID)))}
+
+
+// ============ RENDER ALL ============
+function renderAll(){renderHome();renderInt();renderUrg();renderOrd();renderNot();renderRep();renderRich();renderTrasf();renderCliMob();renderMacMob();renderDocMob();renderProf();updateBadges()}
+function updateBadges(){
+  const nu=my(D.urgenze).filter(u=>u.Stato!=='risolta').length;
+  const nn=(D.notifiche||[]).filter(n=>!n.Obsoleto&&n.Stato==='inviata'&&(n.DestinatarioID===U?.ID||(n.DestinatariIDs||'').includes(U?.ID))).length;
+  const no=my(D.ordini).filter(o=>o.Stato!=='arrivato').length;
+  document.querySelectorAll('.bnav .nbadge').forEach(b=>b.remove());
+  if(nu>0){const b=document.querySelector('[data-p=urgenze]');if(b){const s=document.createElement('span');s.className='nbadge';s.textContent=nu;b.appendChild(s)}}
+  if(no>0){const b=document.querySelector('[data-p=ordini]');if(b){const s=document.createElement('span');s.className='nbadge';s.textContent=no;b.appendChild(s)}}
+  const bell=$('bellBtn');if(bell){bell.querySelector('.dot')?.remove();if(nn>0){const d=document.createElement('span');d.className='dot';bell.appendChild(d)}}
+}
+
+// ============ HOME ============
+function renderHome(){
+  const d=td();
+  const miei=my(D.piano);
+  const oggi=miei.filter(p=>p.Data===d).sort((a,b)=>(a.OraInizio||'').localeCompare(b.OraInizio||''));
+  const urgA=my(D.urgenze).filter(u=>u.Stato!=='risolta');
+  const mioAutomezzo=(D.automezzi||[]).find(x=>x.ID===U?.AutomezzoID);
+    const automezzoAlert=mioAutomezzo&&mioAutomezzo.ProssimoControllo&&mioAutomezzo.ProssimoControllo<=td();
+  const ordA=my(D.ordini).filter(o=>o.Stato!=='arrivato');
+  const reps=(D.reperibilita||[]).filter(r=>!r.Obsoleto&&r.Stato==='attiva'&&r.TecnicoID===U?.ID&&r.DataInizio<=d&&r.DataFine>=d);
+
+  $('homeKpi').innerHTML=`
+    <div class="kpi-mini"><div class="val" style="color:var(--info)">${oggi.length}</div><div class="lbl">📋 Oggi</div></div>
+    <div class="kpi-mini"><div class="val" style="color:${oggi.filter(p=>p.Stato==='completato').length===oggi.length&&oggi.length>0?'var(--ok)':'var(--warn)'}">${oggi.filter(p=>p.Stato==='completato').length}/${oggi.length}</div><div class="lbl">✅ Fatti</div></div>
+    <div class="kpi-mini"><div class="val" style="color:${urgA.length>0?'var(--err)':'var(--ok)'}">${urgA.length}</div><div class="lbl">🚨 Urgenze</div></div>
+  `;
+
+  $('homeList').innerHTML=oggi.length?oggi.map(p=>intItem(p)).join(''):'<div class="empty"><div class="ico">☀️</div><p>Nessun intervento per oggi</p></div>';
+
+  // Urgenze mini
+  if(urgA.length>0){
+    $('homeUrgBox').style.display='';
+    $('homeUrg').innerHTML=urgA.slice(0,3).map(u=>`<div style="padding:10px 16px;border-bottom:1px solid var(--gray4);cursor:pointer" onclick="showUrg('${u.ID}')">
+      <div style="display:flex;justify-content:space-between;margin-bottom:2px"><span class="tag" style="background:${gc(D.priorita,u.PrioritaID)}20;color:${gc(D.priorita,u.PrioritaID)}">${gn(D.priorita,u.PrioritaID)}</span>${stag(u.Stato)}</div>
+      <div style="font-weight:600;font-size:.875rem">${gn(D.clienti,u.ClienteID)}</div>
+      <div style="font-size:.75rem;color:var(--gray)">${(u.Problema||'').substring(0,60)}</div>
+    </div>`).join('');
+  }else{$('homeUrgBox').style.display='none'}
+
+  // Reperibilità
+  if(reps.length>0){
+    $('homeRepBox').style.display='';
+    $('homeRep').innerHTML=reps.map(r=>`<div style="font-size:.875rem"><strong>📞 Reperibilità attiva</strong> · ${r.Turno||'24h'}<br><span style="font-size:.75rem;color:var(--gray)">${fd(r.DataInizio)} → ${fd(r.DataFine)}</span></div>`).join('');
+  }else{$('homeRepBox').style.display='none'}
+}
+
+// ============ INTERVENTION ITEM ============
+function intItem(p){
+  const cli=gn(D.clienti,p.ClienteID);
+  const tipo=gn(D.tipiIntervento,p.TipoInterventoID);
+  const tc=gc(D.tipiIntervento,p.TipoInterventoID);
+  const multi=(p.TecniciIDs||'').split(',').filter(Boolean).length;
+  return`<div class="int-item" onclick="showInt('${p.ID}')">
+    <div class="time-block"><div class="time">${ft(p.OraInizio)}</div><div class="date">${fd(p.Data).substring(0,5)}</div></div>
+    <div class="info">
+      <h4>${cli}</h4>
+      <p><span class="tag" style="background:${tc}20;color:${tc}">${tipo}</span>${p.AutomezzoID?' · 🚐 '+p.AutomezzoID:''}${multi?' · 👥 +'+multi:''}</p>
+      ${stag(p.Stato)}
+    </div>
+    <div class="arrow">›</div>
+  </div>`;
+}
+
+// ============ INTERVENTI PAGE ============
+function filtInt(s){intF=s;renderInt();
+  ['fAll','fPian','fCorso','fComp'].forEach(id=>{const b=$(id);if(b)b.className=b.className.replace('btn-primary','btn-outline')});
+  if(!s)$('fAll').className=$('fAll').className.replace('btn-outline','btn-primary');
+  else if(s==='pianificato')$('fPian').className=$('fPian').className.replace('btn-outline','btn-primary');
+  else if(s==='in_corso')$('fCorso').className=$('fCorso').className.replace('btn-outline','btn-primary');
+  else if(s==='completato')$('fComp').className=$('fComp').className.replace('btn-outline','btn-primary');
+}
+function renderInt(){
+  let items=my(D.piano);
+  if(intF)items=items.filter(p=>p.Stato===intF);
+  items.sort((a,b)=>(b.Data||'').localeCompare(a.Data||'')||(a.OraInizio||'').localeCompare(b.OraInizio||''));
+  $('intList').innerHTML=items.length?items.map(p=>intItem(p)).join(''):'<div class="empty"><div class="ico">📋</div><p>Nessun intervento</p></div>';
+}
+
+// ============ INT DETAIL ============
+function showInt(id){
+  const p=(D.piano||[]).find(x=>x.ID===id);if(!p)return;
+  const cli=gn(D.clienti,p.ClienteID);
+  const cObj=(D.clienti||[]).find(c=>c.ID===p.ClienteID);
+  const mac=(D.macchine||[]).find(m=>m.ID===p.MacchinaID);
+  const tIds=(p.TecniciIDs||'').split(',').filter(Boolean);
+  $('siTitle').textContent=cli;
+  $('siBody').innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <span style="font-size:1.5rem;font-weight:700;color:var(--c1)">${ft(p.OraInizio)}</span>
+      ${stag(p.Stato)}
+    </div>
+    <div style="font-size:.9375rem;font-weight:600;margin-bottom:4px">${fd(p.Data)}${p.DataFine&&p.DataFine!==p.Data?' → '+fd(p.DataFine):''}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0;font-size:.8125rem">
+      <div><span style="color:var(--gray)">Tipo</span><br><strong>${gn(D.tipiIntervento,p.TipoInterventoID)}</strong></div>
+      <div><span style="color:var(--gray)">Priorità</span><br><strong>${gn(D.priorita,p.PrioritaID)}</strong></div>
+      <div><span style="color:var(--gray)">Macchina</span><br><strong>${mac?mac.Tipo+' '+mac.Modello:'—'}</strong></div>
+      <div><span style="color:var(--gray)">Automezzo</span><br><strong>${p.AutomezzoID||'—'}</strong></div>
+      <div><span style="color:var(--gray)">Km / Ore</span><br><strong>${p.KmPercorsi||'—'} km · ${p.OreLavorate||'—'} h</strong></div>
+      ${tIds.length?`<div><span style="color:var(--gray)">Team</span><br><strong>${tIds.map(i=>gn(D.utenti,i)).join(', ')}</strong></div>`:''}
+    </div>
+    ${p.Note?`<div style="margin-bottom:12px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm);font-size:.8125rem">${p.Note}</div></div>`:''}
+    ${p.NoteCompletamento?`<div style="margin-bottom:12px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note completamento</div><div style="background:#D1FAE520;border:1px solid #D1FAE5;padding:12px;border-radius:var(--radius-sm);font-size:.8125rem">${p.NoteCompletamento}</div></div>`:''}
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+      ${cObj?.Telefono?`<a href="tel:${cObj.Telefono}" class="btn btn-outline">📞 Chiama ${cObj.Telefono}</a>`:''}
+      ${cObj?.Latitudine&&cObj?.Longitudine?`<a href="https://www.google.com/maps/dir/?api=1&destination=${cObj.Latitudine},${cObj.Longitudine}&travelmode=driving" target="_blank" class="btn btn-outline">📍 Naviga verso il cliente</a>`:''}
+      ${p.Stato==='pianificato'?`<button class="btn btn-warn" onclick="startInt('${id}')">âš¡ Inizia Intervento</button>`:''}
+      ${p.Stato==='in_corso'?`<button class="btn btn-ok" onclick="closeSheet('shInt');openCompleta('${id}')">✅ Completa Intervento</button>`:''}
+    </div>
+  `;
+  openSheet('shInt');
+}
+
+async function startInt(id){
+  try{await api('updatePiano',{id,data:{Stato:'in_corso'}},'POST');toast('Intervento iniziato âš¡','ok');closeSheet('shInt');await refresh()}catch(e){toast(e.message,'err')}
+}
+function openCompleta(id){
+  $('scId').value=id;$('scKm').value='';$('scOre').value='';$('scVoto').value='';$('scNote').value='';scAllegatiFiles=[];$('scAllegatiPreview').innerHTML='';
+  $('scTemplateId').value='';$('scChecklistBox').style.display='none';$('scChecklistVoci').innerHTML='';
+  // Cerca checklist template per tipo intervento
+  const p=(D.piano||[]).find(x=>x.ID===id);
+  if(p&&p.TipoInterventoID){
+    const tpl=(D.checklistTemplate||D.ChecklistTemplate||[]).find(t=>t.TipoInterventoID===p.TipoInterventoID&&t.Attivo!==false&&t.Attivo!=='false');
+    if(tpl){
+      $('scTemplateId').value=tpl.ID;
+      let voci=[];try{voci=JSON.parse(tpl.Voci||'[]')}catch(e){}
+      if(voci.length){
+        $('scChecklistBox').style.display='block';
+        $('scChecklistVoci').innerHTML=voci.map((v,i)=>
+          `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:${i%2===0?'#F9FAFB':'#fff'};border-radius:8px;cursor:pointer;font-size:.8125rem">
+          <input type="checkbox" class="sc-chk" value="${i}"> ${v}</label>`
+        ).join('');
+      }
+    }
+  }
+  openSheet('shCompleta');
+}
+async function completaInt(){
+  try{
+    const interventoId=$('scId').value;
+    const data={Stato:'completato',KmPercorsi:parseFloat($('scKm').value)||0,OreLavorate:parseFloat($('scOre').value)||0,NoteCompletamento:$('scNote').value,ValutazioneCliente:parseInt($('scVoto').value)||null};
+    await api('updatePiano',{id:interventoId,data},'POST');
+    // Salva checklist se presente
+    const tplId=$('scTemplateId').value;
+    if(tplId){
+      const checks=[...document.querySelectorAll('.sc-chk')].map(c=>c.checked);
+      try{await api('compileChecklist',{InterventoID:interventoId,TemplateID:tplId,VociCompletate:JSON.stringify(checks)},'POST')}catch(e){}
+    }
+   // Upload allegati (foto/file)
+    for(const af of scAllegatiFiles){
+      if(!af)continue;
+      try{
+        const up=await api('uploadFile',{base64:af.base64,mimeType:af.type,fileName:af.name,userId:U?.ID},'POST');
+        if(up.success) await api('createAllegato',{Nome:af.name,FileURL:up.data.fileUrl,FileID:up.data.fileId,MimeType:af.type,DimensioneKB:af.sizeKB,RiferimentoTipo:'piano',RiferimentoID:interventoId},'POST');
+      }catch(e){}
+    }
+    toast('Intervento completato! ✅','ok');closeSheet('shCompleta');await refresh();
+  }catch(e){toast(e.message,'err')}
+}
+
+// ============ ALLEGATI UPLOAD ============
+let scAllegatiFiles=[];
+function addAllegatoFile(input){
+  const file=input.files[0];if(!file)return;
+  if(file.size>20*1024*1024){toast('File troppo grande (max 20MB)','err');input.value='';return}
+  const reader=new FileReader();
+  reader.onload=function(){
+    const base64=reader.result.split(',')[1];
+    const idx=scAllegatiFiles.length;
+    scAllegatiFiles.push({base64,type:file.type,name:file.name,sizeKB:Math.round(file.size/1024)});
+    const isImg=file.type.startsWith('image/');
+    const prev=document.createElement('div');
+    prev.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 10px;background:#F9FAFB;border-radius:8px';
+    prev.innerHTML=`${isImg?'<img src="'+reader.result+'" style="width:40px;height:40px;border-radius:6px;object-fit:cover">':'<span style="font-size:1.5rem">📄</span>'}
+      <div style="flex:1;min-width:0"><div style="font-size:.8rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${file.name}</div><div style="font-size:.7rem;color:var(--gray)">${Math.round(file.size/1024)} KB</div></div>
+      <button onclick="rmAllegato(${idx},this.parentElement)" style="background:none;border:none;color:var(--err);cursor:pointer;font-size:1.1rem">✕</button>`;
+    $('scAllegatiPreview').appendChild(prev);
+    input.value='';
+  };
+  reader.readAsDataURL(file);
+}
+function rmAllegato(idx,el){scAllegatiFiles[idx]=null;el.remove()}
+
+// ============ URGENZE ============
+function renderUrg(){
+  const items=my(D.urgenze).sort((a,b)=>{const o={'breach':0,'critical':1,'warning':2,'ok':3,'':4};return(o[a.SLAStatus]||4)-(o[b.SLAStatus]||4)});
+  const aperte=items.filter(u=>u.Stato!=='risolta');
+  const risolte=items.filter(u=>u.Stato==='risolta').slice(0,5);
+  let h='';
+  if(aperte.length){
+    h+=aperte.map(u=>{
+      const pc=gc(D.priorita,u.PrioritaID);
+      return`<div class="card" style="border-left:4px solid ${pc}" onclick="showUrg('${u.ID}')">
+        <div class="card-body">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span class="tag" style="background:${pc}20;color:${pc}">${gn(D.priorita,u.PrioritaID)}</span>${stag(u.Stato)}</div>
+          <div style="font-weight:600;margin-bottom:2px">${gn(D.clienti,u.ClienteID)}</div>
+          <div style="font-size:.8125rem;color:var(--gray);margin-bottom:4px">${(u.Problema||'').substring(0,80)}</div>
+          ${u.DataPrevista?`<div style="font-size:.75rem">📅 ${fd(u.DataPrevista)} ${u.OraPrevista||''}</div>`:''}
+          ${u.SLAStatus&&u.SLAStatus!=='ok'?`<div style="margin-top:4px">${stag(u.SLAStatus==='warning'?'⚠️ Warning':u.SLAStatus==='critical'?'🔴 Critical':'💥 Breach')}</div>`:''}
+        </div>
+      </div>`}).join('');
+  }else{h+='<div class="empty"><div class="ico">🎉</div><p>Nessuna urgenza aperta!</p></div>'}
+  if(risolte.length){h+=`<div style="font-size:.75rem;color:var(--gray);font-weight:600;text-transform:uppercase;margin:16px 0 8px;letter-spacing:.04em">Risolte di recente</div>`;
+    h+=risolte.map(u=>`<div class="card" style="opacity:.7" onclick="showUrg('${u.ID}')"><div class="card-body" style="padding:10px 16px;display:flex;justify-content:space-between;align-items:center"><span>${gn(D.clienti,u.ClienteID)}</span>${stag(u.Stato)}</div></div>`).join('')}
+  $('urgList').innerHTML=h;
+}
+
+function showUrg(id){
+  const u=(D.urgenze||[]).find(x=>x.ID===id);if(!u)return;
+  const cObj=(D.clienti||[]).find(c=>c.ID===u.ClienteID);
+  $('suTitle').textContent='🚨 '+gn(D.clienti,u.ClienteID);
+  $('suBody').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:.8125rem;margin-bottom:16px">
+      <div><span style="color:var(--gray)">Priorità</span><br><span class="tag" style="background:${gc(D.priorita,u.PrioritaID)}20;color:${gc(D.priorita,u.PrioritaID)}">${gn(D.priorita,u.PrioritaID)}</span></div>
+      <div><span style="color:var(--gray)">Stato</span><br>${stag(u.Stato)}</div>
+      <div><span style="color:var(--gray)">Macchina</span><br><strong>${gn(D.macchine,u.MacchinaID)}</strong></div>
+      <div><span style="color:var(--gray)">Segnalata</span><br><strong>${fdt(u.DataSegnalazione)}</strong></div>
+      <div><span style="color:var(--gray)">Prevista</span><br><strong>${fd(u.DataPrevista)} ${u.OraPrevista||''}</strong></div>
+      <div><span style="color:var(--gray)">SLA</span><br><strong>${u.SLAStatus||'—'}</strong></div>
+    </div>
+    <div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Problema</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">${u.Problema||'—'}</div></div>
+    ${u.Note?`<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">${u.Note}</div></div>`:''}
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${cObj?.Telefono?`<a href="tel:${cObj.Telefono}" class="btn btn-outline">📞 Chiama ${cObj.Telefono}</a>`:''}
+      ${cObj?.Latitudine&&cObj?.Longitudine?`<a href="https://www.google.com/maps/dir/?api=1&destination=${cObj.Latitudine},${cObj.Longitudine}" target="_blank" class="btn btn-outline">📍 Naviga</a>`:''}
+      <button class="btn btn-outline" onclick="closeSheet('shUrg')">Chiudi</button>
+    </div>`;
+  openSheet('shUrg');
+}
+
+// ============ ORDINI ============
+function renderOrd(){
+  const items=my(D.ordini).sort((a,b)=>(b.DataRichiesta||'').localeCompare(a.DataRichiesta||''));
+  $('ordList').innerHTML=items.length?items.map(o=>{
+    const sts=['richiesto','preso_in_carico','ordinato','in_arrivo','arrivato'];
+    const ix=sts.indexOf(o.Stato);
+    const wf='<div style="display:flex;gap:4px;margin:6px 0">'+sts.map((s,i)=>`<div class="wf-dot${i<ix?' done':i===ix?' active':''}"></div>`).join('')+'</div>';
+    return`<div class="card"><div class="card-body">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><strong>${o.Codice||'—'}</strong>${stag(o.Stato)}</div>
+      <div style="font-size:.8125rem;color:var(--gray)">${o.Descrizione||'—'} · Qtà: ${o.Quantita||1}</div>
+      ${wf}
+      <div style="font-size:.75rem;color:var(--gray)">Richiesto: ${fd(o.DataRichiesta)}${o.DataArrivoPrevista?' · ETA: '+fd(o.DataArrivoPrevista):''}</div>
+    </div></div>`}).join(''):'<div class="empty"><div class="ico">📦</div><p>Nessun ordine</p></div>';
+}
+
+async function saveOrdine(){
+  try{
+    const data={Codice:$('soCodice').value,Descrizione:$('soDesc').value,Quantita:parseInt($('soQta').value)||1,ClienteID:$('soCliente').value,Note:$('soNote').value,TecnicoID:U?.ID};
+    if(!data.Codice){toast('Inserisci codice ricambio','warn');return}
+    await api('createOrdine',{data},'POST');
+    toast('Ordine creato! 📦','ok');closeSheet('shOrdine');$('soCodice').value='';$('soDesc').value='';$('soNote').value='';await refresh();
+  }catch(e){toast(e.message,'err')}
+}
+
+// ============ NOTIFICHE ============
+function renderNot(){
+  const items=(D.notifiche||[]).filter(n=>!n.Obsoleto&&(n.DestinatarioID===U?.ID||(n.DestinatariIDs||'').includes(U?.ID))).sort((a,b)=>(b.DataInvio||'').localeCompare(a.DataInvio||''));
+  $('notList').innerHTML=items.length?items.map(n=>{
+    const unread=n.Stato==='inviata';
+    return`<div class="notif-item${unread?' unread':''}">
+      <div class="dot-n${unread?'':' read'}"></div>
+      <div class="n-info">
+        <div style="display:flex;justify-content:space-between"><strong style="font-size:.875rem">${n.Oggetto||'Notifica'}</strong><span style="font-size:.6875rem;color:var(--gray)">${fdt(n.DataInvio)}</span></div>
+        <div style="font-size:.8125rem;color:var(--gray);margin-top:2px">${(n.Testo||'').substring(0,100)}</div>
+        <div style="font-size:.75rem;color:var(--gray2);margin-top:2px">Da: ${gn(D.utenti,n.MittenteID)}</div>
+        ${unread?`<button class="btn btn-sm btn-ok" style="margin-top:8px" onclick="markNot('${n.ID}')">✅ Ricevuta</button>`:''}
+      </div>
+    </div>`}).join(''):'<div class="empty"><div class="ico">🔔</div><p>Nessuna notifica</p></div>';
+}
+async function markNot(id){try{await api('markNotifica',{id,azione:'presa_in_carico'},'POST');toast('Notifica confermata','ok');await refresh()}catch(e){toast(e.message,'err')}}
+async function markAllRead(){try{await api('markAllRead',{},'POST');toast('Tutte lette','ok');await refresh()}catch(e){toast(e.message,'err')}}
+
+// ============ REPERIBILITA ============
+function renderRep(){
+  const items=(D.reperibilita||[]).filter(r=>!r.Obsoleto&&r.TecnicoID===U?.ID).sort((a,b)=>(b.DataInizio||'').localeCompare(a.DataInizio||''));
+  $('repList').innerHTML=items.length?items.map(r=>{
+    const active=r.Stato==='attiva'&&r.DataInizio<=td()&&r.DataFine>=td();
+    return`<div class="card" ${active?'style="border-left:4px solid var(--ok)"':''}>
+      <div class="card-body">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px"><strong>${r.Turno||'24h'} · ${r.Tipo||'reperibilità'}</strong>${stag(r.Stato)}</div>
+        <div style="font-size:.875rem">📅 ${fd(r.DataInizio)} → ${fd(r.DataFine)}</div>
+        ${active?'<div style="margin-top:6px"><span class="tag tag-ok">🟢 Attualmente reperibile</span></div>':''}
+        ${r.Note?`<div style="font-size:.8125rem;color:var(--gray);margin-top:4px">${r.Note}</div>`:''}
+      </div>
+    </div>`}).join(''):'<div class="empty"><div class="ico">📞</div><p>Nessun turno di reperibilità</p></div>';
+}
+
+// ============ RICHIESTE ============
+function renderRich(){
+  const items=(D.richieste||[]).filter(r=>!r.Obsoleto&&r.Obsoleto!=='true'&&r.TecnicoID===U?.ID).sort((a,b)=>(b.DataRichiesta||b.DataInizio||'').localeCompare(a.DataRichiesta||a.DataInizio||''));
+  $('richList').innerHTML=items.length?items.map(r=>`<div class="card">
+    <div class="card-body">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><strong>${r.Tipo||'—'}</strong>${stag(r.Stato)}</div>
+      <div style="font-size:.875rem">📅 ${fd(r.DataInizio)} → ${fd(r.DataFine)}</div>
+      <div style="font-size:.8125rem;color:var(--gray);margin-top:4px">${r.Motivo||'—'}</div>
+      <div style="font-size:.75rem;color:var(--gray2);margin-top:4px">Inviata: ${fd(r.DataRichiesta)}</div>
+    </div>
+  </div>`).join(''):'<div class="empty"><div class="ico">📝</div><p>Nessuna richiesta inviata</p></div>';
+}
+
+async function saveRichiesta(){
+  try{
+    const data={TecnicoID:U?.ID,Tipo:$('srTipo').value,DataInizio:$('srDal').value,DataFine:$('srAl').value,Motivo:$('srMotivo').value};
+    if(!data.DataInizio){toast('Inserisci data inizio','warn');return}
+    await api('createRichiesta',{data},'POST');
+    toast('Richiesta inviata! Il direttore la valuterà','ok');closeSheet('shRichiesta');
+    $('srDal').value='';$('srAl').value='';$('srMotivo').value='';
+    await refresh();
+  }catch(e){toast(e.message,'err')}
+}
+// ============ CLIENTI (sola lettura) ============
+function renderCliMob(){
+  const q=($('srcCliMob')?.value||'').toLowerCase();
+  const items=(D.clienti||[]).filter(c=>!c.Obsoleto&&(!q||c.Nome?.toLowerCase().includes(q)||c.Citta?.toLowerCase().includes(q)||c.Prov?.toLowerCase().includes(q)));
+  $('cliMobList').innerHTML=items.length?items.map(c=>`<div class="card" onclick="showCliDetail('${c.ID}')">
+    <div class="card-body" style="padding:12px 16px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><strong>${c.Nome||'—'}</strong><div style="font-size:.8125rem;color:var(--gray)">${c.Citta||''}${c.Prov?' ('+c.Prov+')':''}</div></div>
+        <span style="color:var(--gray3)">›</span>
+      </div>
+    </div>
+  </div>`).join(''):'<div class="empty"><div class="ico">🏢</div><p>Nessun cliente trovato</p></div>';
+}
+function showCliDetail(id){
+  const c=(D.clienti||[]).find(x=>x.ID===id);if(!c)return;
+  const interventi=(D.piano||[]).filter(p=>!p.Obsoleto&&p.ClienteID===id).sort((a,b)=>(b.Data||'').localeCompare(a.Data||'')).slice(0,5);
+  $('suTitle').textContent='🏢 '+c.Nome;
+  $('suBody').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:.8125rem;margin-bottom:16px">
+      <div><span style="color:var(--gray)">Città</span><br><strong>${c.Citta||'—'} ${c.Prov?'('+c.Prov+')':''}</strong></div>
+      <div><span style="color:var(--gray)">Contratto</span><br><strong>${c.Contratto||'—'}</strong></div>
+      <div style="grid-column:1/-1"><span style="color:var(--gray)">Indirizzo</span><br><strong>${c.Indirizzo||'—'}${c.CAP?' — '+c.CAP:''}</strong></div>
+      <div><span style="color:var(--gray)">Telefono</span><br><strong>${c.Telefono||'—'}</strong></div>
+      <div><span style="color:var(--gray)">Email</span><br><strong>${c.Email||'—'}</strong></div>
+    </div>
+    ${c.Note?'<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+c.Note+'</div></div>':''}
+    <div style="font-weight:600;font-size:.8125rem;margin-bottom:8px">Ultimi interventi</div>
+    ${interventi.length?interventi.map(p=>'<div style="padding:8px 12px;border-left:3px solid '+gc(D.tipiIntervento,p.TipoInterventoID)+';margin-bottom:6px;background:var(--gray5);border-radius:0 var(--radius-sm) var(--radius-sm) 0;font-size:.8125rem"><strong>'+fd(p.Data)+'</strong> '+gn(D.tipiIntervento,p.TipoInterventoID)+' '+stag(p.Stato)+'</div>').join(''):'<div style="font-size:.8125rem;color:var(--gray)">Nessun intervento</div>'}
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+      ${c.Telefono?'<a href="tel:'+c.Telefono+'" class="btn btn-outline">📞 Chiama '+c.Telefono+'</a>':''}
+      ${c.Latitudine&&c.Longitudine?'<a href="https://www.google.com/maps/dir/?api=1&destination='+c.Latitudine+','+c.Longitudine+'&travelmode=driving" target="_blank" class="btn btn-outline">📍 Naviga verso il cliente</a>':''}
+      <button class="btn btn-outline" onclick="closeSheet('shUrg')">Chiudi</button>
+    </div>`;
+  openSheet('shUrg');
+}
+// ============ TRASFERTE ============
+function renderTrasf(){
+  const items=(D.trasferte||[]).filter(t=>!t.Obsoleto&&(t.TecnicoID===U?.ID||(t.TecniciIDs||'').includes(U?.ID))).sort((a,b)=>(b.DataInizio||'').localeCompare(a.DataInizio||''));
+  $('trasfList').innerHTML=items.length?items.map(t=>{
+    const active=t.Stato!=='completata'&&t.DataInizio<=td()&&t.DataFine>=td();
+    return`<div class="card" ${active?'style="border-left:4px solid var(--c1)"':''}>
+      <div class="card-body">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px"><strong>${gn(D.clienti,t.ClienteID)||'—'}</strong>${stag(t.Stato)}</div>
+        <div style="font-size:.875rem">📅 ${fd(t.DataInizio)} → ${fd(t.DataFine)}</div>
+        ${t.AutomezzoID?'<div style="font-size:.8125rem;color:var(--gray);margin-top:4px">🚐 Automezzo: '+t.AutomezzoID+'</div>':''}
+        ${t.Motivo?'<div style="font-size:.8125rem;color:var(--gray);margin-top:4px">'+t.Motivo+'</div>':''}
+        ${active?'<div style="margin-top:6px"><span class="tag tag-warn">🧳 In trasferta adesso</span></div>':''}
+      </div>
+    </div>`}).join(''):'<div class="empty"><div class="ico">🧳</div><p>Nessuna trasferta</p></div>';
+}
+async function saveTrasferta(){
+  try{
+    const data={TecnicoID:U?.ID,ClienteID:$('stCliente').value,DataInizio:$('stDal').value,DataFine:$('stAl').value,Motivo:$('stMotivo').value};
+    if(!data.DataInizio){toast('Inserisci data inizio','warn');return}
+    await api('createTrasferta',{data},'POST');
+    toast('Trasferta inviata!','ok');closeSheet('shTrasferta');
+    $('stDal').value='';$('stAl').value='';$('stMotivo').value='';
+    await refresh();
+  }catch(e){toast(e.message,'err')}
+}
+// ============ MACCHINE (sola lettura) ============
+function renderMacMob(){
+  const q=($('srcMacMob')?.value||'').toLowerCase();
+  const items=(D.macchine||[]).filter(m=>!m.Obsoleto&&(!q||(m.Tipo||'').toLowerCase().includes(q)||(m.Modello||'').toLowerCase().includes(q)||(m.Seriale||'').toLowerCase().includes(q)||gn(D.clienti,m.ClienteID).toLowerCase().includes(q)));
+  $('macMobList').innerHTML=items.length?items.map(m=>{
+    const gar=m.GaranziaFino&&m.GaranziaFino>=td();
+    return`<div class="card" onclick="showMacDetail('${m.ID}')">
+      <div class="card-body" style="padding:12px 16px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><strong>${m.Tipo||'—'} ${m.Modello||''}</strong><div style="font-size:.8125rem;color:var(--gray)">${gn(D.clienti,m.ClienteID)} · S/N: ${m.Seriale||'—'}</div></div>
+          ${gar?'<span class="tag tag-ok" style="font-size:.625rem">✅ Garanzia</span>':''}
+        </div>
+      </div>
+    </div>`}).join(''):'<div class="empty"><div class="ico">⚙️</div><p>Nessuna macchina trovata</p></div>';
+}
+function showMacDetail(id){
+  const m=(D.macchine||[]).find(x=>x.ID===id);if(!m)return;
+  const gar=m.GaranziaFino&&m.GaranziaFino>=td();
+  const cli=(D.clienti||[]).find(c=>c.ID===m.ClienteID);
+  const interventi=(D.piano||[]).filter(p=>!p.Obsoleto&&p.MacchinaID===id).sort((a,b)=>(b.Data||'').localeCompare(a.Data||'')).slice(0,5);
+  const urgenze=(D.urgenze||[]).filter(u=>!u.Obsoleto&&u.MacchinaID===id&&u.Stato!=='risolta');
+  $('suTitle').textContent='⚙️ '+(m.Tipo||'')+' '+(m.Modello||'');
+  $('suBody').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:.8125rem;margin-bottom:16px">
+      <div><span style="color:var(--gray)">Tipo</span><br><strong>${m.Tipo||'—'}</strong></div>
+      <div><span style="color:var(--gray)">Modello</span><br><strong>${m.Modello||'—'}</strong></div>
+      <div><span style="color:var(--gray)">Seriale</span><br><strong style="font-family:monospace">${m.Seriale||'—'}</strong></div>
+      <div><span style="color:var(--gray)">Anno</span><br><strong>${m.AnnoInstallazione||'—'}</strong></div>
+      <div><span style="color:var(--gray)">Ore lavoro</span><br><strong>${m.OreLavoro||'—'}</strong></div>
+      <div><span style="color:var(--gray)">Garanzia</span><br>${gar?'<span class="tag tag-ok">✅ Fino al '+fd(m.GaranziaFino)+'</span>':m.GaranziaFino?'<span class="tag tag-gray">Scaduta '+fd(m.GaranziaFino)+'</span>':'<span class="tag tag-gray">—</span>'}</div>
+      <div><span style="color:var(--gray)">Ultimo tagliando</span><br><strong>${fd(m.UltimoTagliando)||'—'}</strong></div>
+      <div><span style="color:var(--gray)">Prossimo tagliando</span><br><strong>${fd(m.ProssimoTagliando)||'—'}</strong></div>
+      <div style="grid-column:1/-1"><span style="color:var(--gray)">Cliente</span><br><strong>${cli?cli.Nome:'—'}</strong>${cli?.Citta?' — '+cli.Citta:''}</div>
+    </div>
+    ${urgenze.length?'<div style="margin-bottom:16px"><div style="font-weight:600;font-size:.8125rem;margin-bottom:8px;color:var(--err)">🚨 Urgenze aperte ('+urgenze.length+')</div>'+urgenze.map(u=>'<div style="padding:8px 12px;border-left:3px solid var(--err);margin-bottom:6px;background:var(--gray5);border-radius:0 var(--radius-sm) var(--radius-sm) 0;font-size:.8125rem">'+u.Problema+' '+stag(u.Stato)+'</div>').join('')+'</div>':''}
+    ${m.Note?'<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+m.Note+'</div></div>':''}
+    <div style="font-weight:600;font-size:.8125rem;margin-bottom:8px">Ultimi interventi</div>
+    ${interventi.length?interventi.map(p=>'<div style="padding:8px 12px;border-left:3px solid '+gc(D.tipiIntervento,p.TipoInterventoID)+';margin-bottom:6px;background:var(--gray5);border-radius:0 var(--radius-sm) var(--radius-sm) 0;font-size:.8125rem"><strong>'+fd(p.Data)+'</strong> '+gn(D.tipiIntervento,p.TipoInterventoID)+' '+stag(p.Stato)+'</div>').join(''):'<div style="font-size:.8125rem;color:var(--gray)">Nessun intervento</div>'}
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+      ${cli?.Telefono?'<a href="tel:'+cli.Telefono+'" class="btn btn-outline">📞 Chiama '+cli.Nome+'</a>':''}
+      ${cli?.Latitudine&&cli?.Longitudine?'<a href="https://www.google.com/maps/dir/?api=1&destination='+cli.Latitudine+','+cli.Longitudine+'&travelmode=driving" target="_blank" class="btn btn-outline">📍 Naviga verso il cliente</a>':''}
+      <button class="btn btn-outline" onclick="closeSheet('shUrg')">Chiudi</button>
+    </div>`;
+  openSheet('shUrg');
+}
+function automezzoCard(){
+  const f=(D.automezzi||[]).find(x=>x.ID===U?.AutomezzoID);
+  if(!f)return'';
+  const d=new Date().toISOString().slice(0,10);
+  const ctrl=f.ProssimoControllo&&f.ProssimoControllo<=d;
+  return`<div style="padding:0 16px 14px;border-bottom:1px solid var(--gray4)">
+    <div style="background:var(--gray5);border-radius:var(--radius-sm);padding:12px;border-left:4px solid ${f.Status==='attivo'?'var(--ok)':'var(--warn)'}">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px"><strong>🚐 ${f.Targa||''}</strong>${stag(f.Status)}</div>
+      <div style="font-size:.8125rem;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div>📏 Km: <strong>${f.KmAttuali||'—'}</strong></div>
+        <div>📐 ${f.Allestimento||'—'}</div>
+        <div>🔧 Controllo: ${ctrl?'<span class="tag tag-err">⚠️ '+fd(f.ProssimoControllo)+'</span>':'<strong>'+fd(f.ProssimoControllo)+'</strong>'}</div>
+        <div>${f.Descrizione||''}</div>
+      </div>
+      ${f.Note?'<div style="font-size:.75rem;color:var(--gray);margin-top:6px">'+f.Note+'</div>':''}
+    </div>
+  </div>`;
+}
+// ============ DOCUMENTI AZIENDALI (read-only) ============
+function renderDocMob(){
+  const docs=(D.documenti||[]).filter(d=>!d.Obsoleto&&(d.Pubblico===true||d.Pubblico==='true'));
+  const q=($('srcDocMob')?.value||'').toLowerCase();
+  const filtered=docs.filter(d=>{
+    if(!q)return true;
+    return (d.Nome||'').toLowerCase().includes(q)||(d.Tags||'').toLowerCase().includes(q)||(d.Descrizione||'').toLowerCase().includes(q)||(d.Categoria||'').toLowerCase().includes(q);
+  }).sort((a,b)=>(b.DataCaricamento||'').localeCompare(a.DataCaricamento||''));
+
+  if(!filtered.length){$('docMobList').innerHTML='<div style="text-align:center;color:var(--gray);padding:40px 0">Nessun documento disponibile</div>';return}
+
+  const catIco={'Contratti':'📄','Manuali':'📘','Certificati':'🏅','Report':'📊','Altro':'📁'};
+  $('docMobList').innerHTML=filtered.map(d=>{
+    const ico=catIco[d.Categoria]||'📁';
+    const dim=d.DimensioneKB?(d.DimensioneKB>1024?Math.round(d.DimensioneKB/1024)+' MB':d.DimensioneKB+' KB'):'';
+    return`<div class="card" style="margin-bottom:8px">
+      <div class="card-body" style="padding:12px 16px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="font-size:1.5rem;flex-shrink:0">${ico}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:.875rem">${d.Nome||'—'}</div>
+            ${d.Descrizione?'<div style="font-size:.75rem;color:var(--gray);margin-top:2px">'+d.Descrizione+'</div>':''}
+            <div style="font-size:.7rem;color:var(--gray2);margin-top:4px">
+              <span class="tag tag-info" style="font-size:.65rem">${d.Categoria||'Altro'}</span>
+              ${dim?' · '+dim:''}
+              ${d.DataCaricamento?' · '+(d.DataCaricamento||'').substring(0,10):''}
+              ${d.Tags?' · 🏷️ '+d.Tags:''}
+            </div>
+          </div>
+          ${d.FileURL?'<a href="'+d.FileURL+'" target="_blank" style="color:var(--c1);font-size:1.2rem;text-decoration:none;flex-shrink:0">🔗</a>':''}
+        </div>
+      </div>
+    </div>`}).join('');
+}
+// ============ PROFILO ============
+
+function renderProf(){
+  if(!U)return;
+  if(U.FotoURL){$('profAvatar').innerHTML=`<img src="${U.FotoURL}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`} else {$('profAvatar').textContent=(U.Nome||'')[0]+''+(U.Cognome||'')[0]}
+  $('profName').textContent=(U.Nome||'')+' '+(U.Cognome||'');
+  const sq=(D.squadre||[]).find(s=>s.ID===U.SquadraID);
+  $('profRole').textContent=U.Ruolo+(sq?' · Squadra '+sq.Nome:'');
+  const miei=my(D.piano);
+  const comp=miei.filter(p=>p.Stato==='completato').length;
+  const kmTot=miei.reduce((s,p)=>s+(parseFloat(p.KmPercorsi)||0),0);
+  const urgMie=(D.urgenze||[]).filter(u=>!u.Obsoleto&&u.TecnicoAssegnato===U?.ID);
+  const urgRis=urgMie.filter(u=>u.Stato==='risolta').length;
+  let h=`
+    <div style="padding:14px 16px;border-bottom:1px solid var(--gray4);display:flex;justify-content:space-between"><span style="color:var(--gray)">Telefono</span><strong>${U.Telefono||'—'}</strong></div>
+    <div style="padding:14px 16px;border-bottom:1px solid var(--gray4);display:flex;justify-content:space-between"><span style="color:var(--gray)">Email</span><strong>${U.Email||'—'}</strong></div>
+    <div style="padding:14px 16px;border-bottom:1px solid var(--gray4);display:flex;justify-content:space-between"><span style="color:var(--gray)">Automezzo</span><strong>${U.AutomezzoID||'—'}</strong></div>
+  `;
+  h+=automezzoCard();
+  h+=`
+    <div style="padding:14px 16px;border-bottom:1px solid var(--gray4);display:flex;justify-content:space-between"><span style="color:var(--gray)">Base</span><strong>${U.Base||'—'}</strong></div>
+    <div style="padding:14px 16px;border-bottom:1px solid var(--gray4);display:flex;justify-content:space-between"><span style="color:var(--gray)">Interventi tot.</span><strong>${miei.length}</strong></div>
+    <div style="padding:14px 16px;border-bottom:1px solid var(--gray4);display:flex;justify-content:space-between"><span style="color:var(--gray)">Completati</span><strong>${comp} (${miei.length?Math.round(comp/miei.length*100):0}%)</strong></div>
+    <div style="padding:14px 16px;border-bottom:1px solid var(--gray4);display:flex;justify-content:space-between"><span style="color:var(--gray)">Km totali</span><strong>${Math.round(kmTot)} km</strong></div>
+    <div style="padding:14px 16px;border-bottom:1px solid var(--gray4);display:flex;justify-content:space-between"><span style="color:var(--gray)">Urgenze risolte</span><strong>${urgRis}/${urgMie.length}</strong></div>
+    <div style="padding:14px 16px;display:flex;justify-content:space-between;align-items:center"><span style="color:var(--gray)">💬 Notifiche Telegram</span><a href="https://t.me/" target="_blank" style="color:var(--c1);font-weight:600;text-decoration:none">Configura →</a></div>
+  `;
+  $('profCard').innerHTML=h;
+
+  // === B21: SEZIONE SQUADRA (solo caposquadra e director) ===
+  const oldSq=document.getElementById('profSquadra');
+  if(oldSq)oldSq.remove();
+  if(U.Ruolo==='caposquadra'||U.Ruolo==='director'){
+    const colleghi=(D.utenti||[]).filter(u=>!u.Obsoleto&&u.ID!==U.ID&&(U.Ruolo==='director'||u.SquadraID===U.SquadraID));
+    if(colleghi.length){
+      const div=document.createElement('div');
+      div.id='profSquadra';
+      div.style.cssText='margin-top:16px';
+      div.innerHTML=`<div class="card">
+        <div class="card-head" style="padding:12px 16px"><h3>👥 ${U.Ruolo==='director'?'Tutto il team':'La mia squadra'+(sq?' — '+sq.Nome:'')}</h3></div>
+        <div class="card-body" style="padding:0">
+          ${colleghi.map(c=>{
+            const ini=(c.Nome||'')[0]+''+(c.Cognome||'')[0];
+            const cInt=(D.piano||[]).filter(p=>!p.Obsoleto&&(p.TecnicoID===c.ID||(p.TecniciIDs||'').includes(c.ID)));
+            const cComp=cInt.filter(p=>p.Stato==='completato').length;
+            return`<div style="padding:12px 16px;border-bottom:1px solid var(--gray4);display:flex;align-items:center;gap:12px">
+              <div style="width:40px;height:40px;border-radius:50%;overflow:hidden;flex-shrink:0">${c.FotoURL?'<img src="'+c.FotoURL+'" style="width:100%;height:100%;object-fit:cover">':'<div style="width:100%;height:100%;background:linear-gradient(135deg,var(--c2),var(--c1));display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:.75rem">'+ini+'</div>'}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:600;font-size:.875rem">${(c.Nome||'')+' '+(c.Cognome||'')}</div>
+                <div style="font-size:.75rem;color:var(--gray)">${c.Ruolo} · ${c.Base||'—'}</div>
+              </div>
+              <div style="text-align:right;font-size:.75rem;color:var(--gray)">
+                <div>${cComp}/${cInt.length} int.</div>
+                ${c.Telefono?'<a href="tel:'+c.Telefono+'" style="color:var(--c1);text-decoration:none">📞</a>':''}
+              </div>
+            </div>`}).join('')}
+        </div>
+      </div>`;
+      $('profCard').parentElement.insertBefore(div,$('profCard').nextSibling);
+    }
+  }
+}
+// ============ MAPPA ============
+function initMap(){
+  if(MAP){MAP.invalidateSize();refreshMap();return}
+  MAP=L.map('mapTec').setView([44.6471,10.9252],10);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OSM'}).addTo(MAP);
+  refreshMap();
+}
+
+function refreshMap(){
+  if(!MAP)return;
+  MK.forEach(m=>MAP.removeLayer(m));MK=[];
+  const d=td();
+  const oggi=my(D.piano).filter(p=>p.Data===d).sort((a,b)=>(a.OraInizio||'').localeCompare(b.OraInizio||''));
+  const pts=[];
+  const colors=['#00C9A7','#2563EB','#10B981','#F59E0B','#8B5CF6','#EC4899'];
+  
+  oggi.forEach((p,i)=>{
+    const cli=(D.clienti||[]).find(c=>c.ID===p.ClienteID);
+    if(!cli||!cli.Latitudine||!cli.Longitudine)return;
+    const lat=parseFloat(cli.Latitudine),lng=parseFloat(cli.Longitudine);
+    pts.push([lat,lng]);
+    const col=colors[i%colors.length];
+    const icon=L.divIcon({className:'',html:`<div style="background:${col};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.3);border:2px solid #fff">${i+1}</div>`,iconSize:[28,28],iconAnchor:[14,14]});
+    const m=L.marker([lat,lng],{icon}).addTo(MAP);
+    m.bindPopup(`<strong>${i+1}. ${cli.Nome||cli.ID}</strong><br>${ft(p.OraInizio)} · ${gn(D.tipiIntervento,p.TipoInterventoID)}<br>${stag(p.Stato)}`);
+    MK.push(m);
+  });
+
+  // Route line
+  if(pts.length>1){const line=L.polyline(pts,{color:'#00C9A7',weight:3,opacity:.6,dashArray:'8,6'}).addTo(MAP);MK.push(line)}
+
+  if(pts.length>1)MAP.fitBounds(pts,{padding:[30,30]});
+  else if(pts.length===1)MAP.setView(pts[0],13);
+
+  $('mapMeta').textContent=oggi.length+' interventi oggi'+(!pts.length?' · Nessun cliente geocodificato':'');
+
+  // Store for google maps
+  MAP._wp=pts.map((p,i)=>({lat:p[0],lng:p[1]}));
+}
+
+function openGMaps(){
+  const wp=MAP?._wp||[];
+  if(!wp.length){toast('Nessun punto sulla mappa','warn');return}
+  if(wp.length===1){window.open(`https://www.google.com/maps/dir/?api=1&destination=${wp[0].lat},${wp[0].lng}&travelmode=driving`,'_blank');return}
+  const orig=wp[0],dest=wp[wp.length-1];
+  const mid=wp.slice(1,-1).map(w=>w.lat+','+w.lng).join('|');
+  let url=`https://www.google.com/maps/dir/?api=1&origin=${orig.lat},${orig.lng}&destination=${dest.lat},${dest.lng}`;
+  if(mid)url+=`&waypoints=${mid}`;
+  url+='&travelmode=driving';
+  window.open(url,'_blank');
+}
+
+// ============ PULL TO REFRESH (simple) ============
+let touchStartY=0;
+document.addEventListener('touchstart',e=>{touchStartY=e.touches[0].clientY},{passive:true});
+document.addEventListener('touchend',e=>{
+  const diff=e.changedTouches[0].clientY-touchStartY;
+  if(diff>120&&window.scrollY===0){toast('Aggiornamento...','info');refresh()}
+},{passive:true});
+
+// ============ KEYBOARD ============
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.sheet-overlay.show').forEach(s=>s.classList.remove('show'))});
+
+</script>
+
+<!-- ============ SERVICE WORKER + PUSH NOTIFICATIONS (FIX F-30) ============ -->
+<script>
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').then(reg=>{
+    console.log('[SW] Registered:', reg.scope);
+    setInterval(()=>reg.update(), 30*60*1000);
+    
+    // Push subscription
+    if('PushManager' in window){
+      setTimeout(async()=>{
+        try {
+          const existing = await reg.pushManager.getSubscription();
+          if(existing) return; // Already subscribed
+          
+          const r = await api('getVapidPublicKey', {});
+          if(!r?.vapidPublicKey) return;
+          
+          if(Notification.permission === 'default'){
+            const perm = await Notification.requestPermission();
+            if(perm !== 'granted') return;
+          }
+          if(Notification.permission !== 'granted') return;
+          
+          const padding = '='.repeat((4 - r.vapidPublicKey.length % 4) % 4);
+          const b64 = (r.vapidPublicKey + padding).replace(/-/g,'+').replace(/_/g,'/');
+          const raw = atob(b64);
+          const key = Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+          
+          const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+          const j = sub.toJSON();
+          await api('savePushSubscription', {
+            userId: U?.ID,
+            subscription: { endpoint: j.endpoint, keys: j.keys },
+            userAgent: navigator.userAgent
+          }, 'POST');
+          console.log('[Push] Subscribed');
+        } catch(e){ console.warn('[Push]', e); }
+      }, 3000);
+    }
+  }).catch(e=>console.warn('[SW]', e));
+}
+</script>
+</body>
+</html>
