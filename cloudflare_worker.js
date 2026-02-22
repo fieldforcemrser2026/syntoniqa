@@ -173,12 +173,14 @@ export default {
       } else if (request.method === 'POST') {
         const rawBody = await request.json().catch(() => ({}));
         if (!checkToken(request, env, rawBody.token)) return err('Token non valido', 401);
+        // FIX: leggi action anche dal body POST (il frontend la manda lì)
+        const postAction = action || rawBody.action || '';
         // FIX CRIT-04 (globale): Pre-process body per TUTTI gli handler
         // 1. Estrai dati dal wrapper {data:{...}} se presente
         // 2. Converti PascalCase → snake_case
         // 3. Rimuovi meta-fields (action, token, method) che inquinerebbero gli INSERT
         const body = normalizeBody(rawBody);
-        return await handlePost(action, body, env);
+        return await handlePost(postAction, body, env);
       }
       return err('Metodo non supportato', 405);
     } catch (e) {
