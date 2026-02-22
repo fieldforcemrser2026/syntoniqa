@@ -1231,6 +1231,80 @@ Rispondi SOLO con JSON array: [{ "urgenzaId": "...", "tecnicoId": "...", "data":
       return ok();
     }
 
+    // -------- CHAT INTERNA --------
+
+    case 'getChatCanali': {
+      const userId = body.userId || body.user_id || '';
+      // Canali di cui l'utente è membro + canali pubblici
+      const canali = await sb(env, 'chat_canali', 'GET', null, '?attivo=eq.true&order=nome');
+      const membri = userId ? await sb(env, 'chat_membri', 'GET', null, `?utente_id=eq.${userId}&select=canale_id,ultimo_letto`) : [];
+      const membroMap = {};
+      (membri || []).forEach(m => { membroMap[m.canale_id] = m; });
+      // Per ogni canale, conta messaggi non letti
+      const result = [];
+      for (const c of (canali || [])) {
+        const ultimoLetto = membroMap[c.id]?.ultimo_letto || '1970-01-01';
+        const nonLetti = await sb(env, 'chat_messaggi', 'GET', null,
+          `?canale_id=eq.${c.id}&created_at=gt.${ultimoLetto}&eliminato=eq.false&select=id`).catch(() => []);
+        result.push({ ...pascalizeRecord(c), nonLetti: (nonLetti || []).length, isMembro: !!membroMap[c.id] });
+      }
+      return ok({ canali: result });
+    }
+
+    case 'getChatMessaggi': {
+      const { canale_id, limit: lim } = body;
+      if (!canale_id) return err('canale_id richiesto');
+      const messaggi = await sb(env, 'chat_messaggi', 'GET', null,
+        `?canale_id=eq.${canale_id}&eliminato=eq.false&order=created_at.desc&limit=${lim || 50}`);
+      // Segna come letto
+      const userId = body.userId || body.user_id;
+      if (userId) {
+        await sb(env, 'chat_membri', 'POST', { id: `${canale_id}_${userId}`, canale_id, utente_id: userId, ultimo_letto: new Date().toISOString() })
+          .catch(() => sb(env, `chat_membri?canale_id=eq.${canale_id}&utente_id=eq.${userId}`, 'PATCH', { ultimo_letto: new Date().toISOString() }));
+      }
+      return ok({ messaggi: (messaggi || []).reverse().map(pascalizeRecord) });
+    }
+
+    case 'sendChatMessage': {
+      const { canale_id, testo, tipo, rispondi_a } = body;
+      const mittente = body.userId || body.user_id || body.mittente_id;
+      if (!canale_id || !testo) return err('canale_id e testo richiesti');
+      const id = 'MSG_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+      const msg = { id, canale_id, mittente_id: mittente, testo, tipo: tipo || 'testo', rispondi_a: rispondi_a || null, created_at: new Date().toISOString() };
+      const result = await sb(env, 'chat_messaggi', 'POST', msg);
+      // Auto-join se non è membro
+      if (mittente) {
+        await sb(env, 'chat_membri', 'POST', { id: `${canale_id}_${mittente}`, canale_id, utente_id: mittente, ultimo_letto: new Date().toISOString() }).catch(() => {});
+      }
+      return ok({ messaggio: pascalizeRecord(result[0]) });
+    }
+
+    case 'createChatCanale': {
+      const { nome, tipo, descrizione, icona, solo_admin, membri_ids } = body;
+      if (!nome) return err('nome richiesto');
+      const id = 'CH_' + Date.now();
+      const canale = { id, nome, tipo: tipo || 'gruppo', descrizione: descrizione || null, icona: icona || '💬', solo_admin: solo_admin || false, creato_da: body.userId || null, created_at: new Date().toISOString() };
+      // Cerca tenant_id
+      const utenti = await sb(env, 'utenti', 'GET', null, '?select=tenant_id&limit=1');
+      if (utenti?.[0]?.tenant_id) canale.tenant_id = utenti[0].tenant_id;
+      const result = await sb(env, 'chat_canali', 'POST', canale);
+      // Aggiungi membri iniziali
+      if (membri_ids && Array.isArray(membri_ids)) {
+        for (const uid of membri_ids) {
+          await sb(env, 'chat_membri', 'POST', { id: `${id}_${uid}`, canale_id: id, utente_id: uid, ruolo: uid === body.userId ? 'admin' : 'membro' }).catch(() => {});
+        }
+      }
+      return ok({ canale: pascalizeRecord(result[0]) });
+    }
+
+    case 'joinChatCanale': {
+      const { canale_id } = body;
+      const userId = body.userId || body.user_id;
+      if (!canale_id || !userId) return err('canale_id e userId richiesti');
+      await sb(env, 'chat_membri', 'POST', { id: `${canale_id}_${userId}`, canale_id, utente_id: userId }).catch(() => {});
+      return ok();
+    }
+
     default:
       return err(`Azione POST non trovata: ${action}`, 404);
   }
