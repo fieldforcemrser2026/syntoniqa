@@ -496,6 +496,10 @@ async function handlePost(action, body, env) {
       const row = { id, ...getFields(body), password_hash: hashed, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       delete row.password;
       const result = await sb(env, 'utenti', 'POST', row);
+      // SYNC: se ha automezzo_id, aggiorna assegnatario_id nell'automezzo
+      if (row.automezzo_id) {
+        await sb(env, `automezzi?id=eq.${row.automezzo_id}`, 'PATCH', { assegnatario_id: id }).catch(() => {});
+      }
       await wlog('utente', id, 'created', body.operatoreId);
       const { password_hash, ...safe } = result[0];
       return ok({ utente: safe });
@@ -509,9 +513,27 @@ async function handlePost(action, body, env) {
       for (const k of Object.keys(updates)) {
         if (updates[k] === null && (k.endsWith('_id') || k === 'squadra_id' || k === 'automezzo_id')) delete updates[k];
       }
+      // SYNC BIDIREZIONALE: se cambia automezzo_id, aggiorna anche l'automezzo
+      const newAutoId = updates.automezzo_id;
+      if (newAutoId) {
+        // Leggi vecchio automezzo assegnato a questo utente
+        const [oldUser] = await sb(env, 'utenti', 'GET', null, `?id=eq.${id}&select=automezzo_id`);
+        const oldAutoId = oldUser?.automezzo_id;
+        // Rimuovi assegnazione dal vecchio automezzo (se diverso)
+        if (oldAutoId && oldAutoId !== newAutoId) {
+          await sb(env, `automezzi?id=eq.${oldAutoId}`, 'PATCH', { assegnatario_id: null }).catch(() => {});
+        }
+        // Assegna il nuovo automezzo a questo utente
+        await sb(env, `automezzi?id=eq.${newAutoId}`, 'PATCH', { assegnatario_id: id }).catch(() => {});
+        // Rimuovi vecchio assegnatario dal nuovo automezzo (se un altro utente lo aveva)
+        const otherUsers = await sb(env, 'utenti', 'GET', null, `?automezzo_id=eq.${newAutoId}&id=neq.${id}&select=id`);
+        for (const ou of (otherUsers || [])) {
+          await sb(env, `utenti?id=eq.${ou.id}`, 'PATCH', { automezzo_id: null, updated_at: new Date().toISOString() }).catch(() => {});
+        }
+      }
       await sb(env, `utenti?id=eq.${id}`, 'PATCH', updates);
       await wlog('utente', id, 'updated', body.operatoreId);
-      return ok();
+      return ok({ synced: !!newAutoId });
     }
 
     // -------- CLIENTI --------
@@ -550,15 +572,38 @@ async function handlePost(action, body, env) {
 
     case 'createAutomezzo': {
       const id = 'AUT_' + Date.now();
-      const result = await sb(env, 'automezzi', 'POST', { id, ...getFields(body) });
+      const fields = getFields(body);
+      const result = await sb(env, 'automezzi', 'POST', { id, ...fields });
+      // SYNC: se ha assegnatario_id, aggiorna automezzo_id nell'utente
+      if (fields.assegnatario_id) {
+        await sb(env, `utenti?id=eq.${fields.assegnatario_id}`, 'PATCH', { automezzo_id: id, updated_at: new Date().toISOString() }).catch(() => {});
+      }
       return ok({ automezzo: pascalizeRecord(result[0]) });
     }
 
     case 'updateAutomezzo': {
       const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
       for (const k of Object.keys(updates)) { if (updates[k] === null && k.endsWith('_id')) delete updates[k]; }
+      // SYNC BIDIREZIONALE: se cambia assegnatario_id, aggiorna anche l'utente
+      const newAssId = updates.assegnatario_id;
+      if (newAssId) {
+        // Leggi vecchio assegnatario di questo automezzo
+        const [oldAuto] = await sb(env, 'automezzi', 'GET', null, `?id=eq.${id}&select=assegnatario_id`);
+        const oldAssId = oldAuto?.assegnatario_id;
+        // Rimuovi automezzo dal vecchio assegnatario (se diverso)
+        if (oldAssId && oldAssId !== newAssId) {
+          await sb(env, `utenti?id=eq.${oldAssId}`, 'PATCH', { automezzo_id: null, updated_at: new Date().toISOString() }).catch(() => {});
+        }
+        // Assegna automezzo al nuovo assegnatario
+        await sb(env, `utenti?id=eq.${newAssId}`, 'PATCH', { automezzo_id: id, updated_at: new Date().toISOString() }).catch(() => {});
+        // Rimuovi questo automezzo da altri utenti che lo avevano
+        const otherUsers = await sb(env, 'utenti', 'GET', null, `?automezzo_id=eq.${id}&id=neq.${newAssId}&select=id`);
+        for (const ou of (otherUsers || [])) {
+          await sb(env, `utenti?id=eq.${ou.id}`, 'PATCH', { automezzo_id: null, updated_at: new Date().toISOString() }).catch(() => {});
+        }
+      }
       await sb(env, `automezzi?id=eq.${id}`, 'PATCH', updates);
-      return ok();
+      return ok({ synced: !!newAssId });
     }
 
     // -------- INSTALLAZIONI --------
