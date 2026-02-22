@@ -1505,7 +1505,7 @@ function applyConfig(){
   // LOGO: applica da config DB se presente (supporta logo_url O azienda_logo)
   var logoUrl=c.logo_url||c.azienda_logo||'';
   if(logoUrl){
-    var logo=$('brandLogo');if(logo)logo.innerHTML='<img src="'+logoUrl+'" style="height:56px;max-width:220px;object-fit:contain" alt="Logo">';
+    var logo=$('brandLogo');if(logo)logo.innerHTML='<img src="'+logoUrl+'" style="height:56px;max-width:220px;object-fit:contain;filter:brightness(0)" alt="Logo">';
     var sbr=$('sidebarBrand');if(sbr)sbr.innerHTML='<img src="'+logoUrl+'" style="height:22px;max-width:150px;object-fit:contain;filter:brightness(0) invert(1)" alt=""> '+(c.azienda_nome||'Syntoniqa');
   }
   if(c.favicon_url){var lk=document.querySelector('link[rel="icon"]')||document.createElement('link');lk.rel='icon';lk.href=c.favicon_url;if(!lk.parentNode)document.head.appendChild(lk)}
