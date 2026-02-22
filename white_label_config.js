@@ -31,7 +31,7 @@ window.SYNTONIQA_CONFIG = {
 
   // ─── API ENDPOINT ────────────────────────────────────────────────
   api: {
-    url:        'https://syntoniqa-mrs-api.PLACEHOLDER.workers.dev',  // ← Aggiornare dopo deploy Worker (Passo 4)
+    url:        'https://syntoniqa-mrs-api.fieldforcemrser.workers.dev',
     token:      'SQ_2026_MRS_88FNJz0TFbdzHMikOeN2HQ',
     timeout_ms: 10000,
   },
