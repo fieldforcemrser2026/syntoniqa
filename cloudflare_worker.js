@@ -81,6 +81,7 @@ function getFields(body) {
   const result = {};
   for (const [k, v] of Object.entries(source)) {
     if (skip.has(k)) continue;
+    if (v === null || v === undefined || v === '') continue; // skip empty/null fields
     result[toSnake(k)] = v;
   }
   return result;

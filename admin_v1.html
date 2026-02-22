@@ -2164,12 +2164,12 @@ async function saveUtente(){
     Username:$('nuUsername').value,
     password:$('nuPassword').value,
     Ruolo:$('nuRuolo').value,
-    SquadraID:$('nuSquadra').value,
-    AutomezzoID:$('nuAutomezzo').value,
-    Base:$('nuBase').value,
-    Telefono:$('nuTelefono').value,
-    Email:$('nuEmail').value,
-    TenantID:(DATA.utenti&&DATA.utenti[0])?DATA.utenti[0].TenantID:''
+    SquadraID:$('nuSquadra').value||null,
+    AutomezzoID:$('nuAutomezzo').value||null,
+    Base:$('nuBase').value||null,
+    Telefono:$('nuTelefono').value||null,
+    Email:$('nuEmail').value||null,
+    TenantID:(DATA.utenti&&DATA.utenti[0])?DATA.utenti[0].TenantID:null
   };
   if(!data.Nome||!data.Cognome||!data.Username){toast('Compila nome, cognome e username','warn');return}
   if(!data.password){toast('Inserisci una password','warn');return}
@@ -2211,13 +2211,13 @@ async function saveMacchina(){
     Tipo:$('nmTipo').value,
     Modello:$('nmModello').value,
     Seriale:$('nmSeriale').value,
-    AnnoInstallazione:$('nmAnno').value,
-    OreLavoro:$('nmOre').value,
-    UltimoTagliando:$('nmUltimoTag').value,
-    ProssimoTagliando:$('nmProssTag').value,
-    GaranziaFino:$('nmGaranzia').value,
-    Note:$('nmNote').value,
-    TenantID:(DATA.utenti&&DATA.utenti[0])?DATA.utenti[0].TenantID:''
+    AnnoInstallazione:$('nmAnno').value?parseInt($('nmAnno').value):null,
+    OreLavoro:$('nmOre').value?parseInt($('nmOre').value):null,
+    UltimoTagliando:$('nmUltimoTag').value||null,
+    ProssimoTagliando:$('nmProssTag').value||null,
+    GaranziaFino:$('nmGaranzia').value||null,
+    Note:$('nmNote').value||null,
+    TenantID:(DATA.utenti&&DATA.utenti[0])?DATA.utenti[0].TenantID:null
   };
   if(!data.ClienteID||!data.Tipo||!data.Modello){toast('Compila cliente, tipo e modello','warn');return}
   try{
@@ -2235,11 +2235,11 @@ async function saveAutomezzo(){
     Descrizione:$('naDesc').value,
     Allestimento:$('naAllestimento').value,
     Status:$('naStatus').value,
-    ProssimoControllo:$('naControllo').value,
-    AssegnatarioID:$('naAssegnatario').value,
-    KmAttuali:$('naKm').value,
-    Note:$('naNote').value,
-    TenantID:(DATA.utenti&&DATA.utenti[0])?DATA.utenti[0].TenantID:''
+    ProssimoControllo:$('naControllo').value||null,
+    AssegnatarioID:$('naAssegnatario').value||null,
+    KmAttuali:$('naKm').value?parseInt($('naKm').value):null,
+    Note:$('naNote').value||null,
+    TenantID:(DATA.utenti&&DATA.utenti[0])?DATA.utenti[0].TenantID:null
   };
   if(!data.Targa||!data.Descrizione||!data.Status){toast('Compila targa, descrizione e status','warn');return}
   try{
