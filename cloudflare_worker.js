@@ -873,8 +873,23 @@ async function handlePost(action, body, env) {
 
     case 'markAllRead': {
       const { userId } = body;
-      await sb(env, `notifiche?destinatario_id=eq.${userId}&stato=eq.inviata`, 'PATCH', 
+      await sb(env, `notifiche?destinatario_id=eq.${userId}&stato=eq.inviata`, 'PATCH',
         { stato: 'letta', data_lettura: new Date().toISOString() });
+      return ok();
+    }
+
+    case 'deleteNotifica': {
+      const { id } = body;
+      if (!id) return err('id notifica richiesto');
+      await sb(env, `notifiche?id=eq.${id}`, 'PATCH', { obsoleto: true, updated_at: new Date().toISOString() });
+      return ok();
+    }
+
+    case 'deleteAllNotifiche': {
+      const { userId } = body;
+      if (!userId) return err('userId richiesto');
+      await sb(env, `notifiche?destinatario_id=eq.${userId}&stato=eq.letta`, 'PATCH',
+        { obsoleto: true, updated_at: new Date().toISOString() });
       return ok();
     }
 

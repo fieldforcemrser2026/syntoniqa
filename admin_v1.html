@@ -3628,61 +3628,7 @@ async function savePagellino(){
 
 
 
-// ============ DETAIL MODAL ============
-function showDetail(type,id){
-  let title='',body='',foot='';
-  if(type==='piano'){
-    const p=(DATA.piano||[]).find(x=>x.ID===id);if(!p)return;
-    title='📋 Intervento '+id;
-    body=detailGrid([
-      ['Data',fmtDate(p.Data)+(p.DataFine&&p.DataFine!==p.Data?' → '+fmtDate(p.DataFine):'')],['Ora',p.OraInizio||'—'],['Durata',p.DurataOre+'h'],
-      ['Tecnico',getName(DATA.utenti||[],p.TecnicoID)],['Tecnici Add.',(p.TecniciIDs||'').split(',').filter(Boolean).map(id=>getName(DATA.utenti||[],id)).join(', ')||'—'],
-      ['Automezzo',p.AutomezzoID||'—'],['Cliente',getName(DATA.clienti||[],p.ClienteID)],['Macchina',getName(DATA.macchine||[],p.MacchinaID,'Tipo')],
-      ['Tipo',getName(DATA.tipiIntervento||[],p.TipoInterventoID)],['Priorità',getName(DATA.priorita||[],p.PrioritaID)],
-      ['Stato',statusTag(p.Stato)],['Km',p.KmPercorsi||'—'],['Ore Lavorate',p.OreLavorate||'—'],['Origine',p.Origine||'manuale'],['Note',p.Note||'—'],['Note Completamento',p.NoteCompletamento||'—']
-    ]);
-  }else if(type==='urgenza'){
-    const u=(DATA.urgenze||[]).find(x=>x.ID===id);if(!u)return;
-    title='🚨 Urgenza '+id;
-    body=detailGrid([
-      ['Cliente',getName(DATA.clienti||[],u.ClienteID)],['Macchina',getName(DATA.macchine||[],u.MacchinaID,'Tipo')],
-      ['Problema',u.Problema||'—'],['Priorità',`<span class="tag" style="background:${getColor(DATA.priorita||[],u.PrioritaID)}20;color:${getColor(DATA.priorita||[],u.PrioritaID)}">${getName(DATA.priorita||[],u.PrioritaID)}</span>`],
-      ['Stato',statusTag(u.Stato)],['Tecnico',u.TecnicoAssegnato?getName(DATA.utenti||[],u.TecnicoAssegnato):'Non assegnata'],
-      ['Data Segnalazione',fmtDateTime(u.DataSegnalazione)],['Data Assegnazione',fmtDateTime(u.DataAssegnazione)],
-      ['Data Prevista',fmtDate(u.DataPrevista)],['Ora Prevista',u.OraPrevista||'—'],
-      ['Data Risoluzione',fmtDateTime(u.DataRisoluzione)],
-      ['SLA',slaTag(u.SLAStatus)],['SLA Scadenza',fmtDateTime(u.SLAScadenza)],['Note',u.Note||'—']
-    ]);
-  }else if(type==='ordine'){
-    const o=(DATA.ordini||[]).find(x=>x.ID===id);if(!o)return;
-    title='📦 Ordine '+id;
-    body=`<div class="wf-steps mb">${['richiesto','preso_in_carico','ordinato','in_arrivo','arrivato'].map(s=>`<span class="wf-step ${o.Stato===s?'active':['richiesto','preso_in_carico','ordinato','in_arrivo','arrivato'].indexOf(s)<['richiesto','preso_in_carico','ordinato','in_arrivo','arrivato'].indexOf(o.Stato)?'done':''}">${s}</span>`).join('<span class="wf-arrow">→</span>')}</div>`+
-    detailGrid([
-      ['Codice',o.Codice],['Descrizione',o.Descrizione||'—'],['Quantità',o.Quantita||1],
-      ['Tecnico',getName(DATA.utenti||[],o.TecnicoID)],['Cliente',getName(DATA.clienti||[],o.ClienteID)],
-      ['Stato',statusTag(o.Stato)],['Data Richiesta',fmtDateTime(o.DataRichiesta)],
-      ['Presa in Carico',fmtDateTime(o.DataPresaCarico)],['Data Ordine',fmtDateTime(o.DataOrdine)],
-      ['Arrivo Previsto',fmtDate(o.DataArrivoPrevista)],['Data Arrivo',fmtDateTime(o.DataArrivo)],
-      ['Gestore Magazzino',o.GestoreMagazzino||'—'],['Note',o.Note||'—']
-    ]);
-  }else if(type==='pagellino'){
-    const p=(DATA.pagellini||[]).find(x=>x.ID===id);if(!p)return;
-    title='🎯 Pagellino '+id;
-    const voci=(DATA.pagelliniVoci||[]).filter(v=>v.PagellinoID===id).sort((a,b)=>a.Ordine-b.Ordine);
-    body=detailGrid([
-      ['Tecnico',getName(DATA.utenti||[],p.TecnicoID)],['Data',fmtDate(p.DataRilevazione)],['Periodo',p.Periodo],
-      ['Valutatore',getName(DATA.utenti||[],p.ValutatoreID)],['Media Voto',p.MediaVoto],['Stato',statusTag(p.Stato)],['Nota',p.NotaComplessiva||'—']
-    ])+`<h4 style="margin:16px 0 8px;font-size:.875rem">Voci di Valutazione</h4><table class="tbl"><thead><tr><th>Voce</th><th>Categoria</th><th>Voto</th><th>Peso</th><th>Note</th></tr></thead><tbody>${voci.map(v=>`<tr><td>${v.Voce}</td><td><span class="tag tag-info">${v.Categoria}</span></td><td><strong>${v.Voto}/5</strong></td><td>${v.Peso}</td><td>${v.Note||'—'}</td></tr>`).join('')}</tbody></table>`;
-  }else{
-    title='Dettaglio';body='<p>Dettaglio non disponibile per questo tipo.</p>';
-  }
-  $('detailTitle').textContent=title;$('detailBody').innerHTML=body;$('detailFoot').innerHTML=`<button class="btn btn-outline" onclick="closeModal('modalDetail')">Chiudi</button>`;
-  openModal('modalDetail');
-}
-
-function detailGrid(pairs){
-  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+pairs.map(([k,v])=>`<div><div style="font-size:.6875rem;text-transform:uppercase;letter-spacing:.04em;color:var(--gray);margin-bottom:2px">${k}</div><div style="font-size:.875rem">${v}</div></div>`).join('')+'</div>';
-}
+// showDetail è definito più avanti con versione con editing
 
 // ============ INIT DATE FIELDS ============
 setTimeout(()=>{
@@ -4378,7 +4324,7 @@ function renderOrdineWorkflow(statoCorrente){
 }
 
 async function updatePianoStato(id,stato){
-  try{await apiCall('updatePiano',{id,data:{Stato:stato}},'POST');toast('Stato aggiornato','ok');closeModal('modalDetail');await refreshData()}catch(e){toast(e.message,'err')}
+  try{await apiCall('updatePiano',{id,data:{Stato:stato},operatoreId:USER?.ID},'POST');toast('Stato aggiornato','ok');closeModal('modalDetail');await refreshData()}catch(e){toast(e.message,'err')}
 }
 
 // ============ FEATURE 29: CHECKLIST ============

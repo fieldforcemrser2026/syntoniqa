@@ -353,7 +353,7 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 
 <!-- PAGE: NOTIFICHE -->
 <div class="page" id="pgNotifiche">
-<div class="card"><div class="card-head"><h3>🔔 Notifiche</h3><button class="btn btn-ghost btn-sm" onclick="markAllRead()">Tutte lette</button></div><div class="card-body np" id="notList"></div></div>
+<div class="card"><div class="card-head"><h3>🔔 Notifiche</h3><div style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" onclick="markAllRead()">✅ Tutte lette</button><button class="btn btn-ghost btn-sm" style="color:var(--err)" onclick="deleteAllNot()">🗑️ Elimina lette</button></div></div><div class="card-body np" id="notList"></div></div>
 </div>
 
 <!-- PAGE: RICHIESTE -->
@@ -453,7 +453,7 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <button class="active" onclick="goPage('home')" data-p="home"><span class="ico">🏠</span>Home</button>
 <button onclick="goPage('interventi')" data-p="interventi"><span class="ico">📋</span>Interventi</button>
 <button onclick="goPage('urgenze')" data-p="urgenze"><span class="ico">🚨</span>Urgenze</button>
-<button onclick="goPage('chat')" data-p="chat"><span class="ico">💬</span>Chat TG</button>
+<button onclick="goPage('chat')" data-p="chat" id="navChat" style="position:relative"><span class="ico">💬</span>Chat TG<span id="chatBadge" style="display:none;position:absolute;top:2px;right:4px;background:var(--err);color:#fff;border-radius:50%;font-size:.55rem;min-width:14px;height:14px;line-height:14px;text-align:center;padding:0 3px"></span></button>
 <button onclick="goPage('menu')" data-p="menu"><span class="ico">⋯</span>Menu</button>
 </nav>
 
@@ -744,6 +744,7 @@ async function refreshData(){
     DATA=await apiCall('getAll',{userId:USER?.ID||''});
     if(USER&&USER.ID){const fresh=(DATA.utenti||[]).find(x=>x.ID===USER.ID);if(fresh)USER={...fresh}}
     renderAll();
+    loadChatUnread(); // Aggiorna badge chat
   }catch(e){toast('Errore: '+e.message,'err')}
 }
 
@@ -1076,7 +1077,8 @@ function renderNot(){
 }
 
 async function markNot(id){try{await apiCall('markNotifica',{id,azione:'presa_in_carico'},'POST');toast('Notifica confermata','ok');await refreshData()}catch(e){toast(e.message,'err')}}
-async function markAllRead(){try{await apiCall('markAllRead',{},'POST');toast('Tutte lette','ok');await refreshData()}catch(e){toast(e.message,'err')}}
+async function markAllRead(){try{await apiCall('markAllRead',{userId:USER?.ID},'POST');toast('Tutte lette','ok');await refreshData()}catch(e){toast(e.message,'err')}}
+async function deleteAllNot(){if(!confirm('Eliminare tutte le notifiche lette?'))return;try{await apiCall('deleteAllNotifiche',{userId:USER?.ID},'POST');toast('Notifiche eliminate','ok');await refreshData()}catch(e){toast(e.message,'err')}}
 
 // ============ REPERIBILITA ============
 function renderRep(){
@@ -1396,29 +1398,48 @@ function showCalMobDay(ds){
 let chatCanale='CH_GENERALE', chatMsgCache=[], chatPollTimer=null;
 
 function initChat(){
+  loadChatUnread();
   renderChatChannels();
   loadChatMessages();
   // Polling ogni 5 sec
   if(chatPollTimer)clearInterval(chatPollTimer);
   chatPollTimer=setInterval(()=>{
     const pg=$('pgChat');
-    if(pg&&pg.classList.contains('active'))loadChatMessages(true);
+    if(pg&&pg.classList.contains('active')){loadChatMessages(true);loadChatUnread()}
   },5000);
 }
 
+let chatUnread={};
 function renderChatChannels(){
   const canali=[
     {id:'CH_GENERALE',nome:'💬 Generale'},
     {id:'CH_URGENZE',nome:'🚨 Urgenze'},
     {id:'CH_ADMIN',nome:'👑 Admin & Capi'}
   ];
-  $('chatChannels').innerHTML=canali.map(c=>
-    '<button class="chat-ch-btn'+(c.id===chatCanale?' active':'')+'" onclick="switchChatCh(\''+c.id+'\')">'+c.nome+'</button>'
-  ).join('');
+  $('chatChannels').innerHTML=canali.map(c=>{
+    const nr=chatUnread[c.id]||0;
+    return '<button class="chat-ch-btn'+(c.id===chatCanale?' active':'')+'" onclick="switchChatCh(\''+c.id+'\')">'+c.nome+(nr>0&&c.id!==chatCanale?' <span style="background:var(--err);color:#fff;border-radius:50%;font-size:.65rem;padding:1px 6px;margin-left:4px;min-width:16px;text-align:center;display:inline-block">'+nr+'</span>':'')+'</button>';
+  }).join('');
+}
+async function loadChatUnread(){
+  try{
+    const res=await apiCall('getChatCanali',{userId:USER?.ID},'POST');
+    const srv=(res?.canali||res||[]);
+    srv.forEach(c=>{const id=c.ID||c.Id;if(id)chatUnread[id]=c.NonLetti||c.nonLetti||0});
+    renderChatChannels();
+    // Badge globale nella nav
+    const totalUnread=Object.values(chatUnread).reduce((a,b)=>a+b,0);
+    const badge=$('chatBadge');
+    if(badge){
+      if(totalUnread>0){badge.textContent=totalUnread>99?'99+':totalUnread;badge.style.display=''}
+      else{badge.style.display='none'}
+    }
+  }catch(e){}
 }
 
 function switchChatCh(id){
   chatCanale=id;
+  chatUnread[id]=0; // Reset badge subito per UX
   renderChatChannels();
   loadChatMessages();
 }
