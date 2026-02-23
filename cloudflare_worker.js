@@ -14,11 +14,53 @@
 
 // ============ HELPERS ============
 
-const corsHeaders = {
+const ALLOWED_ORIGINS = [
+  'https://fieldforcemrser2026.github.io',
+  'https://app.syntoniqa.app',
+  'http://localhost:3000',
+  'http://localhost:8787'
+];
+
+// Dynamic CORS - aggiornato per request
+let corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Token',
 };
+
+function setCorsForRequest(request) {
+  const origin = request?.headers?.get('Origin') || '';
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  corsHeaders = {
+    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Token',
+  };
+}
+
+// ============ STATE MACHINE: transizioni valide ============
+const VALID_PIANO_TRANSITIONS = {
+  pianificato: ['in_corso', 'annullato'],
+  in_corso: ['completato', 'pianificato', 'annullato'],
+  completato: [],   // terminale
+  annullato: ['pianificato']  // può essere ripianificato
+};
+const VALID_URGENZA_TRANSITIONS = {
+  aperta: ['assegnata', 'chiusa'],
+  assegnata: ['schedulata', 'in_corso', 'aperta', 'chiusa'],
+  schedulata: ['in_corso', 'assegnata', 'chiusa'],
+  in_corso: ['risolta', 'chiusa'],
+  risolta: ['chiusa', 'in_corso'],   // riapertura se serve
+  chiusa: []  // terminale
+};
+
+function validateTransition(validMap, currentStato, newStato, entityType) {
+  if (!newStato || newStato === currentStato) return null; // nessun cambio
+  const allowed = validMap[currentStato];
+  if (!allowed) return `Stato corrente '${currentStato}' non valido per ${entityType}`;
+  if (!allowed.includes(newStato)) return `Transizione ${entityType} non valida: ${currentStato} → ${newStato}. Consentite: ${allowed.join(', ')}`;
+  return null; // valida
+}
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -30,6 +72,7 @@ function json(data, status = 200) {
 function err(msg, status = 400) {
   return json({ success: false, error: msg }, status);
 }
+
 
 function ok(data = {}) {
   return json({ success: true, data });
@@ -155,6 +198,8 @@ function checkToken(request, env, bodyToken) {
 
 export default {
   async fetch(request, env) {
+    setCorsForRequest(request);
+
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
     }
@@ -175,12 +220,7 @@ export default {
       } else if (request.method === 'POST') {
         const rawBody = await request.json().catch(() => ({}));
         if (!checkToken(request, env, rawBody.token)) return err('Token non valido', 401);
-        // FIX: leggi action anche dal body POST (il frontend la manda lì)
         const postAction = action || rawBody.action || '';
-        // FIX CRIT-04 (globale): Pre-process body per TUTTI gli handler
-        // 1. Estrai dati dal wrapper {data:{...}} se presente
-        // 2. Converti PascalCase → snake_case
-        // 3. Rimuovi meta-fields (action, token, method) che inquinerebbero gli INSERT
         const body = normalizeBody(rawBody);
         return await handlePost(postAction, body, env);
       }
@@ -449,7 +489,7 @@ async function handlePost(action, body, env) {
           await fetch(`https://api.telegram.org/bot${cfg.telegram_bot_token}/sendMessage`, {
             method: 'POST', headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ chat_id: cfg.telegram_group_generale, text: `🔑 <b>RESET PASSWORD</b>\n👤 ${u.nome} ${u.cognome} (${u.username}) ha chiesto il reset password.\nAdmin: vai su Gestione Utenti per resettarla.`, parse_mode: 'HTML' })
-          }).catch(()=>{});
+          }).catch(e=>console.error('[SYNC]',e.message));
         }
       } catch(e) {}
       return ok({ message: 'Richiesta inviata. L\'admin riceverà una notifica per resettare la tua password.' });
@@ -483,13 +523,23 @@ async function handlePost(action, body, env) {
 
     case 'updatePiano': {
       const id = body.id;
+      if (!id) return err('id piano richiesto');
       const allFields = getFields(body);
       // Only writable piano columns
       const pianoWritable = ['tecnico_id','cliente_id','macchina_id','automezzo_id','tipo_intervento_id','priorita_id','data','ora_inizio','ora_fine','durata_ore','stato','note','data_fine','obsoleto'];
       const updates = {};
       for (const k of pianoWritable) { if (allFields[k] !== undefined) updates[k] = allFields[k]; }
+      // Validazione transizione stato
+      if (updates.stato) {
+        const current = await sb(env, 'piano', 'GET', null, `?id=eq.${id}&select=stato`).catch(()=>[]);
+        if (current?.[0]?.stato) {
+          const transErr = validateTransition(VALID_PIANO_TRANSITIONS, current[0].stato, updates.stato, 'piano');
+          if (transErr) return err(transErr);
+        }
+      }
+      updates.updated_at = new Date().toISOString();
       await sb(env, `piano?id=eq.${id}`, 'PATCH', updates);
-      await wlog('piano', id, `updated_stato_${updates.stato || 'unknown'}`, body.operatoreId || body.userId);
+      await wlog('piano', id, `updated_stato_${updates.stato || 'fields'}`, body.operatoreId || body.userId);
       if (updates.stato === 'completato') {
         await triggerKPISnapshot(env, id, updates.tecnico_id);
         // Auto-risolvi urgenza collegata se esiste
@@ -549,7 +599,7 @@ async function handlePost(action, body, env) {
         <p><strong>Problema:</strong> ${(row.problema || '').substring(0, 200)}</p>
         <p><strong>SLA:</strong> ${slaScadenza ? slaScadenza.substring(0,16).replace('T',' ') : 'N/D'}</p>
         <p style="margin-top:16px"><a href="https://fieldforcemrser2026.github.io/syntoniqa/admin_v1.html" style="background:#C30A14;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">Vai alla Dashboard</a></p>`
-      ).catch(()=>{});
+      ).catch(e=>console.error('[SYNC]',e.message));
       return ok({ urgenza: pascalizeRecord(result[0]) });
     }
 
@@ -588,7 +638,7 @@ async function handlePost(action, body, env) {
       // Aggiorna anche il piano collegato se esiste
       const urg = await sb(env, 'urgenze', 'GET', null, `?id=eq.${id}&select=intervento_id`).catch(()=>[]);
       if (urg?.[0]?.intervento_id) {
-        await sb(env, `piano?id=eq.${urg[0].intervento_id}`, 'PATCH', { stato: 'in_corso', updated_at: new Date().toISOString() }).catch(()=>{});
+        await sb(env, `piano?id=eq.${urg[0].intervento_id}`, 'PATCH', { stato: 'in_corso', updated_at: new Date().toISOString() }).catch(e=>console.error('[SYNC]',e.message));
       }
       // Notifica chat admin
       try {
@@ -615,7 +665,7 @@ async function handlePost(action, body, env) {
       // Completa anche il piano collegato se esiste
       const urg2 = await sb(env, 'urgenze', 'GET', null, `?id=eq.${id}&select=intervento_id,tecnico_assegnato`).catch(()=>[]);
       if (urg2?.[0]?.intervento_id) {
-        await sb(env, `piano?id=eq.${urg2[0].intervento_id}`, 'PATCH', { stato: 'completato', data_fine: new Date().toISOString(), updated_at: new Date().toISOString() }).catch(()=>{});
+        await sb(env, `piano?id=eq.${urg2[0].intervento_id}`, 'PATCH', { stato: 'completato', data_fine: new Date().toISOString(), updated_at: new Date().toISOString() }).catch(e=>console.error('[SYNC]',e.message));
       }
       // Notifica chat
       try {
@@ -636,7 +686,7 @@ async function handlePost(action, body, env) {
             destinatario_id: a.id, stato: 'inviata', priorita: 'normale',
             riferimento_id: id, riferimento_tipo: 'urgenza',
             tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
-          }).catch(()=>{});
+          }).catch(e=>console.error('[SYNC]',e.message));
         }
       } catch(e){}
       return ok();
@@ -644,10 +694,19 @@ async function handlePost(action, body, env) {
 
     case 'updateUrgenza': {
       const id = body.id;
+      if (!id) return err('id urgenza richiesto');
       const allFields = getFields(body);
       const urgWritable = ['cliente_id','macchina_id','problema','priorita_id','stato','tecnico_assegnato','tecnici_ids','automezzo_id','data_prevista','ora_prevista','data_inizio','data_risoluzione','intervento_id','note','allegati_ids','sla_scadenza','sla_status','obsoleto'];
       const updates = {};
       for (const k of urgWritable) { if (allFields[k] !== undefined) updates[k] = allFields[k]; }
+      // Validazione transizione stato
+      if (updates.stato) {
+        const current = await sb(env, 'urgenze', 'GET', null, `?id=eq.${id}&select=stato`).catch(()=>[]);
+        if (current?.[0]?.stato) {
+          const transErr = validateTransition(VALID_URGENZA_TRANSITIONS, current[0].stato, updates.stato, 'urgenza');
+          if (transErr) return err(transErr);
+        }
+      }
       updates.updated_at = new Date().toISOString();
       await sb(env, `urgenze?id=eq.${id}`, 'PATCH', updates);
       await wlog('urgenza', id, 'updated', body.operatoreId || body.userId);
@@ -703,7 +762,7 @@ async function handlePost(action, body, env) {
             destinatario_id: ord[0].tecnico_id, stato: 'inviata', priorita: 'normale',
             riferimento_id: id, riferimento_tipo: 'ordine',
             tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
-          }).catch(()=>{});
+          }).catch(e=>console.error('[SYNC]',e.message));
         }
       } catch(e){}
       return ok();
@@ -712,8 +771,16 @@ async function handlePost(action, body, env) {
     // -------- UTENTI --------
 
     case 'createUtente': {
+      // SECURITY: solo admin può creare utenti
+      const callerId = body.operatoreId || body.userId;
+      if (callerId) {
+        const caller = await sb(env, 'utenti', 'GET', null, `?id=eq.${callerId}&select=ruolo`).catch(()=>[]);
+        if (caller?.[0] && caller[0].ruolo !== 'admin') return err('Solo admin può creare utenti', 403);
+      }
+      const pwd = body.password;
+      if (!pwd || pwd.length < 8) return err('Password richiesta (min 8 caratteri)');
       const id = 'TEC_' + String(Date.now()).slice(-3);
-      const hashed = await hashPassword(body.password || 'Syntoniqa2026!');
+      const hashed = await hashPassword(pwd);
       const row = { id, ...getFields(body), password_hash: hashed, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       delete row.password;
       const result = await sb(env, 'utenti', 'POST', row);
@@ -1692,7 +1759,7 @@ Rispondi con JSON:
           utente = allUtenti.find(u => (u.nome||'').toLowerCase() === firstName && (!lastName || (u.cognome||'').toLowerCase().startsWith(lastName))) || null;
           // Auto-save telegram user id in telegram_chat_id for future fast lookups
           if (utente && fromId) {
-            await sb(env, `utenti?id=eq.${utente.id}`, 'PATCH', { telegram_chat_id: String(fromId) }).catch(()=>{});
+            await sb(env, `utenti?id=eq.${utente.id}`, 'PATCH', { telegram_chat_id: String(fromId) }).catch(e=>console.error('[SYNC]',e.message));
           }
         }
       }
@@ -2364,10 +2431,18 @@ Rispondi SOLO con JSON valido:
     }
 
     case 'clearAnagrafica': {
-      // Admin only: delete all anagrafica data for re-import
-      await sb(env, 'anagrafica_assets?id=neq.00000000-0000-0000-0000-000000000000', 'DELETE');
-      await sb(env, 'anagrafica_clienti?id=neq.00000000-0000-0000-0000-000000000000', 'DELETE');
-      return ok({ cleared: true });
+      // SECURITY: Richiede admin + confirmToken per proteggere cancellazione massiva
+      const uid = body.userId || body.operatoreId;
+      if (!uid) return err('userId richiesto per clearAnagrafica');
+      const caller = await sb(env, 'utenti', 'GET', null, `?id=eq.${uid}&select=ruolo`).catch(()=>[]);
+      if (!caller?.[0] || caller[0].ruolo !== 'admin') return err('Solo admin può eseguire clearAnagrafica', 403);
+      if (body.confirmToken !== 'CLEAR_CONFIRMED') return err('Conferma richiesta: invia confirmToken="CLEAR_CONFIRMED"');
+      // Soft-delete con audit trail
+      const now = new Date().toISOString();
+      await sb(env, 'anagrafica_assets?obsoleto=eq.false', 'PATCH', { obsoleto: true, updated_at: now });
+      await sb(env, 'anagrafica_clienti?obsoleto=eq.false', 'PATCH', { obsoleto: true, updated_at: now });
+      await wlog('anagrafica', 'ALL', 'cleared_for_reimport', uid);
+      return ok({ cleared: true, method: 'soft_delete' });
     }
 
     default:
