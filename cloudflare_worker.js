@@ -623,6 +623,66 @@ async function handlePost(action, body, env) {
       await sb(env, `urgenze?id=eq.${id}`, 'PATCH', patch);
       await wlog('urgenza', id, 'assigned', operatoreId || userId, `a ${tecId}`);
       await sendTelegramNotification(env, 'urgenza_assegnata', { id, tecnicoAssegnato: tecId });
+      // Notifica in-app al tecnico assegnato
+      if (tecId) {
+        const urgDet = await sb(env, 'urgenze', 'GET', null, `?id=eq.${id}&select=problema,cliente_id`).catch(()=>[]);
+        const prob = urgDet?.[0]?.problema || '';
+        const cliId = urgDet?.[0]?.cliente_id || '';
+        const cliName = cliId ? await getEntityName(env, 'clienti', cliId).catch(()=>'') : '';
+        await sb(env, 'notifiche', 'POST', {
+          id: 'NOT_ASS_' + Date.now(), tipo: 'urgenza', oggetto: '🚨 Urgenza assegnata a te',
+          testo: `Urgenza ${id}: ${prob.substring(0,80)}${cliName?' · '+cliName:''}`,
+          destinatario_id: tecId, stato: 'inviata', priorita: 'alta',
+          riferimento_id: id, riferimento_tipo: 'urgenza',
+          tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
+        }).catch(e=>console.error('[SYNC]',e.message));
+        // Telegram privato al tecnico
+        await notifyTecnicoTG(env, tecId, `🚨 <b>URGENZA ASSEGNATA A TE</b>\n📋 ${prob.substring(0,100)}\n🏢 ${cliName||'—'}\n📅 ${dataPrev||'ASAP'} ${oraPrev||''}\n\n<i>Apri l'app per iniziare</i>`);
+      }
+      return ok();
+    }
+
+    case 'rejectUrgenza': {
+      const { id } = body;
+      if (!id) return err('id urgenza richiesto');
+      const motivo = body.motivo || body.note || 'Nessun motivo specificato';
+      const userId = body.operatoreId || body.userId;
+      // Verifica che sia assegnata
+      const urgCheck = await sb(env, 'urgenze', 'GET', null, `?id=eq.${id}&select=stato,tecnico_assegnato,problema,cliente_id`).catch(()=>[]);
+      if (!urgCheck?.[0]) return err('Urgenza non trovata');
+      if (urgCheck[0].stato !== 'assegnata' && urgCheck[0].stato !== 'schedulata') return err('Solo urgenze assegnate/schedulate possono essere rifiutate');
+      // Riporta ad aperta, rimuovi tecnico
+      await sb(env, `urgenze?id=eq.${id}`, 'PATCH', {
+        stato: 'aperta', tecnico_assegnato: null, tecnici_ids: null, automezzo_id: null,
+        note: `[RIFIUTATA da ${userId}] ${motivo}\n${urgCheck[0].note||''}`.trim(),
+        updated_at: new Date().toISOString()
+      });
+      await wlog('urgenza', id, 'rejected', userId, motivo);
+      // Notifica admin
+      const admins = await sb(env, 'utenti', 'GET', null, '?ruolo=eq.admin&attivo=eq.true&select=id,nome,cognome').catch(()=>[]);
+      const tecName = userId ? await getEntityName(env, 'utenti', userId).catch(()=>userId) : userId;
+      for (const a of (admins||[])) {
+        await sb(env, 'notifiche', 'POST', {
+          id: 'NOT_REJ_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+          tipo: 'urgenza', oggetto: '⚠️ Urgenza RIFIUTATA',
+          testo: `${tecName} ha rifiutato urgenza ${id}: ${motivo}`,
+          destinatario_id: a.id, stato: 'inviata', priorita: 'alta',
+          riferimento_id: id, riferimento_tipo: 'urgenza',
+          tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
+        }).catch(e=>console.error('[SYNC]',e.message));
+      }
+      // Chat + Telegram
+      try {
+        const msgId = 'MSG_URG_REJ_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+        await sb(env, 'chat_messaggi', 'POST', {
+          id: msgId, canale_id: 'CH_URGENZE', mittente_id: userId || 'SYSTEM',
+          testo: `⚠️ Urgenza ${id} RIFIUTATA da ${tecName}\n📝 Motivo: ${motivo}`, tipo: 'testo', created_at: new Date().toISOString()
+        });
+      } catch(e){}
+      // Email admin
+      await emailAdmins(env, `⚠️ Urgenza ${id} rifiutata`,
+        `<h3>⚠️ Urgenza Rifiutata</h3><p><strong>${tecName}</strong> ha rifiutato l'urgenza <strong>${id}</strong></p><p><strong>Motivo:</strong> ${motivo}</p><p><strong>Problema:</strong> ${urgCheck[0].problema||'—'}</p><p style="color:#DC2626"><strong>Azione richiesta:</strong> Riassegnare l'urgenza a un altro tecnico</p>`
+      ).catch(e=>console.error('[EMAIL]',e.message));
       return ok();
     }
 
@@ -1893,7 +1953,7 @@ Rispondi SOLO con JSON valido:
           reply = `👋 Benvenuto in *Syntoniqa MRS*!\n\n📤 Puoi inviarmi:\n• Testo con problemi/ordini\n• 📷 Foto di guasti o ricambi\n• 📄 Documenti (PDF, Excel)\n• 🎤 Audio/Video\n\n🤖 L'AI analizzerà tutto e creerà le azioni giuste!\n\nInvia /help per i comandi.`;
           break;
         case '/help':
-          reply = `📋 *Comandi Syntoniqa:*\n\n🚨 *Urgenze:*\n/stato - Urgenze aperte\n/vado - Prendi urgenza\n/incorso - Segna in corso\n/risolto [note] - Chiudi urgenza\n\n📅 *Interventi:*\n/oggi - I tuoi interventi oggi\n/settimana - Piano settimanale\n\n📦 *Ordini:*\n/ordine [cod] [qt] [cliente] - Ordine ricambio\n/servepezz [desc] - Ricambio generico\n\n📤 *Upload:*\nInvia foto, PDF, Excel, audio → l'AI analizza e crea azioni automaticamente!\n\n💡 Puoi anche scrivere testo libero, es: "Bondioli 102 fermo, errore laser"`;
+          reply = `📋 *Comandi Syntoniqa:*\n\n🚨 *Urgenze:*\n/stato - Urgenze aperte\n/vado - Lista urgenze, /vado N per prendere\n/incorso - Segna in corso\n/risolto [note] - Chiudi urgenza\n\n📅 *Interventi:*\n/oggi - I tuoi interventi oggi\n/settimana - Piano settimanale\n\n📦 *Ordini:*\n/ordine [cod] [qt] [cliente] - Ordine ricambio\n/servepezz [desc] - Ricambio generico\n\n📤 *Upload:*\nInvia foto, PDF, Excel, audio → l'AI analizza e crea azioni automaticamente!\n\n💡 Puoi anche scrivere testo libero, es: "Bondioli 102 fermo, errore laser"`;
           break;
         case '/stato': {
           const urg = await sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,in_corso)&order=data_segnalazione.desc&limit=10');
@@ -1918,11 +1978,17 @@ Rispondi SOLO con JSON valido:
           break;
         }
         case '/vado': {
-          const urg = await sb(env, 'urgenze', 'GET', null, '?stato=eq.aperta&order=data_segnalazione.asc&limit=1');
-          if (!urg.length) { reply = '✅ Nessuna urgenza da prendere in carico'; break; }
-          await sb(env, `urgenze?id=eq.${urg[0].id}`, 'PATCH', { stato: 'assegnata', tecnico_assegnato: utente.id, data_assegnazione: new Date().toISOString() });
-          reply = `✅ Urgenza *${urg[0].id}* assegnata a te!\nProblema: ${urg[0].problema}`;
-          await sendTelegramNotification(env, 'urgenza_assegnata', { id: urg[0].id, tecnicoAssegnato: utente.id });
+          const urgList = await sb(env, 'urgenze', 'GET', null, '?stato=eq.aperta&order=priorita.asc,data_segnalazione.asc&limit=5');
+          if (!urgList.length) { reply = '✅ Nessuna urgenza da prendere in carico'; break; }
+          const scelta = parseInt(parts[1]);
+          if (!scelta || scelta < 1 || scelta > urgList.length) {
+            reply = `🚨 *Urgenze aperte (${urgList.length}):*\n` + urgList.map((u, i) => `*${i + 1}.* ${u.problema || 'N/D'} – P${u.priorita || '?'}\n   📅 ${u.data_segnalazione?.split('T')[0] || '?'} | ID: \`${u.id}\``).join('\n\n') + `\n\n👉 Rispondi */vado N* per prendere in carico (es: /vado 1)`;
+            break;
+          }
+          const picked = urgList[scelta - 1];
+          await sb(env, `urgenze?id=eq.${picked.id}`, 'PATCH', { stato: 'assegnata', tecnico_assegnato: utente.id, data_assegnazione: new Date().toISOString() });
+          reply = `✅ Urgenza *${picked.id}* assegnata a te!\nProblema: ${picked.problema}`;
+          await sendTelegramNotification(env, 'urgenza_assegnata', { id: picked.id, tecnicoAssegnato: utente.id });
           break;
         }
         case '/incorso': {
@@ -2212,10 +2278,16 @@ Rispondi SOLO con JSON valido:
               break;
             }
             case '/vado': {
-              const urg = await sb(env, 'urgenze', 'GET', null, '?stato=eq.aperta&order=data_segnalazione.asc&limit=1').catch(()=>[]);
-              if (!urg.length) { botReply = '✅ Nessuna urgenza da prendere'; break; }
-              await sb(env, `urgenze?id=eq.${urg[0].id}`, 'PATCH', { stato: 'assegnata', tecnico_assegnato: mittente, data_assegnazione: new Date().toISOString() });
-              botReply = `✅ Urgenza ${urg[0].id} assegnata a te!\n${urg[0].problema}`;
+              const urgList = await sb(env, 'urgenze', 'GET', null, '?stato=eq.aperta&order=priorita.asc,data_segnalazione.asc&limit=5').catch(()=>[]);
+              if (!urgList.length) { botReply = '✅ Nessuna urgenza da prendere'; break; }
+              const scelta = parseInt(parts[1]);
+              if (!scelta || scelta < 1 || scelta > urgList.length) {
+                botReply = `🚨 Urgenze aperte (${urgList.length}):\n` + urgList.map((u, i) => `${i + 1}. ${u.problema || 'N/D'} – P${u.priorita || '?'} (${u.data_segnalazione?.split('T')[0] || '?'})`).join('\n') + `\n\n👉 Scrivi /vado N per prendere (es: /vado 1)`;
+                break;
+              }
+              const picked = urgList[scelta - 1];
+              await sb(env, `urgenze?id=eq.${picked.id}`, 'PATCH', { stato: 'assegnata', tecnico_assegnato: mittente, data_assegnazione: new Date().toISOString() });
+              botReply = `✅ Urgenza ${picked.id} assegnata a te!\n${picked.problema}`;
               break;
             }
             case '/incorso': {
@@ -2614,6 +2686,16 @@ async function sendTelegram(env, chatId, text) {
   }).then(r => r.json()).catch(() => null);
 }
 
+// Notifica privata Telegram al tecnico (se ha telegram_chat_id)
+async function notifyTecnicoTG(env, tecnicoId, text) {
+  if (!tecnicoId) return;
+  try {
+    const tec = await sb(env, 'utenti', 'GET', null, `?id=eq.${tecnicoId}&select=telegram_chat_id,nome,cognome`).catch(()=>[]);
+    const chatId = tec?.[0]?.telegram_chat_id;
+    if (chatId) await sendTelegram(env, chatId, text);
+  } catch(e) { console.error('[TG-PRIV]', e.message); }
+}
+
 async function sendTelegramNotification(env, event, data) {
   // Notifiche automatiche al gruppo generale
   const configRes = await sb(env, 'config', 'GET', null, '?chiave=in.(telegram_group_generale,telegram_bot_token)').catch(() => []);
@@ -2827,6 +2909,47 @@ async function checkSLAUrgenze(env) {
       }
     }
     console.log(`[CRON] checkSLAUrgenze: ${urgenze?.length || 0} urgenze checked, ${updated} updated`);
+
+    // ESCALATION: urgenze assegnate ma non iniziate da >4 ore
+    const urgAssegnate = await sb(env, 'urgenze', 'GET', null,
+      '?stato=eq.assegnata&obsoleto=eq.false&select=id,data_assegnazione,tecnico_assegnato,problema,cliente_id'
+    ).catch(() => []);
+    for (const ua of (urgAssegnate || [])) {
+      if (!ua.data_assegnazione) continue;
+      const oreAssegnata = (now - new Date(ua.data_assegnazione)) / 3600000;
+      if (oreAssegnata >= 4) {
+        // Anti-duplicato: max 1 escalation al giorno per urgenza
+        const escId = 'NOT_ESC_' + ua.id + '_' + now.toISOString().split('T')[0];
+        const existing = await sb(env, 'notifiche', 'GET', null, `?id=eq.${escId}&select=id`).catch(() => []);
+        if (!existing?.length) {
+          const cliName = await getEntityName(env, 'clienti', ua.cliente_id).catch(()=>'');
+          const tecName = ua.tecnico_assegnato ? await getEntityName(env, 'utenti', ua.tecnico_assegnato).catch(()=>'') : '—';
+          // Notifica admin
+          const admins = await sb(env, 'utenti', 'GET', null, '?ruolo=eq.admin&attivo=eq.true&select=id').catch(()=>[]);
+          for (const a of (admins||[])) {
+            await sb(env, 'notifiche', 'POST', {
+              id: escId + '_' + a.id.slice(-3), tipo: 'escalation', oggetto: '⏰ ESCALATION: urgenza non iniziata',
+              testo: `Urgenza ${ua.id} assegnata a ${tecName} da ${Math.floor(oreAssegnata)}h, non ancora iniziata! Cliente: ${cliName}`,
+              destinatario_id: a.id, stato: 'inviata', priorita: 'urgente',
+              riferimento_id: ua.id, riferimento_tipo: 'urgenza',
+              tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
+            }).catch(e=>console.error('[SYNC]',e.message));
+          }
+          // Sollecita il tecnico via Telegram privato
+          await notifyTecnicoTG(env, ua.tecnico_assegnato,
+            `⏰ <b>SOLLECITO URGENZA</b>\n📋 ${ua.id}: ${(ua.problema||'').substring(0,80)}\n🏢 ${cliName}\n\n⚠️ Assegnata da ${Math.floor(oreAssegnata)} ore, non ancora iniziata.\n<i>Apri l'app e premi ⚡ Inizia oppure ❌ Rifiuta</i>`
+          );
+          // Chat
+          await sb(env, 'chat_messaggi', 'POST', {
+            id: 'MSG_ESC_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+            canale_id: 'CH_URGENZE', mittente_id: 'SYSTEM',
+            testo: `⏰ ESCALATION: Urgenza ${ua.id} assegnata a ${tecName} da ${Math.floor(oreAssegnata)}h, non iniziata!`,
+            tipo: 'testo', created_at: new Date().toISOString()
+          }).catch(e=>console.error('[SYNC]',e.message));
+          console.log(`[CRON] Escalation for urgenza ${ua.id} (${Math.floor(oreAssegnata)}h)`);
+        }
+      }
+    }
   } catch (e) { console.error('[CRON] checkSLAUrgenze error:', e.message); }
 }
 

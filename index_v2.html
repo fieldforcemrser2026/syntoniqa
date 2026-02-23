@@ -1067,7 +1067,7 @@ function showUrg(id){
     '<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Problema</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+(u.Problema||'—')+'</div></div>'+
     (u.Note?'<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+u.Note+'</div></div>':'')+
     '<div style="display:flex;flex-direction:column;gap:8px">'+
-    (u.Stato==='assegnata'||u.Stato==='schedulata'?'<button class="btn" style="background:var(--warn);color:#fff" onclick="startUrg(\''+u.ID+'\')">⚡ Inizia Urgenza</button>':'')+
+    (u.Stato==='assegnata'||u.Stato==='schedulata'?'<button class="btn" style="background:var(--warn);color:#fff" onclick="startUrg(\''+u.ID+'\')">⚡ Inizia Urgenza</button><button class="btn" style="background:var(--err);color:#fff" onclick="rejectUrg(\''+u.ID+'\')">❌ Rifiuta Urgenza</button>':'')+
     (u.Stato==='in_corso'?'<button class="btn" style="background:var(--ok);color:#fff" onclick="resolveUrg(\''+u.ID+'\')">✅ Risolvi Urgenza</button>':'')+
     (cObj?.Telefono?'<a href="tel:'+cObj.Telefono+'" class="btn btn-outline">📞 Chiama '+cObj.Telefono+'</a>':'')+
     (cObj?.Latitudine&&cObj?.Longitudine?'<a href="https://www.google.com/maps/dir/?api=1&destination='+cObj.Latitudine+','+cObj.Longitudine+'&travelmode=driving" target="_blank" class="btn btn-outline">📍 Naviga</a>':'')+
@@ -1088,6 +1088,16 @@ async function resolveUrg(id){
   try{
     await apiCall('resolveUrgenza',{id,noteRisoluzione:note,operatoreId:USER?.ID},'POST');
     toast('Urgenza risolta!','ok');closeSheet('shUrg');
+    await refreshData();
+  }catch(e){toast(e.message,'err')}
+}
+
+async function rejectUrg(id){
+  const motivo=prompt('Motivo del rifiuto:');
+  if(!motivo)return;
+  try{
+    await apiCall('rejectUrgenza',{id,motivo,operatoreId:USER?.ID},'POST');
+    toast('Urgenza rifiutata — admin notificato','ok');closeSheet('shUrg');
     await refreshData();
   }catch(e){toast(e.message,'err')}
 }
