@@ -688,13 +688,51 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <section class="sec" id="secAi">
 <div class="ai-box">
 <h3>🤖 AI Planner — Simulatore Intelligente</h3>
-<p>Descrivi i vincoli e le esigenze in linguaggio naturale. L'AI analizzerà tecnici, automezzi, macchine, tagliandi e urgenze per generare un piano ottimizzato.</p>
+<p>Descrivi i vincoli e le esigenze in linguaggio naturale. Puoi anche allegare documenti (Excel, PDF, Word, foto) che l'AI userà per ottimizzare il piano.</p>
 <textarea id="aiPrompt" placeholder="Es: Pianifica la prossima settimana. Marco è in ferie lunedì e martedì. Dai priorità ai tagliandi scaduti. Il automezzo F3 è in officina."></textarea>
-<div style="margin-top:12px;display:flex;gap:8px">
+<div style="margin-top:12px">
+<div id="aiUploadZone" style="border:2px dashed rgba(255,255,255,.3);border-radius:var(--radius);padding:16px;text-align:center;cursor:pointer;margin-bottom:12px;transition:all .2s" onclick="$('aiFileInput').click()" ondragover="event.preventDefault();this.style.borderColor='#6366F1';this.style.background='rgba(99,102,241,.1)'" ondragleave="this.style.borderColor='rgba(255,255,255,.3)';this.style.background='transparent'" ondrop="event.preventDefault();handleAIFileDrop(event);this.style.borderColor='rgba(255,255,255,.3)';this.style.background='transparent'">
+📎 <strong>Trascina qui</strong> o clicca per allegare documenti (xlsx, pdf, docx, foto)
+<input type="file" id="aiFileInput" multiple accept=".xlsx,.xls,.pdf,.docx,.doc,.jpg,.jpeg,.png,.csv" style="display:none" onchange="handleAIFiles(this.files)">
+</div>
+<div id="aiFileList" style="display:none;margin-bottom:12px"></div>
+</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap">
 <button class="btn btn-lg" style="background:#6366F1;color:white" onclick="runAI()">🤖 Genera Piano</button>
+<button class="btn btn-lg btn-outline" style="border-color:rgba(255,255,255,.3);color:white" onclick="submitAIPlanForApproval()" id="btnSubmitPlan" disabled>📤 Invia per Approvazione</button>
 <button class="btn btn-lg btn-outline" style="border-color:rgba(255,255,255,.3);color:white" onclick="applyAI()" id="btnApplyAI" disabled>✅ Applica Piano</button>
 </div>
 <div class="ai-result" id="aiResult" style="display:none"></div>
+</div>
+
+<!-- Workflow Approvativo -->
+<div class="card" style="margin-top:24px">
+<div class="card-head"><h3>📋 Iter Approvativo Piano</h3>
+<div class="btn-group">
+<select id="approvalFilter" onchange="renderApprovalQueue()" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem">
+<option value="">Tutti</option><option value="in_attesa">In attesa</option><option value="approvato">Approvati</option><option value="rifiutato">Rifiutati</option>
+</select>
+</div>
+</div>
+<div class="card-body np" style="max-height:400px;overflow-y:auto">
+<table class="tbl"><thead><tr>
+<th>ID</th><th>Data</th><th>Creato da</th><th>Stato</th><th>Approvato da</th><th>Note</th><th>Azioni</th>
+</tr></thead><tbody id="tblApproval"></tbody></table>
+</div>
+</div>
+
+<!-- Vista Tecnico: Piano Personale -->
+<div class="card" style="margin-top:16px" id="cardTecnicoPlan">
+<div class="card-head"><h3>👷 Piano Personale</h3>
+<div class="btn-group">
+<select id="tecViewSelect" onchange="renderTecnicoPlan()" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem">
+<option value="mio">Il mio piano</option><option value="tutti">Tutti i piani (sola lettura)</option>
+</select>
+</div>
+</div>
+<div class="card-body np" style="max-height:500px;overflow-y:auto">
+<div id="tecnicoPlanGrid"></div>
+</div>
 </div>
 </section>
 
@@ -1539,6 +1577,7 @@ function showSec(id,btn){
   if(id==='mappa')setTimeout(()=>initMap(),100);
   if(id==='kpi')loadKPIWithCharts();
   if(id==='planner')setTimeout(()=>initPlanner(),100);
+  if(id==='ai'){renderApprovalQueue();renderTecnicoPlan()}
   if(id==='chat')loadChatCanali();
   if(id==='anagrafica'){loadAnagClients()}
   $('sidebar').classList.remove('open');$('sideOverlay').classList.remove('show');
@@ -3597,16 +3636,76 @@ async function saveInstall(){
 }
 
 // ============ AI PLANNER ============
+let AI_FILES=[];
+
+function handleAIFiles(fileList){
+  for(const f of fileList) AI_FILES.push(f);
+  renderAIFileList();
+}
+function handleAIFileDrop(e){
+  handleAIFiles(e.dataTransfer.files);
+}
+function removeAIFile(idx){
+  AI_FILES.splice(idx,1);
+  renderAIFileList();
+}
+function renderAIFileList(){
+  const el=$('aiFileList');
+  if(!AI_FILES.length){el.style.display='none';return}
+  el.style.display='block';
+  el.innerHTML=AI_FILES.map((f,i)=>{
+    const icon=f.name.match(/\.xlsx?$/i)?'📊':f.name.match(/\.pdf$/i)?'📄':f.name.match(/\.docx?$/i)?'📝':'🖼️';
+    return `<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,.1);padding:4px 10px;border-radius:20px;margin:2px;font-size:.8125rem">${icon} ${f.name} <span style="cursor:pointer;color:#ef4444" onclick="removeAIFile(${i})">✕</span></span>`;
+  }).join('');
+}
+
+async function readFileAsText(file){
+  return new Promise((resolve)=>{
+    if(file.name.match(/\.csv$/i)||file.name.match(/\.txt$/i)){
+      const r=new FileReader();r.onload=()=>resolve(r.result);r.readAsText(file);
+    } else {
+      // For xlsx, pdf, docx — read as base64 for the API
+      const r=new FileReader();r.onload=()=>resolve(r.result.split(',')[1]);r.readAsDataURL(file);
+    }
+  });
+}
+
 async function runAI(){
   const prompt=$('aiPrompt').value.trim();
-  if(!prompt){toast('Scrivi i vincoli per il piano','warn');return}
+  if(!prompt&&!AI_FILES.length){toast('Scrivi i vincoli o allega documenti','warn');return}
   $('aiResult').style.display='block';
   $('aiResult').textContent='🤖 Generazione in corso...';
+
+  // Prepare file data for API
+  const filesData=[];
+  for(const f of AI_FILES){
+    const content=await readFileAsText(f);
+    filesData.push({name:f.name, type:f.type, size:f.size, content});
+  }
+
   try{
-    const result=await apiCall('generateAIPlan',{vincoli:{testo:prompt}},'POST');
+    const result=await apiCall('generateAIPlan',{vincoli:{testo:prompt, files:filesData}},'POST');
     AI_PLAN=result;
-    $('aiResult').textContent=typeof result==='string'?result:JSON.stringify(result,null,2);
+    // Render AI result nicely
+    if(typeof result==='object'&&result.piano){
+      let html='<h4 style="margin:0 0 12px">📋 Piano Generato</h4>';
+      if(result.summary) html+=`<p style="margin:0 0 12px">${result.summary}</p>`;
+      if(Array.isArray(result.piano)){
+        html+='<table class="tbl" style="font-size:.8125rem"><thead><tr><th>Data</th><th>Tecnico</th><th>Cliente</th><th>Tipo</th><th>Note</th></tr></thead><tbody>';
+        result.piano.forEach(r=>{
+          html+=`<tr><td>${r.data||''}</td><td>${r.tecnico||''}</td><td>${r.cliente||''}</td><td>${r.tipo||''}</td><td>${r.note||''}</td></tr>`;
+        });
+        html+='</tbody></table>';
+      }
+      if(result.warnings&&result.warnings.length){
+        html+='<div style="margin-top:12px;padding:8px;background:rgba(245,158,11,.1);border-radius:var(--radius-sm)">⚠️ '+result.warnings.join('<br>')+'</div>';
+      }
+      $('aiResult').innerHTML=html;
+    } else {
+      $('aiResult').textContent=typeof result==='string'?result:JSON.stringify(result,null,2);
+    }
     $('btnApplyAI').disabled=false;
+    $('btnSubmitPlan').disabled=false;
     toast('Piano AI generato!','ok');
   }catch(e){$('aiResult').textContent='❌ Errore: '+e.message;toast(e.message,'err')}
 }
@@ -3616,9 +3715,160 @@ async function applyAI(){
   try{
     const result=await apiCall('applyAIPlan',{piano:AI_PLAN},'POST');
     toast('Piano applicato: '+(result.created||0)+' interventi creati','ok');
-    AI_PLAN=null;$('btnApplyAI').disabled=true;
+    AI_PLAN=null;$('btnApplyAI').disabled=true;$('btnSubmitPlan').disabled=true;
     await refreshData();
   }catch(e){toast(e.message,'err')}
+}
+
+// ============ WORKFLOW APPROVATIVO ============
+async function submitAIPlanForApproval(){
+  if(!AI_PLAN){toast('Genera prima un piano','warn');return}
+  const currentUser=SESSION?.user||{};
+  try{
+    const id='APR_'+Date.now();
+    await apiCall('createApproval',{
+      id, piano:AI_PLAN,
+      creato_da:currentUser.id||'admin',
+      ruolo_creatore:currentUser.ruolo||'admin',
+      stato:'in_attesa',
+      data_creazione:new Date().toISOString()
+    },'POST');
+    toast('Piano inviato per approvazione!','ok');
+    $('btnSubmitPlan').disabled=true;
+    renderApprovalQueue();
+  }catch(e){toast(e.message,'err')}
+}
+
+async function renderApprovalQueue(){
+  const tbody=$('tblApproval');if(!tbody)return;
+  const filter=$('approvalFilter')?.value||'';
+  try{
+    const approvals=await apiCall('getApprovals',{filter},'POST');
+    if(!approvals||!approvals.length){
+      tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--gray)">Nessun piano in iter approvativo</td></tr>';
+      return;
+    }
+    tbody.innerHTML=approvals.map(a=>{
+      const currentUser=SESSION?.user||{};
+      const canApprove=(currentUser.ruolo==='admin'||currentUser.ruolo==='caposquadra')&&a.stato==='in_attesa';
+      return `<tr>
+        <td><code>${a.id}</code></td>
+        <td>${fmtDate(a.data_creazione)}</td>
+        <td>${a.creato_da_nome||a.creato_da||'?'}</td>
+        <td>${statusTag(a.stato)}</td>
+        <td>${a.approvato_da_nome||a.approvato_da||'—'}</td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${a.note_approvazione||'—'}</td>
+        <td>${canApprove?`<button class="btn btn-xs btn-ok" onclick="approveOrReject('${a.id}','approvato')">✅</button> <button class="btn btn-xs btn-err" onclick="approveOrReject('${a.id}','rifiutato')">❌</button>`:`<button class="btn btn-xs btn-ghost" onclick="viewApprovalPlan('${a.id}')">👁️</button>`}</td>
+      </tr>`;
+    }).join('');
+  }catch(e){
+    tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--gray)">Approvazioni non ancora configurate</td></tr>';
+  }
+}
+
+async function approveOrReject(id,stato){
+  const note=stato==='rifiutato'?prompt('Motivo del rifiuto:'):null;
+  if(stato==='rifiutato'&&note===null)return;
+  const currentUser=SESSION?.user||{};
+  try{
+    await apiCall('updateApproval',{
+      id, stato,
+      approvato_da:currentUser.id||'admin',
+      note_approvazione:note||'',
+      data_approvazione:new Date().toISOString()
+    },'POST');
+    toast(stato==='approvato'?'Piano approvato!':'Piano rifiutato','ok');
+    renderApprovalQueue();
+    // Se approvato, notifica tecnici via Telegram
+    if(stato==='approvato'){
+      try{ await apiCall('notifyPlanApproved',{approval_id:id},'POST'); }catch(e){}
+    }
+  }catch(e){toast(e.message,'err')}
+}
+
+async function viewApprovalPlan(id){
+  try{
+    const data=await apiCall('getApproval',{id},'POST');
+    if(data&&data.piano){
+      AI_PLAN=data.piano;
+      // Scroll to AI result and show
+      $('aiResult').style.display='block';
+      if(typeof data.piano==='object'&&data.piano.piano){
+        let html='<h4>📋 Piano #'+id+'</h4>';
+        if(Array.isArray(data.piano.piano)){
+          html+='<table class="tbl" style="font-size:.8125rem"><thead><tr><th>Data</th><th>Tecnico</th><th>Cliente</th><th>Tipo</th></tr></thead><tbody>';
+          data.piano.piano.forEach(r=>{html+=`<tr><td>${r.data||''}</td><td>${r.tecnico||''}</td><td>${r.cliente||''}</td><td>${r.tipo||''}</td></tr>`;});
+          html+='</tbody></table>';
+        }
+        $('aiResult').innerHTML=html;
+      } else {
+        $('aiResult').textContent=JSON.stringify(data.piano,null,2);
+      }
+      $('btnApplyAI').disabled=data.stato!=='approvato';
+    }
+  }catch(e){toast(e.message,'err')}
+}
+
+// ============ VISTA TECNICO: PIANO PERSONALE ============
+async function renderTecnicoPlan(){
+  const grid=$('tecnicoPlanGrid');if(!grid)return;
+  const view=$('tecViewSelect')?.value||'mio';
+  const currentUser=SESSION?.user||{};
+  const piano=(DATA.piano||[]).filter(p=>!p.Obsoleto);
+  const utenti=DATA.utenti||[];
+
+  if(view==='mio'){
+    const myPlan=piano.filter(p=>p.TecnicoID===currentUser.id);
+    if(!myPlan.length){grid.innerHTML='<p style="padding:24px;text-align:center;color:var(--gray)">Nessun intervento assegnato a te</p>';return}
+    // Group by date
+    const byDate={};
+    myPlan.sort((a,b)=>(a.Data||'').localeCompare(b.Data||'')).forEach(p=>{
+      const d=p.Data||'senza data';if(!byDate[d])byDate[d]=[];byDate[d].push(p);
+    });
+    let html='';
+    Object.entries(byDate).forEach(([date,items])=>{
+      html+=`<div style="padding:8px 16px;background:var(--gray1);font-weight:600;font-size:.8125rem;border-bottom:1px solid var(--gray2)">📅 ${fmtDate(date)} (${items.length} interventi)</div>`;
+      items.forEach(p=>{
+        html+=`<div style="padding:12px 16px;border-bottom:1px solid var(--gray1);display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:500">${getName(DATA.clienti||[],p.ClienteID)} — ${getName(DATA.tipiIntervento||[],p.TipoInterventoID)||'Intervento'}</div>
+            <div style="font-size:.75rem;color:var(--gray);margin-top:2px">${p.OraInizio||'—'} · ${p.DurataOre||'?'}h · ${statusTag(p.Stato)}</div>
+            ${p.Note?`<div style="font-size:.75rem;margin-top:4px">${p.Note}</div>`:''}
+          </div>
+          <div style="display:flex;gap:4px">
+            ${p.Stato==='pianificato'?`<button class="btn btn-xs btn-warn" onclick="updatePianoStato('${p.ID}','in_corso')">⚡ Inizia</button>`:''}
+            ${p.Stato==='in_corso'?`<button class="btn btn-xs btn-ok" onclick="updatePianoStato('${p.ID}','completato')">✅ Completa</button>`:''}
+            <button class="btn btn-xs btn-ghost" onclick="showDetail('piano','${p.ID}')">👁️</button>
+          </div>
+        </div>`;
+      });
+    });
+    grid.innerHTML=html;
+  } else {
+    // Tutti i piani — raggruppati per tecnico, sola lettura per gli altri
+    const byTec={};
+    piano.sort((a,b)=>(a.Data||'').localeCompare(b.Data||'')).forEach(p=>{
+      const tId=p.TecnicoID||'non_assegnato';
+      if(!byTec[tId])byTec[tId]=[];byTec[tId].push(p);
+    });
+    let html='';
+    Object.entries(byTec).forEach(([tecId,items])=>{
+      const tecName=getName(utenti,tecId)||tecId;
+      const isMine=tecId===currentUser.id;
+      html+=`<div style="padding:10px 16px;background:${isMine?'rgba(99,102,241,.1)':'var(--gray1)'};font-weight:600;font-size:.875rem;border-bottom:1px solid var(--gray2)">${isMine?'⭐':'👷'} ${tecName} (${items.length}) ${isMine?'— Il tuo piano':''}</div>`;
+      items.forEach(p=>{
+        html+=`<div style="padding:8px 16px;border-bottom:1px solid var(--gray1);font-size:.8125rem;display:flex;justify-content:space-between;align-items:center">
+          <div>${fmtDate(p.Data)} · ${getName(DATA.clienti||[],p.ClienteID)} · ${statusTag(p.Stato)}</div>
+          <div style="display:flex;gap:4px">
+            ${isMine&&p.Stato==='pianificato'?`<button class="btn btn-xs btn-warn" onclick="updatePianoStato('${p.ID}','in_corso')">⚡</button>`:''}
+            ${isMine&&p.Stato==='in_corso'?`<button class="btn btn-xs btn-ok" onclick="updatePianoStato('${p.ID}','completato')">✅</button>`:''}
+            <button class="btn btn-xs btn-ghost" onclick="showDetail('piano','${p.ID}')">👁️</button>
+          </div>
+        </div>`;
+      });
+    });
+    grid.innerHTML=html;
+  }
 }
 
 // ============ DETAIL VIEW ============

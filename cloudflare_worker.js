@@ -900,57 +900,83 @@ async function handlePost(action, body, env) {
     // -------- INTELLIGENCE --------
 
     case 'generateAIPlan': {
-      // FIX CRIT-07 (B-009): Batch tecnici max 15 per chiamata Gemini
-      const { urgenze, tecnici, data } = body;
       if (!env.GEMINI_KEY) return err('Gemini API key non configurata');
-      
-      const BATCH_SIZE = 15;
-      const tecBatches = [];
-      for (let i = 0; i < tecnici.length; i += BATCH_SIZE) {
-        tecBatches.push(tecnici.slice(i, i + BATCH_SIZE));
-      }
-      
-      let allPiano = [];
-      let remainingUrgenze = [...urgenze];
-      
-      for (const tecBatch of tecBatches) {
-        if (remainingUrgenze.length === 0) break;
-        
-        const prompt = `Sei un ottimizzatore di interventi tecnici per assistenza macchine agricole Lely.
-Data: ${data}
-Tecnici disponibili: ${JSON.stringify(tecBatch.map(t => ({ nome: (t.nome||t.Nome) + ' ' + (t.cognome||t.Cognome), base: t.base||t.Base, squadra: t.squadra_id||t.SquadraID })))}
-Urgenze da assegnare: ${JSON.stringify(remainingUrgenze.map(u => ({ id: u.id||u.ID, cliente: u.cliente_id||u.ClienteID, problema: u.problema||u.Problema, priorita: u.priorita_id||u.PrioritaID, sla: u.sla_scadenza||u.SlaScadenza })))}
 
-Genera un piano di interventi ottimizzato che:
-1. Rispetti le priorità SLA
-2. Minimizzi i km percorsi (raggruppa interventi vicini)
-3. Bilanci il carico tra tecnici
-4. Assegni prima le urgenze critiche
+      const vincoli = body.vincoli || {};
+      const testo = vincoli.testo || '';
+      const files = vincoli.files || [];
 
-Rispondi SOLO con JSON array: [{ "urgenzaId": "...", "tecnicoId": "...", "data": "YYYY-MM-DD", "oraInizio": "HH:MM", "motivazione": "..." }]`;
+      // If called from old interface with urgenze/tecnici
+      const urgenze = body.urgenze || [];
+      const tecnici = body.tecnici || [];
 
-        const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-          }
-        );
-        const geminiData = await geminiRes.json();
-        const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-        const cleanText = rawText.replace(/```json\n?|\n?```/g, '').trim();
-        try {
-          const batchPiano = JSON.parse(cleanText);
-          allPiano = allPiano.concat(batchPiano);
-          const assignedIds = new Set(batchPiano.map(p => p.urgenzaId));
-          remainingUrgenze = remainingUrgenze.filter(u => !assignedIds.has(u.id||u.ID));
-        } catch (e) {
-          await wlog('ai', 'generateAIPlan', 'parse_error', 'system', e.message);
+      // Load current data context
+      const [allTecnici, allUrgenze, allPiano, allClienti] = await Promise.all([
+        tecnici.length ? Promise.resolve(tecnici) : sb(env, 'utenti', 'GET', null, '?attivo=eq.true&ruolo=in.(tecnico,caposquadra)&select=id,nome,cognome,base,squadra_id').catch(()=>[]),
+        urgenze.length ? Promise.resolve(urgenze) : sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata)&order=data_segnalazione.desc&limit=50').catch(()=>[]),
+        sb(env, 'piano', 'GET', null, '?obsoleto=eq.false&order=data.desc&limit=100').catch(()=>[]),
+        sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno,citta&limit=200').catch(()=>[])
+      ]);
+
+      // Build file descriptions for context
+      let fileContext = '';
+      for (const f of files) {
+        if (f.name.match(/\.(csv|txt)$/i) && typeof f.content === 'string' && !f.content.includes('base64')) {
+          fileContext += `\n--- FILE: ${f.name} ---\n${f.content.substring(0, 3000)}\n`;
+        } else {
+          fileContext += `\n--- FILE: ${f.name} (${f.type}, ${Math.round((f.size||0)/1024)}KB) ---\n[Documento allegato]\n`;
         }
       }
-      
-      return ok({ piano: allPiano });
+
+      const prompt = `Sei l'AI planner di Syntoniqa, il sistema FSM di MRS Lely Center Emilia Romagna.
+Genera un piano di interventi ottimizzato per la prossima settimana.
+
+VINCOLI UTENTE: ${testo || 'Nessun vincolo specificato'}
+
+TECNICI DISPONIBILI (${allTecnici.length}):
+${allTecnici.map(t => `- ${t.nome||''} ${t.cognome||''} (ID: ${t.id}, base: ${t.base||'?'}, squadra: ${t.squadra_id||'?'})`).join('\n')}
+
+URGENZE APERTE (${allUrgenze.length}):
+${allUrgenze.slice(0,30).map(u => `- ${u.id}: ${u.problema||'?'} | Cliente: ${u.cliente_id||'?'} | Priorità: ${u.priorita_id||'?'} | SLA: ${u.sla_scadenza||'?'}`).join('\n')}
+
+INTERVENTI GIÀ PIANIFICATI: ${allPiano.length}
+
+CLIENTI: ${allClienti.slice(0,50).map(c => `${c.nome_account||c.nome_interno} (${c.codice_m3}, ${c.citta||'?'})`).join(', ')}
+${fileContext ? '\nDOCUMENTI ALLEGATI:' + fileContext : ''}
+
+Genera un piano ottimizzato che:
+1. Rispetti i vincoli dell'utente
+2. Prioritizzi le urgenze per SLA
+3. Minimizzi i km (raggruppa interventi per zona)
+4. Bilanci il carico tra tecnici
+5. Consideri i documenti allegati se presenti
+
+Rispondi con JSON:
+{
+  "summary": "breve riepilogo del piano",
+  "piano": [
+    {"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"id","cliente":"nome","clienteId":"codice_m3","tipo":"urgenza|tagliando|service|installazione","oraInizio":"HH:MM","durataOre":2,"note":"...","urgenzaId":"se applicabile"}
+  ],
+  "warnings": ["eventuali avvisi/conflitti"]
+}`;
+
+      const geminiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        }
+      );
+      const geminiData = await geminiRes.json();
+      const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      const cleanText = rawText.replace(/```json\n?|\n?```/g, '').trim();
+      try {
+        const result = JSON.parse(cleanText);
+        return ok(result);
+      } catch (e) {
+        return ok({ summary: 'Piano generato (testo)', piano: [], warnings: ['Risposta AI non parsabile'], raw: cleanText });
+      }
     }
 
     case 'applyAIPlan': {
@@ -973,6 +999,79 @@ Rispondi SOLO con JSON array: [{ "urgenzaId": "...", "tecnicoId": "...", "data":
         await wlog('piano', id, 'ai_created', operatoreId, item.motivazione);
       }
       return ok({ created, count: created.length });
+    }
+
+    // -------- WORKFLOW APPROVATIVO --------
+
+    case 'createApproval': {
+      const { id, piano, creato_da, ruolo_creatore, stato, data_creazione } = body;
+      // Store in config table as JSON (no separate table needed)
+      await sb(env, 'config', 'POST', {
+        chiave: `approval_${id}`,
+        valore: JSON.stringify({ id, piano, creato_da, ruolo_creatore, stato, data_creazione }),
+        tenant_id: env.TENANT_ID || 'default'
+      }, null, { 'Prefer': 'return=minimal,resolution=merge-duplicates' });
+      return ok({ id, stato });
+    }
+
+    case 'getApprovals': {
+      const filter = body.filter || '';
+      const configs = await sb(env, 'config', 'GET', null, `?chiave=like.approval_%&tenant_id=eq.${env.TENANT_ID || 'default'}`);
+      let approvals = configs.map(c => {
+        try { return JSON.parse(c.valore); } catch { return null; }
+      }).filter(Boolean);
+      if (filter) approvals = approvals.filter(a => a.stato === filter);
+      approvals.sort((a, b) => (b.data_creazione || '').localeCompare(a.data_creazione || ''));
+      // Enrich with user names
+      const userIds = [...new Set(approvals.map(a => a.creato_da).concat(approvals.map(a => a.approvato_da)).filter(Boolean))];
+      if (userIds.length) {
+        const users = await sb(env, 'utenti', 'GET', null, `?id=in.(${userIds.join(',')})&select=id,nome,cognome`).catch(() => []);
+        const userMap = Object.fromEntries(users.map(u => [u.id, (u.nome || '') + ' ' + (u.cognome || '')]));
+        approvals.forEach(a => {
+          a.creato_da_nome = userMap[a.creato_da] || a.creato_da;
+          a.approvato_da_nome = userMap[a.approvato_da] || '';
+        });
+      }
+      return ok(approvals);
+    }
+
+    case 'getApproval': {
+      const cfg = await sb(env, 'config', 'GET', null, `?chiave=eq.approval_${body.id}&tenant_id=eq.${env.TENANT_ID || 'default'}`);
+      if (!cfg.length) return err('Approvazione non trovata', 404);
+      return ok(JSON.parse(cfg[0].valore));
+    }
+
+    case 'updateApproval': {
+      const { id, stato, approvato_da, note_approvazione, data_approvazione } = body;
+      const cfg = await sb(env, 'config', 'GET', null, `?chiave=eq.approval_${id}&tenant_id=eq.${env.TENANT_ID || 'default'}`);
+      if (!cfg.length) return err('Approvazione non trovata', 404);
+      const approval = JSON.parse(cfg[0].valore);
+      approval.stato = stato;
+      approval.approvato_da = approvato_da;
+      approval.note_approvazione = note_approvazione;
+      approval.data_approvazione = data_approvazione;
+      await sb(env, `config?chiave=eq.approval_${id}&tenant_id=eq.${env.TENANT_ID || 'default'}`, 'PATCH', {
+        valore: JSON.stringify(approval)
+      });
+      return ok(approval);
+    }
+
+    case 'notifyPlanApproved': {
+      const { approval_id } = body;
+      const cfg = await sb(env, 'config', 'GET', null, `?chiave=eq.approval_${approval_id}&tenant_id=eq.${env.TENANT_ID || 'default'}`);
+      if (!cfg.length) return ok({ notified: 0 });
+      const approval = JSON.parse(cfg[0].valore);
+      if (approval.stato !== 'approvato') return ok({ notified: 0 });
+      // Notify all active technicians via Telegram
+      const tecnici = await sb(env, 'utenti', 'GET', null, '?attivo=eq.true&ruolo=in.(tecnico,caposquadra)&telegram_chat_id=not.is.null');
+      let notified = 0;
+      for (const tec of tecnici) {
+        if (tec.telegram_chat_id) {
+          await sendTelegram(env, tec.telegram_chat_id, `📋 *Piano approvato!*\nIl piano è stato approvato. Controlla i tuoi interventi su Syntoniqa.`);
+          notified++;
+        }
+      }
+      return ok({ notified });
     }
 
     case 'geocodeAll': {
@@ -1140,32 +1239,145 @@ Rispondi SOLO con JSON array: [{ "urgenzaId": "...", "tecnicoId": "...", "data":
     // -------- TELEGRAM BOT (webhook) --------
 
     case 'telegramWebhook': {
-      // Gestisce i comandi Telegram in arrivo
       const update = body;
-      if (!update.message) return ok();
-      
-      const chatId  = update.message.chat.id;
-      const text    = update.message.text || '';
-      const parts   = text.split(' ');
-      const cmd     = parts[0].toLowerCase();
-      
-      // Trova utente dal chat_id
-      const utenti  = await sb(env, 'utenti', 'GET', null, `?telegram_chat_id=eq.${chatId}&attivo=eq.true`);
-      const utente  = utenti[0] || null;
-      
-      if (!utente && cmd !== '/start') {
-        await sendTelegram(env, chatId, '❌ Non autorizzato. Registra il tuo Telegram ID nel profilo.');
+      if (!update.message && !update.callback_query) return ok();
+
+      // Handle callback queries (inline button responses)
+      if (update.callback_query) {
+        const cb = update.callback_query;
+        const cbChatId = cb.message?.chat?.id;
+        const cbData = cb.data || '';
+        try {
+          await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ callback_query_id: cb.id })
+          });
+          // Callback data format: "confirm:type:encodedId" or "cancel:x:x"
+          const [cbAction] = cbData.split(':');
+          if (cbAction === 'cancel') {
+            await sendTelegram(env, cbChatId, '❌ Azione annullata.');
+          }
+          // Note: confirm actions are handled by the original message creating the record directly
+          // The buttons are just UX feedback - actions are created immediately on AI parse
+        } catch(e) { console.error('CB error:', e.message); }
         return ok();
       }
 
+      const msg     = update.message;
+      const chatId  = msg.chat.id;
+      const text    = msg.text || msg.caption || '';
+      const parts   = text.split(' ');
+      const cmd     = parts[0]?.toLowerCase() || '';
+
+      // Trova utente dal chat_id
+      const utenti  = await sb(env, 'utenti', 'GET', null, `?telegram_chat_id=eq.${chatId}&attivo=eq.true`);
+      const utente  = utenti[0] || null;
+
+      if (!utente && cmd !== '/start') {
+        await sendTelegram(env, chatId, '❌ Non autorizzato. Registra il tuo Telegram ID nel profilo Syntoniqa.');
+        return ok();
+      }
+
+      // ---- Helper: download Telegram file and store URL ----
+      async function getTelegramFileUrl(fileId) {
+        const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`);
+        const d = await res.json();
+        return d.ok ? `https://api.telegram.org/file/bot${env.TELEGRAM_BOT_TOKEN}/${d.result.file_path}` : null;
+      }
+
+      // ---- Helper: send with inline keyboard ----
+      async function sendTelegramWithButtons(chatId, text, buttons) {
+        return fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({
+            chat_id: chatId, text, parse_mode: 'Markdown',
+            reply_markup: { inline_keyboard: buttons }
+          })
+        }).then(r=>r.json()).catch(()=>null);
+      }
+
+      // ---- Helper: AI parse message with Gemini ----
+      async function aiParseMessage(text, mediaUrl, mediaType) {
+        if (!env.GEMINI_KEY) return null;
+        // Get clients list for context
+        const clienti = await sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno&limit=200').catch(()=>[]);
+        const clientiList = clienti.map(c => `${c.nome_account||c.nome_interno} (${c.codice_m3})`).join(', ');
+
+        const systemPrompt = `Sei l'assistente AI di Syntoniqa, il sistema FSM di MRS Lely Center.
+Analizza il messaggio e determina il tipo di azione da creare.
+
+CLIENTI DISPONIBILI: ${clientiList}
+
+TIPI DI AZIONE:
+1. "urgenza" - Problema tecnico urgente su un robot/macchina (robot fermo, errore, guasto)
+2. "ordine" - Richiesta ricambi (codici tipo X.XXXX.XXXX.X, quantità, destinazione)
+3. "intervento" - Intervento programmato (manutenzione, service, installazione)
+4. "nota" - Informazione generica, aggiornamento stato, nessuna azione specifica
+
+CODICI RICAMBI LELY: formato X.XXXX.XXXX.X (es. 9.1189.0283.0)
+
+Rispondi SOLO con JSON valido:
+{
+  "tipo": "urgenza|ordine|intervento|nota",
+  "cliente": "nome cliente più probabile o null",
+  "codice_m3": "codice M3 del cliente o null",
+  "problema": "descrizione sintetica del problema",
+  "macchina": "tipo macchina (Astronaut/Juno/Vector/Discovery/etc) o null",
+  "robot_id": "numero robot (101-108) o null",
+  "priorita": "alta|media|bassa",
+  "ricambi": [{"codice":"X.XXXX.XXXX.X","quantita":1,"descrizione":"..."}] o [],
+  "note": "eventuali note aggiuntive"
+}`;
+
+        const contentParts = [{ text: systemPrompt + '\n\nMESSAGGIO UTENTE: ' + text }];
+        // If there's a photo, use vision model
+        if (mediaUrl && mediaType === 'photo') {
+          try {
+            const imgRes = await fetch(mediaUrl);
+            const imgBuf = await imgRes.arrayBuffer();
+            const b64 = btoa(String.fromCharCode(...new Uint8Array(imgBuf)));
+            contentParts.push({ inline_data: { mime_type: 'image/jpeg', data: b64 } });
+          } catch(e) { /* ignore image fetch errors */ }
+        }
+
+        const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`, {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ contents: [{ parts: contentParts }] })
+        });
+        const gd = await geminiRes.json();
+        const raw = gd.candidates?.[0]?.content?.parts?.[0]?.text?.replace(/```json\n?|\n?```/g, '').trim();
+        try { return JSON.parse(raw); } catch { return null; }
+      }
+
+      // ---- Handle media uploads (photo, document, video, audio) ----
+      let mediaUrl = null, mediaType = null, fileName = null;
+
+      if (msg.photo && msg.photo.length) {
+        const photo = msg.photo[msg.photo.length - 1]; // Highest resolution
+        mediaUrl = await getTelegramFileUrl(photo.file_id);
+        mediaType = 'photo';
+      } else if (msg.document) {
+        mediaUrl = await getTelegramFileUrl(msg.document.file_id);
+        mediaType = 'document';
+        fileName = msg.document.file_name || 'file';
+      } else if (msg.video) {
+        mediaUrl = await getTelegramFileUrl(msg.video.file_id);
+        mediaType = 'video';
+      } else if (msg.voice || msg.audio) {
+        const audio = msg.voice || msg.audio;
+        mediaUrl = await getTelegramFileUrl(audio.file_id);
+        mediaType = 'audio';
+      }
+
       let reply = '';
-      
+
+      // ---- SLASH COMMANDS ----
       switch (cmd) {
         case '/start':
-          reply = `👋 Benvenuto in *Syntoniqa*!\nInvia /help per i comandi disponibili.`;
+          reply = `👋 Benvenuto in *Syntoniqa MRS*!\n\n📤 Puoi inviarmi:\n• Testo con problemi/ordini\n• 📷 Foto di guasti o ricambi\n• 📄 Documenti (PDF, Excel)\n• 🎤 Audio/Video\n\n🤖 L'AI analizzerà tutto e creerà le azioni giuste!\n\nInvia /help per i comandi.`;
           break;
         case '/help':
-          reply = `📋 *Comandi disponibili:*\n/stato - Urgenze aperte\n/oggi - Interventi di oggi\n/vado - Auto-assegna urgenza\n/risolto [note] - Chiudi urgenza\n/servepezz [desc] - Ordine ricambio\n/incorso - Urgenza in corso`;
+          reply = `📋 *Comandi Syntoniqa:*\n\n🚨 *Urgenze:*\n/stato - Urgenze aperte\n/vado - Prendi urgenza\n/incorso - Segna in corso\n/risolto [note] - Chiudi urgenza\n\n📅 *Interventi:*\n/oggi - I tuoi interventi oggi\n/settimana - Piano settimanale\n\n📦 *Ordini:*\n/ordine [cod] [qt] [cliente] - Ordine ricambio\n/servepezz [desc] - Ricambio generico\n\n📤 *Upload:*\nInvia foto, PDF, Excel, audio → l'AI analizza e crea azioni automaticamente!\n\n💡 Puoi anche scrivere testo libero, es: "Bondioli 102 fermo, errore laser"`;
           break;
         case '/stato': {
           const urg = await sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,in_corso)&order=data_segnalazione.desc&limit=10');
@@ -1178,11 +1390,23 @@ Rispondi SOLO con JSON array: [{ "urgenzaId": "...", "tecnicoId": "...", "data":
           reply = intv.length ? `📅 *Interventi oggi (${intv.length}):*\n` + intv.map(i => `• ${i.id}: ${i.stato} – Cliente ${i.cliente_id}`).join('\n') : '📅 Nessun intervento programmato oggi';
           break;
         }
+        case '/settimana': {
+          const oggi = new Date();
+          const lun = new Date(oggi); lun.setDate(oggi.getDate() - oggi.getDay() + 1);
+          const dom = new Date(lun); dom.setDate(lun.getDate() + 6);
+          const intv = await sb(env, 'piano', 'GET', null, `?data=gte.${lun.toISOString().split('T')[0]}&data=lte.${dom.toISOString().split('T')[0]}&tecnico_id=eq.${utente.id}&obsoleto=eq.false&order=data.asc`);
+          if (!intv.length) { reply = '📅 Nessun intervento questa settimana'; break; }
+          const byDay = {};
+          intv.forEach(i => { const d = i.data; if (!byDay[d]) byDay[d] = []; byDay[d].push(i); });
+          reply = `📅 *Piano settimanale (${intv.length} interventi):*\n` + Object.entries(byDay).map(([d, items]) => `\n*${d}:*\n` + items.map(i => `  • ${i.stato} – ${i.cliente_id}`).join('\n')).join('');
+          break;
+        }
         case '/vado': {
           const urg = await sb(env, 'urgenze', 'GET', null, '?stato=eq.aperta&order=data_segnalazione.asc&limit=1');
           if (!urg.length) { reply = '✅ Nessuna urgenza da prendere in carico'; break; }
           await sb(env, `urgenze?id=eq.${urg[0].id}`, 'PATCH', { stato: 'assegnata', tecnico_assegnato: utente.id, data_assegnazione: new Date().toISOString() });
           reply = `✅ Urgenza *${urg[0].id}* assegnata a te!\nProblema: ${urg[0].problema}`;
+          await sendTelegramNotification(env, 'urgenza_assegnata', { id: urg[0].id, tecnicoAssegnato: utente.id });
           break;
         }
         case '/incorso': {
@@ -1200,6 +1424,20 @@ Rispondi SOLO con JSON array: [{ "urgenzaId": "...", "tecnicoId": "...", "data":
           reply = `✅ Urgenza *${urg[0].id}* RISOLTA${note ? '\nNote: ' + note : ''}`;
           break;
         }
+        case '/ordine': {
+          // /ordine 9.1189.0283.0 2 Bondioli
+          const codice = parts[1] || '';
+          const qt = parseInt(parts[2]) || 1;
+          const cliente = parts.slice(3).join(' ') || 'non specificato';
+          if (!codice || !/^\d\.\d{4}\.\d{4}\.\d$/.test(codice)) {
+            reply = '📦 Formato: /ordine [codice] [quantità] [cliente]\nEs: /ordine 9.1189.0283.0 2 Bondioli';
+            break;
+          }
+          const id = 'ORD_TG_' + Date.now();
+          await sb(env, 'ordini', 'POST', { id, tecnico_id: utente.id, descrizione: `${codice} x${qt} - ${cliente}`, stato: 'richiesto', data_richiesta: new Date().toISOString() });
+          reply = `📦 Ordine *${id}* creato:\nCodice: \`${codice}\` x${qt}\nCliente: ${cliente}`;
+          break;
+        }
         case '/servepezz': {
           const desc = parts.slice(1).join(' ');
           if (!desc) { reply = 'Usa: /servepezz [descrizione ricambio]'; break; }
@@ -1209,25 +1447,94 @@ Rispondi SOLO con JSON array: [{ "urgenzaId": "...", "tecnicoId": "...", "data":
           break;
         }
         default: {
-          // Testo libero: Gemini riconosce cliente
-          if (env.GEMINI_KEY && text.length > 3) {
-            const clienti = await sb(env, 'clienti', 'GET', null, '?obsoleto=eq.false&select=id,nome,citta');
-            const prompt = `Messaggio: "${text}"\nClienti: ${JSON.stringify(clienti.map(c => c.nome + ' (' + c.citta + ')'))}\nRispondi SOLO con JSON: {"clienteNome": "...", "problema": "..."}`;
-            const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`,
-              { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
-            const gd = await geminiRes.json();
-            const raw = gd.candidates?.[0]?.content?.parts?.[0]?.text?.replace(/```json\n?|\n?```/g, '').trim();
-            try {
-              const parsed = JSON.parse(raw);
-              reply = `🤖 Ho capito:\nCliente: *${parsed.clienteNome}*\nProblema: _${parsed.problema}_\n\nConfermi la creazione urgenza? Rispondi SI o NO`;
-            } catch {
-              reply = '🤔 Non ho capito. Prova /help';
+          // ---- FREE TEXT + MEDIA: AI ANALYSIS ----
+          if (text.length < 3 && !mediaUrl) { reply = '🤔 Messaggio troppo breve. Scrivi il problema o invia /help'; break; }
+
+          // Store media metadata for later attachment
+          let mediaInfo = null;
+          if (mediaUrl) {
+            mediaInfo = { url: mediaUrl, type: mediaType, fileName, telegramFileId: msg.photo?.[msg.photo.length-1]?.file_id || msg.document?.file_id || msg.video?.file_id || msg.voice?.file_id || null };
+            if (!text && mediaType === 'photo') {
+              await sendTelegram(env, chatId, '📷 Foto ricevuta! Aggiungi una descrizione o la analizzo con AI...');
+            }
+            if (!text && mediaType === 'document') {
+              await sendTelegram(env, chatId, `📄 Documento *${fileName}* ricevuto! Aggiungi una descrizione oppure lo salvo come allegato.`);
             }
           }
-          break;
+
+          // AI Parse
+          const aiResult = await aiParseMessage(text || `[${mediaType} allegato: ${fileName || 'foto'}]`, mediaUrl, mediaType);
+
+          if (!aiResult) { reply = '🤔 Non riesco ad analizzare. Prova con /help'; break; }
+
+          if (aiResult.tipo === 'nota') {
+            reply = `📝 *Nota registrata*\n${aiResult.problema || text}`;
+            if (aiResult.cliente) reply += `\nCliente: ${aiResult.cliente}`;
+            break;
+          }
+
+          // Create action directly based on AI analysis
+          const now = new Date().toISOString();
+          let payload = {}, actionReply = '';
+
+          if (aiResult.tipo === 'urgenza') {
+            payload = {
+              id: 'URG_TG_' + Date.now(),
+              problema: aiResult.problema,
+              cliente_id: aiResult.codice_m3 || '',
+              macchina_tipo: aiResult.macchina || '',
+              robot_id: aiResult.robot_id || '',
+              priorita_id: aiResult.priorita === 'alta' ? 1 : aiResult.priorita === 'media' ? 2 : 3,
+              stato: 'aperta',
+              data_segnalazione: now,
+              segnalato_da: utente.id,
+              allegati: mediaUrl ? JSON.stringify([{ url: mediaUrl, type: mediaType, name: fileName }]) : null
+            };
+            try {
+              await sb(env, 'urgenze', 'POST', payload);
+              actionReply = `🚨 *URGENZA CREATA*\nID: \`${payload.id}\`\nCliente: ${aiResult.cliente || '?'}\nProblema: ${aiResult.problema}\nMacchina: ${aiResult.macchina || '?'} ${aiResult.robot_id || ''}\nPriorità: ${aiResult.priorita}${mediaUrl ? '\n📎 Allegato salvato' : ''}`;
+              await sendTelegramNotification(env, 'nuova_urgenza', payload);
+            } catch(e) { actionReply = '❌ Errore creazione urgenza: ' + e.message; }
+          } else if (aiResult.tipo === 'ordine') {
+            const ricambiDesc = (aiResult.ricambi || []).map(r => `${r.codice} x${r.quantita}`).join(', ') || aiResult.problema;
+            payload = {
+              id: 'ORD_TG_' + Date.now(),
+              tecnico_id: utente.id,
+              descrizione: ricambiDesc,
+              cliente: aiResult.cliente || '',
+              stato: 'richiesto',
+              data_richiesta: now,
+              allegati: mediaUrl ? JSON.stringify([{ url: mediaUrl, type: mediaType, name: fileName }]) : null
+            };
+            try {
+              await sb(env, 'ordini', 'POST', payload);
+              actionReply = `📦 *ORDINE CREATO*\nID: \`${payload.id}\`\nCliente: ${aiResult.cliente || '?'}\nRicambi: ${ricambiDesc}${mediaUrl ? '\n📎 Allegato salvato' : ''}`;
+            } catch(e) { actionReply = '❌ Errore creazione ordine: ' + e.message; }
+          } else if (aiResult.tipo === 'intervento') {
+            payload = {
+              id: 'INT_TG_' + Date.now(),
+              cliente_id: aiResult.codice_m3 || '',
+              tecnico_id: utente.id,
+              stato: 'pianificato',
+              data: now.split('T')[0],
+              note: aiResult.problema,
+              obsoleto: false,
+              allegati: mediaUrl ? JSON.stringify([{ url: mediaUrl, type: mediaType, name: fileName }]) : null
+            };
+            try {
+              await sb(env, 'piano', 'POST', payload);
+              actionReply = `📅 *INTERVENTO PIANIFICATO*\nID: \`${payload.id}\`\nCliente: ${aiResult.cliente || '?'}\nDescrizione: ${aiResult.problema}${mediaUrl ? '\n📎 Allegato salvato' : ''}`;
+              await sendTelegramNotification(env, 'nuovo_intervento', payload);
+            } catch(e) { actionReply = '❌ Errore creazione intervento: ' + e.message; }
+          }
+
+          if (actionReply) {
+            reply = actionReply;
+            if (aiResult.note) reply += `\n\n💡 _${aiResult.note}_`;
+          }
         }
       }
-      
+
       if (reply) await sendTelegram(env, chatId, reply);
       return ok();
     }
