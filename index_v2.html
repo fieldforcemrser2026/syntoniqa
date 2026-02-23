@@ -278,6 +278,8 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 
 <!-- PAGE: INTERVENTI -->
 <div class="page" id="pgInterventi">
+<button class="btn btn-primary btn-block" style="margin-bottom:12px" onclick="openCreaInt()">📋 + Richiedi Intervento</button>
+<div style="font-size:.7rem;color:var(--warn);margin:-8px 0 12px;padding:0 4px">⚠️ Gli interventi richiesti dal tecnico richiedono approvazione admin per essere confermati in calendario</div>
 <div style="display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;-webkit-overflow-scrolling:touch">
 <button class="btn btn-sm btn-primary" onclick="filtInt('')" id="fAll">Tutti</button>
 <button class="btn btn-sm btn-outline" onclick="filtInt('pianificato')" id="fPian">📅 Pianif.</button>
@@ -307,8 +309,20 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <div class="chat-msgs" id="chatMsgs">
 <div class="empty"><div class="ico">💬</div><p>Seleziona un canale</p></div>
 </div>
+<div id="chatCmdBar" style="display:none;padding:6px 10px;background:#F0F9FF;border-top:1px solid #BAE6FD;font-size:.75rem;overflow-x:auto;white-space:nowrap">
+<span style="color:#0369A1;font-weight:600">Comandi Bot TG:</span>
+<button class="btn btn-xs btn-outline" onclick="insertCmd('/stato')" style="margin:0 2px;font-size:.7rem">/stato</button>
+<button class="btn btn-xs btn-outline" onclick="insertCmd('/oggi')" style="margin:0 2px;font-size:.7rem">/oggi</button>
+<button class="btn btn-xs btn-outline" onclick="insertCmd('/settimana')" style="margin:0 2px;font-size:.7rem">/settimana</button>
+<button class="btn btn-xs btn-outline" onclick="insertCmd('/vado')" style="margin:0 2px;font-size:.7rem">/vado</button>
+<button class="btn btn-xs btn-outline" onclick="insertCmd('/incorso')" style="margin:0 2px;font-size:.7rem">/incorso</button>
+<button class="btn btn-xs btn-outline" onclick="insertCmd('/risolto ')" style="margin:0 2px;font-size:.7rem">/risolto</button>
+<button class="btn btn-xs btn-outline" onclick="insertCmd('/ordine ')" style="margin:0 2px;font-size:.7rem">/ordine</button>
+</div>
+<div id="chatAllegatoPreview" style="display:none;padding:6px 10px;background:var(--gray5);border-top:1px solid #E5E7EB"></div>
 <div class="chat-input-bar">
-<input type="text" id="chatInput" placeholder="Scrivi messaggio..." onkeydown="if(event.key==='Enter')sendChatMsg()">
+<label style="cursor:pointer;font-size:1.2rem;padding:0 4px;display:flex;align-items:center" title="Allega foto/file">📎<input type="file" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" style="display:none" onchange="chatAllegatoChange(this)"></label>
+<input type="text" id="chatInput" placeholder="Scrivi messaggio..." onkeydown="if(event.key==='Enter')sendChatMsg()" onfocus="showChatCmds()" style="flex:1">
 <button onclick="sendChatMsg()">➤</button>
 </div>
 </div>
@@ -598,6 +612,39 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 </div>
 </div>
 
+<!-- Sheet: Crea/Richiedi Intervento (tecnico) -->
+<div class="sheet-overlay" id="shCreaInt" onclick="if(event.target===this)closeSheet('shCreaInt')">
+<div class="sheet">
+<div class="handle"></div>
+<div class="sheet-head"><h2>📋 Richiedi Intervento</h2><button onclick="closeSheet('shCreaInt')">✕</button></div>
+<div class="sheet-body">
+<div style="background:#FEF3C7;padding:10px 14px;border-radius:var(--radius-sm);font-size:.8125rem;color:#92400E;margin-bottom:16px">⚠️ L'intervento verrà proposto in calendario con stato <strong>PIANIFICATO</strong>. L'admin riceverà notifica per conferma.</div>
+<div class="field"><label>Cliente *</label><select id="ciCliente"><option value="">— Seleziona —</option></select></div>
+<div class="field"><label>Macchina</label><select id="ciMacchina"><option value="">— Seleziona —</option></select></div>
+<div class="field"><label>Tipo Intervento</label><select id="ciTipo"></select></div>
+<div class="field"><label>Priorità</label><select id="ciPriorita"></select></div>
+<div class="field-row">
+<div class="field"><label>Data proposta</label><input type="date" id="ciData"></div>
+<div class="field"><label>Ora proposta</label><input type="time" id="ciOra" value="08:00"></div>
+</div>
+<div class="field"><label>Durata stimata (ore)</label><input type="number" id="ciDurata" value="2" min="0.5" max="24" step="0.5"></div>
+<div class="field"><label>Descrizione / Motivo *</label><textarea id="ciNote" rows="4" placeholder="Descrivi il motivo dell'intervento, cosa va fatto..."></textarea></div>
+<div style="margin-top:12px">
+<label style="font-weight:600;font-size:.8125rem;margin-bottom:8px;display:block">📎 Allegato (opzionale)</label>
+<div style="display:flex;gap:8px">
+<label class="btn btn-outline" style="flex:1;text-align:center;cursor:pointer">📷 Foto<input type="file" accept="image/*" capture="environment" style="display:none" onchange="intAllegatoChange(this)"></label>
+<label class="btn btn-outline" style="flex:1;text-align:center;cursor:pointer">📎 File<input type="file" style="display:none" onchange="intAllegatoChange(this)"></label>
+</div>
+<div id="intAllegatoPreview" style="margin-top:8px"></div>
+</div>
+<div style="display:flex;gap:8px;margin-top:16px">
+<button class="btn btn-outline" onclick="closeSheet('shCreaInt')" style="flex:1">Annulla</button>
+<button class="btn btn-primary" onclick="saveCreaInt()" style="flex:1">📋 Invia Richiesta</button>
+</div>
+</div>
+</div>
+</div>
+
 <!-- Sheet: Installazione Detail -->
 <div class="sheet-overlay" id="shInstDet" onclick="if(event.target===this)closeSheet('shInstDet')">
 <div class="sheet">
@@ -644,7 +691,7 @@ function statusTag(stato){
     'aperta':['tag-err','🔴'],'assegnata':['tag-warn','👤'],'schedulata':['tag-info','📅'],'risolta':['tag-ok','✅'],
     'richiesto':['tag-info','📝'],'preso_in_carico':['tag-warn','📋'],'ordinato':['tag-warn','📦'],'in_arrivo':['tag-info','🚚'],'arrivato':['tag-ok','✅'],
     'attiva':['tag-ok','✅'],'in_attesa':['tag-warn','⏳'],'approvata':['tag-ok','✅'],'rifiutata':['tag-err','❌'],
-    'chiuso':['tag-gray','🔒'],'da_rivedere':['tag-warn','⚠️'],'annullato':['tag-err','❌']};
+    'chiuso':['tag-gray','🔒'],'da_rivedere':['tag-warn','⚠️'],'annullato':['tag-err','❌'],'da_approvare':['tag-warn','⏳']};
   const x=m[stato]||['tag-gray',''];
   return'<span class="tag '+x[0]+'">'+x[1]+' '+(stato||'—')+'</span>';
 }
@@ -1344,25 +1391,66 @@ function renderChatMsgs(){
     const isTg=m.MittenteID==='TELEGRAM'||(m.Testo||'').startsWith('📱');
     const sender=isMine?'':(getName(DATA.utenti||[],m.MittenteID)||(m.MittenteID==='TELEGRAM'?'Telegram':'?'));
     const time=(m.CreatedAt||'').substring(11,16);
+    // Rendi link cliccabili + immagini inline
+    let msgHtml=(m.Testo||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    msgHtml=msgHtml.replace(/(https?:\/\/[^\s]+)/g,function(url){
+      if(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url))return '<a href="'+url+'" target="_blank"><img src="'+url+'" style="max-width:200px;max-height:150px;border-radius:8px;margin:4px 0;display:block" onerror="this.outerHTML=\'<a href=\\\'\'+this.src+\'\\\' target=_blank>📎 File</a>\'"></a>';
+      return '<a href="'+url+'" target="_blank" style="color:inherit;text-decoration:underline">🔗 Link</a>';
+    });
+    msgHtml=msgHtml.replace(/\n/g,'<br>');
     return '<div class="chat-msg'+(isMine?' mine':' other')+(isTg?' tg':'')+'">'+
       (!isMine&&sender?'<div class="sender">'+(isTg?'📱 ':'')+sender+'</div>':'')+
-      '<div>'+(m.Testo||'')+'</div>'+
+      '<div>'+msgHtml+'</div>'+
       '<div class="meta">'+time+'</div></div>';
   }).join('');
   el.scrollTop=el.scrollHeight;
 }
 
+let chatAllegatoFile=null;
+
+function showChatCmds(){$('chatCmdBar').style.display='block'}
+function insertCmd(cmd){$('chatInput').value=cmd;$('chatInput').focus()}
+
+function chatAllegatoChange(input){
+  const file=input.files[0];if(!file)return;
+  if(file.size>20*1024*1024){toast('File troppo grande (max 20MB)','err');input.value='';return}
+  const reader=new FileReader();
+  reader.onload=function(){
+    chatAllegatoFile={base64:reader.result.split(',')[1],type:file.type,name:file.name,sizeKB:Math.round(file.size/1024)};
+    $('chatAllegatoPreview').style.display='block';
+    $('chatAllegatoPreview').innerHTML='<div style="display:flex;align-items:center;gap:8px;font-size:.8rem"><span>'+(file.type.startsWith('image/')?'🖼️':'📄')+'</span><span style="flex:1">'+file.name+' ('+chatAllegatoFile.sizeKB+'KB)</span><button onclick="removeChatAllegato()" style="background:none;border:none;color:var(--err);cursor:pointer;font-size:.9rem">✕</button></div>';
+    input.value='';
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeChatAllegato(){chatAllegatoFile=null;$('chatAllegatoPreview').style.display='none';$('chatAllegatoPreview').innerHTML=''}
+
 async function sendChatMsg(){
   const inp=$('chatInput');
   const txt=(inp.value||'').trim();
-  if(!txt)return;
+  if(!txt&&!chatAllegatoFile)return;
   inp.value='';
   try{
-    await apiCall('sendChatMessage',{canale_id:chatCanale,testo:txt,userId:USER?.ID},'POST');
-    // Aggiungi subito alla cache locale per feedback istantaneo
-    chatMsgCache.push({MittenteID:USER?.ID,Testo:txt,CreatedAt:new Date().toISOString()});
+    // Upload allegato prima, se presente
+    let allegatoUrl=null,allegatoName='';
+    if(chatAllegatoFile){
+      allegatoName=chatAllegatoFile.name;
+      try{
+        const up=await apiCall('uploadFile',{base64Data:chatAllegatoFile.base64,mimeType:chatAllegatoFile.type,fileName:chatAllegatoFile.name,uploaderId:USER?.ID,riferimentoTipo:'chat',riferimentoId:chatCanale},'POST');
+        allegatoUrl=up.url;
+      }catch(e){toast('Errore upload: '+e.message,'err')}
+      removeChatAllegato();
+    }
+    // Componi messaggio con link allegato
+    let finalTxt=txt||'';
+    if(allegatoUrl){
+      finalTxt=(finalTxt?finalTxt+'\n':'')+'📎 Allegato: '+allegatoName+'\n'+allegatoUrl;
+    }
+    if(!finalTxt)return;
+    await apiCall('sendChatMessage',{canale_id:chatCanale,testo:finalTxt,userId:USER?.ID},'POST');
+    chatMsgCache.push({MittenteID:USER?.ID,Testo:finalTxt,CreatedAt:new Date().toISOString()});
     renderChatMsgs();
-    // Ricarica dal server dopo 1 sec per sincronizzare
     setTimeout(()=>loadChatMessages(true),1000);
   }catch(e){toast('Errore invio: '+e.message,'err')}
 }
@@ -1371,16 +1459,18 @@ async function sendChatMsg(){
 let urgAllegatoFile=null;
 
 function openCreaUrg(){
-  // Popola selects
+  // Popola selects — value=ID per match con macchine.ClienteID
   const cls=(DATA.clienti||[]).filter(c=>!c.Obsoleto);
   const s=$('suCliUrg');
   s.innerHTML='<option value="">— Seleziona —</option>';
-  cls.forEach(c=>{const o=document.createElement('option');o.value=c.CodiceM3||c.ID;o.textContent=getName(DATA.clienti,c.ID);s.appendChild(o)});
+  cls.forEach(c=>{const o=document.createElement('option');o.value=c.ID;o.dataset.codm3=c.CodiceM3||'';o.textContent=getName(DATA.clienti,c.ID);s.appendChild(o)});
   // Macchine (si aggiornano on change cliente)
   $('suMacUrg').innerHTML='<option value="">— Tutte —</option>';
   s.onchange=function(){
     const cid=this.value;
-    const macs=(DATA.macchine||[]).filter(m=>!m.Obsoleto&&(m.ClienteID===cid));
+    const codM3=this.selectedOptions[0]?.dataset?.codm3||'';
+    // Match per ID oppure CodiceM3
+    const macs=(DATA.macchine||[]).filter(m=>!m.Obsoleto&&(m.ClienteID===cid||m.ClienteID===codM3));
     const ms=$('suMacUrg');ms.innerHTML='<option value="">— Seleziona —</option>';
     macs.forEach(m=>{const o=document.createElement('option');o.value=m.ID;o.textContent=(m.Tipo||'')+' '+(m.Modello||'')+' (S/N: '+(m.Seriale||'—')+')';ms.appendChild(o)});
   };
@@ -1478,6 +1568,99 @@ async function saveEditInt(){
     closeSheet('shEditInt');
     await refreshData();
   }catch(e){toast(e.message,'err')}
+}
+
+// ============ CREA INTERVENTO (tecnico → approvazione) ============
+let intAllegatoFile=null;
+
+function openCreaInt(){
+  // Popola clienti
+  const cls=(DATA.clienti||[]).filter(c=>!c.Obsoleto);
+  const s=$('ciCliente');
+  s.innerHTML='<option value="">— Seleziona —</option>';
+  cls.forEach(c=>{const o=document.createElement('option');o.value=c.ID;o.dataset.codm3=c.CodiceM3||'';o.textContent=getName(DATA.clienti,c.ID);s.appendChild(o)});
+  // Macchine (on change)
+  $('ciMacchina').innerHTML='<option value="">— Opzionale —</option>';
+  s.onchange=function(){
+    const cid=this.value;
+    const codM3=this.selectedOptions[0]?.dataset?.codm3||'';
+    const macs=(DATA.macchine||[]).filter(m=>!m.Obsoleto&&(m.ClienteID===cid||m.ClienteID===codM3));
+    const ms=$('ciMacchina');ms.innerHTML='<option value="">— Opzionale —</option>';
+    macs.forEach(m=>{const o=document.createElement('option');o.value=m.ID;o.textContent=(m.Tipo||'')+' '+(m.Modello||'')+' (S/N: '+(m.Seriale||'—')+')';ms.appendChild(o)});
+  };
+  // Tipi intervento
+  const ts=$('ciTipo');ts.innerHTML='';
+  (DATA.tipiIntervento||[]).forEach(t=>{const o=document.createElement('option');o.value=t.ID;o.textContent=t.Nome||t.ID;ts.appendChild(o)});
+  // Priorità
+  const ps=$('ciPriorita');ps.innerHTML='';
+  (DATA.priorita||[]).forEach(p=>{const o=document.createElement('option');o.value=p.ID;o.textContent=p.Nome||p.ID;ps.appendChild(o)});
+  // Default data = domani
+  const tomorrow=new Date();tomorrow.setDate(tomorrow.getDate()+1);
+  $('ciData').value=tomorrow.toISOString().slice(0,10);
+  $('ciOra').value='08:00';$('ciDurata').value='2';$('ciNote').value='';
+  intAllegatoFile=null;$('intAllegatoPreview').innerHTML='';
+  openSheet('shCreaInt');
+}
+
+function intAllegatoChange(input){
+  const file=input.files[0];if(!file)return;
+  if(file.size>20*1024*1024){toast('File troppo grande (max 20MB)','err');input.value='';return}
+  const reader=new FileReader();
+  reader.onload=function(){
+    intAllegatoFile={base64:reader.result.split(',')[1],type:file.type,name:file.name,sizeKB:Math.round(file.size/1024)};
+    $('intAllegatoPreview').innerHTML='<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--gray5);border-radius:8px"><span>'+(file.type.startsWith('image/')?'🖼️':'📄')+'</span><span style="flex:1;font-size:.8rem">'+file.name+' ('+intAllegatoFile.sizeKB+'KB)</span><button onclick="intAllegatoFile=null;this.parentElement.remove()" style="background:none;border:none;color:var(--err);cursor:pointer">✕</button></div>';
+    input.value='';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function saveCreaInt(){
+  try{
+    const clienteID=$('ciCliente').value;
+    const note=$('ciNote').value.trim();
+    if(!clienteID){toast('Seleziona un cliente','warn');return}
+    if(!note){toast('Descrivi il motivo dell\'intervento','warn');return}
+    const dataInt=$('ciData').value;
+    if(!dataInt){toast('Seleziona una data','warn');return}
+    const oraFine=$('ciOra').value?calcOraFine($('ciOra').value,parseFloat($('ciDurata').value)||2):null;
+    const data={
+      TecnicoID:USER?.ID,
+      ClienteID:clienteID,
+      MacchinaID:$('ciMacchina').value||null,
+      TipoInterventoID:$('ciTipo').value||null,
+      PrioritaID:$('ciPriorita').value||null,
+      Data:dataInt,
+      OraInizio:$('ciOra').value||'08:00',
+      OraFine:oraFine,
+      DurataOre:parseFloat($('ciDurata').value)||2,
+      Note:'[RICHIESTA TECNICO - DA CONFERMARE] '+note,
+      Stato:'pianificato'
+    };
+    const result=await apiCall('createPiano',{data},'POST');
+    // Upload allegato
+    if(intAllegatoFile){
+      try{
+        await apiCall('uploadFile',{base64Data:intAllegatoFile.base64,mimeType:intAllegatoFile.type,fileName:intAllegatoFile.name,uploaderId:USER?.ID,riferimentoTipo:'piano',riferimentoId:result?.id||''},'POST');
+      }catch(e){}
+    }
+    // Notifica admin via chat + notifica
+    const tecNome=((USER?.Nome||'')+' '+(USER?.Cognome||'')).trim();
+    const cliNome=getName(DATA.clienti,clienteID);
+    try{
+      await apiCall('sendChatMessage',{canale_id:'CH_ADMIN',testo:'📋 RICHIESTA INTERVENTO (da '+tecNome+'):\n👤 Cliente: '+cliNome+'\n📅 Data: '+fmtDate(dataInt)+' '+($('ciOra').value||'')+'\n📝 '+note+'\n\n⚠️ Stato: DA APPROVARE — confermare per fissare in calendario',userId:USER?.ID},'POST');
+    }catch(e){}
+    toast('Richiesta intervento inviata! In attesa di approvazione admin.','ok');
+    closeSheet('shCreaInt');
+    await refreshData();
+  }catch(e){toast(e.message,'err')}
+}
+
+function calcOraFine(oraInizio,durata){
+  const [h,m]=(oraInizio||'08:00').split(':').map(Number);
+  const totMin=h*60+m+Math.round(durata*60);
+  const fh=Math.floor(totMin/60)%24;
+  const fm=totMin%60;
+  return String(fh).padStart(2,'0')+':'+String(fm).padStart(2,'0');
 }
 
 // ============ INSTALLAZIONI (detail) ============

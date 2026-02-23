@@ -879,12 +879,19 @@ async function handlePost(action, body, env) {
     }
 
     case 'uploadFile': {
-      // Upload a Supabase Storage
-      const { fileName, base64Data, mimeType, riferimentoTipo, riferimentoId, uploaderId } = body;
+      // Upload a Supabase Storage — read both camelCase and snake_case (normalizeBody converts)
+      const fileName = body.file_name || body.fileName || 'file';
+      const base64Data = body.base64_data || body.base64Data;
+      const mimeType = body.mime_type || body.mimeType || 'application/octet-stream';
+      const riferimentoTipo = body.riferimento_tipo || body.riferimentoTipo || 'generico';
+      const riferimentoId = body.riferimento_id || body.riferimentoId || 'na';
+      const uploaderId = body.uploader_id || body.uploaderId || null;
+      if (!base64Data) return err('base64Data richiesto');
       const bucket  = 'syntoniqa-allegati';
-      const path    = `${riferimentoTipo}/${riferimentoId}/${Date.now()}_${fileName}`;
+      const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path    = `${riferimentoTipo}/${riferimentoId}/${Date.now()}_${safeName}`;
       const fileData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-      
+
       const uploadRes = await fetch(
         `${env.SUPABASE_URL}/storage/v1/object/${bucket}/${path}`,
         {
@@ -896,16 +903,19 @@ async function handlePost(action, body, env) {
           body: fileData,
         }
       );
-      if (!uploadRes.ok) throw new Error('Upload storage fallito');
-      
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text().catch(()=>'');
+        throw new Error('Upload storage fallito: ' + uploadRes.status + ' ' + errText);
+      }
+
       const fileUrl = `${env.SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
       const id = 'ALL_' + Date.now();
       await sb(env, 'allegati', 'POST', {
         id, nome: fileName, file_url: fileUrl, mime_type: mimeType,
         uploader_id: uploaderId, riferimento_tipo: riferimentoTipo, riferimento_id: riferimentoId,
         data_upload: new Date().toISOString()
-      });
-      return ok({ url: fileUrl, id });
+      }).catch(() => {}); // allegati table might not exist yet, don't block upload
+      return ok({ url: fileUrl, id, nome: fileName });
     }
 
     case 'uploadFotoProfilo': {
