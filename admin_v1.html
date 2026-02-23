@@ -1325,7 +1325,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="pag-voce" style="display:grid;grid-template-columns:2fr 1fr 80px 60px;gap:8px;align-items:end;margin-bottom:8px">
 <div class="field mb-sm"><label>Voce</label><input type="text" class="pv-voce" placeholder="Es: Competenza tecnica"></div>
 <div class="field mb-sm"><label>Categoria</label><select class="pv-cat"><option value="tecnica">Tecnica</option><option value="soft_skill">Soft Skill</option><option value="operativa">Operativa</option></select></div>
-<div class="field mb-sm"><label>Voto (1-5)</label><input type="number" class="pv-voto" min="1" max="5" value="3"></div>
+<div class="field mb-sm"><label>Voto (1-10)</label><input type="number" class="pv-voto" min="1" max="10" value="6"></div>
 <div class="field mb-sm"><label>Peso</label><input type="number" class="pv-peso" min="1" max="5" value="1"></div>
 </div>
 </div>
@@ -1563,7 +1563,7 @@ const $=id=>document.getElementById(id);
 const today=()=>new Date().toISOString().split('T')[0];
 const fmtDate=d=>{if(!d)return '—';const p=String(d).substring(0,10).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:'—'};
 const fmtDateTime=d=>{if(!d)return '—';try{return new Date(d).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}catch{return '—'}};
-const getName=(list,id,field='Nome')=>{const o=list.find(x=>x.ID===id||x.CodiceM3===id);return o?(o.NomeInterno||o.Nome||'')+(o.Cognome?' '+o.Cognome:''):id||'—'};
+const getName=(list,id,field='Nome')=>{const o=list.find(x=>x.ID===id||x.CodiceM3===id);if(!o)return id||'—';if(field!=='Nome'&&o[field])return o[field];return(o.NomeInterno||o.Nome||o.Descrizione||'')+(o.Cognome?' '+o.Cognome:'');};
 const getColor=(list,id)=>{const o=list.find(x=>x.ID===id);return o?.Colore||'#6B7280'};
 const statusTag=(s)=>{const m={'pianificato':['tag-info','📅'],'in_corso':['tag-warn','⚡'],'completato':['tag-ok','✅'],'chiuso':['tag-gray','🔒'],'aperta':['tag-err','🔴'],'assegnata':['tag-warn','👤'],'schedulata':['tag-info','📅'],'risolta':['tag-ok','✅'],'richiesto':['tag-info','📝'],'preso_in_carico':['tag-warn','👋'],'ordinato':['tag-purple','📦'],'in_arrivo':['tag-info','🚚'],'arrivato':['tag-ok','✅'],'attiva':['tag-ok','✅'],'pianificata':['tag-info','📅'],'completata':['tag-ok','✅'],'bozza':['tag-warn','📝'],'approvato':['tag-ok','✅'],'approvata':['tag-ok','✅'],'rifiutata':['tag-err','❌'],'in_attesa':['tag-warn','⏳']};const x=m[s]||['tag-gray',''];return `<span class="tag ${x[0]}">${x[1]} ${s||'—'}</span>`};
 const slaTag=(s,pct)=>{const m={'ok':['tag-ok','✅ OK'],'warning':['tag-warn','⚠️ Warning'],'critical':['tag-err','🔴 Critical'],'breach':['tag-err','💥 Breach']};const x=m[s]||['tag-gray',s||'—'];return `<span class="tag ${x[0]}">${x[1]}</span>${pct!==undefined?`<div class="sla-bar sla-${s}"><div class="fill" style="width:${Math.min(pct,100)}%"></div></div>`:''}`};
@@ -1836,7 +1836,7 @@ function renderDashboard(){
   $('tblOggi').innerHTML=oggi.length?oggi.sort((a,b)=>(a.OraInizio||'').localeCompare(b.OraInizio||'')).map(p=>`<tr>
     <td>${p.OraInizio||'—'}</td>
     <td>${getName(DATA.utenti||[],p.TecnicoID)}</td>
-    <td>${p.AutomezzoID||'—'}</td>
+    <td>${getName(DATA.automezzi||[],p.AutomezzoID,'Descrizione')}</td>
     <td>${getName(DATA.clienti||[],p.ClienteID)}</td>
     <td><span class="tag" style="background:${getColor(DATA.tipiIntervento||[],p.TipoInterventoID)}20;color:${getColor(DATA.tipiIntervento||[],p.TipoInterventoID)}">${getName(DATA.tipiIntervento||[],p.TipoInterventoID)}</span></td>
     <td>${statusTag(p.Stato)}</td>
@@ -1891,7 +1891,7 @@ function renderPiano(){
     <td>${fmtDate(p.Data)}${p.DataFine&&p.DataFine!==p.Data?' → '+fmtDate(p.DataFine):''}</td>
     <td>${p.OraInizio||'—'}</td>
     <td>${getName(DATA.utenti||[],p.TecnicoID)}${p.TecniciIDs?'<br><span style="font-size:.6875rem;color:var(--gray)">+'+p.TecniciIDs.split(',').filter(Boolean).length+' altri</span>':''}</td>
-    <td>${p.AutomezzoID||'—'}</td>
+    <td>${getName(DATA.automezzi||[],p.AutomezzoID,'Descrizione')}</td>
     <td>${getName(DATA.clienti||[],p.ClienteID)}</td>
     <td>${getName(DATA.macchine||[],p.MacchinaID,'Tipo')}</td>
     <td><span class="tag" style="background:${getColor(DATA.tipiIntervento||[],p.TipoInterventoID)}20;color:${getColor(DATA.tipiIntervento||[],p.TipoInterventoID)}">${getName(DATA.tipiIntervento||[],p.TipoInterventoID)}</span></td>
@@ -2567,7 +2567,7 @@ function renderPagellini(){
     <td>${fmtDate(p.DataRilevazione)}</td>
     <td>${p.Periodo||'—'}</td>
     <td>${getName(DATA.utenti||[],p.ValutatoreID)}</td>
-    <td><div class="score-circle" style="background:${(parseFloat(p.MediaVoto)||0)>=4?'var(--ok)':(parseFloat(p.MediaVoto)||0)>=3?'var(--warn)':'var(--err)'};width:40px;height:40px;font-size:.875rem;display:inline-flex">${p.MediaVoto||'—'}</div></td>
+    <td><div class="score-circle" style="background:${(parseFloat(p.MediaVoto)||0)>=7?'var(--ok)':(parseFloat(p.MediaVoto)||0)>=5?'var(--warn)':'var(--err)'};width:40px;height:40px;font-size:.875rem;display:inline-flex">${p.MediaVoto||'—'}</div>/10</td>
     <td>${statusTag(p.Stato)}</td>
     <td>${p.Stato==='bozza'?`<button class="btn btn-ok btn-xs" onclick="approvePagellino('${p.ID}')">✅ Approva</button>`:''} <button class="btn btn-ghost btn-xs" onclick="showDetail('pagellino','${p.ID}')">👁️</button></td>
   </tr>`).join(''):'<tr><td colspan="7" class="empty"><p>Nessun pagellino</p></td></tr>';
@@ -2576,7 +2576,7 @@ function pagTab(f,btn){pagFilter=f;document.querySelectorAll('#secPagellini .tab
 async function approvePagellino(id){try{await apiCall('approvaPagellino',{id},'POST');toast('Pagellino approvato','ok');await refreshData()}catch(e){toast(e.message,'err')}}
 function addPagVoce(){
   const div=document.createElement('div');div.className='pag-voce';div.style='display:grid;grid-template-columns:2fr 1fr 80px 60px;gap:8px;align-items:end;margin-bottom:8px';
-  div.innerHTML=`<div class="field mb-sm"><input type="text" class="pv-voce" placeholder="Es: Comunicazione cliente"></div><div class="field mb-sm"><select class="pv-cat"><option value="tecnica">Tecnica</option><option value="soft_skill">Soft Skill</option><option value="operativa">Operativa</option></select></div><div class="field mb-sm"><input type="number" class="pv-voto" min="1" max="5" value="3"></div><div class="field mb-sm"><input type="number" class="pv-peso" min="1" max="5" value="1"></div>`;
+  div.innerHTML=`<div class="field mb-sm"><input type="text" class="pv-voce" placeholder="Es: Comunicazione cliente"></div><div class="field mb-sm"><select class="pv-cat"><option value="tecnica">Tecnica</option><option value="soft_skill">Soft Skill</option><option value="operativa">Operativa</option></select></div><div class="field mb-sm"><input type="number" class="pv-voto" min="1" max="10" value="6"></div><div class="field mb-sm"><input type="number" class="pv-peso" min="1" max="5" value="1"></div>`;
   $('pagVoci').appendChild(div);
 }
 
