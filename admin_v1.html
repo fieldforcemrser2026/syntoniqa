@@ -633,15 +633,30 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <section class="sec" id="secMacchine">
 <div class="card">
 <div class="card-head"><h3>⚙️ Parco Macchine</h3>
-<div class="btn-group">
-<input type="text" id="srcMacch" placeholder="🔍 Cerca..." oninput="renderMacchine()" style="padding:6px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem;width:200px">
+<div class="btn-group" style="flex-wrap:wrap;gap:6px">
+<input type="text" id="srcMacch" placeholder="Cerca macchina..." oninput="renderMacchine()" style="padding:6px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem;width:200px">
 <select id="filtMacchCli" onchange="renderMacchine()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti i clienti</option></select>
+<select id="filtMacchView" onchange="renderMacchine()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem">
+  <option value="tree">Vista ad albero</option>
+  <option value="list">Vista lista</option>
+</select>
 <button class="btn btn-primary btn-sm" onclick="openNewMacchina()">+ Nuova Macchina</button>
 </div>
 </div>
-<div class="card-body np" style="max-height:600px;overflow-y:auto">
-<table class="tbl"><thead><tr><th>Tipo</th><th>Modello</th><th>Seriale</th><th>Cliente</th><th>Ore</th><th>Pross. Tagliando</th><th>Garanzia</th><th></th></tr></thead><tbody id="tblMacchine"></tbody></table>
+<div class="card-body np" style="max-height:700px;overflow-y:auto">
+<div id="macchTreeView"></div>
+<table class="tbl" id="macchListTable" style="display:none"><thead><tr><th style="width:40px"></th><th>Tipo</th><th>Modello</th><th>Seriale</th><th>Cliente</th><th>Ore</th><th>Pross. Tagliando</th><th>Garanzia</th><th></th></tr></thead><tbody id="tblMacchine"></tbody></table>
 </div>
+</div>
+<!-- Modal mappa singolo asset -->
+<div id="macchMapModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:rgba(0,0,0,.5)">
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;max-width:700px;background:white;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee">
+      <h4 id="macchMapTitle" style="margin:0"></h4>
+      <button class="btn btn-xs" onclick="closeMacchMap()">✕</button>
+    </div>
+    <div id="macchMapContainer" style="height:400px"></div>
+  </div>
 </div>
 </section>
 
@@ -997,20 +1012,20 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
     <input type="text" id="anagSearch" placeholder="Cerca cliente, città, M3..." style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:.8125rem;width:220px" oninput="filterAnagClients()">
     <select id="anagFilterType" onchange="filterAnagClients()" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:.8rem">
       <option value="">Tutti i prodotti</option>
-      <option value="ROBOT">🤖 Astronaut</option>
-      <option value="JUNO">🔄 Juno</option>
-      <option value="VECTOR">🍽️ Vector</option>
-      <option value="DISCOVERY">🔍 Discovery</option>
-      <option value="COLLECTOR">🧹 Collector</option>
-      <option value="COSMIX">⚖️ Cosmix</option>
-      <option value="NAUTILUS">🐚 Nautilus</option>
-      <option value="LUNA">🌙 Luna</option>
-      <option value="CU">🖥️ CU</option>
-      <option value="CALM">🍼 Calm</option>
-      <option value="COMPRESSORI">🔧 Compressori</option>
-      <option value="METEOR">☄️ Meteor</option>
-      <option value="GRAZEWAY">🌿 Grazeway</option>
-      <option value="L4C LED">💡 L4C LED</option>
+      <option value="ROBOT">Astronaut</option>
+      <option value="JUNO">Juno</option>
+      <option value="VECTOR">Vector</option>
+      <option value="DISCOVERY">Discovery</option>
+      <option value="COLLECTOR">Collector</option>
+      <option value="COSMIX">Cosmix</option>
+      <option value="NAUTILUS">Nautilus</option>
+      <option value="LUNA">Luna</option>
+      <option value="CU">Central Unit</option>
+      <option value="CALM">Calm</option>
+      <option value="COMPRESSORI">Compressori</option>
+      <option value="METEOR">Meteor</option>
+      <option value="GRAZEWAY">Grazeway</option>
+      <option value="L4C LED">L4C LED</option>
     </select>
     <button class="btn btn-sm" onclick="anagView='list';renderAnagClients(ANAG_FILTERED)" title="Vista Lista" id="btnAnagList">📋</button>
     <button class="btn btn-sm" onclick="anagView='map';renderAnagClients(ANAG_FILTERED)" title="Vista Mappa" id="btnAnagMap">🗺️</button>
@@ -1032,9 +1047,14 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
   <th>Prov.</th>
   <th>Stato</th>
   <th>Titolare</th>
-  <th title="Astronaut">🤖</th><th title="Juno">🔄</th><th title="Vector">🍽️</th>
-  <th title="Discovery+Collector">🔍</th><th title="CU">🖥️</th><th title="Cosmix">⚖️</th>
-  <th title="Nautilus">🐚</th><th title="Luna+Meteor+Calm+Altri">📦</th>
+  <th title="Astronaut"><img src="assets/products/astronaut.jpg" style="width:22px;height:22px;border-radius:3px;object-fit:cover"></th>
+  <th title="Juno"><img src="assets/products/juno.jpg" style="width:22px;height:22px;border-radius:3px;object-fit:cover"></th>
+  <th title="Vector"><img src="assets/products/vector.jpg" style="width:22px;height:22px;border-radius:3px;object-fit:cover"></th>
+  <th title="Discovery+Collector"><img src="assets/products/discovery.jpg" style="width:22px;height:22px;border-radius:3px;object-fit:cover"></th>
+  <th title="CU"><img src="assets/products/cu.jpg" style="width:22px;height:22px;border-radius:3px;object-fit:cover"></th>
+  <th title="Cosmix"><img src="assets/products/cosmix.jpg" style="width:22px;height:22px;border-radius:3px;object-fit:cover"></th>
+  <th title="Nautilus"><img src="assets/products/nautilus.jpg" style="width:22px;height:22px;border-radius:3px;object-fit:cover"></th>
+  <th title="Luna+Meteor+Calm+Altri">📦</th>
   <th>Tot</th>
   <th style="width:80px"></th>
 </tr></thead>
@@ -1933,21 +1953,123 @@ function renderClienti(){
 function renderMacchine(){
   const q=($('srcMacch')?.value||'').toLowerCase();
   const cli=$('filtMacchCli')?.value||'';
+  const view=$('filtMacchView')?.value||'tree';
   let items=(DATA.macchine||[]).filter(m=>!m.Obsoleto);
   if(q)items=items.filter(m=>(m.Tipo||'').toLowerCase().includes(q)||(m.Modello||'').toLowerCase().includes(q)||(m.Seriale||'').toLowerCase().includes(q));
   if(cli)items=items.filter(m=>m.ClienteID===cli);
-  $('tblMacchine').innerHTML=items.length?items.map(m=>{
-    const gar=m.GaranziaFino&&m.GaranziaFino>=today();
-    return `<tr>
-    <td>${m.Tipo||'—'}</td>
-    <td><strong>${m.Modello||'—'}</strong></td>
-    <td style="font-family:var(--mono);font-size:.75rem">${m.Seriale||'—'}</td>
-    <td>${getName(DATA.clienti||[],m.ClienteID)}</td>
-    <td>${m.OreLavoro||'—'}</td>
-    <td>${m.ProssimoTagliando||'—'}</td>
-    <td>${gar?'<span class="tag tag-ok">✅ Attiva</span>':'<span class="tag tag-gray">Scaduta</span>'}</td>
-    <td><button class="btn btn-ghost btn-xs" onclick="editMacchina('${m.ID}')">✏️</button><button class="btn btn-ghost btn-xs" onclick="showDetail('macchina','${m.ID}')">👁️</button></td>
-  </tr>`}).join(''):'<tr><td colspan="8" class="empty"><p>Nessuna macchina trovata</p></td></tr>';
+
+  if(view==='tree'){
+    // Tree view: group by Tipo
+    $('macchListTable').style.display='none';
+    const treeDiv=$('macchTreeView');treeDiv.style.display='block';
+    if(!items.length){treeDiv.innerHTML='<div class="empty"><p>Nessuna macchina trovata</p></div>';return}
+    const groups={};
+    items.forEach(m=>{const tipo=m.Tipo||'Altro';if(!groups[tipo])groups[tipo]=[];groups[tipo].push(m)});
+    let html='';
+    Object.entries(groups).sort((a,b)=>b[1].length-a[1].length).forEach(([tipo,machines])=>{
+      const cfg=PROD_CFG[tipo.toUpperCase()]||PROD_CFG[tipo]||{};
+      const imgHtml=cfg.img?`<img src="${PROD_IMG_BASE}${cfg.img}" style="width:40px;height:40px;border-radius:6px;object-fit:cover;margin-right:10px">`:'';
+      html+=`<div style="margin-bottom:4px">
+        <div onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.querySelector('.mac-arrow').textContent=this.nextElementSibling.style.display==='none'?'▶':'▼'" style="cursor:pointer;padding:10px 14px;background:#f8f9fa;border-bottom:1px solid #eee;display:flex;align-items:center">
+          <span class="mac-arrow" style="margin-right:8px;font-size:.8rem;width:14px">▼</span>
+          ${imgHtml}
+          <div style="flex:1">
+            <strong style="font-size:.95rem">${cfg.label||tipo}</strong>
+            <span class="badge" style="margin-left:8px;font-size:.7rem">${machines.length}</span>
+          </div>
+          ${cfg.url?`<a href="${cfg.url}" target="_blank" style="font-size:.7rem;color:var(--primary);text-decoration:none" onclick="event.stopPropagation()">Info prodotto →</a>`:''}
+        </div>
+        <div style="padding:0">
+          <table class="tbl" style="font-size:.8125rem;margin:0"><tbody>`;
+      machines.forEach(m=>{
+        const gar=m.GaranziaFino&&m.GaranziaFino>=today();
+        const cliName=getName(DATA.clienti||[],m.ClienteID);
+        html+=`<tr>
+          <td style="width:36px">${cfg.img?`<img src="${PROD_IMG_BASE}${cfg.img}" style="width:24px;height:24px;border-radius:3px;object-fit:cover">`:''}</td>
+          <td><strong>${m.Modello||'—'}</strong></td>
+          <td style="font-family:var(--mono);font-size:.75rem">${m.Seriale||'—'}</td>
+          <td>${cliName}</td>
+          <td>${m.OreLavoro||'—'}</td>
+          <td>${m.ProssimoTagliando||'—'}</td>
+          <td>${gar?'<span class="tag tag-ok">Attiva</span>':'<span class="tag tag-gray">Scaduta</span>'}</td>
+          <td>
+            <button class="btn btn-ghost btn-xs" onclick="editMacchina('${m.ID}')" title="Modifica">✏️</button>
+            <button class="btn btn-ghost btn-xs" onclick="showDetail('macchina','${m.ID}')" title="Dettaglio">👁️</button>
+            <button class="btn btn-ghost btn-xs" onclick="showMacchOnMap('${m.ID}')" title="Vedi sulla mappa">📍</button>
+          </td>
+        </tr>`;
+      });
+      html+=`</tbody></table></div></div>`;
+    });
+    treeDiv.innerHTML=html;
+  }else{
+    // List view (original flat table)
+    $('macchTreeView').style.display='none';
+    $('macchListTable').style.display='';
+    $('tblMacchine').innerHTML=items.length?items.map(m=>{
+      const gar=m.GaranziaFino&&m.GaranziaFino>=today();
+      const tipo=m.Tipo||'Altro';
+      const cfg=PROD_CFG[tipo.toUpperCase()]||{};
+      return `<tr>
+      <td>${cfg.img?`<img src="${PROD_IMG_BASE}${cfg.img}" style="width:28px;height:28px;border-radius:4px;object-fit:cover" title="${cfg.label||tipo}">`:tipo}</td>
+      <td><strong>${m.Modello||'—'}</strong></td>
+      <td style="font-family:var(--mono);font-size:.75rem">${m.Seriale||'—'}</td>
+      <td>${getName(DATA.clienti||[],m.ClienteID)}</td>
+      <td>${m.OreLavoro||'—'}</td>
+      <td>${m.ProssimoTagliando||'—'}</td>
+      <td>${gar?'<span class="tag tag-ok">Attiva</span>':'<span class="tag tag-gray">Scaduta</span>'}</td>
+      <td>
+        <button class="btn btn-ghost btn-xs" onclick="editMacchina('${m.ID}')">✏️</button>
+        <button class="btn btn-ghost btn-xs" onclick="showDetail('macchina','${m.ID}')">👁️</button>
+        <button class="btn btn-ghost btn-xs" onclick="showMacchOnMap('${m.ID}')" title="Mappa">📍</button>
+      </td>
+    </tr>`}).join(''):'<tr><td colspan="9" class="empty"><p>Nessuna macchina trovata</p></td></tr>';
+  }
+}
+
+// Show single machine/asset on map
+var macchMapInst=null;
+function showMacchOnMap(macchId){
+  const m=(DATA.macchine||[]).find(x=>x.ID===macchId);
+  if(!m)return;
+  // Find client coordinates
+  const cli=(DATA.clienti||[]).find(c=>c.ID===m.ClienteID);
+  // Also check anagrafica for coordinates
+  let lat=null,lng=null,locName='';
+  if(cli){
+    locName=cli.Nome||cli.NomeAccount||'';
+    // Check if client has lat/lng in anagrafica
+    const anagCli=ANAG_CLIENTI.find(a=>a.NomeAccount&&cli.Nome&&a.NomeAccount.toUpperCase()===cli.Nome.toUpperCase());
+    if(anagCli&&anagCli.Lat){lat=anagCli.Lat;lng=anagCli.Lng}
+  }
+  if(!lat){
+    toast('Coordinate non disponibili per questo cliente. Aggiungi lat/lng nell\'anagrafica.','warn');
+    return;
+  }
+  const tipo=m.Tipo||'';
+  const cfg=PROD_CFG[tipo.toUpperCase()]||{};
+  $('macchMapTitle').innerHTML=`${cfg.img?`<img src="${PROD_IMG_BASE}${cfg.img}" style="width:24px;height:24px;border-radius:4px;object-fit:cover;margin-right:6px;vertical-align:middle">`:''}${m.Modello||tipo} — ${m.Seriale||''} <small style="color:var(--muted)">@ ${locName}</small>`;
+  $('macchMapModal').style.display='block';
+
+  if(!window.L){
+    const css=document.createElement('link');css.rel='stylesheet';css.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(css);
+    const js=document.createElement('script');js.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(js);
+    js.onload=()=>buildMacchMap(lat,lng,m,cfg,locName);
+  }else{buildMacchMap(lat,lng,m,cfg,locName)}
+}
+function buildMacchMap(lat,lng,m,cfg,locName){
+  if(macchMapInst){macchMapInst.remove();macchMapInst=null}
+  const cont=$('macchMapContainer');cont.innerHTML='';
+  macchMapInst=L.map(cont).setView([lat,lng],14);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'OSM'}).addTo(macchMapInst);
+  const color=cfg.color||'#C30A14';
+  L.circleMarker([lat,lng],{radius:12,color,fillColor:color,fillOpacity:.8,weight:2}).addTo(macchMapInst)
+    .bindPopup(`<b>${m.Modello||m.Tipo||''}</b><br>SN: ${m.Seriale||'-'}<br>Cliente: ${locName}<br><a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank">Apri in Google Maps →</a>`).openPopup();
+  setTimeout(()=>macchMapInst.invalidateSize(),200);
+}
+function closeMacchMap(){
+  $('macchMapModal').style.display='none';
+  if(macchMapInst){macchMapInst.remove();macchMapInst=null}
 }
 
 // ============ AUTOMEZZI ============
@@ -2338,25 +2460,34 @@ var ANAG_CLIENTI=[];
 var ANAG_FILTERED=[];
 var ANAG_ASSETS_CACHE={};
 var anagView='list';
-// Product type config: icon, color, label, lelyUrl
+// Product type config: real images, color, label, lelyUrl
+const PROD_IMG_BASE='assets/products/';
 const PROD_CFG={
-  ROBOT:{icon:'🤖',color:'#C30A14',label:'Astronaut',url:'https://www.lely.com/solutions/milking/astronaut/'},
-  JUNO:{icon:'🔄',color:'#3b82f6',label:'Juno',url:'https://www.lely.com/solutions/feeding/juno/'},
-  VECTOR:{icon:'🍽️',color:'#8b5cf6',label:'Vector',url:'https://www.lely.com/solutions/feeding/vector/'},
-  DISCOVERY:{icon:'🔍',color:'#06b6d4',label:'Discovery',url:'https://www.lely.com/solutions/barn-cleaning/discovery/'},
-  COLLECTOR:{icon:'🧹',color:'#14b8a6',label:'Collector',url:'https://www.lely.com/solutions/barn-cleaning/discovery-collector/'},
-  CU:{icon:'🖥️',color:'#6366f1',label:'Central Unit',url:''},
-  CALM:{icon:'🍼',color:'#f59e0b',label:'Calm',url:'https://www.lely.com/solutions/calf-feeding/calm/'},
-  COMPRESSORI:{icon:'🔧',color:'#78716c',label:'Compressori',url:''},
-  COSMIX:{icon:'⚖️',color:'#22c55e',label:'Cosmix',url:'https://www.lely.com/solutions/feeding/cosmix/'},
-  NAUTILUS:{icon:'🐚',color:'#0ea5e9',label:'Nautilus',url:''},
-  LUNA:{icon:'🌙',color:'#a855f7',label:'Luna',url:'https://www.lely.com/solutions/barn-cleaning/luna/'},
-  METEOR:{icon:'☄️',color:'#ef4444',label:'Meteor',url:''},
-  GRAZEWAY:{icon:'🌿',color:'#16a34a',label:'Grazeway',url:'https://www.lely.com/solutions/grazing/grazeway/'},
-  'L4C LED':{icon:'💡',color:'#eab308',label:'L4C LED',url:''},
-  ARLA:{icon:'🏭',color:'#94a3b8',label:'Arla',url:''},
-  TITANIA:{icon:'⚙️',color:'#64748b',label:'Titania',url:''}
+  ROBOT:{img:'astronaut.jpg',color:'#C30A14',label:'Astronaut',url:'https://www.lely.com/solutions/milking/astronaut/'},
+  JUNO:{img:'juno.jpg',color:'#3b82f6',label:'Juno',url:'https://www.lely.com/solutions/feeding/juno/'},
+  VECTOR:{img:'vector.jpg',color:'#8b5cf6',label:'Vector',url:'https://www.lely.com/solutions/feeding/vector/'},
+  DISCOVERY:{img:'discovery.jpg',color:'#06b6d4',label:'Discovery',url:'https://www.lely.com/solutions/manure/discovery/'},
+  COLLECTOR:{img:'collector.jpg',color:'#14b8a6',label:'Collector',url:'https://www.lely.com/solutions/manure/discovery-collector/'},
+  CU:{img:'cu.jpg',color:'#6366f1',label:'Central Unit',url:''},
+  CALM:{img:'calm.jpg',color:'#f59e0b',label:'Calm',url:'https://www.lely.com/solutions/calf-rearing/calm/'},
+  COMPRESSORI:{img:'compressori.jpg',color:'#78716c',label:'Compressori',url:''},
+  COSMIX:{img:'cosmix.jpg',color:'#22c55e',label:'Cosmix',url:'https://www.lely.com/solutions/feeding/cosmix/'},
+  NAUTILUS:{img:'nautilus.jpg',color:'#0ea5e9',label:'Nautilus',url:''},
+  LUNA:{img:'luna.jpg',color:'#a855f7',label:'Luna',url:'https://www.lely.com/solutions/housing-and-caring/luna/'},
+  METEOR:{img:'meteor.jpg',color:'#ef4444',label:'Meteor',url:''},
+  GRAZEWAY:{img:'grazeway.jpg',color:'#16a34a',label:'Grazeway',url:'https://www.lely.com/solutions/grazing/grazeway/'},
+  'L4C LED':{img:'l4c_led.jpg',color:'#eab308',label:'L4C LED',url:''},
+  ARLA:{img:'arla.jpg',color:'#94a3b8',label:'Arla',url:''},
+  TITANIA:{img:'titania.jpg',color:'#64748b',label:'Titania',url:''}
 };
+function prodIcon(type,size){
+  size=size||24;
+  const cfg=PROD_CFG[type]||PROD_CFG[type.toUpperCase()]||{};
+  const src=cfg.img?PROD_IMG_BASE+cfg.img:'';
+  if(!src)return `<span style="display:inline-block;width:${size}px;height:${size}px;background:#ccc;border-radius:4px;text-align:center;line-height:${size}px;font-size:${Math.round(size*0.6)}px">?</span>`;
+  const lnk=cfg.url?`onclick="window.open('${cfg.url}','_blank')" style="cursor:pointer"`:''
+  return `<img src="${src}" alt="${cfg.label||type}" title="${cfg.label||type}" ${lnk} style="width:${size}px;height:${size}px;border-radius:4px;object-fit:cover;vertical-align:middle" onerror="this.style.display='none'">`;
+}
 
 async function loadAnagClients(){
   try{
@@ -2442,9 +2573,9 @@ function renderAnagClients(list){
     mainTypes.forEach(t=>{
       const cfg=PROD_CFG[t]||{};
       const v=sumType(t);
-      if(v>0) statCards.push([v,`${cfg.icon||''} ${cfg.label||t}`]);
+      if(v>0) statCards.push([v, prodIcon(t,20)+' '+cfg.label||t]);
     });
-    s.innerHTML=statCards.map(([v,l])=>`<div class="stat-card" style="min-width:70px;padding:6px 10px"><div class="stat-val" style="font-size:1.1rem">${v}</div><div class="stat-lbl" style="font-size:.65rem">${l}</div></div>`).join('');
+    s.innerHTML=statCards.map(([v,l])=>`<div class="stat-card" style="min-width:75px;padding:6px 10px;text-align:center"><div class="stat-val" style="font-size:1.1rem">${v}</div><div class="stat-lbl" style="font-size:.65rem">${l}</div></div>`).join('');
   }
 
   if(anagView==='map'){renderAnagMap();return}
@@ -2515,7 +2646,7 @@ async function toggleAnagTree(m3){
     const ac=c._assetCounts||{};
     const prodBadges=Object.entries(ac).filter(([k,v])=>k!=='_total'&&v>0).map(([type,cnt])=>{
       const cfg=PROD_CFG[type]||{icon:'📦',color:'#666',label:type};
-      return `<span class="badge" style="font-size:.75rem;margin:2px;background:${cfg.color}15;border:1px solid ${cfg.color}40;color:${cfg.color}">${cfg.icon} ${cfg.label}: <b>${cnt}</b></span>`;
+      return `<span class="badge" style="font-size:.75rem;margin:2px;background:${cfg.color}15;border:1px solid ${cfg.color}40;color:${cfg.color}">${prodIcon(type,18)} ${cfg.label}: <b>${cnt}</b></span>`;
     });
     if(prodBadges.length) html+=`<div style="margin-bottom:10px">${prodBadges.join('')}</div>`;
 
@@ -2523,7 +2654,7 @@ async function toggleAnagTree(m3){
     if(assets.length){
       const groups={};assets.forEach(a=>{const g=a.GruppoAttrezzatura||a.TipoFoglio||'Altro';groups[g]=(groups[g]||0)+1});
       html+=`<div style="margin-bottom:6px;font-size:.75rem;color:var(--muted)">
-        <b>${assets.length} assets</b>: ${Object.entries(groups).map(([g,n])=>{const cfg=PROD_CFG[g]||{icon:'📦'};return cfg.icon+' '+g+' ('+n+')'}).join(', ')}
+        <b>${assets.length} assets</b>: ${Object.entries(groups).map(([g,n])=>`${prodIcon(g,16)} ${g} (${n})`).join(', ')}
       </div>`;
       html+=`<table class="tbl" style="font-size:.8rem"><thead><tr>
         <th>#</th><th>Tipo</th><th>Modello</th><th>N. Serie</th><th>Data Install.</th><th>Provincia</th><th>RH/LH</th><th>Note</th><th>Status</th>
@@ -2534,7 +2665,7 @@ async function toggleAnagTree(m3){
         const dt=formatAnagDate(a.DataInstallazione);
         html+=`<tr>
           <td>${i+1}</td>
-          <td><span style="color:${cfg.color}">${cfg.icon}</span> <strong>${tipo}</strong></td>
+          <td>${prodIcon(tipo,20)} <strong>${tipo}</strong></td>
           <td>${a.Modello||'-'}</td>
           <td><code style="font-size:.75rem">${a.NumeroSerie||'-'}</code></td>
           <td>${dt}</td>
@@ -2608,7 +2739,7 @@ function buildAnagMap(clients){
     let prodHtml='';
     Object.entries(ac).filter(([k,v])=>k!=='_total'&&v>0).forEach(([type,cnt])=>{
       const cfg=PROD_CFG[type]||{icon:'📦'};
-      prodHtml+=`${cfg.icon}${cnt} `;
+      prodHtml+=`<span style="margin-right:4px">${prodIcon(type,16)}${cnt}</span> `;
     });
     marker.bindPopup(`<b>${c.NomeAccount}</b><br>${c.NomeInterno||''}<br>${c.CittaFatturazione||''} (${c.ProvinciaFatturazione||''})<br><span style="font-size:.85em">${prodHtml||'Nessun asset'}</span><br><a href="#" onclick="anagView='list';renderAnagClients(ANAG_FILTERED);setTimeout(()=>toggleAnagTree('${c.CodiceM3}'),200);return false">Apri dettaglio →</a>`);
   });
