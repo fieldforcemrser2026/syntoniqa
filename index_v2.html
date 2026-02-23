@@ -293,6 +293,13 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <button class="btn btn-sm btn-outline" onclick="filtInt('in_corso')" id="fCorso">⚡ In Corso</button>
 <button class="btn btn-sm btn-outline" onclick="filtInt('completato')" id="fComp">✅ Fatti</button>
 </div>
+<div style="display:flex;gap:6px;margin-bottom:12px;align-items:center;font-size:.8125rem">
+  <span style="color:var(--gray)">📅</span>
+  <input type="date" id="intDateFrom" onchange="renderInt()" style="flex:1;padding:6px 8px;border:1px solid var(--gray3);border-radius:8px;font-size:.8125rem">
+  <span style="color:var(--gray)">→</span>
+  <input type="date" id="intDateTo" onchange="renderInt()" style="flex:1;padding:6px 8px;border:1px solid var(--gray3);border-radius:8px;font-size:.8125rem">
+  <button onclick="clearDateFilter()" class="btn btn-sm btn-outline" style="padding:4px 8px;font-size:.75rem">✕</button>
+</div>
 <div class="card"><div class="card-body np" id="intList"></div></div>
 </div>
 
@@ -848,10 +855,30 @@ function renderHome(){
   // Reperibilità attiva: data oggi è nell'intervallo (indipendentemente dallo Stato)
   const reps=(DATA.reperibilita||[]).filter(r=>!r.Obsoleto&&r.TecnicoID===USER?.ID&&r.DataInizio<=d&&(r.DataFine||'9999')>=d);
 
+  // Stats settimanali
+  const d7ago=new Date();d7ago.setDate(d7ago.getDate()-6);const d7=d7ago.toISOString().split('T')[0];
+  const settimana=miei.filter(p=>p.Data>=d7&&p.Data<=d);
+  const settComp=settimana.filter(p=>p.Stato==='completato').length;
+  const ordArr=my(DATA.ordini).filter(o=>o.Stato==='arrivato'||o.Stato==='in_arrivo').length;
+  // Prossimo intervento
+  const prossimo=miei.filter(p=>p.Data>=d&&p.Stato==='pianificato').sort((a,b)=>(a.Data+a.OraInizio).localeCompare(b.Data+b.OraInizio))[0];
+  const prossTxt=prossimo?fmtTime(prossimo.OraInizio)+' '+getName(DATA.clienti,prossimo.ClienteID).substring(0,15):'—';
+
   $('homeKpi').innerHTML=
     '<div class="kpi-mini"><div class="val" style="color:var(--c3)">'+oggi.length+'</div><div class="lbl">📋 Oggi</div></div>'+
     '<div class="kpi-mini"><div class="val" style="color:'+(oggi.filter(p=>p.Stato==='completato').length===oggi.length&&oggi.length>0?'var(--ok)':'var(--warn)')+'">'+oggi.filter(p=>p.Stato==='completato').length+'/'+oggi.length+'</div><div class="lbl">✅ Fatti</div></div>'+
-    '<div class="kpi-mini"><div class="val" style="color:'+(urgA.length>0?'var(--err)':'var(--ok)')+'">'+urgA.length+'</div><div class="lbl">🚨 Urgenze</div></div>';
+    '<div class="kpi-mini"><div class="val" style="color:'+(urgA.length>0?'var(--err)':'var(--ok)')+'">'+urgA.length+'</div><div class="lbl">🚨 Urgenze</div></div>'+
+    '<div class="kpi-mini"><div class="val" style="color:var(--c1)">'+settComp+'/'+settimana.length+'</div><div class="lbl">📊 Settimana</div></div>';
+  // Barra progresso giornata
+  const pctOggi=oggi.length>0?Math.round(oggi.filter(p=>p.Stato==='completato').length/oggi.length*100):0;
+  const inCorso=oggi.filter(p=>p.Stato==='in_corso').length;
+  $('homeKpi').innerHTML+='<div style="grid-column:1/-1;margin-top:4px">'+
+    '<div style="display:flex;justify-content:space-between;font-size:.7rem;color:var(--gray);margin-bottom:4px"><span>Progresso giornata</span><span>'+pctOggi+'%'+(inCorso?' · '+inCorso+' in corso':'')+'</span></div>'+
+    '<div style="height:6px;background:var(--gray3);border-radius:3px;overflow:hidden"><div style="height:100%;width:'+pctOggi+'%;background:linear-gradient(90deg,var(--c1),var(--ok));border-radius:3px;transition:width .5s"></div></div>'+
+    (prossimo?'<div style="font-size:.75rem;margin-top:8px;color:var(--c3)">➡️ Prossimo: <strong>'+prossTxt+'</strong></div>':'')+
+    (ordArr?'<div style="font-size:.75rem;margin-top:4px;color:var(--warn)">📦 '+ordArr+' ordini in arrivo</div>':'')+
+    (reps.length?'<div style="font-size:.75rem;margin-top:4px;color:var(--err)">📞 Reperibilità attiva</div>':'')+
+    '</div>';
 
   $('homeList').innerHTML=oggi.length?oggi.map(p=>intItem(p)).join(''):'<div class="empty"><div class="ico">☀️</div><p>Nessun intervento oggi</p></div>';
 
@@ -901,9 +928,16 @@ function filtInt(s){
 function renderInt(){
   let items=my(DATA.piano);
   if(intF)items=items.filter(p=>p.Stato===intF);
+  // Filtro per data
+  const df=$('intDateFrom')?.value;
+  const dt=$('intDateTo')?.value;
+  if(df)items=items.filter(p=>(p.Data||'')>=df);
+  if(dt)items=items.filter(p=>(p.Data||'')<=dt);
   items.sort((a,b)=>(b.Data||'').localeCompare(a.Data||'')||(a.OraInizio||'').localeCompare(b.OraInizio||''));
-  $('intList').innerHTML=items.length?items.map(p=>intItem(p)).join(''):'<div class="empty"><div class="ico">📋</div><p>Nessun intervento</p></div>';
+  const cnt=items.length;
+  $('intList').innerHTML=cnt?'<div style="padding:8px 16px;font-size:.75rem;color:var(--gray);border-bottom:1px solid var(--gray3)">'+cnt+' intervento'+(cnt>1?'i':'')+(df||dt?' nel periodo':'')+' trovato'+(cnt>1?'i':'')+'</div>'+items.map(p=>intItem(p)).join(''):'<div class="empty"><div class="ico">📋</div><p>Nessun intervento'+(df||dt?' nel periodo':'')+'</p></div>';
 }
+function clearDateFilter(){$('intDateFrom').value='';$('intDateTo').value='';renderInt()}
 
 function showInt(id){
   const p=(DATA.piano||[]).find(x=>x.ID===id);if(!p)return;
@@ -1218,7 +1252,7 @@ function showCliDetail(id){
 // ============ MACCHINE ============
 function renderMacMob(){
   const q=($('srcMacMob')?.value||'').toLowerCase();
-  const items=(DATA.macchine||[]).filter(m=>!m.Obsoleto&&(!q||(m.Tipo||'').toLowerCase().includes(q)||(m.Modello||'').toLowerCase().includes(q)||(m.Seriale||'').toLowerCase().includes(q)));
+  const items=(DATA.macchine||[]).filter(m=>!m.Obsoleto&&(!q||(m.Tipo||'').toLowerCase().includes(q)||(m.Modello||'').toLowerCase().includes(q)||(m.Seriale||'').toLowerCase().includes(q)||getName(DATA.clienti,m.ClienteID).toLowerCase().includes(q)));
   $('macMobList').innerHTML=items.length?items.map(m=>{
     const gar=m.GaranziaFino&&m.GaranziaFino>=today();
     return '<div class="card" onclick="showMacDetail(\''+m.ID+'\')"><div class="card-body" style="padding:12px 16px"><div style="display:flex;justify-content:space-between;align-items:center"><div><strong>'+(m.Tipo||'—')+' '+(m.Modello||'')+'</strong><div style="font-size:.8125rem;color:var(--gray)">S/N: '+(m.Seriale||'—')+' · '+getName(DATA.clienti,m.ClienteID)+'</div></div>'+(gar?'<span class="tag tag-ok">✅ Garanzia</span>':'')+'</div></div></div>';
@@ -1228,24 +1262,51 @@ function renderMacMob(){
 function showMacDetail(id){
   const m=(DATA.macchine||[]).find(x=>x.ID===id);if(!m)return;
   const cli=(DATA.clienti||[]).find(c=>c.ID===m.ClienteID||c.CodiceM3===m.ClienteID);
-  const interventi=(DATA.piano||[]).filter(p=>!p.Obsoleto&&p.MacchinaID===id).sort((a,b)=>(b.Data||'').localeCompare(a.Data||'')).slice(0,5);
+  const allIntMac=(DATA.piano||[]).filter(p=>!p.Obsoleto&&p.MacchinaID===id);
+  const interventi=allIntMac.sort((a,b)=>(b.Data||'').localeCompare(a.Data||'')).slice(0,5);
+  const totInt=allIntMac.length;
+  const compInt=allIntMac.filter(p=>p.Stato==='completato').length;
+  // Garanzia
+  const garFino=m.GaranziaFino||'';
+  const isInGar=garFino&&garFino>=today();
+  const garDays=garFino?Math.ceil((new Date(garFino)-new Date())/86400000):0;
+  const garTag=isInGar?(garDays<=30?'<span class="tag" style="background:#FEF3C7;color:#D97706">⚠️ Scade tra '+garDays+'gg</span>':'<span class="tag tag-ok">✅ In garanzia</span>'):(garFino?'<span class="tag" style="background:#FEE2E2;color:#DC2626">❌ Scaduta</span>':'<span class="tag" style="background:var(--gray3);color:var(--gray)">—</span>');
+  // Prossimo intervento
+  const prossimoInt=allIntMac.filter(p=>p.Data>=today()&&p.Stato==='pianificato').sort((a,b)=>(a.Data||'').localeCompare(b.Data||''))[0];
+  // Urgenze attive su questa macchina
+  const urgMac=(DATA.urgenze||[]).filter(u=>u.MacchinaID===id&&u.Stato!=='risolta'&&u.Stato!=='chiusa');
+
   $('suTitle').textContent='⚙️ '+(m.Tipo||'')+' '+(m.Modello||'');
   $('suBody').innerHTML=
+    '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">'+garTag+
+    '<span class="tag" style="background:var(--c1)10;color:var(--c1)">🔧 '+totInt+' interventi ('+compInt+' completati)</span>'+
+    (urgMac.length?'<span class="tag" style="background:#FEE2E2;color:#DC2626">🚨 '+urgMac.length+' urgenz'+(urgMac.length>1?'e':'a')+' attiv'+(urgMac.length>1?'e':'a')+'</span>':'')+
+    '</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:.8125rem;margin-bottom:16px">'+
     '<div><span style="color:var(--gray)">Tipo</span><br><strong>'+(m.Tipo||'—')+'</strong></div>'+
     '<div><span style="color:var(--gray)">Modello</span><br><strong>'+(m.Modello||'—')+'</strong></div>'+
     '<div><span style="color:var(--gray)">Seriale</span><br><strong>'+(m.Seriale||'—')+'</strong></div>'+
     '<div><span style="color:var(--gray)">Anno</span><br><strong>'+(m.AnnoInstallazione||'—')+'</strong></div>'+
     '<div><span style="color:var(--gray)">Cliente</span><br><strong>'+(cli?getName(DATA.clienti,cli.ID):'—')+'</strong></div>'+
-    '<div><span style="color:var(--gray)">Garanzia</span><br><strong>'+(m.GaranziaFino?fmtDate(m.GaranziaFino):'—')+'</strong></div>'+
+    '<div><span style="color:var(--gray)">Garanzia fino</span><br><strong>'+(garFino?fmtDate(garFino):'—')+'</strong></div>'+
     '</div>'+
     (m.Note?'<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+m.Note+'</div></div>':'')+
+    (prossimoInt?'<div style="margin-bottom:16px;padding:10px 14px;background:#EFF6FF;border-radius:10px;font-size:.8125rem"><strong>➡️ Prossimo:</strong> '+fmtDate(prossimoInt.Data)+' '+fmtTime(prossimoInt.OraInizio)+' · '+getName(DATA.tipiIntervento,prossimoInt.TipoInterventoID)+'</div>':'')+
     '<div style="font-weight:600;font-size:.8125rem;margin-bottom:8px">Ultimi interventi</div>'+
-    (interventi.length?interventi.map(p=>'<div style="padding:8px 12px;border-left:3px solid '+getColor(DATA.tipiIntervento,p.TipoInterventoID)+';margin-bottom:6px;background:var(--gray5);border-radius:0 var(--radius-sm) var(--radius-sm) 0;font-size:.8125rem"><strong>'+fmtDate(p.Data)+'</strong> '+getName(DATA.tipiIntervento,p.TipoInterventoID)+'</div>').join(''):'<div style="font-size:.8125rem;color:var(--gray)">Nessun intervento</div>')+
+    (interventi.length?interventi.map(p=>'<div style="padding:8px 12px;border-left:3px solid '+getColor(DATA.tipiIntervento,p.TipoInterventoID)+';margin-bottom:6px;background:var(--gray5);border-radius:0 var(--radius-sm) var(--radius-sm) 0;font-size:.8125rem"><strong>'+fmtDate(p.Data)+'</strong> '+getName(DATA.tipiIntervento,p.TipoInterventoID)+' '+statusTag(p.Stato)+'</div>').join(''):'<div style="font-size:.8125rem;color:var(--gray)">Nessun intervento</div>')+
     '<div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">'+
     (cli?.Telefono?'<a href="tel:'+cli.Telefono+'" class="btn btn-outline">📞 Chiama cliente</a>':'')+
+    '<button class="btn" style="background:var(--err);color:#fff" onclick="closeSheet(\'shUrg\');creaUrgMacchina(\''+id+'\',\''+(cli?.ID||'')+'\')">🚨 Segnala urgenza</button>'+
     '<button class="btn btn-outline" onclick="closeSheet(\'shUrg\')">Chiudi</button></div>';
   openSheet('shUrg');
+}
+
+function creaUrgMacchina(macId,cliId){
+  const prob=prompt('Descrivi il problema:');
+  if(!prob)return;
+  apiCall('createUrgenza',{MacchinaID:macId,ClienteID:cliId,Problema:prob,PrioritaID:2,Stato:'aperta',operatoreId:USER?.ID},'POST')
+    .then(()=>{toast('Urgenza creata!','ok');refreshData()})
+    .catch(e=>toast(e.message,'err'));
 }
 
 // ============ DOCUMENTI ============
@@ -1482,19 +1543,49 @@ function renderChatMsgs(){
     const isTg=m.MittenteID==='TELEGRAM'||(m.Testo||'').startsWith('📱');
     const sender=isMine?'':(getName(DATA.utenti||[],m.MittenteID)||(m.MittenteID==='TELEGRAM'?'Telegram':'?'));
     const time=(m.CreatedAt||'').substring(11,16);
-    // Rendi link cliccabili + immagini inline
+    const edited=m.Modificato?' <span style="font-size:.65rem;opacity:.6">(modificato)</span>':'';
     let msgHtml=(m.Testo||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     msgHtml=msgHtml.replace(/(https?:\/\/[^\s]+)/g,function(url){
       if(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url))return '<a href="'+url+'" target="_blank"><img src="'+url+'" style="max-width:200px;max-height:150px;border-radius:8px;margin:4px 0;display:block" onerror="this.outerHTML=\'<a href=\\\'\'+this.src+\'\\\' target=_blank>📎 File</a>\'"></a>';
       return '<a href="'+url+'" target="_blank" style="color:inherit;text-decoration:underline">🔗 Link</a>';
     });
     msgHtml=msgHtml.replace(/\n/g,'<br>');
-    return '<div class="chat-msg'+(isMine?' mine':' other')+(isTg?' tg':'')+'">'+
+    // Azioni messaggio (solo per messaggi propri)
+    const actions=isMine?'<div class="chat-actions" style="display:none;position:absolute;top:-28px;right:4px;background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.15);padding:2px;font-size:.75rem;z-index:10"><button onclick="editChatMsg(\''+m.ID+'\',\''+encodeURIComponent(m.Testo||'')+'\')" style="background:none;border:none;cursor:pointer;padding:4px 8px" title="Modifica">✏️</button><button onclick="deleteChatMsg(\''+m.ID+'\')" style="background:none;border:none;cursor:pointer;padding:4px 8px" title="Elimina">🗑️</button></div>':'';
+    return '<div class="chat-msg'+(isMine?' mine':' other')+(isTg?' tg':'')+'" style="position:relative" '+(isMine?'onclick="toggleChatActions(this)"':'')+'>'+
+      actions+
       (!isMine&&sender?'<div class="sender">'+(isTg?'📱 ':'')+sender+'</div>':'')+
       '<div>'+msgHtml+'</div>'+
-      '<div class="meta">'+time+'</div></div>';
+      '<div class="meta">'+time+edited+'</div></div>';
   }).join('');
   el.scrollTop=el.scrollHeight;
+}
+
+function toggleChatActions(el){
+  // Chiudi tutti gli altri
+  document.querySelectorAll('.chat-actions').forEach(a=>a.style.display='none');
+  const a=el.querySelector('.chat-actions');
+  if(a)a.style.display=a.style.display==='none'?'flex':'none';
+}
+
+async function editChatMsg(id,encodedText){
+  const oldText=decodeURIComponent(encodedText);
+  const newText=prompt('Modifica messaggio:',oldText);
+  if(!newText||newText===oldText)return;
+  try{
+    await apiCall('editChatMessage',{id,testo:newText},'POST');
+    toast('Messaggio modificato','ok');
+    loadChatMessages();
+  }catch(e){toast(e.message,'err')}
+}
+
+async function deleteChatMsg(id){
+  if(!confirm('Eliminare questo messaggio?'))return;
+  try{
+    await apiCall('deleteChatMessage',{id},'POST');
+    toast('Messaggio eliminato','ok');
+    loadChatMessages();
+  }catch(e){toast(e.message,'err')}
 }
 
 let chatAllegatoFile=null;

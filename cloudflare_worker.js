@@ -2316,6 +2316,33 @@ Rispondi SOLO con JSON valido:
       return ok();
     }
 
+    case 'editChatMessage': {
+      const { id, testo } = body;
+      const userId = body.userId || body.user_id;
+      if (!id || !testo) return err('id e testo richiesti');
+      // Verifica ownership: solo il mittente può modificare
+      const msg = await sb(env, 'chat_messaggi', 'GET', null, `?id=eq.${id}&select=mittente_id,eliminato`).catch(()=>[]);
+      if (!msg?.[0]) return err('Messaggio non trovato');
+      if (msg[0].eliminato) return err('Messaggio già eliminato');
+      if (msg[0].mittente_id !== userId) return err('Solo il mittente può modificare il messaggio');
+      await sb(env, `chat_messaggi?id=eq.${id}`, 'PATCH', { testo, modificato: true, updated_at: new Date().toISOString() });
+      return ok();
+    }
+
+    case 'deleteChatMessage': {
+      const { id } = body;
+      const userId = body.userId || body.user_id;
+      if (!id) return err('id messaggio richiesto');
+      // Verifica ownership: mittente o admin
+      const msg = await sb(env, 'chat_messaggi', 'GET', null, `?id=eq.${id}&select=mittente_id`).catch(()=>[]);
+      if (!msg?.[0]) return err('Messaggio non trovato');
+      const isOwner = msg[0].mittente_id === userId;
+      const isAdmin = userId ? (await sb(env, 'utenti', 'GET', null, `?id=eq.${userId}&select=ruolo`).catch(()=>[]))?.[0]?.ruolo === 'admin' : false;
+      if (!isOwner && !isAdmin) return err('Solo il mittente o admin può eliminare il messaggio');
+      await sb(env, `chat_messaggi?id=eq.${id}`, 'PATCH', { eliminato: true, updated_at: new Date().toISOString() });
+      return ok();
+    }
+
     // ============ ANAGRAFICA (Clienti + Assets) ============
 
     case 'getAnagraficaClienti': {
