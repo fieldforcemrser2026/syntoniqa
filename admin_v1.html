@@ -1622,7 +1622,6 @@ const $=id=>document.getElementById(id);
 const today=()=>new Date().toISOString().split('T')[0];
 const fmtDate=d=>{if(!d)return '—';const p=String(d).substring(0,10).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:'—'};
 const fmtDateTime=d=>{if(!d)return '—';try{return new Date(d).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}catch{return '—'}};
-const today=()=>new Date().toISOString().slice(0,10);
 function calcOraFine(oraInizio,durata){const [h,m]=(oraInizio||'08:00').split(':').map(Number);const t=h*60+m+Math.round(durata*60);return String(Math.floor(t/60)%24).padStart(2,'0')+':'+String(t%60).padStart(2,'0')}
 const getName=(list,id,field='Nome')=>{const o=list.find(x=>x.ID===id||x.CodiceM3===id);if(!o)return id||'—';if(field!=='Nome'&&o[field])return o[field];return(o.NomeInterno||o.Nome||o.Descrizione||'')+(o.Cognome?' '+o.Cognome:'');};
 const getColor=(list,id)=>{const o=list.find(x=>x.ID===id);return o?.Colore||'#6B7280'};
