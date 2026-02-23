@@ -84,7 +84,7 @@
     };
     Object.keys(featMap).forEach(function(k){
       if(feat[k]===false){
-        var q="[onclick*=""+featMap[k]+""]";
+        var q='[onclick*="'+featMap[k]+'"]';
         var el=document.querySelector(q);
         if(el) el.style.display='none';
       }

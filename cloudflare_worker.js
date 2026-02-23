@@ -193,7 +193,10 @@ export default {
 
   // ============ CRON: notifiche automatiche interventi ============
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(checkInterventoReminders(env));
+    ctx.waitUntil(Promise.all([
+      checkInterventoReminders(env),
+      checkSLAUrgenze(env)
+    ]));
   }
 };
 
@@ -2595,6 +2598,57 @@ async function checkInterventoReminders(env) {
     }
   }
   console.log(`[CRON] checkInterventoReminders: ${pianificati?.length || 0} pianificati, ${inCorso?.length || 0} in_corso checked`);
+}
+
+// ============ CRON: SLA MONITORING ============
+async function checkSLAUrgenze(env) {
+  try {
+    const urgenze = await sb(env, 'urgenze', 'GET', null,
+      '?stato=in.(aperta,assegnata,schedulata,in_corso)&sla_scadenza=not.is.null&obsoleto=eq.false&select=id,sla_scadenza,sla_status,tecnico_assegnato,cliente_id,problema'
+    ).catch(() => []);
+    const now = new Date();
+    let updated = 0;
+    for (const u of (urgenze || [])) {
+      const scadenza = new Date(u.sla_scadenza);
+      const diffOre = (scadenza - now) / 3600000;
+      let newStatus = 'ok';
+      if (diffOre < 0) newStatus = 'breach';
+      else if (diffOre < 2) newStatus = 'critical';
+      else if (diffOre < 6) newStatus = 'warning';
+      if (newStatus !== u.sla_status) {
+        await sb(env, `urgenze?id=eq.${u.id}`, 'PATCH', { sla_status: newStatus });
+        updated++;
+        // Notifica se breach o critical
+        if ((newStatus === 'breach' || newStatus === 'critical') && u.sla_status !== 'breach') {
+          const cliNome = await getEntityName(env, 'clienti', u.cliente_id);
+          const emoji = newStatus === 'breach' ? '🔴' : '🟠';
+          const label = newStatus === 'breach' ? 'SLA SCADUTO' : 'SLA CRITICO';
+          // Notifica admin via chat
+          await sb(env, 'chat_messaggi', 'POST', {
+            id: 'MSG_SLA_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+            canale_id: 'CH_URGENZE', mittente_id: 'TELEGRAM',
+            testo: `${emoji} ${label}: Urgenza ${u.id}\n🏢 ${cliNome}\n📝 ${(u.problema || '').substring(0, 60)}\n⏱️ Scadenza: ${u.sla_scadenza?.substring(0, 16)?.replace('T', ' ')}`,
+            tipo: 'testo', created_at: new Date().toISOString()
+          }).catch(() => {});
+          // Notifica tecnico assegnato
+          if (u.tecnico_assegnato) {
+            const notifId = 'NOT_SLA_' + u.id + '_' + newStatus + '_' + now.toISOString().split('T')[0];
+            const existing = await sb(env, 'notifiche', 'GET', null, `?id=eq.${notifId}&select=id`).catch(() => []);
+            if (!existing?.length) {
+              await sb(env, 'notifiche', 'POST', {
+                id: notifId, tipo: 'sla_alert', oggetto: `${emoji} ${label}`,
+                testo: `Urgenza ${u.id} per ${cliNome}: ${label}! Intervieni subito.`,
+                destinatario_id: u.tecnico_assegnato, stato: 'inviata', priorita: 'urgente',
+                riferimento_id: u.id, riferimento_tipo: 'urgenza',
+                tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
+              }).catch(() => {});
+            }
+          }
+        }
+      }
+    }
+    console.log(`[CRON] checkSLAUrgenze: ${urgenze?.length || 0} urgenze checked, ${updated} updated`);
+  } catch (e) { console.error('[CRON] checkSLAUrgenze error:', e.message); }
 }
 
 // Helper per nome entità

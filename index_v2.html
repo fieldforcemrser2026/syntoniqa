@@ -807,7 +807,7 @@ function renderAll(){
 }
 
 function updateBadges(){
-  const nu=my(DATA.urgenze).filter(u=>u.Stato!=='risolta').length;
+  const nu=my(DATA.urgenze).filter(u=>u.Stato!=='risolta'&&u.Stato!=='chiusa').length;
   const nn=(DATA.notifiche||[]).filter(n=>!n.Obsoleto&&n.Stato==='inviata'&&(n.DestinatarioID===USER?.ID||(n.DestinatariIDs||'').includes(USER?.ID))).length;
   const no=my(DATA.ordini).filter(o=>o.Stato!=='arrivato').length;
   document.querySelectorAll('.bnav .nbadge').forEach(b=>b.remove());
@@ -1453,8 +1453,8 @@ async function loadChatMessages(silent){
 }
 
 function renderChatMsgs(){
-  const el=$('chatMsgs');
-  if(!chatMsgCache.length){el.innerHTML='<div class="empty"><div class="ico">💬</div><p>Nessun messaggio</p></div>';return}
+  const el=$('chatMsgs');if(!el)return;
+  if(!chatMsgCache||!chatMsgCache.length){el.innerHTML='<div class="empty"><div class="ico">💬</div><p>Nessun messaggio</p></div>';return}
   const sorted=[...chatMsgCache].sort((a,b)=>(a.CreatedAt||'').localeCompare(b.CreatedAt||''));
   el.innerHTML=sorted.map(m=>{
     const isMine=m.MittenteID===USER?.ID;
