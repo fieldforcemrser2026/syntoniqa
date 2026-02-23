@@ -356,6 +356,13 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 .star:hover{transform:scale(1.2)}
 .score-circle{width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.25rem;font-weight:700;color:var(--white)}
 
+/* ===== ANAGRAFICA TREE ===== */
+.anag-arrow{display:inline-block;width:16px;font-size:.7rem;color:var(--gray);transition:transform .2s}
+.anag-row:hover{background:var(--bg)!important}
+.badge-ok{background:#dcfce7;color:#166534}.badge-warn{background:#fef3c7;color:#92400e}.badge-err{background:#fecaca;color:#991b1b}
+#anagDetail_ table.tbl{margin:0;font-size:.78rem}
+#anagDetail_ table.tbl td,#anagDetail_ table.tbl th{padding:5px 8px}
+
 /* ===== EMPTY STATE ===== */
 .empty{text-align:center;padding:40px 20px;color:var(--gray)}
 .empty .ico{font-size:2.5rem;margin-bottom:12px;opacity:.5}
@@ -405,8 +412,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <button class="nav-item" onclick="showSec('notifiche',this)"><span class="ico">🔔</span>Notifiche<span class="badge" id="badgeNot" style="display:none">0</span></button>
 <button class="nav-item" onclick="showSec('richieste',this)"><span class="ico">📝</span>Richieste<span class="badge" id="badgeRich" style="display:none">0</span></button>
 <div class="nav-label">Anagrafiche</div>
-<button class="nav-item" onclick="showSec('clienti',this)"><span class="ico">🏢</span>Clienti</button>
-<button class="nav-item" onclick="showSec('anagrafica',this)"><span class="ico">📋</span>Anagrafica</button>
+<button class="nav-item" onclick="showSec('anagrafica',this)"><span class="ico">🏢</span>Clienti & Assets</button>
 <button class="nav-item" onclick="showSec('macchine',this)"><span class="ico">⚙️</span>Macchine</button>
 <button class="nav-item" onclick="showSec('automezzi',this)"><span class="ico">🚐</span>Automezzi</button>
 <button class="nav-item" onclick="showSec('tecnici',this)"><span class="ico">👥</span>Tecnici</button>
@@ -985,76 +991,38 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 
 <!-- ========== SEC: ANAGRAFICA ========== -->
 <section class="sec" id="secAnagrafica">
-
-<!-- LISTA CLIENTI -->
-<div id="anagListView">
 <div class="sec-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
   <h2>📋 Anagrafica Clienti & Assets</h2>
   <div style="display:flex;gap:8px;align-items:center">
     <input type="text" id="anagSearch" placeholder="Cerca cliente, città, M3..." style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:.8125rem;width:260px" oninput="filterAnagClients()">
+    <button class="btn btn-sm" onclick="anagView='list';renderAnagClients(ANAG_FILTERED)" title="Vista Lista" id="btnAnagList">📋</button>
+    <button class="btn btn-sm" onclick="anagView='map';renderAnagMap()" title="Vista Mappa" id="btnAnagMap">🗺️</button>
     <button class="btn btn-sm" onclick="loadAnagClients()" title="Ricarica">🔄</button>
     <label class="btn btn-sm btn-primary" style="cursor:pointer">📤 Importa XLSX<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importAnagXlsx(this.files[0])"></label>
   </div>
 </div>
-<div id="anagStats" style="display:flex;gap:16px;margin:12px 0;flex-wrap:wrap"></div>
+<div id="anagStats" style="display:flex;gap:12px;margin:8px 0;flex-wrap:wrap"></div>
+<!-- MAP VIEW -->
+<div id="anagMapWrap" style="display:none;height:500px;border-radius:8px;overflow:hidden;margin-bottom:12px"></div>
+<!-- TREE LIST VIEW -->
+<div id="anagTreeWrap">
 <div class="table-wrap">
 <table class="tbl" id="anagClientiTable">
 <thead><tr>
-  <th style="width:30px">#</th>
-  <th>Nome Account</th>
-  <th>Nome Interno</th>
+  <th style="width:30px"></th>
+  <th>Cliente</th>
   <th>Città</th>
-  <th>Provincia</th>
+  <th>Prov.</th>
   <th>Stato</th>
   <th>Titolare</th>
-  <th title="Lely Astronaut (robot mungitura)">🤖 Astro</th>
-  <th title="Lely Juno (spingi-foraggio)">🔄 Juno</th>
-  <th title="Lely Vector (alimentazione)">🍽️ Vector</th>
-  <th title="Discovery / Collector (pulizia)">🧹 Disc.</th>
-  <th title="Calm / Cosmix / Nautilus / Luna / Shuttle / CRS / LD Reader">📦 Altri</th>
-  <th>Tot.</th>
-  <th style="width:50px"></th>
+  <th>🤖</th><th>🔄</th><th>🍽️</th><th>🧹</th><th>📦</th>
+  <th>Tot</th>
+  <th style="width:80px"></th>
 </tr></thead>
 <tbody id="anagClientiBody"></tbody>
 </table>
 </div>
 </div>
-
-<!-- DETTAGLIO CLIENTE -->
-<div id="anagDetailView" style="display:none">
-<button class="btn btn-sm" onclick="closeAnagDetail()" style="margin-bottom:12px">← Torna alla lista</button>
-<div class="card" id="anagClienteCard" style="margin-bottom:16px">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
-    <div>
-      <h2 id="anagClienteNome" style="margin:0"></h2>
-      <p id="anagClienteInfo" style="color:var(--muted);margin:4px 0 0"></p>
-    </div>
-    <div id="anagClienteBadges" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-  </div>
-  <div id="anagClienteDetails" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:16px"></div>
-  <div id="anagClienteQty" style="margin-top:16px"></div>
-</div>
-<div class="card">
-  <h3 style="margin:0 0 12px">🔧 Assets del Cliente</h3>
-  <div id="anagAssetsSummary" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
-  <div class="table-wrap">
-  <table class="tbl" id="anagAssetsTable">
-  <thead><tr>
-    <th>#</th>
-    <th>Gruppo</th>
-    <th>Modello</th>
-    <th>N. Serie</th>
-    <th>Data Install.</th>
-    <th>Status</th>
-    <th>RH/LH</th>
-    <th>Note</th>
-  </tr></thead>
-  <tbody id="anagAssetsBody"></tbody>
-  </table>
-  </div>
-</div>
-</div>
-
 </section>
 
 <!-- ========== SEC: CHAT INTERNA ========== -->
@@ -2348,147 +2316,185 @@ function openNewCanale(){
 
 // ============ ANAGRAFICA ============
 var ANAG_CLIENTI=[];
-var ANAG_CURRENT=null;
+var ANAG_FILTERED=[];
+var ANAG_ASSETS_CACHE={};
+var anagView='list';
 
 async function loadAnagClients(){
   try{
     const data=await apiCall('getAnagraficaClienti',{},'POST');
     ANAG_CLIENTI=data||[];
-    renderAnagClients(ANAG_CLIENTI);
+    ANAG_ASSETS_CACHE={};
+    filterAnagClients();
   }catch(e){toast('Errore caricamento anagrafica: '+e.message,'err')}
 }
 
 function filterAnagClients(){
   const q=($('anagSearch')?.value||'').toLowerCase();
-  if(!q){renderAnagClients(ANAG_CLIENTI);return}
-  const filtered=ANAG_CLIENTI.filter(c=>{
-    return (c.NomeAccount||'').toLowerCase().includes(q)||
-           (c.NomeInterno||'').toLowerCase().includes(q)||
-           (c.CodiceM3||'').toLowerCase().includes(q)||
-           (c.CittaFatturazione||'').toLowerCase().includes(q)||
-           (c.ProvinciaFatturazione||'').toLowerCase().includes(q);
-  });
-  renderAnagClients(filtered);
+  ANAG_FILTERED=!q?ANAG_CLIENTI:ANAG_CLIENTI.filter(c=>
+    (c.NomeAccount||'').toLowerCase().includes(q)||
+    (c.NomeInterno||'').toLowerCase().includes(q)||
+    (c.CodiceM3||'').includes(q)||
+    (c.CittaFatturazione||'').toLowerCase().includes(q)||
+    (c.ProvinciaFatturazione||'').toLowerCase().includes(q)||
+    (c.TitolareAccount||'').toLowerCase().includes(q)
+  );
+  renderAnagClients(ANAG_FILTERED);
 }
 
 function renderAnagClients(list){
   // Stats
-  const stats=$('anagStats');
-  if(stats){
-    const attivi=list.filter(c=>c.StatoCliente==='Attivo').length;
-    const sum=(f)=>list.reduce((s,c)=>s+(c[f]||0),0);
-    const totAstro=sum('QtyAstronaut');
-    const totJuno=sum('QtyJuno');
-    const totVector=sum('QtyVector');
-    const totDisc=sum('QtyDiscoverySsw')+sum('QtyDiscoveryCollector')+sum('QtyCollectorC2')+sum('QtyDiscoveryBucket');
-    const totCalm=sum('QtyCalm');const totCosmix=sum('QtyCosmix');const totNautilus=sum('QtyNautilus');
-    const totLuna=sum('QtyLuna');const totShuttle=sum('QtyShuttle');const totCrs=sum('QtyCrs');const totLdr=sum('QtyLdReader');
-    const totAltri=totCalm+totCosmix+totNautilus+totLuna+totShuttle+totCrs+totLdr;
-    stats.innerHTML=`
-      <div class="stat-card"><div class="stat-val">${list.length}</div><div class="stat-lbl">Clienti</div></div>
-      <div class="stat-card"><div class="stat-val">${attivi}</div><div class="stat-lbl">Attivi</div></div>
-      <div class="stat-card"><div class="stat-val">${totAstro}</div><div class="stat-lbl">🤖 Astronaut</div></div>
-      <div class="stat-card"><div class="stat-val">${totJuno}</div><div class="stat-lbl">🔄 Juno</div></div>
-      <div class="stat-card"><div class="stat-val">${totVector}</div><div class="stat-lbl">🍽️ Vector</div></div>
-      <div class="stat-card"><div class="stat-val">${totDisc}</div><div class="stat-lbl">🧹 Discovery</div></div>
-      <div class="stat-card"><div class="stat-val">${totCalm}</div><div class="stat-lbl">🍼 Calm</div></div>
-      <div class="stat-card"><div class="stat-val">${totCosmix}</div><div class="stat-lbl">⚖️ Cosmix</div></div>
-      <div class="stat-card"><div class="stat-val">${totNautilus}</div><div class="stat-lbl">🐚 Nautilus</div></div>
-      <div class="stat-card"><div class="stat-val">${totAltri}</div><div class="stat-lbl">📦 Altri</div></div>
-    `;
+  const s=$('anagStats');
+  if(s){
+    const sm=(f)=>list.reduce((t,c)=>t+(c[f]||0),0);
+    const a=list.filter(c=>c.StatoCliente==='Attivo').length;
+    const geo=list.filter(c=>c.Lat&&c.Lng).length;
+    const disc=sm('QtyDiscoverySsw')+sm('QtyDiscoveryCollector')+sm('QtyCollectorC2')+sm('QtyDiscoveryBucket');
+    const altri=sm('QtyCalm')+sm('QtyCosmix')+sm('QtyNautilus')+sm('QtyLuna')+sm('QtyShuttle')+sm('QtyCrs')+sm('QtyLdReader');
+    s.innerHTML=[
+      [list.length,'Clienti'],[a,'Attivi'],[geo,'📍 Geo'],
+      [sm('QtyAstronaut'),'🤖 Astronaut'],[sm('QtyJuno'),'🔄 Juno'],[sm('QtyVector'),'🍽️ Vector'],
+      [disc,'🧹 Discovery'],[sm('QtyCalm'),'🍼 Calm'],[sm('QtyCosmix'),'⚖️ Cosmix'],
+      [sm('QtyNautilus'),'🐚 Nautilus'],[altri,'📦 Altri']
+    ].map(([v,l])=>`<div class="stat-card" style="min-width:70px;padding:6px 10px"><div class="stat-val" style="font-size:1.1rem">${v}</div><div class="stat-lbl" style="font-size:.65rem">${l}</div></div>`).join('');
   }
-  const tb=$('anagClientiBody');
-  if(!tb)return;
-  if(!list.length){tb.innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--muted)">Nessun cliente. Importa il file XLSX.</td></tr>';return}
+
+  if(anagView==='map'){renderAnagMap();return}
+
+  const tb=$('anagClientiBody');if(!tb)return;
+  $('anagMapWrap').style.display='none';
+  $('anagTreeWrap').style.display='block';
+  if(!list.length){tb.innerHTML='<tr><td colspan="13" style="text-align:center;color:var(--muted)">Nessun cliente trovato.</td></tr>';return}
+  const hi=v=>v>0?`<strong>${v}</strong>`:`<span style="color:#ccc">-</span>`;
   tb.innerHTML=list.map((c,i)=>{
     const disc=(c.QtyDiscoverySsw||0)+(c.QtyDiscoveryCollector||0)+(c.QtyCollectorC2||0)+(c.QtyDiscoveryBucket||0);
-    const altri=(c.QtyCalm||0)+(c.QtyCosmix||0)+(c.QtyNautilus||0)+(c.QtyLuna||0)+(c.QtyShuttle||0)+(c.QtyCrs||0)+(c.QtyLdReader||0)+(c.QtyConsumabili||0);
+    const altri=(c.QtyCalm||0)+(c.QtyCosmix||0)+(c.QtyNautilus||0)+(c.QtyLuna||0)+(c.QtyShuttle||0)+(c.QtyCrs||0)+(c.QtyLdReader||0);
     const tot=(c.QtyAstronaut||0)+(c.QtyJuno||0)+(c.QtyVector||0)+disc+altri;
-    const hi=(v)=>v>0?`<strong>${v}</strong>`:`<span style="color:var(--muted)">0</span>`;
-    return `<tr onclick="openAnagDetail('${c.CodiceM3}')" style="cursor:pointer">
-      <td>${i+1}</td>
-      <td><strong>${c.NomeAccount||'-'}</strong></td>
-      <td>${c.NomeInterno||''}</td>
+    const m3=c.CodiceM3||'';
+    const geo=c.Lat?'📍':'';
+    return `<tr class="anag-row" id="anagRow_${m3}" onclick="toggleAnagTree('${m3}')" style="cursor:pointer">
+      <td><span class="anag-arrow" id="anagArrow_${m3}">▶</span></td>
+      <td><strong>${c.NomeAccount||'-'}</strong><br><small style="color:var(--muted)">${c.NomeInterno||''} ${geo}</small></td>
       <td>${c.CittaFatturazione||''}</td>
       <td>${c.ProvinciaFatturazione||''}</td>
-      <td><span class="badge ${c.StatoCliente==='Attivo'?'badge-ok':'badge-warn'}">${c.StatoCliente||'-'}</span></td>
-      <td>${c.TitolareAccount||''}</td>
-      <td>${hi(c.QtyAstronaut||0)}</td>
-      <td>${hi(c.QtyJuno||0)}</td>
-      <td>${hi(c.QtyVector||0)}</td>
-      <td>${hi(disc)}</td>
-      <td>${hi(altri)}</td>
-      <td><strong>${tot}</strong></td>
-      <td><button class="btn btn-xs" onclick="event.stopPropagation();openAnagDetail('${c.CodiceM3}')">👁️</button></td>
-    </tr>`;
+      <td><span class="badge ${c.StatoCliente==='Attivo'?'badge-ok':'badge-warn'}" style="font-size:.7rem">${c.StatoCliente||'-'}</span></td>
+      <td style="font-size:.8rem">${c.TitolareAccount||''}</td>
+      <td>${hi(c.QtyAstronaut||0)}</td><td>${hi(c.QtyJuno||0)}</td><td>${hi(c.QtyVector||0)}</td>
+      <td>${hi(disc)}</td><td>${hi(altri)}</td>
+      <td><strong>${tot||'-'}</strong></td>
+      <td>
+        <button class="btn btn-xs" onclick="event.stopPropagation();openAnagEdit('${m3}')" title="Modifica">✏️</button>
+        ${c.Lat?`<button class="btn btn-xs" onclick="event.stopPropagation();openAnagGeo('${m3}')" title="Mappa">📍</button>`:''}
+      </td>
+    </tr>
+    <tr id="anagExpand_${m3}" style="display:none"><td colspan="13" style="padding:0;background:#f8f9fa">
+      <div id="anagDetail_${m3}" style="padding:12px 16px"></div>
+    </td></tr>`;
   }).join('');
 }
 
-async function openAnagDetail(m3){
-  $('anagListView').style.display='none';
-  $('anagDetailView').style.display='block';
+async function toggleAnagTree(m3){
+  const expandRow=document.getElementById('anagExpand_'+m3);
+  const arrow=document.getElementById('anagArrow_'+m3);
+  if(!expandRow)return;
+  if(expandRow.style.display!=='none'){
+    expandRow.style.display='none';arrow.textContent='▶';return;
+  }
+  expandRow.style.display='';arrow.textContent='▼';
+  const detailDiv=document.getElementById('anagDetail_'+m3);
+  if(detailDiv.innerHTML)return; // already loaded
+
+  detailDiv.innerHTML='<div class="loading"><div class="spin"></div></div>';
   try{
-    const cliente=await apiCall('getAnagraficaCliente',{codice_m3:m3},'POST');
-    ANAG_CURRENT=cliente;
-    $('anagClienteNome').textContent=cliente.NomeAccount||'Cliente';
-    $('anagClienteInfo').textContent=[cliente.NomeInterno,`M3: ${cliente.CodiceM3}`,`P.IVA: ${cliente.PartitaIva||'-'}`].filter(Boolean).join(' · ');
+    const c=ANAG_CLIENTI.find(x=>x.CodiceM3===m3);
+    const assets=ANAG_ASSETS_CACHE[m3]||(ANAG_ASSETS_CACHE[m3]=await apiCall('getAnagraficaAssets',{codice_m3:m3},'POST'));
 
-    // Badges
-    $('anagClienteBadges').innerHTML=`
-      <span class="badge ${cliente.StatoCliente==='Attivo'?'badge-ok':'badge-warn'}">${cliente.StatoCliente||'-'}</span>
-      ${cliente.TipoCliente?'<span class="badge">'+cliente.TipoCliente+'</span>':''}
-      ${cliente.ContrattoAssistenza?'<span class="badge badge-ok">📝 Contratto</span>':''}
-    `;
+    // Client detail card
+    let html=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;font-size:.8125rem">
+      <div><b>Indirizzo</b><br>${c.ViaFatturazione||'-'}<br>${c.CapFatturazione||''} ${c.CittaFatturazione||''} (${c.ProvinciaFatturazione||''})</div>
+      <div><b>Contatti</b><br>📞 ${c.Telefono||'-'}<br>📧 ${c.Email||'-'}</div>
+      <div><b>Codici</b><br>M3: ${c.CodiceM3||'-'} | P.IVA: ${c.PartitaIva||'-'}<br>DANEA: ${c.CodiceDanea||'-'} | Account: ${c.AccountNumber||'-'}${c.Lat?`<br>📍 ${c.Lat}, ${c.Lng}`:''}</div>
+    </div>`;
 
-    // Details grid
-    $('anagClienteDetails').innerHTML=`
-      <div><small style="color:var(--muted)">Indirizzo</small><br>${cliente.ViaFatturazione||''}<br>${cliente.CapFatturazione||''} ${cliente.CittaFatturazione||''} (${cliente.ProvinciaFatturazione||''})</div>
-      <div><small style="color:var(--muted)">Contatti</small><br>📞 ${cliente.Telefono||'-'}<br>📧 ${cliente.Email||'-'}</div>
-      <div><small style="color:var(--muted)">Responsabile</small><br>${cliente.TitolareAccount||'-'}</div>
-      <div><small style="color:var(--muted)">Codici</small><br>Account: ${cliente.AccountNumber||'-'}<br>DANEA: ${cliente.CodiceDanea||'-'}<br>Service Area: ${cliente.ServiceArea||'-'}</div>
-      ${cliente.Lat?'<div><small style="color:var(--muted)">GPS</small><br>'+cliente.Lat+', '+cliente.Lng+'</div>':''}
-    `;
-
-    // Product quantities
-    const prods=[
-      ['Astronaut',cliente.QtyAstronaut],['A5',cliente.QtyAstronautA5],['A4',cliente.QtyAstronautA4],['A3',cliente.QtyAstronautA3],['A2',cliente.QtyAstronautA2],
-      ['Juno',cliente.QtyJuno],['Vector',cliente.QtyVector],['Discovery',cliente.QtyDiscoverySsw],['Collector',cliente.QtyCollectorC2],
-      ['Discovery Coll.',cliente.QtyDiscoveryCollector],['Calm',cliente.QtyCalm],['Cosmix',cliente.QtyCosmix],
-      ['Nautilus',cliente.QtyNautilus],['Luna',cliente.QtyLuna],['Shuttle',cliente.QtyShuttle],['CRS',cliente.QtyCrs],['LD Reader',cliente.QtyLdReader]
+    // Product badges
+    const prods=[['Astronaut',c.QtyAstronaut],['A5',c.QtyAstronautA5],['A4',c.QtyAstronautA4],['A3',c.QtyAstronautA3],['A2',c.QtyAstronautA2],
+      ['Juno',c.QtyJuno],['Vector',c.QtyVector],['Discovery S/SW',c.QtyDiscoverySsw],['Collector C2',c.QtyCollectorC2],
+      ['Disc.Collector',c.QtyDiscoveryCollector],['Calm',c.QtyCalm],['Cosmix',c.QtyCosmix],
+      ['Nautilus',c.QtyNautilus],['Luna',c.QtyLuna],['Shuttle',c.QtyShuttle],['CRS',c.QtyCrs],['LD Reader',c.QtyLdReader]
     ].filter(p=>p[1]>0);
-    $('anagClienteQty').innerHTML=prods.length?
-      '<h4 style="margin:0 0 8px">Prodotti installati</h4><div style="display:flex;gap:8px;flex-wrap:wrap">'+prods.map(p=>`<span class="badge" style="font-size:.8125rem">${p[0]}: <strong>${p[1]}</strong></span>`).join('')+'</div>':'';
+    if(prods.length) html+=`<div style="margin-bottom:10px">${prods.map(p=>`<span class="badge" style="font-size:.75rem;margin:2px">${p[0]}: <b>${p[1]}</b></span>`).join('')}</div>`;
 
-    // Load assets
-    const assets=await apiCall('getAnagraficaAssets',{codice_m3:m3},'POST');
-    renderAnagAssets(assets||[]);
-  }catch(e){toast('Errore: '+e.message,'err')}
+    // Assets table
+    if(assets.length){
+      const groups={};assets.forEach(a=>{const g=a.GruppoAttrezzatura||'Altro';groups[g]=(groups[g]||0)+1});
+      html+=`<div style="margin-bottom:6px;font-size:.75rem;color:var(--muted)">
+        <b>${assets.length} assets</b>: ${Object.entries(groups).map(([g,n])=>g+' ('+n+')').join(', ')}
+      </div>`;
+      html+=`<table class="tbl" style="font-size:.8rem"><thead><tr>
+        <th>#</th><th>Gruppo</th><th>Modello</th><th>N. Serie</th><th>Data Install.</th><th>Descrizione</th><th>RH/LH</th><th>Note</th>
+      </tr></thead><tbody>`;
+      assets.forEach((a,i)=>{
+        html+=`<tr>
+          <td>${i+1}</td>
+          <td><strong>${a.GruppoAttrezzatura||'-'}</strong></td>
+          <td>${a.Modello||'-'}</td>
+          <td><code style="font-size:.75rem">${a.NumeroSerie||'-'}</code></td>
+          <td>${a.DataInstallazione||'-'}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(a.Descrizione||'').replace(/"/g,'&quot;')}">${a.Descrizione||''}</td>
+          <td>${a.RhLh||''}</td>
+          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(a.Note||'').replace(/"/g,'&quot;')}">${a.Note||''}</td>
+        </tr>`;
+      });
+      html+=`</tbody></table>`;
+    }else{
+      html+=`<p style="color:var(--muted);font-size:.8125rem">Nessun asset collegato (codice M3: ${m3})</p>`;
+    }
+    detailDiv.innerHTML=html;
+  }catch(e){detailDiv.innerHTML=`<p style="color:var(--err)">Errore: ${e.message}</p>`}
 }
 
-function renderAnagAssets(assets){
-  // Summary by group
-  const groups={};
-  assets.forEach(a=>{const g=a.GruppoAttrezzatura||'Altro';groups[g]=(groups[g]||0)+1});
-  $('anagAssetsSummary').innerHTML=Object.entries(groups).map(([g,n])=>`<span class="badge">${g}: <strong>${n}</strong></span>`).join('');
+// MAP VIEW
+var anagMapInstance=null;
+function renderAnagMap(){
+  $('anagTreeWrap').style.display='none';
+  $('anagMapWrap').style.display='block';
+  const geoClients=ANAG_FILTERED.filter(c=>c.Lat&&c.Lng);
+  if(!geoClients.length){$('anagMapWrap').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted)">Nessun cliente georeferenziato</div>';return}
 
-  const tb=$('anagAssetsBody');
-  if(!assets.length){tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--muted)">Nessun asset trovato</td></tr>';return}
-  tb.innerHTML=assets.map((a,i)=>`<tr>
-    <td>${i+1}</td>
-    <td><strong>${a.GruppoAttrezzatura||'-'}</strong></td>
-    <td>${a.Modello||'-'}</td>
-    <td><code>${a.NumeroSerie||'-'}</code></td>
-    <td>${a.DataInstallazione||'-'}</td>
-    <td><span class="badge ${a.Status==='Attivo'?'badge-ok':'badge-warn'}">${a.Status||'-'}</span></td>
-    <td>${a.RhLh||''}</td>
-    <td>${a.Note||''}</td>
-  </tr>`).join('');
+  // Load Leaflet if needed
+  if(!window.L){
+    const css=document.createElement('link');css.rel='stylesheet';css.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(css);
+    const js=document.createElement('script');js.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(js);
+    js.onload=()=>buildAnagMap(geoClients);
+  }else{buildAnagMap(geoClients)}
 }
 
-function closeAnagDetail(){
-  $('anagDetailView').style.display='none';
-  $('anagListView').style.display='block';
-  ANAG_CURRENT=null;
+function buildAnagMap(clients){
+  if(anagMapInstance){anagMapInstance.remove();anagMapInstance=null}
+  const wrap=$('anagMapWrap');wrap.innerHTML='';
+  anagMapInstance=L.map(wrap).setView([44.5,10.8],9);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'OSM'}).addTo(anagMapInstance);
+  const bounds=[];
+  clients.forEach(c=>{
+    const ll=[c.Lat,c.Lng];bounds.push(ll);
+    const tot=(c.QtyAstronaut||0)+(c.QtyJuno||0)+(c.QtyVector||0);
+    const color=c.StatoCliente==='Attivo'?'#22c55e':'#f59e0b';
+    const marker=L.circleMarker(ll,{radius:Math.max(6,Math.min(tot*2,16)),color,fillColor:color,fillOpacity:.7,weight:1}).addTo(anagMapInstance);
+    marker.bindPopup(`<b>${c.NomeAccount}</b><br>${c.NomeInterno||''}<br>${c.CittaFatturazione||''} (${c.ProvinciaFatturazione||''})<br>🤖${c.QtyAstronaut||0} 🔄${c.QtyJuno||0} 🍽️${c.QtyVector||0}<br><a href="#" onclick="anagView='list';renderAnagClients(ANAG_FILTERED);setTimeout(()=>toggleAnagTree('${c.CodiceM3}'),200);return false">Apri dettaglio →</a>`);
+  });
+  if(bounds.length)anagMapInstance.fitBounds(bounds,{padding:[30,30]});
+  setTimeout(()=>anagMapInstance.invalidateSize(),200);
+}
+
+function openAnagGeo(m3){
+  const c=ANAG_CLIENTI.find(x=>x.CodiceM3===m3);
+  if(!c||!c.Lat)return;
+  window.open(`https://www.google.com/maps?q=${c.Lat},${c.Lng}`,'_blank');
+}
+
+function openAnagEdit(m3){
+  // TODO: modal di edit per il cliente
+  toast('Funzione modifica in arrivo','info');
 }
 
 // Import XLSX via browser (SheetJS)
