@@ -540,6 +540,16 @@ async function handlePost(action, body, env) {
       const result = await sb(env, 'urgenze', 'POST', row);
       await wlog('urgenza', id, 'created', body.operatoreId || body.userId);
       await sendTelegramNotification(env, 'nuova_urgenza', row);
+      // Email admin per nuova urgenza
+      const cliNomeUrg = await getEntityName(env, 'clienti', row.cliente_id).catch(()=>'');
+      emailAdmins(env, `🚨 Nuova Urgenza ${id}`,
+        `<h3 style="color:#DC2626">🚨 Nuova Urgenza</h3>
+        <p><strong>ID:</strong> ${id}</p>
+        <p><strong>Cliente:</strong> ${cliNomeUrg}</p>
+        <p><strong>Problema:</strong> ${(row.problema || '').substring(0, 200)}</p>
+        <p><strong>SLA:</strong> ${slaScadenza ? slaScadenza.substring(0,16).replace('T',' ') : 'N/D'}</p>
+        <p style="margin-top:16px"><a href="https://fieldforcemrser2026.github.io/syntoniqa/admin_v1.html" style="background:#C30A14;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">Vai alla Dashboard</a></p>`
+      ).catch(()=>{});
       return ok({ urgenza: pascalizeRecord(result[0]) });
     }
 
@@ -674,8 +684,28 @@ async function handlePost(action, body, env) {
 
     case 'updateOrdineStato': {
       const { id, stato, operatoreId, userId: _u2, ...rest } = body;
-      await sb(env, `ordini?id=eq.${id}`, 'PATCH', { stato, ...rest, updated_at: new Date().toISOString() });
+      // Salva timestamp specifici per ogni stato
+      const datePatch = {};
+      if (stato === 'preso_in_carico') datePatch.data_presa_carico = new Date().toISOString();
+      if (stato === 'ordinato') datePatch.data_ordine = new Date().toISOString();
+      if (stato === 'arrivato') datePatch.data_arrivo = new Date().toISOString();
+      await sb(env, `ordini?id=eq.${id}`, 'PATCH', { stato, ...rest, ...datePatch, updated_at: new Date().toISOString() });
       await wlog('ordine', id, `stato_${stato}`, operatoreId);
+      // Notifica tecnico che ha richiesto l'ordine
+      try {
+        const ord = await sb(env, 'ordini', 'GET', null, `?id=eq.${id}&select=tecnico_id,codice,descrizione`).catch(()=>[]);
+        if (ord?.[0]?.tecnico_id) {
+          const labels = { preso_in_carico: '👋 Preso in carico', ordinato: '📦 Ordinato al fornitore', in_arrivo: '🚚 In arrivo', arrivato: '✅ Arrivato in magazzino' };
+          await sb(env, 'notifiche', 'POST', {
+            id: 'NOT_ORD_' + Date.now(), tipo: 'ordine',
+            oggetto: labels[stato] || `Ordine ${stato}`,
+            testo: `Il tuo ordine ${ord[0].codice || id} (${(ord[0].descrizione || '').substring(0, 50)}) è stato aggiornato: ${labels[stato] || stato}`,
+            destinatario_id: ord[0].tecnico_id, stato: 'inviata', priorita: 'normale',
+            riferimento_id: id, riferimento_tipo: 'ordine',
+            tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
+          }).catch(()=>{});
+        }
+      } catch(e){}
       return ok();
     }
 
@@ -2430,6 +2460,41 @@ async function sendWebPush(env, subscription, payload) {
   }
 }
 
+// ============ EMAIL UTILITY ============
+async function sendEmailAlert(env, to, subject, bodyHtml) {
+  if (!env.RESEND_API_KEY || !to) return null;
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'Syntoniqa <noreply@syntoniqa.app>',
+        to: Array.isArray(to) ? to : [to],
+        subject,
+        html: `<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+          <div style="background:#050C14;color:#fff;padding:16px 20px;border-radius:12px 12px 0 0;text-align:center">
+            <h2 style="margin:0;font-size:1.1rem">🔧 Syntoniqa FSM</h2>
+          </div>
+          <div style="background:#fff;padding:20px;border:1px solid #E5E7EB;border-radius:0 0 12px 12px">
+            ${bodyHtml}
+          </div>
+          <p style="text-align:center;font-size:.75rem;color:#9CA3AF;margin-top:12px">MRS Lely Center Emilia Romagna</p>
+        </div>`
+      })
+    });
+    return await res.json();
+  } catch(e) { console.error('Email error:', e.message); return null; }
+}
+
+// Send email to all admins
+async function emailAdmins(env, subject, bodyHtml) {
+  try {
+    const admins = await sb(env, 'utenti', 'GET', null, '?ruolo=eq.admin&attivo=eq.true&select=email').catch(()=>[]);
+    const emails = (admins||[]).map(a=>a.email).filter(Boolean);
+    if (emails.length) await sendEmailAlert(env, emails, subject, bodyHtml);
+  } catch(e){}
+}
+
 async function sendTelegram(env, chatId, text) {
   if (!chatId) return null;
   let token = env.TELEGRAM_BOT_TOKEN || '';
@@ -2630,6 +2695,18 @@ async function checkSLAUrgenze(env) {
             testo: `${emoji} ${label}: Urgenza ${u.id}\n🏢 ${cliNome}\n📝 ${(u.problema || '').substring(0, 60)}\n⏱️ Scadenza: ${u.sla_scadenza?.substring(0, 16)?.replace('T', ' ')}`,
             tipo: 'testo', created_at: new Date().toISOString()
           }).catch(() => {});
+          // Email admin se breach
+          if (newStatus === 'breach') {
+            await emailAdmins(env, `🔴 SLA SCADUTO - Urgenza ${u.id}`,
+              `<h3 style="color:#DC2626">${emoji} ${label}</h3>
+              <p><strong>Urgenza:</strong> ${u.id}</p>
+              <p><strong>Cliente:</strong> ${cliNome}</p>
+              <p><strong>Problema:</strong> ${(u.problema || '').substring(0, 120)}</p>
+              <p><strong>Scadenza SLA:</strong> ${u.sla_scadenza?.substring(0, 16)?.replace('T', ' ')}</p>
+              <p><strong>Tecnico:</strong> ${u.tecnico_assegnato || 'Non assegnato'}</p>
+              <p style="margin-top:16px"><a href="https://fieldforcemrser2026.github.io/syntoniqa/admin_v1.html" style="background:#DC2626;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">Apri Admin Dashboard</a></p>`
+            );
+          }
           // Notifica tecnico assegnato
           if (u.tecnico_assegnato) {
             const notifId = 'NOT_SLA_' + u.id + '_' + newStatus + '_' + now.toISOString().split('T')[0];

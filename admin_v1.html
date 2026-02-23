@@ -1851,8 +1851,8 @@ function renderDashboard(){
   const d=today();
   const oggi=piano.filter(p=>p.Data===d);
   const comp=piano.filter(p=>p.Stato==='completato').length;
-  const urgA=urg.filter(u=>u.Stato!=='risolta').length;
-  const urgSLA=urg.filter(u=>u.SLAStatus==='breach').length;
+  const urgA=urg.filter(u=>u.Stato!=='risolta'&&u.Stato!=='chiusa').length;
+  const urgSLA=urg.filter(u=>u.SLAStatus==='breach'&&u.Stato!=='risolta'&&u.Stato!=='chiusa').length;
   // Mezzi "attivi oggi": guarda l'automezzo assegnato negli interventi di oggi (pianificato/in_corso)
   const oggiConAuto=oggi.filter(p=>(p.Stato==='pianificato'||p.Stato==='in_corso')&&p.AutomezzoID);
   const autoOggiIds=[...new Set(oggiConAuto.map(p=>p.AutomezzoID))];
@@ -1867,13 +1867,16 @@ function renderDashboard(){
   const tecs=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Attivo&&u.Ruolo==='tecnico').length;
   const reps=(DATA.reperibilita||[]).filter(r=>!r.Obsoleto&&r.Stato==='attiva'&&r.DataInizio<=d&&r.DataFine>=d);
 
+  const oggiComp=oggi.filter(p=>p.Stato==='completato').length;
+  const oggiCorso=oggi.filter(p=>p.Stato==='in_corso').length;
+  const pctOggi=oggi.length>0?Math.round(oggiComp/oggi.length*100):0;
   $('kpiDash').innerHTML=`
-    <div class="kpi blue"><div class="kpi-val">${oggi.length}</div><div class="kpi-lbl">📋 Interventi Oggi</div></div>
-    <div class="kpi green"><div class="kpi-val">${comp}</div><div class="kpi-lbl">✅ Completati (tot)</div></div>
-    <div class="kpi ${urgA>0?'red':'green'}"><div class="kpi-val">${urgA}</div><div class="kpi-lbl">🚨 Urgenze Aperte</div>${urgSLA>0?`<div class="kpi-sub">⚠️ ${urgSLA} SLA breach</div>`:''}</div>
+    <div class="kpi blue"><div class="kpi-val">${oggi.length}</div><div class="kpi-lbl">📋 Interventi Oggi</div><div class="kpi-sub">${oggiComp}✅ ${oggiCorso}⚡ ${oggi.length-oggiComp-oggiCorso}⏳</div></div>
+    <div class="kpi ${pctOggi>=80?'green':pctOggi>=50?'yellow':'red'}"><div class="kpi-val">${pctOggi}%</div><div class="kpi-lbl">📊 Completamento Oggi</div><div class="kpi-sub">${oggiComp}/${oggi.length} fatti</div></div>
+    <div class="kpi ${urgA>0?'red':'green'}"><div class="kpi-val">${urgA}</div><div class="kpi-lbl">🚨 Urgenze Aperte</div>${urgSLA>0?`<div class="kpi-sub" style="color:var(--err)">⚠️ ${urgSLA} SLA breach</div>`:''}</div>
     <div class="kpi yellow"><div class="kpi-val">${ord.filter(o=>o.Stato!=='arrivato').length}</div><div class="kpi-lbl">📦 Ordini in Attesa</div></div>
-    <div class="kpi blue"><div class="kpi-val">${automezziAtt}/${automezziTot}</div><div class="kpi-lbl">🚐 Automezzi Attivi</div></div>
-    <div class="kpi purple"><div class="kpi-val">${tecs}</div><div class="kpi-lbl">👥 Tecnici Attivi</div></div>
+    <div class="kpi blue"><div class="kpi-val">${automezziAtt}/${automezziTot}</div><div class="kpi-lbl">🚐 Mezzi Attivi</div></div>
+    <div class="kpi purple"><div class="kpi-val">${tecs}</div><div class="kpi-lbl">👥 Tecnici</div>${reps.length>0?`<div class="kpi-sub">📞 ${reps.length} in reperibilità</div>`:''}</div>
   `;
 
   // Tabella oggi
@@ -1888,14 +1891,14 @@ function renderDashboard(){
   </tr>`).join(''):'<tr><td colspan="7" class="empty"><p>Nessun intervento oggi</p></td></tr>';
 
   // Urgenze dash
-  const urgOpen=urg.filter(u=>u.Stato!=='risolta').slice(0,5);
+  const urgOpen=urg.filter(u=>u.Stato!=='risolta'&&u.Stato!=='chiusa').slice(0,5);
   $('tblUrgDash').innerHTML=urgOpen.length?urgOpen.map(u=>`<tr>
     <td><span class="tag" style="background:${getColor(DATA.priorita||[],u.PrioritaID)}20;color:${getColor(DATA.priorita||[],u.PrioritaID)}">${getName(DATA.priorita||[],u.PrioritaID)}</span></td>
     <td>${getName(DATA.clienti||[],u.ClienteID)}</td>
     <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.Problema||'—'}</td>
     <td>${slaTag(u.SLAStatus)}</td>
     <td>${statusTag(u.Stato)}</td>
-    <td>${u.Stato==='aperta'?`<button class="btn btn-primary btn-xs" onclick="openAssegna('${u.ID}')">👤</button> `:''}${u.Stato==='assegnata'?`<button class="btn btn-warn btn-xs" onclick="urgAction('${u.ID}','startUrgenza')">⚡</button> `:''}<button class="btn btn-ghost btn-xs" onclick="showDetail('urgenza','${u.ID}')">👁️</button></td>
+    <td>${u.Stato==='aperta'?`<button class="btn btn-primary btn-xs" onclick="openAssegna('${u.ID}')">👤</button> `:''}${u.Stato==='assegnata'||u.Stato==='schedulata'?`<button class="btn btn-warn btn-xs" onclick="urgAction('${u.ID}','startUrgenza')">⚡</button> `:''}${u.Stato==='in_corso'?`<button class="btn btn-ok btn-xs" onclick="urgAction('${u.ID}','resolveUrgenza')">✅</button> `:''}<button class="btn btn-ghost btn-xs" onclick="showDetail('urgenza','${u.ID}')">👁️</button></td>
   </tr>`).join(''):'<tr><td colspan="6" class="empty"><p>Nessuna urgenza aperta 🎉</p></td></tr>';
 
   // Ordini dash
