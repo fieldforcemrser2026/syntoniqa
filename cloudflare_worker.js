@@ -515,7 +515,7 @@ async function handlePost(action, body, env) {
       const row = { id };
       for (const k of urgWritable) { if (fields[k] !== undefined) row[k] = fields[k]; }
       row.tenant_id = row.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
-      row.stato = 'aperta'; row.sla_scadenza = slaScadenza; row.sla_status = 'ok'; row.data_segnalazione = new Date().toISOString();
+      row.stato = row.stato || 'aperta'; row.sla_scadenza = slaScadenza; row.sla_status = 'ok'; row.data_segnalazione = row.data_segnalazione || new Date().toISOString();
       const result = await sb(env, 'urgenze', 'POST', row);
       await wlog('urgenza', id, 'created', body.operatoreId || body.userId);
       await sendTelegramNotification(env, 'nuova_urgenza', row);
@@ -523,16 +523,23 @@ async function handlePost(action, body, env) {
     }
 
     case 'assignUrgenza': {
-      const { id, tecnicoAssegnato, TecnicoID, tecniciIds, TecniciIDs, operatoreId, userId } = body;
-      const tecId = tecnicoAssegnato || TecnicoID;
-      const tecIds = tecniciIds || TecniciIDs;
-      await sb(env, `urgenze?id=eq.${id}`, 'PATCH', {
+      const { id, operatoreId, userId } = body;
+      const tecId = body.tecnicoAssegnato || body.tecnico_assegnato || body.TecnicoID;
+      const tecIds = body.tecniciIds || body.tecnici_ids || body.TecniciIDs;
+      const autoId = body.automezzoId || body.automezzo_id || body.AutomezzoID || null;
+      const dataPrev = body.dataPrevista || body.data_prevista || null;
+      const oraPrev = body.oraPrevista || body.ora_prevista || null;
+      const patch = {
         tecnico_assegnato: tecId,
         tecnici_ids: tecIds,
+        automezzo_id: autoId,
         stato: 'assegnata',
         data_assegnazione: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      });
+      };
+      if (dataPrev) patch.data_prevista = dataPrev;
+      if (oraPrev) patch.ora_prevista = oraPrev;
+      await sb(env, `urgenze?id=eq.${id}`, 'PATCH', patch);
       await wlog('urgenza', id, 'assigned', operatoreId || userId, `a ${tecId}`);
       await sendTelegramNotification(env, 'urgenza_assegnata', { id, tecnicoAssegnato: tecId });
       return ok();

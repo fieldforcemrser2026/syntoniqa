@@ -517,7 +517,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card-head">
 <h3>🚨 Gestione Urgenze</h3>
 <div class="btn-group">
-<select id="filtUrgStato" onchange="renderUrgenze()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti</option><option value="aperta">Aperte</option><option value="assegnata">Assegnate</option><option value="schedulata">Schedulate</option><option value="in_corso">In Corso</option><option value="risolta">Risolte</option></select>
+<select id="filtUrgStato" onchange="renderUrgenze()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti</option><option value="aperta">🔴 Aperte (da assegnare)</option><option value="assegnata">👤 Assegnate</option><option value="schedulata">📅 Schedulate</option><option value="in_corso">⚡ In Corso</option><option value="risolta">✅ Risolte</option></select>
 <button class="btn btn-err" onclick="openModal('modalUrgenza')" style="font-size:.9rem;padding:10px 20px;animation:pulse 2s infinite">🚨 + NUOVA URGENZA</button>
 </div>
 </div>
@@ -1895,7 +1895,7 @@ function renderDashboard(){
     <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.Problema||'—'}</td>
     <td>${slaTag(u.SLAStatus)}</td>
     <td>${statusTag(u.Stato)}</td>
-    <td><button class="btn btn-ghost btn-xs" onclick="showDetail('urgenza','${u.ID}')">👁️</button></td>
+    <td>${u.Stato==='aperta'?`<button class="btn btn-primary btn-xs" onclick="openAssegna('${u.ID}')">👤</button> `:''}${u.Stato==='assegnata'?`<button class="btn btn-warn btn-xs" onclick="urgAction('${u.ID}','startUrgenza')">⚡</button> `:''}<button class="btn btn-ghost btn-xs" onclick="showDetail('urgenza','${u.ID}')">👁️</button></td>
   </tr>`).join(''):'<tr><td colspan="6" class="empty"><p>Nessuna urgenza aperta 🎉</p></td></tr>';
 
   // Ordini dash
@@ -1962,7 +1962,7 @@ function renderUrgenze(){
     <td style="min-width:120px">${slaTag(u.SLAStatus)}</td>
     <td>${statusTag(u.Stato)}</td>
     <td>${fmtDateTime(u.DataSegnalazione)}</td>
-    <td class="actions-cell">${u.Stato==='aperta'?`<button class="btn btn-primary btn-xs" onclick="openAssegna('${u.ID}')">👤 Assegna</button>`:u.Stato==='schedulata'?`<button class="btn btn-warn btn-xs" onclick="urgAction('${u.ID}','startUrgenza')">⚡ Inizia</button>`:u.Stato==='in_corso'?`<button class="btn btn-ok btn-xs" onclick="urgAction('${u.ID}','resolveUrgenza')">✅ Risolvi</button>`:''} <button class="btn btn-ghost btn-xs" onclick="showDetail('urgenza','${u.ID}')">👁️</button></td>
+    <td class="actions-cell">${u.Stato==='aperta'?`<button class="btn btn-primary btn-xs" onclick="openAssegna('${u.ID}')">✅ Approva+Assegna</button>`:u.Stato==='assegnata'||u.Stato==='schedulata'?`<button class="btn btn-warn btn-xs" onclick="urgAction('${u.ID}','startUrgenza')">⚡ Inizia</button>`:u.Stato==='in_corso'?`<button class="btn btn-ok btn-xs" onclick="urgAction('${u.ID}','resolveUrgenza')">✅ Risolvi</button>`:''} <button class="btn btn-ghost btn-xs" onclick="showDetail('urgenza','${u.ID}')">👁️</button></td>
   </tr>`).join(''):'<tr><td colspan="9" class="empty"><p>Nessuna urgenza</p></td></tr>';
 }
 
@@ -3715,7 +3715,7 @@ async function saveUrgenza(){
   try{
     const data={ClienteID:$('muCliente').value,MacchinaID:$('muMacchina').value,
       Problema:$('muProblema').value,PrioritaID:$('muPriorita').value,Note:$('muNote').value,
-      Stato:'in_attesa',SegnalatoDa:USER?.ID,DataSegnalazione:new Date().toISOString()};
+      Stato:'aperta',SegnalatoDa:USER?.ID,DataSegnalazione:new Date().toISOString()};
     if(!data.ClienteID||!data.Problema){toast('Compila Cliente e Problema','warn');return}
     await apiCall('createUrgenza',{data},'POST');
 
@@ -3750,11 +3750,13 @@ async function saveAssegna(){
     const urgId=$('maUrgId').value;
     const tecnicoAssegnato=$('maTecnico').value;
     const automezzoId=$('maAutomezzo').value;
-    const dataPrevista=$('maData').value;
-    const oraPrevista=$('maOra').value;
+    const dataPrevista=$('maData').value||today();
+    const oraPrevista=$('maOra').value||'08:00';
     const creaIntervento=$('maCreaInt').checked;
     if(!tecnicoAssegnato){toast('Seleziona un tecnico','warn');return}
     const urg=(DATA.urgenze||[]).find(u=>u.ID===urgId);
+
+    // 1. Assegna urgenza (cambia stato da in_attesa/aperta → assegnata)
     await apiCall('assignUrgenza',{
       id:urgId,
       tecnicoAssegnato,
@@ -3762,12 +3764,47 @@ async function saveAssegna(){
       automezzoId,
       dataPrevista,
       oraPrevista,
-      creaIntervento,
-      clienteId:urg?.ClienteID,
-      macchinaId:urg?.MacchinaID,
       operatoreId:USER?.ID
     },'POST');
-    toast('Urgenza assegnata','ok');closeModal('modalAssegna');await refreshData();
+
+    // 2. Se checkbox attivo → crea intervento nel piano
+    let interventoId=null;
+    if(creaIntervento){
+      try{
+        const priId=urg?.PrioritaID||null;
+        const priObj=(DATA.priorita||[]).find(p=>p.ID===priId);
+        const priNome=priObj?.Nome||'Urgenza';
+        const durata=priObj?.Livello<=2?4:2;
+        const result=await apiCall('createPiano',{data:{
+          TecnicoID:tecnicoAssegnato,
+          ClienteID:urg?.ClienteID||null,
+          MacchinaID:urg?.MacchinaID||null,
+          PrioritaID:priId,
+          AutomezzoID:automezzoId||null,
+          Data:dataPrevista,
+          OraInizio:oraPrevista,
+          OraFine:calcOraFine(oraPrevista,durata),
+          DurataOre:durata,
+          Note:'[DA URGENZA '+urgId+']\n🚨 Priorità: '+priNome+'\n'+(urg?.Problema||''),
+          Stato:'pianificato'
+        }},'POST');
+        interventoId=result?.intervento?.ID||result?.id||null;
+        // Aggiorna urgenza con riferimento all'intervento
+        if(interventoId){
+          try{await apiCall('updateUrgenza',{id:urgId,InterventoID:interventoId},'POST')}catch(e){}
+        }
+      }catch(e){console.warn('Piano da urgenza:',e)}
+    }
+
+    // 3. Notifica tecnico assegnato
+    const tecNome=getName(DATA.utenti||[],tecnicoAssegnato);
+    const cliNome=getName(DATA.clienti||[],urg?.ClienteID);
+    const adminNome=((USER?.Nome||'')+' '+(USER?.Cognome||'')).trim();
+    try{await apiCall('createNotifica',{data:{Tipo:'urgenza_assegnata',Oggetto:'🚨 Urgenza assegnata a te',Testo:adminNome+' ti ha assegnato un\'urgenza per '+cliNome+': '+(urg?.Problema||'')+'\n📅 '+fmtDate(dataPrevista)+' '+oraPrevista,DestinatarioID:tecnicoAssegnato,Priorita:'alta'}},'POST')}catch(e){}
+    try{await apiCall('sendChatMessage',{canale_id:'CH_ADMIN',testo:'✅ URGENZA '+urgId+' assegnata a '+tecNome+' per '+cliNome+'\n📅 '+fmtDate(dataPrevista)+' '+oraPrevista+(interventoId?'\n📋 Intervento creato: '+interventoId:''),userId:USER?.ID},'POST')}catch(e){}
+
+    toast('Urgenza assegnata'+(creaIntervento?' + intervento creato nel piano':'')+' a '+tecNome,'ok');
+    closeModal('modalAssegna');await refreshData();
   }catch(e){toast(e.message,'err')}
 }
 

@@ -1538,7 +1538,7 @@ async function saveUrgenzaTecnico(){
       PrioritaID:priId,
       Problema:problema,
       Note:$('suNoteUrg').value||null,
-      Stato:'in_attesa',
+      Stato:'aperta',
       TecnicoID:USER?.ID,
       SegnalatoDa:USER?.ID,
       DataSegnalazione:new Date().toISOString()
