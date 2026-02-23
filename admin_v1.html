@@ -132,6 +132,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 .login-box .loading{text-align:center;padding:40px;color:var(--gray)}
 .login-box .loading .spin{display:inline-block;width:32px;height:32px;border:3px solid var(--gray3);border-top-color:var(--c1);border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5)}50%{box-shadow:0 0 0 8px rgba(239,68,68,0)}}
 
 /* ===== FORM ELEMENTS ===== */
 .field{margin-bottom:16px}
@@ -517,7 +518,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <h3>🚨 Gestione Urgenze</h3>
 <div class="btn-group">
 <select id="filtUrgStato" onchange="renderUrgenze()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti</option><option value="aperta">Aperte</option><option value="assegnata">Assegnate</option><option value="schedulata">Schedulate</option><option value="in_corso">In Corso</option><option value="risolta">Risolte</option></select>
-<button class="btn btn-err btn-sm" onclick="openModal('modalUrgenza')">+ Nuova Urgenza</button>
+<button class="btn btn-err" onclick="openModal('modalUrgenza')" style="font-size:.9rem;padding:10px 20px;animation:pulse 2s infinite">🚨 + NUOVA URGENZA</button>
 </div>
 </div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
@@ -980,6 +981,28 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="field-row" style="margin-top:16px">
 <div class="field"><label>Test Chat ID</label><input type="text" id="testTgChatId" placeholder="123456789"></div>
 <div class="field" style="padding-top:24px"><button class="btn btn-outline" onclick="sendTestTelegram()">💬 Invia Test</button></div>
+</div>
+
+<hr style="margin:24px 0;border:none;border-top:1px solid var(--gray3)">
+<h4 style="margin-bottom:12px">📨 Invia Messaggio a Tecnici</h4>
+<div class="field"><label>Destinatari</label>
+<select id="tgMsgDest" style="width:100%"><option value="all">🔔 Tutti i tecnici con Chat ID</option></select>
+</div>
+<div class="field"><label>Messaggio</label><textarea id="tgMsgText" rows="3" placeholder="Scrivi il messaggio da inviare via Telegram..."></textarea></div>
+<div style="display:flex;gap:8px">
+<button class="btn btn-outline" onclick="sendTelegramBroadcast()">📨 Invia Messaggio</button>
+<button class="btn btn-outline" onclick="openTelegramBot()" id="btnOpenTgBot" style="display:none">🤖 Apri Bot Telegram</button>
+</div>
+
+<hr style="margin:24px 0;border:none;border-top:1px solid var(--gray3)">
+<h4 style="margin-bottom:12px">💬 Chat Gruppo Telegram</h4>
+<div style="padding:12px;background:var(--gray5);border-radius:var(--radius-sm);margin-bottom:12px">
+<p style="font-size:.8125rem;color:var(--gray);margin-bottom:8px">Per accedere alla chat del gruppo, inserisci l'ID o il link del gruppo nella configurazione, poi clicca il bottone per aprire Telegram.</p>
+<div class="field"><label>Link/ID Gruppo</label><input type="text" id="cfgTgGroup" placeholder="@gruppo o https://t.me/gruppo" style="width:100%"></div>
+<div style="display:flex;gap:8px;margin-top:8px">
+<button class="btn btn-primary btn-sm" onclick="saveTelegramGroup()">💾 Salva</button>
+<button class="btn btn-outline btn-sm" onclick="openTelegramGroup()">💬 Apri Gruppo Telegram</button>
+</div>
 </div>
 </div>
 </div>
@@ -1796,7 +1819,7 @@ function renderAll(){
   renderClienti();renderMacchine();renderAutomezzi();renderTecnici();
   renderSLA();renderAuditLog();renderPowerBI();renderConfig();renderPagellini();
   renderCal();renderDocumenti();renderChecklist();renderAllegati();
-  renderEmailConfig();renderTelegramConfig();loadBackupHistory();
+  renderEmailConfig();renderTelegramConfig();renderTelegramExtras();loadBackupHistory();
   updateBadges();
 }
 
@@ -4430,6 +4453,80 @@ async function sendTestTelegram(){
   const chatId=$('testTgChatId').value;
   if(!chatId){toast('Inserisci Chat ID','err');return}
   try{const r=await apiCall('testTelegram',{chatId},'POST');toast(r.sent?'Messaggio inviato!':'Errore: '+(r.reason||''),r.sent?'ok':'err')}catch(e){toast(e.message,'err')}
+}
+
+async function testTgForTec(tecId){
+  const chatId=document.getElementById('tgchat_'+tecId)?.value?.trim();
+  if(!chatId){toast('Inserisci Chat ID per questo tecnico','warn');return}
+  try{const r=await apiCall('testTelegram',{chatId},'POST');toast(r.sent?'Test OK!':'Errore: '+(r.reason||''),r.sent?'ok':'err')}catch(e){toast(e.message,'err')}
+}
+
+// Telegram Broadcast
+async function sendTelegramBroadcast(){
+  const text=$('tgMsgText')?.value?.trim();
+  if(!text){toast('Scrivi un messaggio','warn');return}
+  const dest=$('tgMsgDest')?.value||'all';
+  const config=DATA.config||{};
+  const token=config.telegram_bot_token;
+  if(!token){toast('Configura prima il Bot Token','err');return}
+  const tecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&u.Attivo!=='false'&&['tecnico','team_leader'].includes(u.Ruolo));
+  let sent=0,fail=0;
+  for(const t of tecnici){
+    if(dest!=='all'&&t.ID!==dest)continue;
+    const chatId=config['telegram_chatid_'+t.ID];
+    if(!chatId)continue;
+    try{
+      const r=await apiCall('testTelegram',{chatId,message:text},'POST');
+      if(r.sent)sent++;else fail++;
+    }catch(e){fail++}
+  }
+  toast('Inviato a '+sent+' tecnici'+(fail?' ('+fail+' errori)':''),'ok');
+  $('tgMsgText').value='';
+}
+
+// Telegram Group / Channel
+async function saveTelegramGroup(){
+  const group=$('cfgTgGroup')?.value?.trim();
+  if(!group){toast('Inserisci link/ID gruppo','warn');return}
+  try{
+    await apiCall('saveConfig',{key:'telegram_group_generale',value:group},'POST');
+    toast('Gruppo/Canale Telegram salvato!','ok');
+  }catch(e){toast(e.message,'err')}
+}
+
+function openTelegramGroup(){
+  const config=DATA.config||{};
+  let group=config.telegram_group_generale||$('cfgTgGroup')?.value?.trim()||'';
+  if(!group){toast('Configura prima il link del gruppo/canale','warn');return}
+  if(group.startsWith('@'))group='https://t.me/'+group.substring(1);
+  else if(!group.startsWith('http'))group='https://t.me/'+group;
+  window.open(group,'_blank');
+}
+
+function openTelegramBot(){
+  const config=DATA.config||{};
+  const token=config.telegram_bot_token||'';
+  if(!token){toast('Configura prima il Bot Token','warn');return}
+  // Extract bot username from token (not possible directly, but user can set it)
+  toast('Apri Telegram e cerca il tuo bot per avviare la chat','info');
+}
+
+// Populate Telegram dest select + group field on render
+function renderTelegramExtras(){
+  const config=DATA.config||{};
+  const sel=$('tgMsgDest');
+  if(sel){
+    sel.innerHTML='<option value="all">🔔 Tutti i tecnici con Chat ID</option>';
+    const tecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&u.Attivo!=='false'&&['tecnico','team_leader'].includes(u.Ruolo));
+    tecnici.forEach(t=>{
+      const chatId=config['telegram_chatid_'+t.ID];
+      if(chatId)sel.innerHTML+='<option value="'+t.ID+'">'+t.Nome+' '+t.Cognome+'</option>';
+    });
+  }
+  const grp=$('cfgTgGroup');
+  if(grp)grp.value=config.telegram_group_generale||'';
+  const btn=$('btnOpenTgBot');
+  if(btn&&config.telegram_bot_token)btn.style.display='';
 }
 
 // ============ FEATURE 34: BACKUP ============
