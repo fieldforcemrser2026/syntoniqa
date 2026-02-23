@@ -500,7 +500,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card-head">
 <h3>📋 Tutti gli Interventi</h3>
 <div class="btn-group">
-<select id="filtPianoStato" onchange="renderPiano()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti gli stati</option><option value="pianificato">Pianificato</option><option value="in_corso">In Corso</option><option value="completato">Completato</option></select>
+<select id="filtPianoStato" onchange="renderPiano()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti gli stati</option><option value="da_confermare">⏳ Da Confermare</option><option value="pianificato">Pianificato</option><option value="in_corso">In Corso</option><option value="completato">Completato</option></select>
 <select id="filtPianoTec" onchange="renderPiano()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti i tecnici</option></select>
 <button class="btn btn-primary btn-sm" onclick="openModal('modalPiano')">+ Nuovo Intervento</button>
 </div>
@@ -1928,7 +1928,8 @@ function renderPiano(){
   const stato=$('filtPianoStato')?.value||'';
   const tec=$('filtPianoTec')?.value||'';
   let items=(DATA.piano||[]).filter(p=>!p.Obsoleto);
-  if(stato)items=items.filter(p=>p.Stato===stato);
+  if(stato==='da_confermare')items=items.filter(p=>(p.Note||'').includes('DA CONFERMARE'));
+  else if(stato)items=items.filter(p=>p.Stato===stato);
   if(tec)items=items.filter(p=>p.TecnicoID===tec||(p.TecniciIDs||'').includes(tec));
   items.sort((a,b)=>(b.Data||'').localeCompare(a.Data||''));
   $('tblPiano').innerHTML=items.length?items.map(p=>`<tr>
@@ -1939,10 +1940,10 @@ function renderPiano(){
     <td>${getName(DATA.clienti||[],p.ClienteID)}</td>
     <td>${getName(DATA.macchine||[],p.MacchinaID,'Tipo')}</td>
     <td><span class="tag" style="background:${getColor(DATA.tipiIntervento||[],p.TipoInterventoID)}20;color:${getColor(DATA.tipiIntervento||[],p.TipoInterventoID)}">${getName(DATA.tipiIntervento||[],p.TipoInterventoID)}</span></td>
-    <td>${statusTag(p.Stato)}</td>
+    <td>${statusTag(p.Stato)}${(p.Note||'').includes('DA CONFERMARE')?'<br><span class="tag tag-warn" style="font-size:.6rem">⏳ DA CONFERMARE</span>':''}</td>
     <td>${p.KmPercorsi||'—'}</td>
     <td>${p.OreLavorate||'—'}</td>
-    <td><button class="btn btn-ghost btn-xs" onclick="showDetail('piano','${p.ID}')">👁️</button></td>
+    <td>${(p.Note||'').includes('DA CONFERMARE')?`<button class="btn btn-ok btn-xs" onclick="approvaInt('${p.ID}')">✅</button> <button class="btn btn-err btn-xs" onclick="rifiutaInt('${p.ID}')">❌</button> `:''}<button class="btn btn-ghost btn-xs" onclick="showDetail('piano','${p.ID}')">👁️</button></td>
   </tr>`).join(''):'<tr><td colspan="11" class="empty"><p>Nessun intervento trovato</p></td></tr>';
 }
 
@@ -2002,6 +2003,31 @@ async function saveInterventoEdit(id){
     closeModal('modalDetail');
     await refreshData();
   }catch(e){toast('Errore: '+e.message,'err')}
+}
+
+async function approvaInt(id){
+  try{
+    const p=(DATA.piano||[]).find(x=>x.ID===id);if(!p)return;
+    const note=(p.Note||'').replace(/\[RICHIESTA TECNICO - DA CONFERMARE\]\n?/g,'').replace(/\[URGENZA - DA CONFERMARE\]\n?/g,'').replace(/\[URGENZA ADMIN\]\n?/g,'');
+    await apiCall('updatePiano',{id,data:{Note:'[APPROVATO ✅]\n'+note,Stato:'pianificato'}},'POST');
+    const nome=((USER?.Nome||'')+' '+(USER?.Cognome||'')).trim();
+    try{await apiCall('createNotifica',{data:{Tipo:'approvazione_intervento',Oggetto:'✅ Intervento approvato',Testo:nome+' ha approvato il tuo intervento per '+getName(DATA.clienti,p.ClienteID)+' del '+fmtDate(p.Data),DestinatarioID:p.TecnicoID,Priorita:'alta'}},'POST')}catch(e){}
+    try{await apiCall('sendChatMessage',{canale_id:'CH_ADMIN',testo:'✅ APPROVATO intervento '+id+' per '+getName(DATA.clienti,p.ClienteID)+' ('+fmtDate(p.Data)+') — approvato da '+nome,userId:USER?.ID},'POST')}catch(e){}
+    toast('Intervento approvato!','ok');await refreshData();
+  }catch(e){toast(e.message,'err')}
+}
+
+async function rifiutaInt(id){
+  const motivo=prompt('Motivo del rifiuto:');
+  if(motivo===null)return;
+  try{
+    const p=(DATA.piano||[]).find(x=>x.ID===id);if(!p)return;
+    await apiCall('updatePiano',{id,data:{Note:'[RIFIUTATO ❌] '+(motivo||'Nessun motivo')+'\n'+(p.Note||''),Stato:'annullato'}},'POST');
+    const nome=((USER?.Nome||'')+' '+(USER?.Cognome||'')).trim();
+    try{await apiCall('createNotifica',{data:{Tipo:'rifiuto_intervento',Oggetto:'❌ Intervento rifiutato',Testo:nome+' ha rifiutato il tuo intervento per '+getName(DATA.clienti,p.ClienteID)+'. Motivo: '+(motivo||'non specificato'),DestinatarioID:p.TecnicoID,Priorita:'alta'}},'POST')}catch(e){}
+    try{await apiCall('sendChatMessage',{canale_id:'CH_ADMIN',testo:'❌ RIFIUTATO intervento '+id+' per '+getName(DATA.clienti,p.ClienteID)+' — da '+nome+(motivo?'\nMotivo: '+motivo:''),userId:USER?.ID},'POST')}catch(e){}
+    toast('Intervento rifiutato','warn');await refreshData();
+  }catch(e){toast(e.message,'err')}
 }
 
 

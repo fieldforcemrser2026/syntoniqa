@@ -213,7 +213,7 @@ async function handleGet(action, url, env) {
       ] = await Promise.all([
         sb(env, 'utenti',             'GET', null, '?select=*&obsoleto=eq.false&order=cognome'),
         sb(env, 'clienti',            'GET', null, '?select=*&obsoleto=eq.false&order=nome'),
-        sb(env, 'macchine',           'GET', null, '?select=*&obsoleto=eq.false'),
+        sb(env, 'macchine',           'GET', null, '?select=*&obsoleto=eq.false&limit=2000'),
         sb(env, 'piano',              'GET', null, '?select=*&obsoleto=eq.false&order=data.desc&limit=500'),
         sb(env, 'urgenze',            'GET', null, '?select=*&obsoleto=eq.false&order=data_segnalazione.desc&limit=200'),
         sb(env, 'ordini',             'GET', null, '?select=*&obsoleto=eq.false&order=data_richiesta.desc&limit=300'),
@@ -2321,8 +2321,11 @@ async function triggerKPISnapshot(env, interventoId, tecnicoId) {
 // ============ CRON: Check interventi e manda notifiche ============
 async function checkInterventoReminders(env) {
   const now = new Date();
-  const oggi = now.toISOString().split('T')[0];
-  const oraCorrente = now.toISOString().substring(11, 16); // HH:MM
+  // Usa fuso orario italiano (CET/CEST)
+  const itFormatter = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const itTimeFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hour12: false });
+  const oggi = itFormatter.format(now); // YYYY-MM-DD in Italian time
+  const oraCorrente = itTimeFormatter.format(now); // HH:MM in Italian time
 
   // 1. Interventi PIANIFICATI oggi dove l'ora di inizio è passata da >1h → notifica "inizia intervento"
   const pianificati = await sb(env, 'piano', 'GET', null,
@@ -2332,8 +2335,10 @@ async function checkInterventoReminders(env) {
   for (const p of (pianificati || [])) {
     if (!p.ora_inizio || !p.tecnico_id) continue;
     const [h, m] = p.ora_inizio.split(':').map(Number);
-    const inizioMs = new Date(oggi + 'T' + p.ora_inizio + ':00Z').getTime();
-    const diffMin = (now.getTime() - inizioMs) / 60000;
+    // Calcola diff in minuti tra ora corrente italiana e ora inizio
+    const [ih, im] = p.ora_inizio.substring(0,5).split(':').map(Number);
+    const [ch, cm] = oraCorrente.split(':').map(Number);
+    const diffMin = (ch * 60 + cm) - (ih * 60 + im);
 
     // Se tra 60 e 75 minuti di ritardo (per evitare notifiche ripetute ogni 15 min del cron)
     if (diffMin >= 60 && diffMin < 75) {
@@ -2374,8 +2379,10 @@ async function checkInterventoReminders(env) {
 
   for (const p of (inCorso || [])) {
     if (!p.ora_inizio || !p.tecnico_id) continue;
-    const inizioMs = new Date(oggi + 'T' + p.ora_inizio + ':00Z').getTime();
-    const diffMin = (now.getTime() - inizioMs) / 60000;
+    // Calcola diff in minuti tra ora corrente italiana e ora inizio
+    const [ih, im] = p.ora_inizio.substring(0,5).split(':').map(Number);
+    const [ch, cm] = oraCorrente.split(':').map(Number);
+    const diffMin = (ch * 60 + cm) - (ih * 60 + im);
 
     // Se tra 480 e 495 minuti (8h-8h15)
     if (diffMin >= 480 && diffMin < 495) {
