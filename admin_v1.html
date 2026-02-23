@@ -820,12 +820,12 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <label style="font-size:.8125rem;display:flex;align-items:center;gap:4px"><input type="checkbox" id="plannerShowLiberi" onchange="renderPlanner()"> Evidenzia slot liberi</label>
 </div>
 <div style="overflow-x:auto"><div id="plannerGrid" style="min-width:900px"></div></div>
-<div id="plannerLegend" style="margin-top:12px;display:flex;gap:16px;flex-wrap:wrap;font-size:.75rem"></div>
+<div id="plannerLegend" style="margin-top:14px;padding:12px 16px;background:#F8FAFC;border-radius:8px;border:1px solid #E2E8F0"></div>
 </div>
 </div>
 <div class="card">
 <div class="card-head"><h3>&#x1F4CB; Dettaglio Giorno Selezionato</h3></div>
-<div class="card-body" id="plannerDayDetail"><p style="color:var(--gray)">Clicca su un giorno per dettagli. Trascina gli interventi per riassegnarli.</p></div>
+<div class="card-body" id="plannerDayDetail"><p style="color:var(--gray)">Clicca su un giorno nell'intestazione per vederne il riepilogo. Clicca su un intervento nella griglia per modificarlo. Trascina gli interventi per spostarli ad altro tecnico/giorno.</p></div>
 </div>
 </section>
 
@@ -4060,7 +4060,8 @@ function showDetail(type,id){
       ${item.NoteCompletamento?`<div class="mb"><strong>Note completamento:</strong><br>${item.NoteCompletamento}</div>`:''}`;
       foot=`<button class="btn btn-primary" onclick="saveInterventoEdit('${id}')">💾 Salva</button> `;
       if(item.Stato==='pianificato')foot+=`<button class="btn btn-warn" onclick="updatePianoStato('${id}','in_corso')">⚡ Inizia</button> `;
-      if(item.Stato==='in_corso')foot+=`<button class="btn btn-ok" onclick="updatePianoStato('${id}','completato')">✅ Completa</button>`;
+      if(item.Stato==='in_corso')foot+=`<button class="btn btn-ok" onclick="updatePianoStato('${id}','completato')">✅ Completa</button> `;
+      foot+=`<button class="btn" style="background:#FEE2E2;color:#DC2626;border:1px solid #FECACA" onclick="if(confirm('Cancellare questo intervento?')){deletePlannerItem('piano','${id}');closeModal('modalDetail')}">🗑️ Cancella</button>`;
       break;
 
     case 'urgenza':
@@ -4516,13 +4517,22 @@ function renderPlanner(){
 
   const weekStrs = week.map(d => d.toISOString().split('T')[0]);
   const piano = (DATA.piano||[]).filter(p => !p.Obsoleto && weekStrs.includes(p.Data));
-  const urgenze = showUrg ? (DATA.urgenze||[]).filter(u => !u.Obsoleto && u.Stato !== 'risolta' && weekStrs.includes((u.DataScadenzaSLA||'').split('T')[0])) : [];
+  // Urgenze: usa DataPrevista (se presente), altrimenti DataScadenzaSLA
+  const urgenze = showUrg ? (DATA.urgenze||[]).filter(u => {
+    if(u.Obsoleto || u.Stato === 'risolta') return false;
+    const dateStr = (u.DataPrevista || u.DataScadenzaSLA || '').split('T')[0];
+    return weekStrs.includes(dateStr);
+  }) : [];
 
   const statoColor = {
     'pianificato':'#6366F1','in_corso':'#2563EB','completato':'#10B981',
     'chiuso':'#6B7280','da_rivedere':'#F59E0B','annullato':'#EF4444'
   };
-  const prioColor = {'CRITICA':'#7F1D1D','ALTA':'#DC2626','MEDIA':'#D97706','BASSA':'#65A30D'};
+  const statoLabel = {
+    'pianificato':'Pianificato','in_corso':'In corso','completato':'Completato',
+    'chiuso':'Chiuso','da_rivedere':'Da rivedere','annullato':'Annullato'
+  };
+  const prioColor = {'1':'#7F1D1D','2':'#DC2626','3':'#D97706','4':'#65A30D','5':'#22C55E','CRITICA':'#7F1D1D','ALTA':'#DC2626','MEDIA':'#D97706','BASSA':'#65A30D'};
   const dayNames = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
   const todayStr = today();
 
@@ -4533,10 +4543,10 @@ function renderPlanner(){
     const ds = d.toISOString().split('T')[0];
     const isToday = ds === todayStr;
     const cnt = piano.filter(p => p.Data === ds).length;
-    const cntU = urgenze.filter(u => (u.DataScadenzaSLA||'').startsWith(ds)).length;
+    const cntU = urgenze.filter(u => (u.DataPrevista||u.DataScadenzaSLA||'').split('T')[0]===ds).length;
     html += '<th style="padding:8px 4px;background:' + (isToday?'#FEF3C7':'#F9FAFB') + ';border:1px solid #E5E7EB;font-size:.75rem;font-weight:600;color:' + (isToday?'#92400E':'#374151') + ';cursor:pointer" onclick="showPlannerDay(\''+ds+'\')"><div>' + dayNames[i] + ' ' + d.getDate() + '/' + (d.getMonth()+1) + '</div>';
-    if(cnt>0) html += '<span style="background:#6366F1;color:white;border-radius:10px;padding:1px 6px;font-size:.6rem">' + cnt + ' int</span>';
-    if(cntU>0) html += '<span style="background:#DC2626;color:white;border-radius:10px;padding:1px 6px;font-size:.6rem;margin-left:2px">' + cntU + ' urg</span>';
+    if(cnt>0) html += '<span style="background:#6366F1;color:white;border-radius:10px;padding:1px 6px;font-size:.6rem">' + cnt + '</span> ';
+    if(cntU>0) html += '<span style="background:#DC2626;color:white;border-radius:10px;padding:1px 6px;font-size:.6rem">' + cntU + ' urg</span>';
     html += '</th>';
   });
   html += '</tr></thead><tbody>';
@@ -4549,21 +4559,23 @@ function renderPlanner(){
     week.forEach(d => {
       const ds = d.toISOString().split('T')[0];
       const dayItems = piano.filter(p => p.Data===ds && (p.TecnicoID===tec.ID||(p.TecniciIDs||'').includes(tec.ID)));
-      const dayUrg = showUrg ? urgenze.filter(u => u.TecnicoID===tec.ID && (u.DataScadenzaSLA||'').startsWith(ds)) : [];
+      const dayUrg = showUrg ? urgenze.filter(u => (u.TecnicoAssegnato||u.TecnicoID)===tec.ID && (u.DataPrevista||u.DataScadenzaSLA||'').split('T')[0]===ds) : [];
       const isEmpty = dayItems.length === 0 && dayUrg.length === 0;
       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
 
       html += '<td style="padding:4px;border:1px solid #E5E7EB;vertical-align:top;min-height:70px;background:' + (isWeekend?'#F3F4F6':isEmpty&&showLiberi?'#F0FDF4':'white') + '" ondragover="event.preventDefault()" ondrop="onPlannerDrop(event,\'' + tec.ID + '\',\'' + ds + '\')">';
 
       dayUrg.forEach(u => {
-        const col = prioColor[u.Priorita]||'#6B7280';
-        html += '<div draggable="true" ondragstart="onPlannerDragStart(event,\'urgenza\',\'' + u.ID + '\')" style="background:' + col + '22;border-left:3px solid ' + col + ';padding:3px 5px;margin-bottom:2px;border-radius:0 4px 4px 0;font-size:.67rem;cursor:grab" onclick="showPlannerItem(\'urgenza\',\'' + u.ID + '\')">&#x1F6A8; ' + (u.Problema||'').substring(0,22) + '</div>';
+        const prio = getName(DATA.priorita||[],u.PrioritaID);
+        const col = prioColor[u.PrioritaID]||prioColor[prio]||'#6B7280';
+        html += '<div draggable="true" ondragstart="onPlannerDragStart(event,\'urgenza\',\'' + u.ID + '\')" style="background:' + col + '22;border-left:3px solid ' + col + ';padding:3px 5px;margin-bottom:2px;border-radius:0 4px 4px 0;font-size:.67rem;cursor:grab;position:relative" onclick="showPlannerItem(\'urgenza\',\'' + u.ID + '\')" title="Urgenza: '+(u.Problema||'').replace(/"/g,'')+' — Clicca per dettagli, trascina per spostare">&#x1F6A8; ' + (u.Problema||'').substring(0,20) + '</div>';
       });
 
       dayItems.forEach(p => {
         const col = statoColor[p.Stato]||'#6366F1';
         const cli = getName(DATA.clienti||[], p.ClienteID);
-        html += '<div draggable="true" ondragstart="onPlannerDragStart(event,\'piano\',\'' + p.ID + '\')" style="background:' + col + '18;border-left:3px solid ' + col + ';padding:3px 5px;margin-bottom:2px;border-radius:0 4px 4px 0;font-size:.67rem;cursor:grab" onclick="showPlannerItem(\'piano\',\'' + p.ID + '\')">' + (p.OraInizio?'<strong>'+p.OraInizio+'</strong> ':'') + cli.substring(0,20) + '</div>';
+        const tipoInt = getName(DATA.tipiIntervento||[], p.TipoInterventoID);
+        html += '<div draggable="true" ondragstart="onPlannerDragStart(event,\'piano\',\'' + p.ID + '\')" style="background:' + col + '18;border-left:3px solid ' + col + ';padding:3px 5px;margin-bottom:2px;border-radius:0 4px 4px 0;font-size:.67rem;cursor:grab;position:relative" onclick="showPlannerItem(\'piano\',\'' + p.ID + '\')" title="'+cli+' — '+(statoLabel[p.Stato]||p.Stato)+' — Clicca per modificare/cancellare, trascina per spostare">' + (p.OraInizio?'<strong>'+p.OraInizio+'</strong> ':'') + cli.substring(0,20) + '</div>';
       });
 
       if(isEmpty && showLiberi && !isWeekend) html += '<div style="color:#86EFAC;font-size:.65rem;text-align:center;padding:6px 0">libero</div>';
@@ -4575,12 +4587,35 @@ function renderPlanner(){
   html += '</tbody></table>';
   document.getElementById('plannerGrid').innerHTML = html;
 
-  let leg = '';
-  Object.entries(statoColor).forEach(([s,c]) => {
-    leg += '<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;background:'+c+';border-radius:2px;display:inline-block"></span>'+s+'</span>';
-  });
+  // --- LEGENDA CHIARA E DETTAGLIATA ---
   const legEl = document.getElementById('plannerLegend');
-  if(legEl) legEl.innerHTML = leg;
+  if(legEl){
+    let leg = '<div style="display:flex;flex-direction:column;gap:10px;font-size:.8rem">';
+    // Sezione 1: Stato interventi
+    leg += '<div><strong style="font-size:.8125rem;color:#374151">Colori Stato Intervento:</strong><div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:4px">';
+    Object.entries(statoColor).forEach(([s,c]) => {
+      leg += '<span style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:12px;background:'+c+';border-radius:2px;display:inline-block;border:1px solid '+c+'"></span><span style="color:#4B5563">'+(statoLabel[s]||s)+'</span></span>';
+    });
+    leg += '</div></div>';
+    // Sezione 2: Urgenze
+    leg += '<div><strong style="font-size:.8125rem;color:#374151">Priorità Urgenze (&#x1F6A8;):</strong><div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:4px">';
+    const prioNames = {'1':'Critica','2':'Alta','3':'Media','4':'Bassa','5':'Molto Bassa'};
+    ['1','2','3','4','5'].forEach(k => {
+      const c = prioColor[k]||'#6B7280';
+      leg += '<span style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:12px;background:'+c+';border-radius:2px;display:inline-block"></span><span style="color:#4B5563">'+(prioNames[k]||k)+'</span></span>';
+    });
+    leg += '</div></div>';
+    // Sezione 3: Istruzioni rapide
+    leg += '<div style="color:#6B7280;font-size:.75rem;border-top:1px solid #E2E8F0;padding-top:8px">';
+    leg += '<strong>Come usare:</strong> ';
+    leg += '&#x1F446; <b>Clicca</b> su un intervento per modificarlo o cancellarlo · ';
+    leg += '&#x270B; <b>Trascina</b> un intervento su un\'altra cella per spostarlo (cambia tecnico e/o giorno) · ';
+    leg += '&#x1F4C5; <b>Clicca</b> sulla data in intestazione per vedere il riepilogo del giorno · ';
+    leg += '&#x2795; Usa il bottone <b>\"+ Intervento\"</b> in alto per aggiungerne uno nuovo';
+    leg += '</div>';
+    leg += '</div>';
+    legEl.innerHTML = leg;
+  }
 }
 
 function onPlannerDragStart(e, type, id){
@@ -4596,10 +4631,10 @@ async function onPlannerDrop(e, tecnicoId, data){
   try {
     if(type === 'piano'){
       await apiCall('updatePiano', { id, TecnicoID: tecnicoId, Data: data }, 'POST');
-      toast('Intervento spostato', 'ok');
+      toast('Intervento spostato a ' + data + ' → ' + getName(DATA.utenti||[],tecnicoId), 'ok');
     } else if(type === 'urgenza'){
-      await apiCall('updateUrgenza', { id, TecnicoID: tecnicoId }, 'POST');
-      toast('Urgenza assegnata', 'ok');
+      await apiCall('updateUrgenza', { id, TecnicoAssegnato: tecnicoId, DataPrevista: data }, 'POST');
+      toast('Urgenza spostata a ' + data + ' → ' + getName(DATA.utenti||[],tecnicoId), 'ok');
     }
     await refreshData();
     renderPlanner();
@@ -4610,13 +4645,46 @@ function showPlannerItem(type, id){ if(type==='piano') showDetail('piano',id); e
 
 function showPlannerDay(ds){
   const items = (DATA.piano||[]).filter(p => !p.Obsoleto && p.Data === ds);
-  const urgs = (DATA.urgenze||[]).filter(u => !u.Obsoleto && (u.DataScadenzaSLA||'').startsWith(ds));
-  let html = '<h4 style="margin-bottom:8px">' + fmtDate(ds) + ' - ' + items.length + ' interventi, ' + urgs.length + ' urgenze</h4>';
-  if(items.length) html += items.sort((a,b)=>(a.OraInizio||'').localeCompare(b.OraInizio||'')).map(p=>'<div style="padding:8px 12px;border-left:3px solid #6366F1;margin-bottom:6px;background:#F5F3FF;border-radius:0 6px 6px 0"><strong>'+(p.OraInizio||'--')+'</strong> '+getName(DATA.utenti||[],p.TecnicoID)+' - '+getName(DATA.clienti||[],p.ClienteID)+' '+statusTag(p.Stato)+'</div>').join('');
-  if(urgs.length) html += '<hr style="margin:8px 0"><strong>Urgenze:</strong>' + urgs.map(u=>'<div style="padding:8px 12px;border-left:3px solid #DC2626;margin-bottom:4px;background:#FEF2F2;border-radius:0 6px 6px 0">&#x1F6A8; <strong>'+u.Priorita+'</strong> - '+(u.Problema||'')+' - '+getName(DATA.clienti||[],u.ClienteID)+'</div>').join('');
-  if(!items.length && !urgs.length) html = '<p style="color:var(--gray)">Nessun intervento per questo giorno</p>';
+  const urgs = (DATA.urgenze||[]).filter(u => !u.Obsoleto && (u.DataPrevista||u.DataScadenzaSLA||'').split('T')[0]===ds);
+  let html = '<h4 style="margin-bottom:10px">📅 ' + fmtDate(ds) + ' — ' + items.length + ' interventi, ' + urgs.length + ' urgenze</h4>';
+  if(items.length){
+    html += '<div style="margin-bottom:8px">';
+    html += items.sort((a,b)=>(a.OraInizio||'').localeCompare(b.OraInizio||'')).map(p=>{
+      const tec = getName(DATA.utenti||[],p.TecnicoID);
+      const cli = getName(DATA.clienti||[],p.ClienteID);
+      const tipo = getName(DATA.tipiIntervento||[],p.TipoInterventoID);
+      return '<div style="padding:8px 12px;border-left:3px solid #6366F1;margin-bottom:6px;background:#F5F3FF;border-radius:0 6px 6px 0;display:flex;justify-content:space-between;align-items:center"><div><strong>'+(p.OraInizio||'--:--')+'</strong> '+tec+' → '+cli+' <span style="color:#6B7280;font-size:.75rem">('+tipo+')</span> '+statusTag(p.Stato)+'</div><div style="display:flex;gap:4px"><button class="btn btn-sm btn-outline" onclick="showPlannerItem(\'piano\',\''+p.ID+'\')" title="Modifica">✏️</button><button class="btn btn-sm" style="color:#EF4444;background:transparent;border:1px solid #FECACA" onclick="deletePlannerItem(\'piano\',\''+p.ID+'\')" title="Cancella">🗑️</button></div></div>';
+    }).join('');
+    html += '</div>';
+  }
+  if(urgs.length){
+    html += '<hr style="margin:8px 0"><strong>🚨 Urgenze:</strong>';
+    html += urgs.map(u=>{
+      const prio = getName(DATA.priorita||[],u.PrioritaID);
+      const cli = getName(DATA.clienti||[],u.ClienteID);
+      return '<div style="padding:8px 12px;border-left:3px solid #DC2626;margin-bottom:4px;background:#FEF2F2;border-radius:0 6px 6px 0;display:flex;justify-content:space-between;align-items:center"><div>&#x1F6A8; <strong>'+prio+'</strong> — '+(u.Problema||'')+' — '+cli+'</div><div><button class="btn btn-sm btn-outline" onclick="showPlannerItem(\'urgenza\',\''+u.ID+'\')" title="Dettagli">👁️</button></div></div>';
+    }).join('');
+  }
+  if(!items.length && !urgs.length) html = '<p style="color:var(--gray)">Nessun intervento pianificato per questo giorno. Usa \"+ Intervento\" per aggiungerne uno.</p>';
   const el = document.getElementById('plannerDayDetail');
   if(el) el.innerHTML = html;
+}
+
+async function deletePlannerItem(type, id){
+  if(!confirm('Sei sicuro di voler cancellare questo '+(type==='piano'?'intervento':'urgenza')+'?')) return;
+  try {
+    if(type === 'piano'){
+      await apiCall('updatePiano', { id, Obsoleto: true }, 'POST');
+      toast('Intervento cancellato', 'ok');
+    } else {
+      await apiCall('updateUrgenza', { id, Obsoleto: true }, 'POST');
+      toast('Urgenza cancellata', 'ok');
+    }
+    await refreshData();
+    renderPlanner();
+    const el = document.getElementById('plannerDayDetail');
+    if(el) el.innerHTML = '<p style="color:var(--gray)">Elemento cancellato. Clicca su un giorno per aggiornare.</p>';
+  } catch(err){ toast('Errore: '+err.message, 'err') }
 }
 
 async function runAIPlanner(){
