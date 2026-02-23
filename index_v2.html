@@ -1309,8 +1309,8 @@ function switchChatCh(id){
 
 async function loadChatMessages(silent){
   try{
-    const msgs=await apiCall('getChatMessaggi',{canale_id:chatCanale,limit:'50'});
-    chatMsgCache=Array.isArray(msgs)?msgs:[];
+    const msgs=await apiCall('getChatMessaggi',{canale_id:chatCanale,limit:'50'},'POST');
+    chatMsgCache=Array.isArray(msgs)?msgs:(msgs?.messaggi||[]);
     renderChatMsgs();
   }catch(e){if(!silent)toast('Errore chat: '+e.message,'err')}
 }
