@@ -733,8 +733,9 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 <div style="display:flex;gap:8px;flex-wrap:wrap">
 <button class="btn btn-lg" style="background:#6366F1;color:white" onclick="runAI()">🤖 Genera Piano</button>
+<button class="btn btn-lg" style="background:#22c55e;color:white" onclick="downloadAIPlanXlsx()" id="btnDownloadPlan" disabled>📥 Scarica Excel</button>
+<button class="btn btn-lg btn-outline" style="border-color:rgba(255,255,255,.3);color:white" onclick="applyAI()" id="btnApplyAI" disabled>✅ Applica al Sistema</button>
 <button class="btn btn-lg btn-outline" style="border-color:rgba(255,255,255,.3);color:white" onclick="submitAIPlanForApproval()" id="btnSubmitPlan" disabled>📤 Invia per Approvazione</button>
-<button class="btn btn-lg btn-outline" style="border-color:rgba(255,255,255,.3);color:white" onclick="applyAI()" id="btnApplyAI" disabled>✅ Applica Piano</button>
 </div>
 <div class="ai-result" id="aiResult" style="display:none"></div>
 </div>
@@ -2710,6 +2711,52 @@ function showCalDay(ds){
 }
 
 // ============ MAPPA ============
+const GEO_CACHE={
+'piacenza':[45.0526,9.6929],'parma':[44.8015,10.3279],'reggio emilia':[44.6989,10.6310],'modena':[44.6471,10.9252],
+'bologna':[44.4949,11.3426],'ferrara':[44.8381,11.6199],'ravenna':[44.4184,12.2035],'rimini':[44.0678,12.5695],
+'carpi':[44.7836,10.8862],'fidenza':[44.8667,10.0607],'correggio':[44.7713,10.7809],'collecchio':[44.7486,10.2200],
+'langhirano':[44.6150,10.2660],'pavullo nel frignano':[44.3354,10.8362],'castelnovo ne monti':[44.4384,10.4059],
+'noceto':[44.8117,10.1763],'fontanellato':[44.8780,10.1740],'soragna':[44.9270,10.1220],'busseto':[44.9803,10.0417],
+'montecchio emilia':[44.7033,10.4478],'novellara':[44.8444,10.7289],'campegine':[44.7824,10.5338],
+'bibbiano':[44.6669,10.4756],'san polo d\'enza':[44.6281,10.4228],'viano':[44.5528,10.5808],
+'traversetolo':[44.6355,10.3772],'montechiarugolo':[44.6903,10.4159],'felino':[44.6934,10.2310],
+'medesano':[44.7558,10.1406],'tizzano val parma':[44.5194,10.2001],'corniglio':[44.4836,10.0903],
+'neviano degli arduini':[44.5625,10.3028],'monghidoro':[44.2944,11.3222],'monterenzio':[44.3347,11.4067],
+'monte san pietro':[44.4122,11.1642],'castel d\'aiano':[44.2919,11.0158],'medicina':[44.4744,11.6367],
+'budrio':[44.5367,11.5333],'argelato':[44.6417,11.3481],'bentivoglio':[44.6325,11.4172],
+'granarolo dell\'emilia':[44.5522,11.4461],'san cesario sul panaro':[44.5631,11.0267],
+'spilamberto':[44.5306,11.0242],'castelnuovo rangone':[44.5553,10.9389],'soliera':[44.7356,10.9250],
+'medolla':[44.8528,11.0711],'san prospero':[44.7892,11.0217],'serramazzoni':[44.4564,10.7889],
+'zocca':[44.3461,10.9939],'montese':[44.2661,10.9428],'palagano':[44.3211,10.6778],
+'polinago':[44.3500,10.7222],'montecreto':[44.2508,10.7194],'prignano sulla secchia':[44.4394,10.6886],
+'lama mocogno':[44.3075,10.7339],'villa minozzo':[44.3650,10.4694],'toano':[44.4539,10.5494],
+'casina':[44.5061,10.5017],'castelnovo di sotto':[44.8072,10.5625],'campagnola emilia':[44.8394,10.7622],
+'luzzara':[44.9556,10.6914],'gualtieri':[44.9064,10.6272],'poviglio':[44.8397,10.5486],
+'rivergaro':[44.9139,9.5978],'borgonovo val tidone':[44.9850,9.4456],'gragnano trebbiense':[45.0044,9.5756],
+'carpaneto piacentino':[44.9219,9.7867],'cadeo':[44.9592,9.8361],'san giorgio piacentino':[44.9494,9.7314],
+'codogno':[45.1617,9.7072],'bagnolo in piano':[44.7647,10.6744],'colorno':[44.9308,10.3767],
+'sorbolo':[44.8581,10.4481],'torrile':[44.8614,10.3319],'roccabianca':[44.9933,10.2183],
+'compiano':[44.5117,9.6586],'bardi':[44.6333,9.7236],'reggiolo':[44.9183,10.8100],
+'rolo':[44.8800,10.8644],'anzola dell\'emilia':[44.5467,11.1933],'fontevivo':[44.8350,10.1856],
+'mesola':[44.9239,12.2331],'poggio renatico':[44.7664,11.4831],'sant\'agata bolognese':[44.6622,11.1361],
+};
+const _geoQueue={};
+async function geocodeCity(city){
+  if(!city)return null;
+  const k=city.toLowerCase().replace(/\s+/g,' ').trim();
+  if(GEO_CACHE[k])return GEO_CACHE[k];
+  if(_geoQueue[k])return _geoQueue[k];
+  _geoQueue[k]=(async()=>{
+    try{
+      const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=it&q=${encodeURIComponent(city+', Emilia-Romagna, Italia')}`);
+      const d=await r.json();
+      if(d[0]){GEO_CACHE[k]=[parseFloat(d[0].lat),parseFloat(d[0].lon)];return GEO_CACHE[k]}
+    }catch(e){}
+    return null;
+  })();
+  return _geoQueue[k];
+}
+
 function initMap(){
   if(MAP){MAP.invalidateSize();updateMap();return}
   MAP=L.map('mapAdmin').setView([44.6471,10.9252],9);
@@ -2717,7 +2764,7 @@ function initMap(){
   updateMap();
 }
 
-function updateMap(){
+async function updateMap(){
   if(!MAP)return;
   MARKERS.forEach(m=>MAP.removeLayer(m));MARKERS=[];
   const filtTec=$('mapFiltroTec')?.value||'';
@@ -2732,42 +2779,53 @@ function updateMap(){
   else{const d=new Date();const end=new Date();end.setDate(end.getDate()+7);piano=piano.filter(p=>p.Data>=d.toISOString().split('T')[0]&&p.Data<=end.toISOString().split('T')[0])}
   if(filtTec)piano=piano.filter(p=>p.TecnicoID===filtTec||(p.TecniciIDs||'').includes(filtTec));
 
-  // Marker clienti con interventi
   const clientiIds=[...new Set(piano.map(p=>p.ClienteID))];
-  const waypoints=[];
   const colors=['#00C9A7','#3B7EF7','#10B981','#F59E0B','#8B5CF6','#EC4899'];
   let colorIdx=0;
+
+  // Risolvi coordinate clienti (da campo Lat/Lng o da città via geocoding)
+  async function getClientCoords(cli){
+    if(cli.Latitudine&&cli.Longitudine)return[parseFloat(cli.Latitudine),parseFloat(cli.Longitudine)];
+    const citta=cli.Citta||cli.Indirizzo||'';
+    if(citta){const coords=await geocodeCity(citta);if(coords)return coords}
+    return null;
+  }
 
   // Gruppo per tecnico
   const tecGroup={};
   piano.forEach(p=>{const tid=p.TecnicoID||'notech';if(!tecGroup[tid])tecGroup[tid]=[];tecGroup[tid].push(p)});
+  const waypoints=[];
 
-  Object.entries(tecGroup).forEach(([tid,items])=>{
+  for(const [tid,items] of Object.entries(tecGroup)){
     const color=colors[colorIdx++%colors.length];
     items.sort((a,b)=>(a.OraInizio||'').localeCompare(b.OraInizio||''));
     const pts=[];
 
-    items.forEach((p,i)=>{
+    for(let i=0;i<items.length;i++){
+      const p=items[i];
       const cli=(DATA.clienti||[]).find(c=>c.ID===p.ClienteID);
-      if(!cli||!cli.Latitudine||!cli.Longitudine)return;
-      const lat=parseFloat(cli.Latitudine),lng=parseFloat(cli.Longitudine);
+      if(!cli)continue;
+      const coords=await getClientCoords(cli);
+      if(!coords)continue;
+      const [lat,lng]=coords;
       pts.push([lat,lng]);
       const icon=L.divIcon({className:'',html:`<div style="background:${color};color:white;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.3)">${i+1}</div>`,iconSize:[24,24],iconAnchor:[12,12]});
       const m=L.marker([lat,lng],{icon}).addTo(MAP);
-      m.bindPopup(`<strong>${i+1}. ${cli.Nome||cli.ID}</strong><br>${p.OraInizio||''} · ${getName(DATA.tipiIntervento||[],p.TipoInterventoID)}<br>Tecnico: ${getName(DATA.utenti||[],tid)}`);
+      m.bindPopup(`<strong>${i+1}. ${cli.Nome||cli.ID}</strong><br>${cli.Citta||''}<br>${p.OraInizio||''} · ${getName(DATA.tipiIntervento||[],p.TipoInterventoID)}<br>Tecnico: ${getName(DATA.utenti||[],tid)}`);
       MARKERS.push(m);
       waypoints.push({lat,lng,name:cli.Nome||cli.ID});
-    });
+    }
 
     if(showRoute&&pts.length>1){const line=L.polyline(pts,{color,weight:3,opacity:.7,dashArray:'8,8'}).addTo(MAP);MARKERS.push(line)}
-  });
+  }
 
   // Fit bounds
   const allPts=MARKERS.filter(m=>m.getLatLng).map(m=>[m.getLatLng().lat,m.getLatLng().lng]);
   if(allPts.length>1)MAP.fitBounds(allPts,{padding:[40,40]});
   else if(allPts.length===1)MAP.setView(allPts[0],12);
+  else $('mapInfo').innerHTML='⚠️ Nessun intervento con coordinate trovato per il periodo selezionato. Prova "Settimana".';
 
-  $('mapInfo').innerHTML=`${piano.length} interventi visualizzati · ${clientiIds.length} clienti · ${Object.keys(tecGroup).length} tecnici`;
+  $('mapInfo').innerHTML=`${piano.length} interventi · ${clientiIds.length} clienti · ${allPts.length} su mappa · ${Object.keys(tecGroup).length} tecnici`;
 
   // Store waypoints for Google Maps export
   MAP._ffWaypoints=waypoints;
@@ -4050,11 +4108,37 @@ function renderAIFileList(){
 }
 
 async function readFileAsText(file){
+  // Per Excel: parse con SheetJS e restituisci come testo leggibile
+  if(file.name.match(/\.xlsx?$/i)){
+    return new Promise(async(resolve)=>{
+      if(!window.XLSX){
+        const s=document.createElement('script');
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+        document.head.appendChild(s);
+        await new Promise(r=>{s.onload=r;s.onerror=()=>r()});
+      }
+      if(!window.XLSX){resolve('[Errore caricamento parser Excel]');return}
+      const r=new FileReader();
+      r.onload=()=>{
+        try{
+          const wb=XLSX.read(r.result,{type:'array',cellDates:true});
+          let out='';
+          wb.SheetNames.forEach(sn=>{
+            const ws=wb.Sheets[sn];
+            const csv=XLSX.utils.sheet_to_csv(ws,{FS:';',dateNF:'YYYY-MM-DD'});
+            // Limita a 4000 chars per sheet per non esplodere il prompt
+            out+=`\n--- FOGLIO: ${sn} ---\n${csv.substring(0,4000)}\n`;
+          });
+          resolve(out);
+        }catch(e){resolve('[Errore parsing: '+e.message+']')}
+      };
+      r.readAsArrayBuffer(file);
+    });
+  }
   return new Promise((resolve)=>{
     if(file.name.match(/\.csv$/i)||file.name.match(/\.txt$/i)){
       const r=new FileReader();r.onload=()=>resolve(r.result);r.readAsText(file);
     } else {
-      // For xlsx, pdf, docx — read as base64 for the API
       const r=new FileReader();r.onload=()=>resolve(r.result.split(',')[1]);r.readAsDataURL(file);
     }
   });
@@ -4186,8 +4270,71 @@ async function runAI(){
     }
     $('btnApplyAI').disabled=false;
     $('btnSubmitPlan').disabled=false;
+    $('btnDownloadPlan').disabled=false;
     toast('Piano AI generato!','ok');
   }catch(e){$('aiResult').textContent='❌ Errore: '+e.message;toast(e.message,'err')}
+}
+
+async function downloadAIPlanXlsx(){
+  if(!AI_PLAN||!AI_PLAN.piano||!AI_PLAN.piano.length){toast('Genera prima un piano','warn');return}
+  if(!window.XLSX){
+    const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    document.head.appendChild(s);await new Promise(r=>{s.onload=r;setTimeout(r,3000)});
+  }
+  if(!window.XLSX){toast('Errore caricamento libreria','err');return}
+
+  const wb=XLSX.utils.book_new();
+
+  // Header row
+  const header=['Data','Giorno','Tecnico','Furgone','Cliente','Tipo Intervento','Ora Inizio','Durata (h)','Note'];
+  const giorni=['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+  const rows=AI_PLAN.piano.map(r=>{
+    const d=r.data?new Date(r.data+'T00:00:00'):null;
+    const giorno=d?giorni[d.getDay()]:'';
+    const tecNome=r.tecnico||getName(DATA.utenti||[],r.tecnicoId);
+    // Trova furgone del tecnico
+    const tec=(DATA.utenti||[]).find(u=>u.ID===r.tecnicoId||u.Nome===r.tecnico);
+    const furg=tec?.AutomezzoID||'';
+    return[r.data||'',giorno,tecNome,furg,r.cliente||'',r.tipo||'',r.oraInizio||'08:00',r.durataOre||2,r.note||''];
+  });
+
+  // Raggruppa per data
+  const byDate={};
+  AI_PLAN.piano.forEach((r,i)=>{const d=r.data||'?';if(!byDate[d])byDate[d]=[];byDate[d].push(rows[i])});
+
+  // Piano completo
+  const allRows=[header];
+  Object.entries(byDate).sort(([a],[b])=>a.localeCompare(b)).forEach(([data,items])=>{
+    items.forEach(r=>allRows.push(r));
+    allRows.push([]); // riga vuota separatrice
+  });
+
+  const ws=XLSX.utils.aoa_to_sheet(allRows);
+  // Larghezza colonne
+  ws['!cols']=[{wch:12},{wch:5},{wch:14},{wch:8},{wch:20},{wch:16},{wch:10},{wch:10},{wch:30}];
+  XLSX.utils.book_append_sheet(wb,ws,'Piano Generato');
+
+  // Summary sheet
+  if(AI_PLAN.summary||AI_PLAN.warnings){
+    const sumRows=[['📋 RIEPILOGO PIANO AI'],[''],[AI_PLAN.summary||'']];
+    if(AI_PLAN.warnings?.length){sumRows.push([''],['⚠️ AVVISI:']);AI_PLAN.warnings.forEach(w=>sumRows.push([w]))}
+    const ws2=XLSX.utils.aoa_to_sheet(sumRows);
+    ws2['!cols']=[{wch:80}];
+    XLSX.utils.book_append_sheet(wb,ws2,'Riepilogo');
+  }
+
+  // Per tecnico
+  const byTec={};
+  AI_PLAN.piano.forEach((r,i)=>{const t=r.tecnico||r.tecnicoId||'?';if(!byTec[t])byTec[t]=[];byTec[t].push(rows[i])});
+  Object.entries(byTec).forEach(([tec,items])=>{
+    const tecRows=[['Data','Giorno','Cliente','Tipo','Ora','Durata','Note'],...items.map(r=>[r[0],r[1],r[4],r[5],r[6],r[7],r[8]])];
+    const wst=XLSX.utils.aoa_to_sheet(tecRows);
+    wst['!cols']=[{wch:12},{wch:5},{wch:20},{wch:16},{wch:8},{wch:8},{wch:30}];
+    XLSX.utils.book_append_sheet(wb,wst,tec.substring(0,31));
+  });
+
+  XLSX.writeFile(wb,'Piano_AI_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  toast('Piano Excel scaricato!','ok');
 }
 
 async function applyAI(){
@@ -4195,7 +4342,7 @@ async function applyAI(){
   try{
     const result=await apiCall('applyAIPlan',{piano:AI_PLAN},'POST');
     toast('Piano applicato: '+(result.created||0)+' interventi creati','ok');
-    AI_PLAN=null;$('btnApplyAI').disabled=true;$('btnSubmitPlan').disabled=true;
+    AI_PLAN=null;$('btnApplyAI').disabled=true;$('btnSubmitPlan').disabled=true;$('btnDownloadPlan').disabled=true;
     await refreshData();
   }catch(e){toast(e.message,'err')}
 }

@@ -1435,10 +1435,12 @@ async function handlePost(action, body, env) {
       // Build file descriptions for context
       let fileContext = '';
       for (const f of files) {
-        if (f.name.match(/\.(csv|txt)$/i) && typeof f.content === 'string' && !f.content.includes('base64')) {
-          fileContext += `\n--- FILE: ${f.name} ---\n${f.content.substring(0, 3000)}\n`;
-        } else {
-          fileContext += `\n--- FILE: ${f.name} (${f.type}, ${Math.round((f.size||0)/1024)}KB) ---\n[Documento allegato]\n`;
+        const content = typeof f.content === 'string' ? f.content : '';
+        // Se il contenuto sembra testo leggibile (CSV, foglio parsed, etc.) — includi tutto
+        if (content.length > 10 && !content.match(/^[A-Za-z0-9+/=]{50,}$/)) {
+          fileContext += `\n--- FILE: ${f.name} ---\n${content.substring(0, 8000)}\n`;
+        } else if (content.length > 0) {
+          fileContext += `\n--- FILE: ${f.name} (${f.type}, ${Math.round((f.size||0)/1024)}KB) ---\n[Documento binario allegato]\n`;
         }
       }
 
