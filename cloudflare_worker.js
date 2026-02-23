@@ -391,9 +391,22 @@ async function handlePost(action, body, env) {
 
     case 'createPiano': {
       const id = 'INT_' + Date.now();
-      // FIX CRIT-04: Estrai e converti campi dal wrapper {data:{...PascalCase}}
       const fields = getFields(body);
-      const row = { id, ...fields, stato: fields.stato || 'pianificato', created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      // Writable: id,tenant_id,tecnico_id,cliente_id,automezzo_id,tipo_intervento_id,data,ora_inizio,ora_fine,stato,note,data_fine
+      const row = {
+        id,
+        tenant_id: fields.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
+        tecnico_id: fields.tecnico_id || null,
+        cliente_id: fields.cliente_id || null,
+        automezzo_id: fields.automezzo_id || null,
+        tipo_intervento_id: fields.tipo_intervento_id || null,
+        data: fields.data || null,
+        ora_inizio: fields.ora_inizio || null,
+        ora_fine: fields.ora_fine || null,
+        stato: fields.stato || 'pianificato',
+        note: fields.note || null,
+        data_fine: fields.data_fine || null
+      };
       const result = await sb(env, 'piano', 'POST', row);
       await wlog('piano', id, 'created', body.operatoreId || body.userId);
       await sendTelegramNotification(env, 'nuovo_intervento', row);
@@ -402,10 +415,11 @@ async function handlePost(action, body, env) {
 
     case 'updatePiano': {
       const id = body.id;
-      // FIX CRIT-04: Estrai e converti campi PascalCase → snake_case
-      const updates = getFields(body);
-      delete updates.id; // non aggiornare l'id
-      updates.updated_at = new Date().toISOString();
+      const allFields = getFields(body);
+      // Only writable piano columns
+      const pianoWritable = ['tecnico_id','cliente_id','automezzo_id','tipo_intervento_id','data','ora_inizio','ora_fine','stato','note','data_fine','obsoleto'];
+      const updates = {};
+      for (const k of pianoWritable) { if (allFields[k] !== undefined) updates[k] = allFields[k]; }
       await sb(env, `piano?id=eq.${id}`, 'PATCH', updates);
       await wlog('piano', id, `updated_stato_${updates.stato || 'unknown'}`, body.operatoreId || body.userId);
       if (updates.stato === 'completato') {
@@ -431,7 +445,12 @@ async function handlePost(action, body, env) {
           slaScadenza = d.toISOString();
         }
       }
-      const row = { id, ...fields, stato: 'aperta', sla_scadenza: slaScadenza, sla_status: 'ok', data_segnalazione: new Date().toISOString() };
+      // Only writable urgenze columns
+      const urgWritable = ['tenant_id','cliente_id','macchina_id','problema','priorita_id','stato','tecnico_assegnato','tecnici_ids','automezzo_id','data_segnalazione','data_assegnazione','data_prevista','ora_prevista','data_inizio','data_risoluzione','intervento_id','note','allegati_ids','sla_scadenza','sla_status'];
+      const row = { id };
+      for (const k of urgWritable) { if (fields[k] !== undefined) row[k] = fields[k]; }
+      row.tenant_id = row.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+      row.stato = 'aperta'; row.sla_scadenza = slaScadenza; row.sla_status = 'ok'; row.data_segnalazione = new Date().toISOString();
       const result = await sb(env, 'urgenze', 'POST', row);
       await wlog('urgenza', id, 'created', body.operatoreId || body.userId);
       await sendTelegramNotification(env, 'nuova_urgenza', row);
@@ -454,12 +473,12 @@ async function handlePost(action, body, env) {
       return ok();
     }
 
-    // FIX CRIT-05: Aggiunta azione updateUrgenza (mancava completamente)
     case 'updateUrgenza': {
       const id = body.id;
-      const updates = getFields(body);
-      delete updates.id;
-      updates.updated_at = new Date().toISOString();
+      const allFields = getFields(body);
+      const urgWritable = ['cliente_id','macchina_id','problema','priorita_id','stato','tecnico_assegnato','tecnici_ids','automezzo_id','data_prevista','ora_prevista','data_inizio','data_risoluzione','intervento_id','note','allegati_ids','sla_scadenza','sla_status','obsoleto'];
+      const updates = {};
+      for (const k of urgWritable) { if (allFields[k] !== undefined) updates[k] = allFields[k]; }
       await sb(env, `urgenze?id=eq.${id}`, 'PATCH', updates);
       await wlog('urgenza', id, 'updated', body.operatoreId || body.userId);
       return ok();
@@ -469,14 +488,25 @@ async function handlePost(action, body, env) {
 
     case 'createOrdine': {
       const id = 'ORD_' + Date.now();
-      // FIX CRIT-04: Estrai e converti campi
       const fields = getFields(body);
-      // FIX CRIT-06 (B-008): Validazione quantità
       const qty = fields.quantita || fields.qty;
       if (qty !== undefined && qty !== null && (isNaN(qty) || Number(qty) <= 0)) {
         return err('Quantità non valida: deve essere un numero maggiore di 0');
       }
-      const row = { id, ...fields, stato: 'richiesto', data_richiesta: new Date().toISOString() };
+      // Only send writable columns: id,tenant_id,cliente_id,codice,descrizione,stato,quantita,data_ordine,data_richiesta,note,tecnico_id
+      const row = {
+        id,
+        tenant_id: fields.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
+        cliente_id: fields.cliente_id || null,
+        codice: fields.codice || null,
+        descrizione: fields.descrizione || fields.note || fields.codice || 'Ordine ricambio',
+        stato: fields.stato || 'richiesto',
+        quantita: qty ? Number(qty) : null,
+        data_ordine: fields.data_ordine || null,
+        data_richiesta: new Date().toISOString(),
+        note: fields.note || null,
+        tecnico_id: fields.tecnico_id || null
+      };
       const result = await sb(env, 'ordini', 'POST', row);
       await wlog('ordine', id, 'created', body.operatoreId || body.userId);
       return ok({ ordine: pascalizeRecord(result[0]) });
@@ -611,7 +641,19 @@ async function handlePost(action, body, env) {
 
     case 'createInstallazione': {
       const id = 'INS_' + Date.now();
-      const result = await sb(env, 'installazioni', 'POST', { id, ...getFields(body), stato: 'pianificata', created_at: new Date().toISOString() });
+      const fields = getFields(body);
+      // Writable: id,tenant_id,cliente_id,macchina_id,stato,data_inizio,note,obsoleto
+      const row = {
+        id,
+        tenant_id: fields.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
+        cliente_id: fields.cliente_id || null,
+        macchina_id: fields.macchina_id || null,
+        stato: 'pianificata',
+        data_inizio: fields.data_inizio || fields.data_prevista || null,
+        note: fields.note || null,
+        created_at: new Date().toISOString()
+      };
+      const result = await sb(env, 'installazioni', 'POST', row);
       return ok({ installazione: pascalizeRecord(result[0]) });
     }
 
@@ -634,7 +676,22 @@ async function handlePost(action, body, env) {
 
     case 'createTrasferta': {
       const id = 'TRA_' + Date.now();
-      const result = await sb(env, 'trasferte', 'POST', { id, ...getFields(body), created_at: new Date().toISOString() });
+      const fields = getFields(body);
+      // Writable: id,tenant_id,cliente_id,tecnico_id,automezzo_id,motivo,stato,note,data_inizio,obsoleto
+      const row = {
+        id,
+        tenant_id: fields.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
+        cliente_id: fields.cliente_id || null,
+        tecnico_id: fields.tecnico_id || fields.tecnici_i_ds?.[0] || null,
+        automezzo_id: fields.automezzo_id || null,
+        motivo: fields.motivo || fields.note || '',
+        stato: fields.stato || 'pianificata',
+        data_inizio: fields.data_inizio || new Date().toISOString().slice(0,10),
+        data_fine: fields.data_fine || null,
+        note: fields.note || null,
+        created_at: new Date().toISOString()
+      };
+      const result = await sb(env, 'trasferte', 'POST', row);
       return ok({ trasferta: pascalizeRecord(result[0]) });
     }
 
@@ -642,7 +699,11 @@ async function handlePost(action, body, env) {
 
     case 'createNotifica': {
       const id = 'NOT_' + Date.now();
-      const result = await sb(env, 'notifiche', 'POST', { id, ...getFields(body), data_invio: new Date().toISOString() });
+      const fields = getFields(body);
+      // Map messaggio/titolo/contenuto -> testo (only writable column)
+      const testo = fields.messaggio || fields.testo || fields.titolo || fields.contenuto || '';
+      const row = { id, tenant_id: fields.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045', tipo: fields.tipo || 'info', testo, stato: fields.stato || 'inviata', destinatario_id: fields.destinatario_id || null, riferimento_id: fields.riferimento_id || null, riferimento_tipo: fields.riferimento_tipo || null, data_invio: new Date().toISOString() };
+      const result = await sb(env, 'notifiche', 'POST', row);
       return ok({ notifica: pascalizeRecord(result[0]) });
     }
 
@@ -663,7 +724,19 @@ async function handlePost(action, body, env) {
 
     case 'createRichiesta': {
       const id = 'RIC_' + Date.now();
-      const result = await sb(env, 'richieste', 'POST', { id, ...getFields(body), stato: 'in_attesa', data_richiesta: new Date().toISOString() });
+      const fields = getFields(body);
+      // Writable: id,tenant_id,tipo,stato,data_richiesta,data_risposta,tecnico_id,motivo,data_inizio,obsoleto
+      const row = {
+        id,
+        tenant_id: fields.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
+        tipo: fields.tipo || 'generico',
+        stato: 'in_attesa',
+        motivo: fields.motivo || fields.testo || fields.messaggio || fields.descrizione || '',
+        tecnico_id: fields.tecnico_id || null,
+        data_inizio: fields.data_inizio || new Date().toISOString().slice(0,10),
+        data_richiesta: new Date().toISOString()
+      };
+      const result = await sb(env, 'richieste', 'POST', row);
       return ok({ richiesta: pascalizeRecord(result[0]) });
     }
 
