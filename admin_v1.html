@@ -468,6 +468,10 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 
 <!-- ========== SEC: DASHBOARD ========== -->
 <section class="sec active" id="secDashboard">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+  <div style="font-size:.75rem;color:var(--gray)">Ultimo aggiornamento: <span id="dashLastUpdate">—</span></div>
+  <button class="btn btn-outline btn-sm" onclick="refreshData();toast('Aggiornamento...','info')" style="font-size:.75rem">🔄 Aggiorna</button>
+</div>
 <div class="kpi-grid" id="kpiDash"></div>
 <div class="grid-2 mb">
 <div class="card"><div class="card-head"><h3>📋 Interventi Oggi</h3><button class="btn btn-primary btn-sm" onclick="openModal('modalPiano')">+ Nuovo</button></div><div class="card-body np" style="max-height:360px;overflow-y:auto"><table class="tbl"><thead><tr><th>Ora</th><th>Tecnico</th><th>🚐</th><th>Cliente</th><th>Tipo</th><th>Stato</th><th></th></tr></thead><tbody id="tblOggi"></tbody></table></div></div>
@@ -516,8 +520,11 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card-head">
 <h3>📋 Tutti gli Interventi</h3>
 <div class="btn-group">
-<select id="filtPianoStato" onchange="renderPiano()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti gli stati</option><option value="da_confermare">⏳ Da Confermare</option><option value="pianificato">Pianificato</option><option value="in_corso">In Corso</option><option value="completato">Completato</option></select>
+<input type="date" id="filtPianoDataDa" onchange="renderPiano()" style="padding:5px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem" title="Da data">
+<input type="date" id="filtPianoDataA" onchange="renderPiano()" style="padding:5px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem" title="A data">
+<select id="filtPianoStato" onchange="renderPiano()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti gli stati</option><option value="da_confermare">⏳ Da Confermare</option><option value="pianificato">Pianificato</option><option value="in_corso">In Corso</option><option value="completato">Completato</option><option value="annullato">Annullato</option></select>
 <select id="filtPianoTec" onchange="renderPiano()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti i tecnici</option></select>
+<button class="btn btn-ghost btn-sm" onclick="exportPianoCSV()" title="Esporta CSV">📥</button>
 <button class="btn btn-primary btn-sm" onclick="openModal('modalPiano')">+ Nuovo Intervento</button>
 </div>
 </div>
@@ -533,7 +540,10 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card-head">
 <h3>🚨 Gestione Urgenze</h3>
 <div class="btn-group">
-<select id="filtUrgStato" onchange="renderUrgenze()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti</option><option value="aperta">🔴 Aperte (da assegnare)</option><option value="assegnata">👤 Assegnate</option><option value="schedulata">📅 Schedulate</option><option value="in_corso">⚡ In Corso</option><option value="risolta">✅ Risolte</option></select>
+<input type="date" id="filtUrgDataDa" onchange="renderUrgenze()" style="padding:5px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem" title="Da data">
+<input type="date" id="filtUrgDataA" onchange="renderUrgenze()" style="padding:5px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem" title="A data">
+<select id="filtUrgStato" onchange="renderUrgenze()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti</option><option value="aperta">🔴 Aperte</option><option value="assegnata">👤 Assegnate</option><option value="schedulata">📅 Schedulate</option><option value="in_corso">⚡ In Corso</option><option value="risolta">✅ Risolte</option><option value="chiusa">📁 Chiuse</option></select>
+<button class="btn btn-ghost btn-sm" onclick="exportUrgenzeCSV()" title="Esporta CSV">📥</button>
 <button class="btn btn-err" onclick="openModal('modalUrgenza')" style="font-size:.9rem;padding:10px 20px;animation:pulse 2s infinite">🚨 + NUOVA URGENZA</button>
 </div>
 </div>
@@ -1729,8 +1739,9 @@ function enterApp(){
   $('footUser').textContent=(USER.Nome||'')[0]+(USER.Cognome||'')[0]+' · '+USER.Ruolo;
   populateSelects();
   renderAll();
-  // Load anagrafica assets in background (needed for Macchine section + modal selects)
   loadAnagClients().then(()=>{renderMacchine();populateModalClientsFromAnag()}).catch(()=>{});
+  // Auto-refresh dashboard ogni 60 sec
+  setInterval(()=>{refreshData()},60000);
 }
 
 // ============ POPULATE SELECTS ============
@@ -1875,6 +1886,8 @@ function updateBadges(){
 
 // ============ DASHBOARD ============
 function renderDashboard(){
+  // Timestamp ultimo aggiornamento
+  const upd=$('dashLastUpdate');if(upd)upd.textContent=new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   const piano=(DATA.piano||[]).filter(p=>!p.Obsoleto);
   const urg=(DATA.urgenze||[]).filter(u=>!u.Obsoleto);
   const ord=(DATA.ordini||[]).filter(o=>!o.Obsoleto);
@@ -2048,14 +2061,20 @@ function renderDashboard(){
 }
 
 // ============ PIANO (INTERVENTI) ============
+let _lastPianoItems=[]; // per export CSV
 function renderPiano(){
   const stato=$('filtPianoStato')?.value||'';
   const tec=$('filtPianoTec')?.value||'';
+  const dataDa=$('filtPianoDataDa')?.value||'';
+  const dataA=$('filtPianoDataA')?.value||'';
   let items=(DATA.piano||[]).filter(p=>!p.Obsoleto);
   if(stato==='da_confermare')items=items.filter(p=>(p.Note||'').includes('DA CONFERMARE'));
   else if(stato)items=items.filter(p=>p.Stato===stato);
   if(tec)items=items.filter(p=>p.TecnicoID===tec||(p.TecniciIDs||'').includes(tec));
+  if(dataDa)items=items.filter(p=>(p.Data||'')>=dataDa);
+  if(dataA)items=items.filter(p=>(p.Data||'')<=dataA);
   items.sort((a,b)=>(b.Data||'').localeCompare(a.Data||''));
+  _lastPianoItems=items;
   $('tblPiano').innerHTML=items.length?items.map(p=>`<tr>
     <td>${fmtDate(p.Data)}${p.DataFine&&p.DataFine!==p.Data?' → '+fmtDate(p.DataFine):''}</td>
     <td>${p.OraInizio||'—'}</td>
@@ -2071,12 +2090,36 @@ function renderPiano(){
   </tr>`).join(''):'<tr><td colspan="11" class="empty"><p>Nessun intervento trovato</p></td></tr>';
 }
 
+function exportPianoCSV(){
+  const items=_lastPianoItems;
+  if(!items.length){toast('Nessun dato da esportare','err');return}
+  const header='Data;Ora;Tecnico;Furgone;Cliente;Macchina;Tipo;Stato;Km;Ore;Note';
+  const rows=items.map(p=>[
+    p.Data||'',p.OraInizio||'',getName(DATA.utenti||[],p.TecnicoID),getName(DATA.automezzi||[],p.AutomezzoID,'Descrizione'),
+    getName(DATA.clienti||[],p.ClienteID),getName(DATA.macchine||[],p.MacchinaID,'Tipo'),
+    getName(DATA.tipiIntervento||[],p.TipoInterventoID),p.Stato||'',p.KmPercorsi||'',p.OreLavorate||'',
+    (p.Note||'').replace(/;/g,',').replace(/\n/g,' ').substring(0,100)
+  ].join(';'));
+  const csv='\uFEFF'+header+'\n'+rows.join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='interventi_'+today()+'.csv';a.click();
+  URL.revokeObjectURL(url);
+  toast(`Esportati ${items.length} interventi`,'ok');
+}
+
 // ============ URGENZE ============
+let _lastUrgItems=[];
 function renderUrgenze(){
   const stato=$('filtUrgStato')?.value||'';
+  const dataDa=$('filtUrgDataDa')?.value||'';
+  const dataA=$('filtUrgDataA')?.value||'';
   let items=(DATA.urgenze||[]).filter(u=>!u.Obsoleto);
   if(stato)items=items.filter(u=>u.Stato===stato);
+  if(dataDa)items=items.filter(u=>(u.DataSegnalazione||'').substring(0,10)>=dataDa);
+  if(dataA)items=items.filter(u=>(u.DataSegnalazione||'').substring(0,10)<=dataA);
   items.sort((a,b)=>(b.DataSegnalazione||'').localeCompare(a.DataSegnalazione||''));
+  _lastUrgItems=items;
   $('tblUrgenze').innerHTML=items.length?items.map(u=>`<tr>
     <td><span class="tag" style="background:${getColor(DATA.priorita||[],u.PrioritaID)}20;color:${getColor(DATA.priorita||[],u.PrioritaID)}">${getName(DATA.priorita||[],u.PrioritaID)}</span></td>
     <td>${getName(DATA.clienti||[],u.ClienteID)}</td>
@@ -2088,6 +2131,26 @@ function renderUrgenze(){
     <td>${fmtDateTime(u.DataSegnalazione)}</td>
     <td class="actions-cell">${u.Stato==='aperta'?`<button class="btn btn-primary btn-xs" onclick="openAssegna('${u.ID}')">✅ Approva+Assegna</button>`:u.Stato==='assegnata'||u.Stato==='schedulata'?`<button class="btn btn-warn btn-xs" onclick="urgAction('${u.ID}','startUrgenza')">⚡ Inizia</button>`:u.Stato==='in_corso'?`<button class="btn btn-ok btn-xs" onclick="urgAction('${u.ID}','resolveUrgenza')">✅ Risolvi</button>`:''} <button class="btn btn-ghost btn-xs" onclick="showDetail('urgenza','${u.ID}')">👁️</button></td>
   </tr>`).join(''):'<tr><td colspan="9" class="empty"><p>Nessuna urgenza</p></td></tr>';
+}
+
+function exportUrgenzeCSV(){
+  const items=_lastUrgItems;
+  if(!items.length){toast('Nessun dato da esportare','err');return}
+  const header='Data Segnalazione;Priorità;Cliente;Macchina;Problema;Tecnico;SLA;Stato;Data Risoluzione;Note';
+  const rows=items.map(u=>[
+    (u.DataSegnalazione||'').substring(0,16),getName(DATA.priorita||[],u.PrioritaID),
+    getName(DATA.clienti||[],u.ClienteID),getName(DATA.macchine||[],u.MacchinaID,'Tipo'),
+    (u.Problema||'').replace(/;/g,',').replace(/\n/g,' ').substring(0,150),
+    u.TecnicoAssegnato?getName(DATA.utenti||[],u.TecnicoAssegnato):'—',
+    u.SLAStatus||'—',u.Stato||'',(u.DataRisoluzione||'').substring(0,16),
+    (u.Note||'').replace(/;/g,',').replace(/\n/g,' ').substring(0,100)
+  ].join(';'));
+  const csv='\uFEFF'+header+'\n'+rows.join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='urgenze_'+today()+'.csv';a.click();
+  URL.revokeObjectURL(url);
+  toast(`Esportate ${items.length} urgenze`,'ok');
 }
 
 function openAssegna(urgId){$('maUrgId').value=urgId;$('maData').value=today();openModal('modalAssegna')}

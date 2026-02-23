@@ -812,7 +812,7 @@ function enterApp(){
   $('hdrDate').textContent=new Date().toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'});
   fillSelects();
   renderAll();
-  setInterval(refreshData,120000);
+  setInterval(refreshData,60000);
 }
 
 function fillSelects(){
