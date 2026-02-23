@@ -606,9 +606,11 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <!-- ========== SEC: RICHIESTE ========== -->
 <section class="sec" id="secRichieste">
 <div class="card">
-<div class="card-head"><h3>📝 Richieste Modifica</h3></div>
+<div class="card-head"><h3>📝 Richieste</h3>
+<div class="btn-group"><button class="btn btn-ok btn-sm" onclick="openNewRichiesta()">+ Nuova Richiesta</button></div>
+</div>
 <div class="card-body np" style="max-height:500px;overflow-y:auto">
-<table class="tbl"><thead><tr><th>Tecnico</th><th>Tipo</th><th>Dal</th><th>Al</th><th>Motivo</th><th>Stato</th><th>Data</th><th></th></tr></thead><tbody id="tblRich"></tbody></table>
+<table class="tbl"><thead><tr><th>Tecnico</th><th>Tipo</th><th>Motivo</th><th>Stato</th><th>Data</th><th></th></tr></thead><tbody id="tblRich"></tbody></table>
 </div>
 </div>
 </section>
@@ -1561,7 +1563,7 @@ const $=id=>document.getElementById(id);
 const today=()=>new Date().toISOString().split('T')[0];
 const fmtDate=d=>{if(!d)return '—';const p=String(d).substring(0,10).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:'—'};
 const fmtDateTime=d=>{if(!d)return '—';try{return new Date(d).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}catch{return '—'}};
-const getName=(list,id,field='Nome')=>{const o=list.find(x=>x.ID===id);return o?(o.Nome||'')+(o.Cognome?' '+o.Cognome:''):id||'—'};
+const getName=(list,id,field='Nome')=>{const o=list.find(x=>x.ID===id||x.CodiceM3===id);return o?(o.NomeInterno||o.Nome||'')+(o.Cognome?' '+o.Cognome:''):id||'—'};
 const getColor=(list,id)=>{const o=list.find(x=>x.ID===id);return o?.Colore||'#6B7280'};
 const statusTag=(s)=>{const m={'pianificato':['tag-info','📅'],'in_corso':['tag-warn','⚡'],'completato':['tag-ok','✅'],'chiuso':['tag-gray','🔒'],'aperta':['tag-err','🔴'],'assegnata':['tag-warn','👤'],'schedulata':['tag-info','📅'],'risolta':['tag-ok','✅'],'richiesto':['tag-info','📝'],'preso_in_carico':['tag-warn','👋'],'ordinato':['tag-purple','📦'],'in_arrivo':['tag-info','🚚'],'arrivato':['tag-ok','✅'],'attiva':['tag-ok','✅'],'pianificata':['tag-info','📅'],'completata':['tag-ok','✅'],'bozza':['tag-warn','📝'],'approvato':['tag-ok','✅'],'approvata':['tag-ok','✅'],'rifiutata':['tag-err','❌'],'in_attesa':['tag-warn','⏳']};const x=m[s]||['tag-gray',''];return `<span class="tag ${x[0]}">${x[1]} ${s||'—'}</span>`};
 const slaTag=(s,pct)=>{const m={'ok':['tag-ok','✅ OK'],'warning':['tag-warn','⚠️ Warning'],'critical':['tag-err','🔴 Critical'],'breach':['tag-err','💥 Breach']};const x=m[s]||['tag-gray',s||'—'];return `<span class="tag ${x[0]}">${x[1]}</span>${pct!==undefined?`<div class="sla-bar sla-${s}"><div class="fill" style="width:${Math.min(pct,100)}%"></div></div>`:''}`};
@@ -1866,7 +1868,7 @@ function renderDashboard(){
   $('automezziDash').innerHTML=automezziList.length?automezziList.map(f=>{
     const ctrl=f.ProssimoControllo&&f.ProssimoControllo<=d;
     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--gray4)">
-      <span><strong>${f.ID}</strong> ${f.Targa||''}</span>
+      <span><strong>${f.Descrizione||f.Targa||f.ID}</strong> ${f.AssegnatarioID?'→ '+getName(DATA.utenti||[],f.AssegnatarioID):''}</span>
       <span>${ctrl?'<span class="tag tag-err">⚠️ Controllo scaduto</span>':'<span class="tag tag-ok">✅ OK</span>'}</span>
     </div>`}).join(''):'<p class="empty">Nessun automezzo</p>';
 
@@ -1921,6 +1923,42 @@ function renderUrgenze(){
 
 function openAssegna(urgId){$('maUrgId').value=urgId;$('maData').value=today();openModal('modalAssegna')}
 async function urgAction(id,action){try{await apiCall(action,{id},'POST');toast(action==='startUrgenza'?'Urgenza in corso!':'Urgenza risolta!','ok');await refreshData()}catch(e){toast(e.message,'err')}}
+
+async function saveUrgenzaEdit(id){
+  try{
+    const updates={id,
+      ClienteID:$('edUrgCliente')?.value||null,
+      PrioritaID:$('edUrgPriorita')?.value||null,
+      TecnicoAssegnato:$('edUrgTecnico')?.value||null,
+      DataPrevista:$('edUrgDataPrev')?.value||null,
+      OraPrevista:$('edUrgOraPrev')?.value||null,
+      Problema:$('edUrgProblema')?.value||'',
+      Note:$('edUrgNote')?.value||''
+    };
+    await apiCall('updateUrgenza',updates,'POST');
+    toast('Urgenza aggiornata!','ok');
+    closeModal('modalDetail');
+    await refreshData();
+  }catch(e){toast('Errore: '+e.message,'err')}
+}
+
+async function saveInterventoEdit(id){
+  try{
+    const updates={id,
+      ClienteID:$('edIntCliente')?.value||null,
+      TecnicoID:$('edIntTecnico')?.value||null,
+      AutomezzoID:$('edIntFurgone')?.value||null,
+      TipoInterventoID:$('edIntTipo')?.value||null,
+      Data:$('edIntData')?.value||null,
+      OraInizio:$('edIntOra')?.value||null,
+      Note:$('edIntNote')?.value||''
+    };
+    await apiCall('updatePiano',updates,'POST');
+    toast('Intervento aggiornato!','ok');
+    closeModal('modalDetail');
+    await refreshData();
+  }catch(e){toast('Errore: '+e.message,'err')}
+}
 
 
 // ============ ORDINI ============
@@ -2035,16 +2073,34 @@ function renderRichieste(){
   const items=(DATA.richieste||[]).filter(r=>!r.Obsoleto).sort((a,b)=>(b.DataRichiesta||'').localeCompare(a.DataRichiesta||''));
   $('tblRich').innerHTML=items.length?items.map(r=>`<tr>
     <td>${getName(DATA.utenti||[],r.TecnicoID)}</td>
-    <td>${r.Tipo||'—'}</td>
-    <td>${fmtDate(r.DataInizio)}</td>
-    <td>${fmtDate(r.DataFine)}</td>
-    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.Motivo||'—'}</td>
+    <td><span class="tag">${r.Tipo||'generico'}</span></td>
+    <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.Motivo||'—'}</td>
     <td>${statusTag(r.Stato)}</td>
     <td>${fmtDate(r.DataRichiesta)}</td>
     <td>${r.Stato==='in_attesa'?`<button class="btn btn-ok btn-xs" onclick="approveRich('${r.ID}','approvata')">✅</button><button class="btn btn-err btn-xs" onclick="approveRich('${r.ID}','rifiutata')" style="margin-left:4px">❌</button>`:''}</td>
-  </tr>`).join(''):'<tr><td colspan="8" class="empty"><p>Nessuna richiesta</p></td></tr>';
+  </tr>`).join(''):'<tr><td colspan="6" class="empty"><p>Nessuna richiesta</p></td></tr>';
 }
-async function approveRich(id,stato){try{await apiCall('updatePiano',{id,data:{Stato:stato}},'POST');toast('Richiesta '+stato,'ok');await refreshData()}catch(e){toast(e.message,'err')}}
+async function approveRich(id,stato){try{await apiCall('updateRichiesta',{id,stato},'POST');toast('Richiesta '+stato,'ok');await refreshData()}catch(e){toast(e.message,'err')}}
+function openNewRichiesta(){
+  const tecOpts=(DATA.utenti||[]).filter(u=>!u.Obsoleto).map(u=>`<option value="${u.ID}">${u.Nome} ${u.Cognome||''}</option>`).join('');
+  const html=`<div style="display:flex;flex-direction:column;gap:12px;padding:8px">
+    <label>Tipo<select id="nrTipo" class="inp"><option value="ferie">Ferie</option><option value="permesso">Permesso</option><option value="malattia">Malattia</option><option value="cambio_turno">Cambio Turno</option><option value="generico">Generico</option></select></label>
+    <label>Tecnico<select id="nrTecnico" class="inp"><option value="">— Seleziona —</option>${tecOpts}</select></label>
+    <label>Motivo<textarea id="nrMotivo" class="inp" rows="3" placeholder="Descrizione richiesta..."></textarea></label>
+    <button class="btn btn-ok" onclick="submitRichiesta()">📝 Invia Richiesta</button>
+  </div>`;
+  openModal('modalDetail','📝 Nuova Richiesta',html);
+}
+async function submitRichiesta(){
+  const tipo=$('nrTipo')?.value||'generico';
+  const tecnico=$('nrTecnico')?.value||null;
+  const motivo=$('nrMotivo')?.value||'';
+  if(!motivo.trim()){toast('Inserisci un motivo','err');return}
+  try{
+    await apiCall('createRichiesta',{tipo,tecnicoId:tecnico,motivo},'POST');
+    toast('Richiesta creata!','ok');closeModal('modalDetail');await refreshData();
+  }catch(e){toast('Errore: '+e.message,'err')}
+}
 
 // ============ CLIENTI ============
 function renderClienti(){
@@ -3973,48 +4029,73 @@ function showDetail(type,id){
     case 'piano':
       item=(DATA.piano||[]).find(p=>p.ID===id);if(!item)return;
       title='📋 Intervento '+id;
+      const intClienti=(DATA.clienti||[]).filter(c=>!c.Obsoleto);
+      const intTecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
+      const intFurgoni=(DATA.automezzi||[]).filter(f=>!f.Obsoleto);
+      const intTipi=(DATA.tipiIntervento||[]).filter(t=>t.Attivo!==false);
       html=`<div class="grid-2 mb">
-        <div><strong>Data:</strong> ${fmtDate(item.Data)}${item.DataFine&&item.DataFine!==item.Data?' → '+fmtDate(item.DataFine):''}</div>
-        <div><strong>Ora:</strong> ${item.OraInizio||'—'} · Durata: ${item.DurataOre||'—'}h</div>
-        <div><strong>Tecnico:</strong> ${getName(DATA.utenti||[],item.TecnicoID)}</div>
-        <div><strong>Tecnici aggiuntivi:</strong> ${(item.TecniciIDs||'').split(',').filter(Boolean).map(id=>getName(DATA.utenti||[],id)).join(', ')||'—'}</div>
-        <div><strong>Automezzo:</strong> ${item.AutomezzoID||'—'}</div>
-        <div><strong>Cliente:</strong> ${getName(DATA.clienti||[],item.ClienteID)}</div>
-        <div><strong>Macchina:</strong> ${getName(DATA.macchine||[],item.MacchinaID,'Tipo')}</div>
-        <div><strong>Tipo:</strong> ${getName(DATA.tipiIntervento||[],item.TipoInterventoID)}</div>
-        <div><strong>Priorità:</strong> ${getName(DATA.priorita||[],item.PrioritaID)}</div>
+        <div><strong>Data:</strong> <input type="date" id="edIntData" class="inp" style="display:inline;width:auto" value="${item.Data||''}"></div>
+        <div><strong>Ora:</strong> <input type="time" id="edIntOra" class="inp" style="display:inline;width:auto" value="${item.OraInizio||''}"> · Durata: ${item.DurataOre||'—'}h</div>
+        <div><strong>Tecnico:</strong> <select id="edIntTecnico" class="inp" style="display:inline;width:auto">
+          <option value="">—</option>
+          ${intTecnici.map(t=>`<option value="${t.ID}" ${t.ID===item.TecnicoID?'selected':''}>${t.Nome} ${t.Cognome||''}</option>`).join('')}
+        </select></div>
+        <div><strong>Furgone:</strong> <select id="edIntFurgone" class="inp" style="display:inline;width:auto">
+          <option value="">—</option>
+          ${intFurgoni.map(f=>`<option value="${f.ID}" ${f.ID===item.AutomezzoID?'selected':''}>${f.Descrizione||f.Targa||f.ID}</option>`).join('')}
+        </select></div>
+        <div><strong>Cliente:</strong> <select id="edIntCliente" class="inp" style="display:inline;width:auto;min-width:180px">
+          <option value="">— Seleziona —</option>
+          ${intClienti.map(c=>`<option value="${c.CodiceM3||c.ID}" ${(c.CodiceM3||c.ID)===item.ClienteID?'selected':''}>${c.NomeInterno||c.NomeAccount||c.Nome}</option>`).join('')}
+        </select></div>
+        <div><strong>Tipo:</strong> <select id="edIntTipo" class="inp" style="display:inline;width:auto">
+          <option value="">—</option>
+          ${intTipi.map(t=>`<option value="${t.ID}" ${t.ID===item.TipoInterventoID?'selected':''}>${t.Nome}</option>`).join('')}
+        </select></div>
         <div><strong>Stato:</strong> ${statusTag(item.Stato)}</div>
-        <div><strong>Km Percorsi:</strong> ${item.KmPercorsi||'—'}</div>
-        <div><strong>Ore Lavorate:</strong> ${item.OreLavorate||'—'}</div>
         <div><strong>Origine:</strong> ${item.Origine||'manuale'}</div>
         ${item.UrgenzaID?`<div><strong>Urgenza collegata:</strong> ${item.UrgenzaID}</div>`:''}
       </div>
-      ${item.Note?`<div class="mb"><strong>Note:</strong><br>${item.Note}</div>`:''}
+      <div class="mb"><strong>Note:</strong><br><textarea id="edIntNote" class="inp" rows="2" style="width:100%">${item.Note||''}</textarea></div>
       ${item.NoteCompletamento?`<div class="mb"><strong>Note completamento:</strong><br>${item.NoteCompletamento}</div>`:''}`;
-      if(item.Stato==='pianificato')foot=`<button class="btn btn-warn" onclick="updatePianoStato('${id}','in_corso')">⚡ Inizia</button>`;
-      if(item.Stato==='in_corso')foot=`<button class="btn btn-ok" onclick="updatePianoStato('${id}','completato')">✅ Completa</button>`;
+      foot=`<button class="btn btn-primary" onclick="saveInterventoEdit('${id}')">💾 Salva</button> `;
+      if(item.Stato==='pianificato')foot+=`<button class="btn btn-warn" onclick="updatePianoStato('${id}','in_corso')">⚡ Inizia</button> `;
+      if(item.Stato==='in_corso')foot+=`<button class="btn btn-ok" onclick="updatePianoStato('${id}','completato')">✅ Completa</button>`;
       break;
 
     case 'urgenza':
       item=(DATA.urgenze||[]).find(u=>u.ID===id);if(!item)return;
       title='🚨 Urgenza '+id;
+      const urgClienti=(DATA.clienti||[]).filter(c=>!c.Obsoleto);
+      const urgTecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
+      const urgPriorita=(DATA.priorita||[]).filter(p=>p.Attivo!==false);
       html=`<div class="grid-2 mb">
-        <div><strong>Cliente:</strong> ${getName(DATA.clienti||[],item.ClienteID)}</div>
+        <div><strong>Cliente:</strong> <select id="edUrgCliente" class="inp" style="display:inline;width:auto;min-width:180px">
+          <option value="">— Seleziona —</option>
+          ${urgClienti.map(c=>`<option value="${c.CodiceM3||c.ID}" ${(c.CodiceM3||c.ID)===item.ClienteID?'selected':''}>${c.NomeInterno||c.NomeAccount||c.Nome}</option>`).join('')}
+        </select></div>
         <div><strong>Macchina:</strong> ${getName(DATA.macchine||[],item.MacchinaID,'Tipo')}</div>
-        <div><strong>Priorità:</strong> <span class="tag" style="background:${getColor(DATA.priorita||[],item.PrioritaID)}20;color:${getColor(DATA.priorita||[],item.PrioritaID)}">${getName(DATA.priorita||[],item.PrioritaID)}</span></div>
+        <div><strong>Priorità:</strong> <select id="edUrgPriorita" class="inp" style="display:inline;width:auto">
+          <option value="">—</option>
+          ${urgPriorita.map(p=>`<option value="${p.ID}" ${p.ID===item.PrioritaID?'selected':''}>${p.Nome}</option>`).join('')}
+        </select></div>
         <div><strong>Stato:</strong> ${statusTag(item.Stato)}</div>
-        <div><strong>Tecnico:</strong> ${item.TecnicoAssegnato?getName(DATA.utenti||[],item.TecnicoAssegnato):'<em>Non assegnato</em>'}</div>
+        <div><strong>Tecnico:</strong> <select id="edUrgTecnico" class="inp" style="display:inline;width:auto">
+          <option value="">— Non assegnato —</option>
+          ${urgTecnici.map(t=>`<option value="${t.ID}" ${t.ID===item.TecnicoAssegnato?'selected':''}>${t.Nome} ${t.Cognome||''}</option>`).join('')}
+        </select></div>
         <div><strong>Automezzo:</strong> ${item.AutomezzoID||'—'}</div>
         <div><strong>Segnalata:</strong> ${fmtDateTime(item.DataSegnalazione)}</div>
         <div><strong>Assegnata:</strong> ${fmtDateTime(item.DataAssegnazione)}</div>
-        <div><strong>Data Prevista:</strong> ${fmtDate(item.DataPrevista)} ${item.OraPrevista||''}</div>
+        <div><strong>Data Prevista:</strong> <input type="date" id="edUrgDataPrev" class="inp" style="display:inline;width:auto" value="${item.DataPrevista||''}"> <input type="time" id="edUrgOraPrev" class="inp" style="display:inline;width:auto" value="${item.OraPrevista||''}"></div>
         <div><strong>Risolta:</strong> ${fmtDateTime(item.DataRisoluzione)}</div>
       </div>
-      <div class="mb"><strong>Problema:</strong><br>${item.Problema||'—'}</div>
-      ${item.Note?`<div class="mb"><strong>Note:</strong><br>${item.Note}</div>`:''}
+      <div class="mb"><strong>Problema:</strong><br><textarea id="edUrgProblema" class="inp" rows="2" style="width:100%">${item.Problema||''}</textarea></div>
+      <div class="mb"><strong>Note:</strong><br><textarea id="edUrgNote" class="inp" rows="2" style="width:100%">${item.Note||''}</textarea></div>
       <div class="mb"><strong>SLA:</strong> ${slaTag(item.SLAStatus)} ${item.SLAScadenza?'— Scadenza: '+fmtDateTime(item.SLAScadenza):''}</div>
       ${item.InterventoID?`<div class="mb"><strong>Intervento collegato:</strong> ${item.InterventoID}</div>`:''}`;
-      if(item.Stato==='aperta')foot=`<button class="btn btn-primary" onclick="closeModal('modalDetail');openAssegna('${id}')">👤 Assegna</button>`;
+      foot=`<button class="btn btn-primary" onclick="saveUrgenzaEdit('${id}')">💾 Salva Modifiche</button> `;
+      if(item.Stato==='aperta')foot+=`<button class="btn btn-outline" onclick="closeModal('modalDetail');openAssegna('${id}')">👤 Assegna</button>`;
       break;
 
     case 'ordine':
