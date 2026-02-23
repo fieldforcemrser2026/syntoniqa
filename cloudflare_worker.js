@@ -888,9 +888,9 @@ async function handlePost(action, body, env) {
     }
 
     case 'testTelegram': {
-      const chatId = body.chatId;
+      const chatId = body.chat_id || body.chatId;
       if (!chatId) return err('Chat ID mancante');
-      const msg = body.message || '🤖 Syntoniqa v2.0 – Telegram OK!';
+      const msg = body.message || body.messaggio || '🤖 Syntoniqa v2.0 – Telegram OK!';
       // Try env token first, then read from DB config
       let token = env.TELEGRAM_BOT_TOKEN || '';
       if (!token) {
