@@ -1282,6 +1282,7 @@ Rispondi con JSON:
     case 'telegramWebhook': {
       const update = body;
       if (!update.message && !update.callback_query) return ok();
+      try {
 
       // Handle callback queries (inline button responses)
       if (update.callback_query) {
@@ -1306,16 +1307,35 @@ Rispondi con JSON:
 
       const msg     = update.message;
       const chatId  = msg.chat.id;
+      const fromId  = msg.from?.id || null; // Telegram user ID (individual)
       const text    = msg.text || msg.caption || '';
       const parts   = text.split(' ');
       const cmd     = parts[0]?.toLowerCase() || '';
 
-      // Trova utente dal chat_id
-      const utenti  = await sb(env, 'utenti', 'GET', null, `?telegram_chat_id=eq.${chatId}&attivo=eq.true`);
-      const utente  = utenti[0] || null;
+      // Trova utente: prima per telegram_chat_id (= Telegram user from.id), poi match fuzzy per nome
+      let utente = null;
+      if (fromId) {
+        const byChatId = await sb(env, 'utenti', 'GET', null, `?telegram_chat_id=eq.${fromId}&attivo=eq.true`).catch(()=>[]);
+        utente = byChatId[0] || null;
+      }
+      // In gruppo MRS noto: se non troviamo utente, usa il nome Telegram per match fuzzy
+      if (!utente) {
+        const firstName = (msg.from?.first_name || '').toLowerCase();
+        const lastName = (msg.from?.last_name || '').toLowerCase();
+        if (firstName) {
+          const allUtenti = await sb(env, 'utenti', 'GET', null, '?attivo=eq.true&select=id,nome,cognome,ruolo').catch(()=>[]);
+          utente = allUtenti.find(u => (u.nome||'').toLowerCase() === firstName && (!lastName || (u.cognome||'').toLowerCase().startsWith(lastName))) || null;
+          // Auto-save telegram user id in telegram_chat_id for future fast lookups
+          if (utente && fromId) {
+            await sb(env, `utenti?id=eq.${utente.id}`, 'PATCH', { telegram_chat_id: String(fromId) }).catch(()=>{});
+          }
+        }
+      }
 
+      // /start è permesso anche senza utente registrato
       if (!utente && cmd !== '/start') {
-        await sendTelegram(env, chatId, '❌ Non autorizzato. Registra il tuo Telegram ID nel profilo Syntoniqa.');
+        const nome = msg.from?.first_name || 'utente';
+        await sendTelegram(env, chatId, `❌ Ciao ${nome}, non ti trovo nel sistema. Chiedi all'admin di aggiungere il tuo Telegram ID (${fromId}) nel profilo Syntoniqa.`);
         return ok();
       }
 
@@ -1385,9 +1405,13 @@ Rispondi SOLO con JSON valido:
           method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({ contents: [{ parts: contentParts }] })
         });
+        if (!geminiRes.ok) {
+          console.error('Gemini API error:', geminiRes.status, await geminiRes.text().catch(()=>''));
+          return null;
+        }
         const gd = await geminiRes.json();
         const raw = gd.candidates?.[0]?.content?.parts?.[0]?.text?.replace(/```json\n?|\n?```/g, '').trim();
-        try { return JSON.parse(raw); } catch { return null; }
+        try { return JSON.parse(raw); } catch { console.error('Gemini parse error, raw:', raw); return null; }
       }
 
       // ---- Handle media uploads (photo, document, video, audio) ----
@@ -1474,17 +1498,19 @@ Rispondi SOLO con JSON valido:
             reply = '📦 Formato: /ordine [codice] [quantità] [cliente]\nEs: /ordine 9.1189.0283.0 2 Bondioli';
             break;
           }
-          const id = 'ORD_TG_' + Date.now();
-          await sb(env, 'ordini', 'POST', { id, tecnico_id: utente.id, descrizione: `${codice} x${qt} - ${cliente}`, stato: 'richiesto', data_richiesta: new Date().toISOString() });
-          reply = `📦 Ordine *${id}* creato:\nCodice: \`${codice}\` x${qt}\nCliente: ${cliente}`;
+          const ordId = 'ORD_TG_' + Date.now();
+          const ordTid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+          await sb(env, 'ordini', 'POST', { id: ordId, tenant_id: ordTid, tecnico_id: utente?.id || null, codice, descrizione: `${codice} x${qt} - ${cliente}`, quantita: qt, stato: 'richiesto', data_richiesta: new Date().toISOString() });
+          reply = `📦 Ordine *${ordId}* creato:\nCodice: \`${codice}\` x${qt}\nCliente: ${cliente}`;
           break;
         }
         case '/servepezz': {
-          const desc = parts.slice(1).join(' ');
-          if (!desc) { reply = 'Usa: /servepezz [descrizione ricambio]'; break; }
-          const id = 'ORD_TG_' + Date.now();
-          await sb(env, 'ordini', 'POST', { id, tecnico_id: utente.id, descrizione: desc, stato: 'richiesto', data_richiesta: new Date().toISOString() });
-          reply = `📦 Ordine ricambio *${id}* creato:\n_${desc}_`;
+          const desc2 = parts.slice(1).join(' ');
+          if (!desc2) { reply = 'Usa: /servepezz [descrizione ricambio]'; break; }
+          const spId = 'ORD_TG_' + Date.now();
+          const spTid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+          await sb(env, 'ordini', 'POST', { id: spId, tenant_id: spTid, tecnico_id: utente?.id || null, descrizione: desc2, stato: 'richiesto', data_richiesta: new Date().toISOString() });
+          reply = `📦 Ordine ricambio *${spId}* creato:\n_${desc2}_`;
           break;
         }
         default: {
@@ -1503,10 +1529,30 @@ Rispondi SOLO con JSON valido:
             }
           }
 
-          // AI Parse
-          const aiResult = await aiParseMessage(text || `[${mediaType} allegato: ${fileName || 'foto'}]`, mediaUrl, mediaType);
+          // AI Parse (with fallback to keyword-based parsing if Gemini quota exceeded)
+          let aiResult = await aiParseMessage(text || `[${mediaType} allegato: ${fileName || 'foto'}]`, mediaUrl, mediaType);
 
-          if (!aiResult) { reply = '🤔 Non riesco ad analizzare. Prova con /help'; break; }
+          if (!aiResult) {
+            // Fallback: keyword-based parsing
+            const txt = (text || '').toLowerCase();
+            const urgKw = ['fermo', 'guasto', 'errore', 'rotto', 'urgente', 'emergenza', 'bloccato', 'non funziona', 'allarme'];
+            const ordKw = ['ordine', 'ricambio', 'pezzo', 'servono', 'ordinare', 'spedire'];
+            const isUrg = urgKw.some(k => txt.includes(k));
+            const isOrd = ordKw.some(k => txt.includes(k));
+            if (isUrg || isOrd || mediaUrl) {
+              aiResult = {
+                tipo: isOrd ? 'ordine' : 'urgenza',
+                cliente: null, codice_m3: null,
+                problema: text || `[${mediaType || 'messaggio'} allegato]`,
+                macchina: null, robot_id: null,
+                priorita: isUrg ? 'alta' : 'media',
+                ricambi: [], note: 'Analizzato con fallback keywords (AI non disponibile)'
+              };
+            } else {
+              reply = '🤔 Non riesco ad analizzare. Prova con /help per i comandi disponibili.';
+              break;
+            }
+          }
 
           if (aiResult.tipo === 'nota') {
             reply = `📝 *Nota registrata*\n${aiResult.problema || text}`;
@@ -1518,18 +1564,19 @@ Rispondi SOLO con JSON valido:
           const now = new Date().toISOString();
           let payload = {}, actionReply = '';
 
+          const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
           if (aiResult.tipo === 'urgenza') {
             payload = {
               id: 'URG_TG_' + Date.now(),
+              tenant_id: tid,
               problema: aiResult.problema,
-              cliente_id: aiResult.codice_m3 || '',
-              macchina_tipo: aiResult.macchina || '',
-              robot_id: aiResult.robot_id || '',
-              priorita_id: aiResult.priorita === 'alta' ? 1 : aiResult.priorita === 'media' ? 2 : 3,
+              cliente_id: aiResult.codice_m3 || null,
+              macchina_id: aiResult.robot_id ? `${aiResult.macchina || 'ROBOT'}_${aiResult.robot_id}` : null,
+              priorita_id: null,
               stato: 'aperta',
               data_segnalazione: now,
-              segnalato_da: utente.id,
-              allegati: mediaUrl ? JSON.stringify([{ url: mediaUrl, type: mediaType, name: fileName }]) : null
+              tecnico_assegnato: null,
+              note: `[Telegram ${utente?.nome || ''}] ${aiResult.macchina || ''} ${aiResult.robot_id || ''} - Priorità: ${aiResult.priorita}${mediaUrl ? ' - Allegato: ' + mediaUrl : ''}`
             };
             try {
               await sb(env, 'urgenze', 'POST', payload);
@@ -1540,12 +1587,13 @@ Rispondi SOLO con JSON valido:
             const ricambiDesc = (aiResult.ricambi || []).map(r => `${r.codice} x${r.quantita}`).join(', ') || aiResult.problema;
             payload = {
               id: 'ORD_TG_' + Date.now(),
-              tecnico_id: utente.id,
+              tenant_id: tid,
+              tecnico_id: utente?.id || null,
+              cliente_id: aiResult.codice_m3 || null,
               descrizione: ricambiDesc,
-              cliente: aiResult.cliente || '',
               stato: 'richiesto',
               data_richiesta: now,
-              allegati: mediaUrl ? JSON.stringify([{ url: mediaUrl, type: mediaType, name: fileName }]) : null
+              note: `[Telegram ${utente?.nome || ''}] ${aiResult.cliente || ''}${mediaUrl ? ' - Allegato: ' + mediaUrl : ''}`
             };
             try {
               await sb(env, 'ordini', 'POST', payload);
@@ -1554,13 +1602,13 @@ Rispondi SOLO con JSON valido:
           } else if (aiResult.tipo === 'intervento') {
             payload = {
               id: 'INT_TG_' + Date.now(),
-              cliente_id: aiResult.codice_m3 || '',
-              tecnico_id: utente.id,
+              tenant_id: tid,
+              cliente_id: aiResult.codice_m3 || null,
+              tecnico_id: utente?.id || null,
               stato: 'pianificato',
               data: now.split('T')[0],
-              note: aiResult.problema,
-              obsoleto: false,
-              allegati: mediaUrl ? JSON.stringify([{ url: mediaUrl, type: mediaType, name: fileName }]) : null
+              note: `[Telegram ${utente?.nome || ''}] ${aiResult.problema}${mediaUrl ? ' - Allegato: ' + mediaUrl : ''}`,
+              obsoleto: false
             };
             try {
               await sb(env, 'piano', 'POST', payload);
@@ -1576,8 +1624,18 @@ Rispondi SOLO con JSON valido:
         }
       }
 
-      if (reply) await sendTelegram(env, chatId, reply);
+      if (reply) {
+        try { await sendTelegram(env, chatId, reply); } catch(e) { console.error('TG send error:', e.message); }
+      }
       return ok();
+      } catch (tgErr) {
+        console.error('Telegram handler error:', tgErr.message, tgErr.stack);
+        try {
+          const errChatId = body?.message?.chat?.id;
+          if (errChatId) await sendTelegram(env, errChatId, `⚠️ Errore bot: ${tgErr.message}`);
+        } catch(e2) {}
+        return ok();
+      }
     }
 
     // -------- CHAT INTERNA --------
