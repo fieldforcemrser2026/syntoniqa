@@ -276,8 +276,8 @@ async function handleGet(action, url, env) {
     case 'getKPITecnici': {
       // Aggregazione KPI per tutti i tecnici dal piano
       const mese = url.searchParams.get('mese') || new Date().toISOString().slice(0, 7);
-      const interventi = await sb(env, 'piano', 'GET', null, 
-        `?select=tecnico_id,stato,ore_lavorate,km_percorsi&data=gte.${mese}-01&data=lte.${mese}-31`);
+      const interventi = await sb(env, 'piano', 'GET', null,
+        `?select=tecnico_id,stato,ore_lavorate,km_percorsi&data=gte.${mese}-01&data=lte.${mese}-31&obsoleto=eq.false`);
       
       const byTecnico = {};
       interventi.forEach(i => {
@@ -330,7 +330,7 @@ async function handleGet(action, url, env) {
         sb(env, 'utenti',   'GET', null, '?select=id,nome,cognome,ruolo,squadra_id&obsoleto=eq.false'),
         sb(env, 'clienti',  'GET', null, '?select=id,nome,citta,prov&obsoleto=eq.false'),
         sb(env, 'macchine', 'GET', null, '?select=id,cliente_id,tipo,modello&obsoleto=eq.false'),
-        sb(env, 'kpi_log',  'GET', null, '?order=data.desc&limit=1000'),
+        sb(env, 'kpi_log',  'GET', null, '?order=data.desc&limit=1000&obsoleto=eq.false'),
       ]);
       return ok({ fact_interventi: piano, fact_urgenze: urgenze, fact_kpi: kpiLog, dim_tecnici: utenti, dim_clienti: clienti, dim_macchine: macchine });
     }
@@ -482,13 +482,31 @@ async function handlePost(action, body, env) {
       const id = body.id;
       const allFields = getFields(body);
       // Only writable piano columns
-      const pianoWritable = ['tecnico_id','cliente_id','automezzo_id','tipo_intervento_id','data','ora_inizio','ora_fine','stato','note','data_fine','obsoleto'];
+      const pianoWritable = ['tecnico_id','cliente_id','macchina_id','automezzo_id','tipo_intervento_id','priorita_id','data','ora_inizio','ora_fine','durata_ore','stato','note','data_fine','obsoleto'];
       const updates = {};
       for (const k of pianoWritable) { if (allFields[k] !== undefined) updates[k] = allFields[k]; }
       await sb(env, `piano?id=eq.${id}`, 'PATCH', updates);
       await wlog('piano', id, `updated_stato_${updates.stato || 'unknown'}`, body.operatoreId || body.userId);
       if (updates.stato === 'completato') {
         await triggerKPISnapshot(env, id, updates.tecnico_id);
+        // Auto-risolvi urgenza collegata se esiste
+        try {
+          const linkedUrg = await sb(env, 'urgenze', 'GET', null, `?intervento_id=eq.${id}&stato=in.(assegnata,schedulata,in_corso)&select=id`).catch(()=>[]);
+          for (const u of (linkedUrg||[])) {
+            await sb(env, `urgenze?id=eq.${u.id}`, 'PATCH', { stato: 'risolta', data_risoluzione: new Date().toISOString(), updated_at: new Date().toISOString() });
+            await wlog('urgenza', u.id, 'auto_resolved_from_piano', body.operatoreId || body.userId, `piano ${id} completato`);
+          }
+        } catch(e){ console.error('Auto-resolve urgenza error:', e.message); }
+      }
+      if (updates.stato === 'in_corso') {
+        // Auto-start urgenza collegata se è in stato assegnata
+        try {
+          const linkedUrg2 = await sb(env, 'urgenze', 'GET', null, `?intervento_id=eq.${id}&stato=eq.assegnata&select=id`).catch(()=>[]);
+          for (const u of (linkedUrg2||[])) {
+            await sb(env, `urgenze?id=eq.${u.id}`, 'PATCH', { stato: 'in_corso', data_inizio: new Date().toISOString(), updated_at: new Date().toISOString() });
+            await wlog('urgenza', u.id, 'auto_started_from_piano', body.operatoreId || body.userId);
+          }
+        } catch(e){ console.error('Auto-start urgenza error:', e.message); }
       }
       return ok();
     }
@@ -545,12 +563,79 @@ async function handlePost(action, body, env) {
       return ok();
     }
 
+    case 'startUrgenza': {
+      const { id } = body;
+      if (!id) return err('id urgenza richiesto');
+      await sb(env, `urgenze?id=eq.${id}`, 'PATCH', {
+        stato: 'in_corso',
+        data_inizio: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+      await wlog('urgenza', id, 'started', body.operatoreId || body.userId);
+      // Aggiorna anche il piano collegato se esiste
+      const urg = await sb(env, 'urgenze', 'GET', null, `?id=eq.${id}&select=intervento_id`).catch(()=>[]);
+      if (urg?.[0]?.intervento_id) {
+        await sb(env, `piano?id=eq.${urg[0].intervento_id}`, 'PATCH', { stato: 'in_corso', updated_at: new Date().toISOString() }).catch(()=>{});
+      }
+      // Notifica chat admin
+      try {
+        const msgId = 'MSG_URG_START_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+        await sb(env, 'chat_messaggi', 'POST', {
+          id: msgId, canale_id: 'CH_URGENZE', mittente_id: body.operatoreId || body.userId || 'SYSTEM',
+          testo: `⚡ Urgenza ${id} INIZIATA`, tipo: 'testo', created_at: new Date().toISOString()
+        });
+      } catch(e){}
+      return ok();
+    }
+
+    case 'resolveUrgenza': {
+      const { id } = body;
+      if (!id) return err('id urgenza richiesto');
+      const noteRisoluzione = body.noteRisoluzione || body.note_risoluzione || body.note || '';
+      await sb(env, `urgenze?id=eq.${id}`, 'PATCH', {
+        stato: 'risolta',
+        data_risoluzione: new Date().toISOString(),
+        note: noteRisoluzione ? noteRisoluzione : undefined,
+        updated_at: new Date().toISOString()
+      });
+      await wlog('urgenza', id, 'resolved', body.operatoreId || body.userId);
+      // Completa anche il piano collegato se esiste
+      const urg2 = await sb(env, 'urgenze', 'GET', null, `?id=eq.${id}&select=intervento_id,tecnico_assegnato`).catch(()=>[]);
+      if (urg2?.[0]?.intervento_id) {
+        await sb(env, `piano?id=eq.${urg2[0].intervento_id}`, 'PATCH', { stato: 'completato', data_fine: new Date().toISOString(), updated_at: new Date().toISOString() }).catch(()=>{});
+      }
+      // Notifica chat
+      try {
+        const msgId = 'MSG_URG_RESOL_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+        await sb(env, 'chat_messaggi', 'POST', {
+          id: msgId, canale_id: 'CH_URGENZE', mittente_id: body.operatoreId || body.userId || 'SYSTEM',
+          testo: `✅ Urgenza ${id} RISOLTA` + (noteRisoluzione ? `\n📝 ${noteRisoluzione}` : ''), tipo: 'testo', created_at: new Date().toISOString()
+        });
+      } catch(e){}
+      // Notifica admin
+      try {
+        const admins = await sb(env, 'utenti', 'GET', null, '?ruolo=eq.admin&attivo=eq.true&select=id&limit=3').catch(()=>[]);
+        for (const a of (admins||[])) {
+          await sb(env, 'notifiche', 'POST', {
+            id: 'NOT_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+            tipo: 'urgenza', oggetto: '✅ Urgenza risolta',
+            testo: `Urgenza ${id} è stata risolta dal tecnico`,
+            destinatario_id: a.id, stato: 'inviata', priorita: 'normale',
+            riferimento_id: id, riferimento_tipo: 'urgenza',
+            tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
+          }).catch(()=>{});
+        }
+      } catch(e){}
+      return ok();
+    }
+
     case 'updateUrgenza': {
       const id = body.id;
       const allFields = getFields(body);
       const urgWritable = ['cliente_id','macchina_id','problema','priorita_id','stato','tecnico_assegnato','tecnici_ids','automezzo_id','data_prevista','ora_prevista','data_inizio','data_risoluzione','intervento_id','note','allegati_ids','sla_scadenza','sla_status','obsoleto'];
       const updates = {};
       for (const k of urgWritable) { if (allFields[k] !== undefined) updates[k] = allFields[k]; }
+      updates.updated_at = new Date().toISOString();
       await sb(env, `urgenze?id=eq.${id}`, 'PATCH', updates);
       await wlog('urgenza', id, 'updated', body.operatoreId || body.userId);
       return ok();

@@ -1967,7 +1967,7 @@ function renderUrgenze(){
 }
 
 function openAssegna(urgId){$('maUrgId').value=urgId;$('maData').value=today();openModal('modalAssegna')}
-async function urgAction(id,action){try{await apiCall(action,{id},'POST');toast(action==='startUrgenza'?'Urgenza in corso!':'Urgenza risolta!','ok');await refreshData()}catch(e){toast(e.message,'err')}}
+async function urgAction(id,action){try{await apiCall(action,{id,operatoreId:USER?.ID},'POST');toast(action==='startUrgenza'?'Urgenza in corso!':'Urgenza risolta!','ok');await refreshData()}catch(e){toast(e.message,'err')}}
 
 async function saveUrgenzaEdit(id){
   try{

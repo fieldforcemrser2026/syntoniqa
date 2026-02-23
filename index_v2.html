@@ -905,7 +905,7 @@ function showInt(id){
 }
 
 async function startInt(id){
-  try{await apiCall('updatePiano',{id,data:{Stato:'in_corso'}},'POST');toast('Intervento iniziato','ok');closeSheet('shInt');await refreshData()}catch(e){toast(e.message,'err')}
+  try{await apiCall('updatePiano',{id,data:{Stato:'in_corso'},operatoreId:USER?.ID},'POST');toast('Intervento iniziato','ok');closeSheet('shInt');await refreshData()}catch(e){toast(e.message,'err')}
 }
 
 function openCompleta(id){
@@ -919,7 +919,7 @@ async function completaInt(){
     const voto=parseInt($('scVoto').value)||null;
     if(voto&&(voto<1||voto>10)){toast('Voto deve essere tra 1 e 10','warn');return}
     const data={Stato:'completato',KmPercorsi:parseFloat($('scKm').value)||0,OreLavorate:parseFloat($('scOre').value)||0,NoteCompletamento:$('scNote').value,ValutazioneCliente:voto};
-    await apiCall('updatePiano',{id:interventoId,data},'POST');
+    await apiCall('updatePiano',{id:interventoId,data,operatoreId:USER?.ID},'POST');
     for(const af of scAllegatiFiles){
       if(!af)continue;
       try{
@@ -992,10 +992,29 @@ function showUrg(id){
     '<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Problema</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+(u.Problema||'—')+'</div></div>'+
     (u.Note?'<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+u.Note+'</div></div>':'')+
     '<div style="display:flex;flex-direction:column;gap:8px">'+
+    (u.Stato==='assegnata'||u.Stato==='schedulata'?'<button class="btn" style="background:var(--warn);color:#fff" onclick="startUrg(\''+u.ID+'\')">⚡ Inizia Urgenza</button>':'')+
+    (u.Stato==='in_corso'?'<button class="btn" style="background:var(--ok);color:#fff" onclick="resolveUrg(\''+u.ID+'\')">✅ Risolvi Urgenza</button>':'')+
     (cObj?.Telefono?'<a href="tel:'+cObj.Telefono+'" class="btn btn-outline">📞 Chiama '+cObj.Telefono+'</a>':'')+
     (cObj?.Latitudine&&cObj?.Longitudine?'<a href="https://www.google.com/maps/dir/?api=1&destination='+cObj.Latitudine+','+cObj.Longitudine+'&travelmode=driving" target="_blank" class="btn btn-outline">📍 Naviga</a>':'')+
     '<button class="btn btn-outline" onclick="closeSheet(\'shUrg\')">Chiudi</button></div>';
   openSheet('shUrg');
+}
+
+async function startUrg(id){
+  try{
+    await apiCall('startUrgenza',{id,operatoreId:USER?.ID},'POST');
+    toast('Urgenza iniziata!','ok');closeSheet('shUrg');
+    await refreshData();
+  }catch(e){toast(e.message,'err')}
+}
+async function resolveUrg(id){
+  const note=prompt('Note di risoluzione (opzionale):');
+  if(note===null)return;
+  try{
+    await apiCall('resolveUrgenza',{id,noteRisoluzione:note,operatoreId:USER?.ID},'POST');
+    toast('Urgenza risolta!','ok');closeSheet('shUrg');
+    await refreshData();
+  }catch(e){toast(e.message,'err')}
 }
 
 // ============ ORDINI ============
