@@ -1558,8 +1558,8 @@ Rispondi con JSON:
       }
 
       // ---- MIRROR Telegram → Chat Admin (PRIMA di qualsiasi return) ----
-      // Salva TUTTI i messaggi ricevuti da Telegram nella chat admin, anche da utenti non registrati
-      if (text && !cmd.startsWith('/')) {
+      // Salva TUTTI i messaggi ricevuti da Telegram nella chat admin, inclusi comandi bot
+      if (text) {
         try {
           const senderNameEarly = (msg.from?.first_name || '') + (msg.from?.last_name ? ' ' + msg.from.last_name : '');
           const earlyMsgId = 'TG_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
@@ -1901,19 +1901,27 @@ Rispondi SOLO con JSON valido:
       }
 
       // ---- MIRROR Bot response → Chat Admin ----
-      // Il mirror del messaggio in arrivo è già fatto sopra (prima del check utente)
-      // Qui salviamo solo la risposta del bot
       if (reply) {
         try {
           const urgKwBot = ['urgenza','fermo','guasto','errore','rotto','emergenza','allarme'];
           const isUrgBot = urgKwBot.some(k => (text||'').toLowerCase().includes(k));
           const botCanale = isUrgBot ? 'CH_URGENZE' : 'CH_GENERALE';
+          const cleanReply = reply.replace(/\*/g, '').replace(/_/g, '');
+          const ts = new Date(Date.now() + 1000).toISOString();
+          // Mirror in canale tematico
           const botMsgId = 'TG_BOT_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
           await sb(env, 'chat_messaggi', 'POST', {
             id: botMsgId, canale_id: botCanale, mittente_id: 'TELEGRAM',
-            testo: `🤖 [Bot] ${reply.replace(/\*/g, '').replace(/_/g, '')}`,
-            tipo: 'testo', created_at: new Date(Date.now() + 1000).toISOString()
+            testo: `🤖 [Bot] ${cleanReply}`, tipo: 'testo', created_at: ts
           }).catch(() => {});
+          // Mirror ANCHE in CH_ADMIN per visibilità completa
+          if (botCanale !== 'CH_ADMIN') {
+            const botMsgId2 = 'TG_BOT_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+            await sb(env, 'chat_messaggi', 'POST', {
+              id: botMsgId2, canale_id: 'CH_ADMIN', mittente_id: 'TELEGRAM',
+              testo: `🤖 [Bot→TG] ${cleanReply}`, tipo: 'testo', created_at: ts
+            }).catch(() => {});
+          }
         } catch(e) { console.error('Bot mirror error:', e.message); }
       }
 
@@ -1969,6 +1977,79 @@ Rispondi SOLO con JSON valido:
       const id = 'MSG_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
       const msg = { id, canale_id, mittente_id: mittente, testo, tipo: tipo || 'testo', rispondi_a: rispondi_a || null, created_at: new Date().toISOString() };
       const result = await sb(env, 'chat_messaggi', 'POST', msg);
+
+      // ---- BOT COMMANDS in-app: se il messaggio inizia con / processalo come comando ----
+      if (testo.startsWith('/')) {
+        try {
+          const parts = testo.split(' ');
+          const cmd = parts[0].toLowerCase();
+          let botReply = '';
+          const oggiStr = new Date().toISOString().split('T')[0];
+
+          switch (cmd) {
+            case '/stato': {
+              const urg = await sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,in_corso)&order=data_segnalazione.desc&limit=10').catch(()=>[]);
+              botReply = urg.length ? `🚨 ${urg.length} urgenze attive:\n` + urg.map(u => `• ${u.id}: ${u.problema} [${u.stato}]`).join('\n') : '✅ Nessuna urgenza attiva';
+              break;
+            }
+            case '/oggi': {
+              const intv = await sb(env, 'piano', 'GET', null, `?data=eq.${oggiStr}&tecnico_id=eq.${mittente}&obsoleto=eq.false`).catch(()=>[]);
+              botReply = intv.length ? `📅 Interventi oggi (${intv.length}):\n` + intv.map(i => `• ${i.id}: ${i.stato} – ${i.cliente_id}`).join('\n') : '📅 Nessun intervento oggi';
+              break;
+            }
+            case '/settimana': {
+              const d2 = new Date(); const lun = new Date(d2); lun.setDate(d2.getDate() - d2.getDay() + 1);
+              const dom = new Date(lun); dom.setDate(lun.getDate() + 6);
+              const intv = await sb(env, 'piano', 'GET', null, `?data=gte.${lun.toISOString().split('T')[0]}&data=lte.${dom.toISOString().split('T')[0]}&tecnico_id=eq.${mittente}&obsoleto=eq.false&order=data.asc`).catch(()=>[]);
+              botReply = intv.length ? `📅 Piano settimanale (${intv.length}):\n` + intv.map(i => `• ${i.data} ${i.stato} – ${i.cliente_id}`).join('\n') : '📅 Nessun intervento questa settimana';
+              break;
+            }
+            case '/vado': {
+              const urg = await sb(env, 'urgenze', 'GET', null, '?stato=eq.aperta&order=data_segnalazione.asc&limit=1').catch(()=>[]);
+              if (!urg.length) { botReply = '✅ Nessuna urgenza da prendere'; break; }
+              await sb(env, `urgenze?id=eq.${urg[0].id}`, 'PATCH', { stato: 'assegnata', tecnico_assegnato: mittente, data_assegnazione: new Date().toISOString() });
+              botReply = `✅ Urgenza ${urg[0].id} assegnata a te!\n${urg[0].problema}`;
+              break;
+            }
+            case '/incorso': {
+              const urg = await sb(env, 'urgenze', 'GET', null, `?tecnico_assegnato=eq.${mittente}&stato=eq.assegnata&limit=1`).catch(()=>[]);
+              if (!urg.length) { botReply = 'Nessuna urgenza assegnata'; break; }
+              await sb(env, `urgenze?id=eq.${urg[0].id}`, 'PATCH', { stato: 'in_corso', data_inizio: new Date().toISOString() });
+              botReply = `🔧 Urgenza ${urg[0].id} IN CORSO`;
+              break;
+            }
+            case '/risolto': {
+              const note = parts.slice(1).join(' ');
+              const urg = await sb(env, 'urgenze', 'GET', null, `?tecnico_assegnato=eq.${mittente}&stato=in.(assegnata,in_corso)&limit=1`).catch(()=>[]);
+              if (!urg.length) { botReply = 'Nessuna urgenza in corso'; break; }
+              await sb(env, `urgenze?id=eq.${urg[0].id}`, 'PATCH', { stato: 'risolta', data_risoluzione: new Date().toISOString(), note });
+              botReply = `✅ Urgenza ${urg[0].id} RISOLTA${note ? '\nNote: ' + note : ''}`;
+              break;
+            }
+            case '/ordine': {
+              const codice = parts[1] || '';
+              const qt = parseInt(parts[2]) || 1;
+              const cliente = parts.slice(3).join(' ') || '';
+              if (!codice) { botReply = '📦 Formato: /ordine [codice] [quantità] [cliente]'; break; }
+              const ordId = 'ORD_APP_' + Date.now();
+              const ordTid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+              await sb(env, 'ordini', 'POST', { id: ordId, tenant_id: ordTid, tecnico_id: mittente, codice, descrizione: `${codice} x${qt}${cliente ? ' - ' + cliente : ''}`, quantita: qt, stato: 'richiesto', data_richiesta: new Date().toISOString() });
+              botReply = `📦 Ordine ${ordId} creato: ${codice} x${qt}${cliente ? ' – ' + cliente : ''}`;
+              break;
+            }
+            default:
+              botReply = '❓ Comando non riconosciuto. Usa /stato, /oggi, /settimana, /vado, /incorso, /risolto, /ordine';
+          }
+
+          if (botReply) {
+            const botMsgId = 'MSG_BOT_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+            await sb(env, 'chat_messaggi', 'POST', {
+              id: botMsgId, canale_id, mittente_id: 'TELEGRAM',
+              testo: `🤖 ${botReply}`, tipo: 'testo', created_at: new Date(Date.now() + 500).toISOString()
+            }).catch(() => {});
+          }
+        } catch(cmdErr) { console.error('Chat bot cmd error:', cmdErr.message); }
+      }
       // Auto-join se non è membro
       if (mittente) {
         await sb(env, 'chat_membri', 'POST', { id: `${canale_id}_${mittente}`, canale_id, utente_id: mittente, ultimo_letto: new Date().toISOString() }).catch(() => {});
