@@ -1321,6 +1321,17 @@ Rispondi con JSON:
       return ok({ tecnicoId, furgoneId, data: dataAssegna || 'permanente' });
     }
 
+    // -------- SEARCH CLIENTI (by nome_interno) --------
+
+    case 'searchClienti': {
+      // Search clienti by nome_interno or nome_account (for autocomplete)
+      const { q } = body;
+      if (!q || q.length < 2) return err('Minimo 2 caratteri');
+      const results = await sb(env, 'anagrafica_clienti', 'GET', null,
+        `?or=(nome_interno.ilike.*${q}*,nome_account.ilike.*${q}*)&select=codice_m3,nome_account,nome_interno&limit=20`);
+      return ok(results.map(pascalizeRecord));
+    }
+
     // -------- TELEGRAM BOT (webhook) --------
 
     case 'telegramWebhook': {
@@ -1404,14 +1415,15 @@ Rispondi con JSON:
       // ---- Helper: AI parse message with Gemini ----
       async function aiParseMessage(text, mediaUrl, mediaType) {
         if (!env.GEMINI_KEY) return null;
-        // Get clients list for context
-        const clienti = await sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno&limit=200').catch(()=>[]);
-        const clientiList = clienti.map(c => `${c.nome_account||c.nome_interno} (${c.codice_m3})`).join(', ');
+        // Get clients list for context — usa nome_interno come chiave primaria
+        const clienti = await sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno&limit=300').catch(()=>[]);
+        const clientiList = clienti.map(c => `${c.nome_interno || c.nome_account} → codice_m3: ${c.codice_m3}`).join('\n');
 
         const systemPrompt = `Sei l'assistente AI di Syntoniqa, il sistema FSM di MRS Lely Center.
 Analizza il messaggio e determina il tipo di azione da creare.
 
-CLIENTI DISPONIBILI: ${clientiList}
+CLIENTI DISPONIBILI (usa il NOME INTERNO per riconoscerli, es. BONDIOLI, OREFICI, ecc.):
+${clientiList}
 
 TIPI DI AZIONE:
 1. "urgenza" - Problema tecnico urgente su un robot/macchina (robot fermo, errore, guasto)
@@ -1577,16 +1589,29 @@ Rispondi SOLO con JSON valido:
           let aiResult = await aiParseMessage(text || `[${mediaType} allegato: ${fileName || 'foto'}]`, mediaUrl, mediaType);
 
           if (!aiResult) {
-            // Fallback: keyword-based parsing
+            // Fallback: keyword-based parsing + nome_interno client matching
             const txt = (text || '').toLowerCase();
             const urgKw = ['fermo', 'guasto', 'errore', 'rotto', 'urgente', 'emergenza', 'bloccato', 'non funziona', 'allarme'];
             const ordKw = ['ordine', 'ricambio', 'pezzo', 'servono', 'ordinare', 'spedire'];
             const isUrg = urgKw.some(k => txt.includes(k));
             const isOrd = ordKw.some(k => txt.includes(k));
-            if (isUrg || isOrd || mediaUrl) {
+
+            // Try to match client by nome_interno
+            let matchedCliente = null, matchedCodice = null;
+            const clienti = await sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_interno&limit=300').catch(()=>[]);
+            for (const c of clienti) {
+              const ni = (c.nome_interno || '').toLowerCase();
+              if (ni && ni.length > 2 && txt.includes(ni)) {
+                matchedCliente = c.nome_interno;
+                matchedCodice = c.codice_m3;
+                break;
+              }
+            }
+
+            if (isUrg || isOrd || mediaUrl || matchedCliente) {
               aiResult = {
                 tipo: isOrd ? 'ordine' : 'urgenza',
-                cliente: null, codice_m3: null,
+                cliente: matchedCliente, codice_m3: matchedCodice,
                 problema: text || `[${mediaType || 'messaggio'} allegato]`,
                 macchina: null, robot_id: null,
                 priorita: isUrg ? 'alta' : 'media',
@@ -1595,6 +1620,21 @@ Rispondi SOLO con JSON valido:
             } else {
               reply = '🤔 Non riesco ad analizzare. Prova con /help per i comandi disponibili.';
               break;
+            }
+          }
+
+          // Post-AI: verify/resolve cliente by nome_interno if AI returned a name but no codice_m3
+          if (aiResult.cliente && !aiResult.codice_m3) {
+            const clienti = await sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_interno,nome_account&limit=300').catch(()=>[]);
+            const searchName = (aiResult.cliente || '').toLowerCase();
+            const match = clienti.find(c =>
+              (c.nome_interno || '').toLowerCase() === searchName ||
+              (c.nome_interno || '').toLowerCase().includes(searchName) ||
+              (c.nome_account || '').toLowerCase().includes(searchName)
+            );
+            if (match) {
+              aiResult.codice_m3 = match.codice_m3;
+              aiResult.cliente = match.nome_interno || match.nome_account;
             }
           }
 
