@@ -993,17 +993,34 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <section class="sec" id="secAnagrafica">
 <div class="sec-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
   <h2>📋 Anagrafica Clienti & Assets</h2>
-  <div style="display:flex;gap:8px;align-items:center">
-    <input type="text" id="anagSearch" placeholder="Cerca cliente, città, M3..." style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:.8125rem;width:260px" oninput="filterAnagClients()">
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <input type="text" id="anagSearch" placeholder="Cerca cliente, città, M3..." style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:.8125rem;width:220px" oninput="filterAnagClients()">
+    <select id="anagFilterType" onchange="filterAnagClients()" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:.8rem">
+      <option value="">Tutti i prodotti</option>
+      <option value="ROBOT">🤖 Astronaut</option>
+      <option value="JUNO">🔄 Juno</option>
+      <option value="VECTOR">🍽️ Vector</option>
+      <option value="DISCOVERY">🔍 Discovery</option>
+      <option value="COLLECTOR">🧹 Collector</option>
+      <option value="COSMIX">⚖️ Cosmix</option>
+      <option value="NAUTILUS">🐚 Nautilus</option>
+      <option value="LUNA">🌙 Luna</option>
+      <option value="CU">🖥️ CU</option>
+      <option value="CALM">🍼 Calm</option>
+      <option value="COMPRESSORI">🔧 Compressori</option>
+      <option value="METEOR">☄️ Meteor</option>
+      <option value="GRAZEWAY">🌿 Grazeway</option>
+      <option value="L4C LED">💡 L4C LED</option>
+    </select>
     <button class="btn btn-sm" onclick="anagView='list';renderAnagClients(ANAG_FILTERED)" title="Vista Lista" id="btnAnagList">📋</button>
-    <button class="btn btn-sm" onclick="anagView='map';renderAnagMap()" title="Vista Mappa" id="btnAnagMap">🗺️</button>
+    <button class="btn btn-sm" onclick="anagView='map';renderAnagClients(ANAG_FILTERED)" title="Vista Mappa" id="btnAnagMap">🗺️</button>
     <button class="btn btn-sm" onclick="loadAnagClients()" title="Ricarica">🔄</button>
     <label class="btn btn-sm btn-primary" style="cursor:pointer">📤 Importa XLSX<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importAnagXlsx(this.files[0])"></label>
   </div>
 </div>
 <div id="anagStats" style="display:flex;gap:12px;margin:8px 0;flex-wrap:wrap"></div>
 <!-- MAP VIEW -->
-<div id="anagMapWrap" style="display:none;height:500px;border-radius:8px;overflow:hidden;margin-bottom:12px"></div>
+<div id="anagMapWrap" style="display:none;height:550px;border-radius:8px;overflow:hidden;margin-bottom:12px"></div>
 <!-- TREE LIST VIEW -->
 <div id="anagTreeWrap">
 <div class="table-wrap">
@@ -1015,7 +1032,9 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
   <th>Prov.</th>
   <th>Stato</th>
   <th>Titolare</th>
-  <th>🤖</th><th>🔄</th><th>🍽️</th><th>🧹</th><th>📦</th>
+  <th title="Astronaut">🤖</th><th title="Juno">🔄</th><th title="Vector">🍽️</th>
+  <th title="Discovery+Collector">🔍</th><th title="CU">🖥️</th><th title="Cosmix">⚖️</th>
+  <th title="Nautilus">🐚</th><th title="Luna+Meteor+Calm+Altri">📦</th>
   <th>Tot</th>
   <th style="width:80px"></th>
 </tr></thead>
@@ -2319,19 +2338,81 @@ var ANAG_CLIENTI=[];
 var ANAG_FILTERED=[];
 var ANAG_ASSETS_CACHE={};
 var anagView='list';
+// Product type config: icon, color, label, lelyUrl
+const PROD_CFG={
+  ROBOT:{icon:'🤖',color:'#C30A14',label:'Astronaut',url:'https://www.lely.com/solutions/milking/astronaut/'},
+  JUNO:{icon:'🔄',color:'#3b82f6',label:'Juno',url:'https://www.lely.com/solutions/feeding/juno/'},
+  VECTOR:{icon:'🍽️',color:'#8b5cf6',label:'Vector',url:'https://www.lely.com/solutions/feeding/vector/'},
+  DISCOVERY:{icon:'🔍',color:'#06b6d4',label:'Discovery',url:'https://www.lely.com/solutions/barn-cleaning/discovery/'},
+  COLLECTOR:{icon:'🧹',color:'#14b8a6',label:'Collector',url:'https://www.lely.com/solutions/barn-cleaning/discovery-collector/'},
+  CU:{icon:'🖥️',color:'#6366f1',label:'Central Unit',url:''},
+  CALM:{icon:'🍼',color:'#f59e0b',label:'Calm',url:'https://www.lely.com/solutions/calf-feeding/calm/'},
+  COMPRESSORI:{icon:'🔧',color:'#78716c',label:'Compressori',url:''},
+  COSMIX:{icon:'⚖️',color:'#22c55e',label:'Cosmix',url:'https://www.lely.com/solutions/feeding/cosmix/'},
+  NAUTILUS:{icon:'🐚',color:'#0ea5e9',label:'Nautilus',url:''},
+  LUNA:{icon:'🌙',color:'#a855f7',label:'Luna',url:'https://www.lely.com/solutions/barn-cleaning/luna/'},
+  METEOR:{icon:'☄️',color:'#ef4444',label:'Meteor',url:''},
+  GRAZEWAY:{icon:'🌿',color:'#16a34a',label:'Grazeway',url:'https://www.lely.com/solutions/grazing/grazeway/'},
+  'L4C LED':{icon:'💡',color:'#eab308',label:'L4C LED',url:''},
+  ARLA:{icon:'🏭',color:'#94a3b8',label:'Arla',url:''},
+  TITANIA:{icon:'⚙️',color:'#64748b',label:'Titania',url:''}
+};
 
 async function loadAnagClients(){
   try{
     const data=await apiCall('getAnagraficaClienti',{},'POST');
     ANAG_CLIENTI=data||[];
     ANAG_ASSETS_CACHE={};
+    // Load ALL assets to compute per-client counts by type
+    try{
+      const allAssets=await apiCall('getAnagraficaAssets',{all:true},'POST');
+      // Group by codice_m3
+      const byM3={};
+      (allAssets||[]).forEach(a=>{
+        const m3=a.CodiceM3;if(!m3)return;
+        if(!byM3[m3])byM3[m3]=[];
+        byM3[m3].push(a);
+      });
+      // Compute _assetCounts per client
+      ANAG_CLIENTI.forEach(c=>{
+        const m3=c.CodiceM3;
+        const myAssets=byM3[m3]||[];
+        ANAG_ASSETS_CACHE[m3]=myAssets;
+        const counts={_total:myAssets.length};
+        myAssets.forEach(a=>{
+          const tipo=(a.GruppoAttrezzatura||a.TipoFoglio||'Altro').toUpperCase();
+          // Normalize type names
+          let key=tipo;
+          if(tipo.includes('ASTRONAUT')||tipo==='ROBOT')key='ROBOT';
+          else if(tipo.includes('JUNO'))key='JUNO';
+          else if(tipo.includes('VECTOR'))key='VECTOR';
+          else if(tipo.includes('DISCOVERY')&&!tipo.includes('COLLECTOR'))key='DISCOVERY';
+          else if(tipo.includes('COLLECTOR'))key='COLLECTOR';
+          else if(tipo.includes('CENTRAL')||tipo==='CU')key='CU';
+          else if(tipo.includes('CALM')||tipo.includes('ALLAT'))key='CALM';
+          else if(tipo.includes('COMPRESS'))key='COMPRESSORI';
+          else if(tipo.includes('COSMIX'))key='COSMIX';
+          else if(tipo.includes('NAUTILUS'))key='NAUTILUS';
+          else if(tipo.includes('LUNA'))key='LUNA';
+          else if(tipo.includes('METEOR'))key='METEOR';
+          else if(tipo.includes('GRAZEWAY'))key='GRAZEWAY';
+          else if(tipo.includes('L4C'))key='L4C LED';
+          else if(tipo.includes('ARLA'))key='ARLA';
+          else if(tipo.includes('TITANIA'))key='TITANIA';
+          counts[key]=(counts[key]||0)+1;
+        });
+        c._assetCounts=counts;
+      });
+    }catch(ae){console.warn('Could not load assets for counts:',ae)}
     filterAnagClients();
   }catch(e){toast('Errore caricamento anagrafica: '+e.message,'err')}
 }
 
 function filterAnagClients(){
   const q=($('anagSearch')?.value||'').toLowerCase();
-  ANAG_FILTERED=!q?ANAG_CLIENTI:ANAG_CLIENTI.filter(c=>
+  const typeFilter=$('anagFilterType')?.value||'';
+  let list=ANAG_CLIENTI;
+  if(q) list=list.filter(c=>
     (c.NomeAccount||'').toLowerCase().includes(q)||
     (c.NomeInterno||'').toLowerCase().includes(q)||
     (c.CodiceM3||'').includes(q)||
@@ -2339,24 +2420,31 @@ function filterAnagClients(){
     (c.ProvinciaFatturazione||'').toLowerCase().includes(q)||
     (c.TitolareAccount||'').toLowerCase().includes(q)
   );
+  if(typeFilter){
+    // Filter clients that have assets of this type (check _assetCounts)
+    list=list.filter(c=>c._assetCounts&&c._assetCounts[typeFilter]>0);
+  }
+  ANAG_FILTERED=list;
   renderAnagClients(ANAG_FILTERED);
 }
 
 function renderAnagClients(list){
-  // Stats
+  // Stats — use _assetCounts from loaded data
   const s=$('anagStats');
   if(s){
-    const sm=(f)=>list.reduce((t,c)=>t+(c[f]||0),0);
+    const sumType=(type)=>list.reduce((t,c)=>t+((c._assetCounts&&c._assetCounts[type])||0),0);
     const a=list.filter(c=>c.StatoCliente==='Attivo').length;
     const geo=list.filter(c=>c.Lat&&c.Lng).length;
-    const disc=sm('QtyDiscoverySsw')+sm('QtyDiscoveryCollector')+sm('QtyCollectorC2')+sm('QtyDiscoveryBucket');
-    const altri=sm('QtyCalm')+sm('QtyCosmix')+sm('QtyNautilus')+sm('QtyLuna')+sm('QtyShuttle')+sm('QtyCrs')+sm('QtyLdReader');
-    s.innerHTML=[
-      [list.length,'Clienti'],[a,'Attivi'],[geo,'📍 Geo'],
-      [sm('QtyAstronaut'),'🤖 Astronaut'],[sm('QtyJuno'),'🔄 Juno'],[sm('QtyVector'),'🍽️ Vector'],
-      [disc,'🧹 Discovery'],[sm('QtyCalm'),'🍼 Calm'],[sm('QtyCosmix'),'⚖️ Cosmix'],
-      [sm('QtyNautilus'),'🐚 Nautilus'],[altri,'📦 Altri']
-    ].map(([v,l])=>`<div class="stat-card" style="min-width:70px;padding:6px 10px"><div class="stat-val" style="font-size:1.1rem">${v}</div><div class="stat-lbl" style="font-size:.65rem">${l}</div></div>`).join('');
+    const totAssets=list.reduce((t,c)=>t+((c._assetCounts&&c._assetCounts._total)||0),0);
+    const typeFilter=$('anagFilterType')?.value||'';
+    const mainTypes=['ROBOT','JUNO','VECTOR','DISCOVERY','COLLECTOR','CU','COSMIX','NAUTILUS','LUNA','CALM','COMPRESSORI','METEOR','GRAZEWAY','L4C LED'];
+    let statCards=[[list.length,'Clienti'],[a,'Attivi'],[geo,'📍 Geo'],[totAssets,'Assets']];
+    mainTypes.forEach(t=>{
+      const cfg=PROD_CFG[t]||{};
+      const v=sumType(t);
+      if(v>0) statCards.push([v,`${cfg.icon||''} ${cfg.label||t}`]);
+    });
+    s.innerHTML=statCards.map(([v,l])=>`<div class="stat-card" style="min-width:70px;padding:6px 10px"><div class="stat-val" style="font-size:1.1rem">${v}</div><div class="stat-lbl" style="font-size:.65rem">${l}</div></div>`).join('');
   }
 
   if(anagView==='map'){renderAnagMap();return}
@@ -2364,12 +2452,18 @@ function renderAnagClients(list){
   const tb=$('anagClientiBody');if(!tb)return;
   $('anagMapWrap').style.display='none';
   $('anagTreeWrap').style.display='block';
-  if(!list.length){tb.innerHTML='<tr><td colspan="13" style="text-align:center;color:var(--muted)">Nessun cliente trovato.</td></tr>';return}
-  const hi=v=>v>0?`<strong>${v}</strong>`:`<span style="color:#ccc">-</span>`;
+  const cols=16;
+  if(!list.length){tb.innerHTML=`<tr><td colspan="${cols}" style="text-align:center;color:var(--muted)">Nessun cliente trovato.</td></tr>`;return}
+  const hi=(v,type)=>{
+    if(!v||v<=0) return `<span style="color:#ddd">-</span>`;
+    const cfg=PROD_CFG[type]||{};
+    return `<strong style="color:${cfg.color||'inherit'}">${v}</strong>`;
+  };
   tb.innerHTML=list.map((c,i)=>{
-    const disc=(c.QtyDiscoverySsw||0)+(c.QtyDiscoveryCollector||0)+(c.QtyCollectorC2||0)+(c.QtyDiscoveryBucket||0);
-    const altri=(c.QtyCalm||0)+(c.QtyCosmix||0)+(c.QtyNautilus||0)+(c.QtyLuna||0)+(c.QtyShuttle||0)+(c.QtyCrs||0)+(c.QtyLdReader||0);
-    const tot=(c.QtyAstronaut||0)+(c.QtyJuno||0)+(c.QtyVector||0)+disc+altri;
+    const ac=c._assetCounts||{};
+    const disc=(ac.DISCOVERY||0)+(ac.COLLECTOR||0);
+    const altri=(ac.LUNA||0)+(ac.METEOR||0)+(ac.CALM||0)+(ac.COMPRESSORI||0)+(ac['L4C LED']||0)+(ac.GRAZEWAY||0)+(ac.ARLA||0)+(ac.TITANIA||0);
+    const tot=ac._total||0;
     const m3=c.CodiceM3||'';
     const geo=c.Lat?'📍':'';
     return `<tr class="anag-row" id="anagRow_${m3}" onclick="toggleAnagTree('${m3}')" style="cursor:pointer">
@@ -2379,15 +2473,16 @@ function renderAnagClients(list){
       <td>${c.ProvinciaFatturazione||''}</td>
       <td><span class="badge ${c.StatoCliente==='Attivo'?'badge-ok':'badge-warn'}" style="font-size:.7rem">${c.StatoCliente||'-'}</span></td>
       <td style="font-size:.8rem">${c.TitolareAccount||''}</td>
-      <td>${hi(c.QtyAstronaut||0)}</td><td>${hi(c.QtyJuno||0)}</td><td>${hi(c.QtyVector||0)}</td>
-      <td>${hi(disc)}</td><td>${hi(altri)}</td>
+      <td>${hi(ac.ROBOT,'ROBOT')}</td><td>${hi(ac.JUNO,'JUNO')}</td><td>${hi(ac.VECTOR,'VECTOR')}</td>
+      <td>${hi(disc,'DISCOVERY')}</td><td>${hi(ac.CU,'CU')}</td><td>${hi(ac.COSMIX,'COSMIX')}</td>
+      <td>${hi(ac.NAUTILUS,'NAUTILUS')}</td><td>${hi(altri,'CALM')}</td>
       <td><strong>${tot||'-'}</strong></td>
       <td>
         <button class="btn btn-xs" onclick="event.stopPropagation();openAnagEdit('${m3}')" title="Modifica">✏️</button>
         ${c.Lat?`<button class="btn btn-xs" onclick="event.stopPropagation();openAnagGeo('${m3}')" title="Mappa">📍</button>`:''}
       </td>
     </tr>
-    <tr id="anagExpand_${m3}" style="display:none"><td colspan="13" style="padding:0;background:#f8f9fa">
+    <tr id="anagExpand_${m3}" style="display:none"><td colspan="${cols}" style="padding:0;background:#f8f9fa">
       <div id="anagDetail_${m3}" style="padding:12px 16px"></div>
     </td></tr>`;
   }).join('');
@@ -2402,7 +2497,7 @@ async function toggleAnagTree(m3){
   }
   expandRow.style.display='';arrow.textContent='▼';
   const detailDiv=document.getElementById('anagDetail_'+m3);
-  if(detailDiv.innerHTML)return; // already loaded
+  if(detailDiv.innerHTML)return;
 
   detailDiv.innerHTML='<div class="loading"><div class="spin"></div></div>';
   try{
@@ -2416,33 +2511,37 @@ async function toggleAnagTree(m3){
       <div><b>Codici</b><br>M3: ${c.CodiceM3||'-'} | P.IVA: ${c.PartitaIva||'-'}<br>DANEA: ${c.CodiceDanea||'-'} | Account: ${c.AccountNumber||'-'}${c.Lat?`<br>📍 ${c.Lat}, ${c.Lng}`:''}</div>
     </div>`;
 
-    // Product badges
-    const prods=[['Astronaut',c.QtyAstronaut],['A5',c.QtyAstronautA5],['A4',c.QtyAstronautA4],['A3',c.QtyAstronautA3],['A2',c.QtyAstronautA2],
-      ['Juno',c.QtyJuno],['Vector',c.QtyVector],['Discovery S/SW',c.QtyDiscoverySsw],['Collector C2',c.QtyCollectorC2],
-      ['Disc.Collector',c.QtyDiscoveryCollector],['Calm',c.QtyCalm],['Cosmix',c.QtyCosmix],
-      ['Nautilus',c.QtyNautilus],['Luna',c.QtyLuna],['Shuttle',c.QtyShuttle],['CRS',c.QtyCrs],['LD Reader',c.QtyLdReader]
-    ].filter(p=>p[1]>0);
-    if(prods.length) html+=`<div style="margin-bottom:10px">${prods.map(p=>`<span class="badge" style="font-size:.75rem;margin:2px">${p[0]}: <b>${p[1]}</b></span>`).join('')}</div>`;
+    // Product badges from _assetCounts
+    const ac=c._assetCounts||{};
+    const prodBadges=Object.entries(ac).filter(([k,v])=>k!=='_total'&&v>0).map(([type,cnt])=>{
+      const cfg=PROD_CFG[type]||{icon:'📦',color:'#666',label:type};
+      return `<span class="badge" style="font-size:.75rem;margin:2px;background:${cfg.color}15;border:1px solid ${cfg.color}40;color:${cfg.color}">${cfg.icon} ${cfg.label}: <b>${cnt}</b></span>`;
+    });
+    if(prodBadges.length) html+=`<div style="margin-bottom:10px">${prodBadges.join('')}</div>`;
 
-    // Assets table
+    // Assets table grouped by type
     if(assets.length){
-      const groups={};assets.forEach(a=>{const g=a.GruppoAttrezzatura||'Altro';groups[g]=(groups[g]||0)+1});
+      const groups={};assets.forEach(a=>{const g=a.GruppoAttrezzatura||a.TipoFoglio||'Altro';groups[g]=(groups[g]||0)+1});
       html+=`<div style="margin-bottom:6px;font-size:.75rem;color:var(--muted)">
-        <b>${assets.length} assets</b>: ${Object.entries(groups).map(([g,n])=>g+' ('+n+')').join(', ')}
+        <b>${assets.length} assets</b>: ${Object.entries(groups).map(([g,n])=>{const cfg=PROD_CFG[g]||{icon:'📦'};return cfg.icon+' '+g+' ('+n+')'}).join(', ')}
       </div>`;
       html+=`<table class="tbl" style="font-size:.8rem"><thead><tr>
-        <th>#</th><th>Gruppo</th><th>Modello</th><th>N. Serie</th><th>Data Install.</th><th>Descrizione</th><th>RH/LH</th><th>Note</th>
+        <th>#</th><th>Tipo</th><th>Modello</th><th>N. Serie</th><th>Data Install.</th><th>Provincia</th><th>RH/LH</th><th>Note</th><th>Status</th>
       </tr></thead><tbody>`;
       assets.forEach((a,i)=>{
+        const tipo=a.GruppoAttrezzatura||a.TipoFoglio||'-';
+        const cfg=PROD_CFG[tipo]||{icon:'📦',color:'#666'};
+        const dt=formatAnagDate(a.DataInstallazione);
         html+=`<tr>
           <td>${i+1}</td>
-          <td><strong>${a.GruppoAttrezzatura||'-'}</strong></td>
+          <td><span style="color:${cfg.color}">${cfg.icon}</span> <strong>${tipo}</strong></td>
           <td>${a.Modello||'-'}</td>
           <td><code style="font-size:.75rem">${a.NumeroSerie||'-'}</code></td>
-          <td>${a.DataInstallazione||'-'}</td>
-          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(a.Descrizione||'').replace(/"/g,'&quot;')}">${a.Descrizione||''}</td>
+          <td>${dt}</td>
+          <td>${a.Provincia||''}</td>
           <td>${a.RhLh||''}</td>
-          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(a.Note||'').replace(/"/g,'&quot;')}">${a.Note||''}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(a.Note||'').replace(/"/g,'&quot;')}">${a.Note||''}</td>
+          <td><span class="badge ${(a.Status||'').toLowerCase().includes('attiv')?'badge-ok':'badge-warn'}" style="font-size:.65rem">${a.Status||''}</span></td>
         </tr>`;
       });
       html+=`</tbody></table>`;
@@ -2453,6 +2552,23 @@ async function toggleAnagTree(m3){
   }catch(e){detailDiv.innerHTML=`<p style="color:var(--err)">Errore: ${e.message}</p>`}
 }
 
+function formatAnagDate(d){
+  if(!d)return '-';
+  const s=String(d);
+  // Already DD/MM/YYYY
+  if(/^\d{2}\/\d{2}\/\d{4}$/.test(s))return s;
+  // ISO or datetime
+  const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m)return `${m[3]}/${m[2]}/${m[1]}`;
+  // Excel serial number
+  const n=Number(s);
+  if(!isNaN(n)&&n>30000&&n<60000){
+    const dt=new Date((n-25569)*86400000);
+    return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()}`;
+  }
+  return s;
+}
+
 // MAP VIEW
 var anagMapInstance=null;
 function renderAnagMap(){
@@ -2461,7 +2577,6 @@ function renderAnagMap(){
   const geoClients=ANAG_FILTERED.filter(c=>c.Lat&&c.Lng);
   if(!geoClients.length){$('anagMapWrap').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted)">Nessun cliente georeferenziato</div>';return}
 
-  // Load Leaflet if needed
   if(!window.L){
     const css=document.createElement('link');css.rel='stylesheet';css.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(css);
     const js=document.createElement('script');js.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(js);
@@ -2475,12 +2590,27 @@ function buildAnagMap(clients){
   anagMapInstance=L.map(wrap).setView([44.5,10.8],9);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'OSM'}).addTo(anagMapInstance);
   const bounds=[];
+  const typeFilter=$('anagFilterType')?.value||'';
   clients.forEach(c=>{
     const ll=[c.Lat,c.Lng];bounds.push(ll);
-    const tot=(c.QtyAstronaut||0)+(c.QtyJuno||0)+(c.QtyVector||0);
-    const color=c.StatoCliente==='Attivo'?'#22c55e':'#f59e0b';
-    const marker=L.circleMarker(ll,{radius:Math.max(6,Math.min(tot*2,16)),color,fillColor:color,fillOpacity:.7,weight:1}).addTo(anagMapInstance);
-    marker.bindPopup(`<b>${c.NomeAccount}</b><br>${c.NomeInterno||''}<br>${c.CittaFatturazione||''} (${c.ProvinciaFatturazione||''})<br>🤖${c.QtyAstronaut||0} 🔄${c.QtyJuno||0} 🍽️${c.QtyVector||0}<br><a href="#" onclick="anagView='list';renderAnagClients(ANAG_FILTERED);setTimeout(()=>toggleAnagTree('${c.CodiceM3}'),200);return false">Apri dettaglio →</a>`);
+    const ac=c._assetCounts||{};
+    const tot=ac._total||0;
+    // Color based on dominant product or filter
+    let color='#22c55e';
+    if(typeFilter&&PROD_CFG[typeFilter]){
+      color=PROD_CFG[typeFilter].color;
+    }else if(c.StatoCliente!=='Attivo'){
+      color='#f59e0b';
+    }
+    const radius=Math.max(6,Math.min(tot*1.5,18));
+    const marker=L.circleMarker(ll,{radius,color,fillColor:color,fillOpacity:.7,weight:1}).addTo(anagMapInstance);
+    // Build popup with product breakdown
+    let prodHtml='';
+    Object.entries(ac).filter(([k,v])=>k!=='_total'&&v>0).forEach(([type,cnt])=>{
+      const cfg=PROD_CFG[type]||{icon:'📦'};
+      prodHtml+=`${cfg.icon}${cnt} `;
+    });
+    marker.bindPopup(`<b>${c.NomeAccount}</b><br>${c.NomeInterno||''}<br>${c.CittaFatturazione||''} (${c.ProvinciaFatturazione||''})<br><span style="font-size:.85em">${prodHtml||'Nessun asset'}</span><br><a href="#" onclick="anagView='list';renderAnagClients(ANAG_FILTERED);setTimeout(()=>toggleAnagTree('${c.CodiceM3}'),200);return false">Apri dettaglio →</a>`);
   });
   if(bounds.length)anagMapInstance.fitBounds(bounds,{padding:[30,30]});
   setTimeout(()=>anagMapInstance.invalidateSize(),200);
@@ -2493,16 +2623,14 @@ function openAnagGeo(m3){
 }
 
 function openAnagEdit(m3){
-  // TODO: modal di edit per il cliente
   toast('Funzione modifica in arrivo','info');
 }
 
-// Import XLSX via browser (SheetJS)
+// Import XLSX via browser (SheetJS) — FULL parser for ALL asset sheets
 async function importAnagXlsx(file){
   if(!file)return;
   toast('Caricamento XLSX in corso...','info');
 
-  // Load SheetJS dynamically
   if(!window.XLSX){
     const s=document.createElement('script');
     s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
@@ -2516,7 +2644,7 @@ async function importAnagXlsx(file){
     try{
       const wb=XLSX.read(e.target.result,{type:'array'});
 
-      // 1. Parse Clienti sheet
+      // 1. Parse Clienti sheet (NO qty from here — will calculate from assets)
       let cliSheet=wb.Sheets['Clienti'];
       if(!cliSheet){toast('Foglio "Clienti" non trovato!','err');return}
       const cliRows=XLSX.utils.sheet_to_json(cliSheet,{range:1,defval:null});
@@ -2542,39 +2670,23 @@ async function importAnagXlsx(file){
           ViaSpedizioni:r['Via spedizioni']||null,CittaSpedizioni:r['Città spedizioni']||null,
           ProvinciaSpedizioni:r['Stato/Provincia spedizioni']||null,CapSpedizioni:r['CAP spedizioni']?String(r['CAP spedizioni']):null,
           ServiceArea:r['Service Area']||null,
-          ContrattoAssistenza:r['Contratto di assi']||null,
-          QtyAstronaut:Math.floor(Number(r['Lely Astronaut']||0)),
-          QtyAstronautA5:Math.floor(Number(r['Lely Astronaut A5']||0)),
-          QtyAstronautA4:Math.floor(Number(r['Lely Astronaut A4']||0)),
-          QtyAstronautA3:Math.floor(Number(r['Lely Astronaut A3']||0)),
-          QtyAstronautA2:Math.floor(Number(r['Lely Astronaut A2']||0)),
-          QtyDiscoveryBucket:Math.floor(Number(r['Discovery Bucket']||0)),
-          QtyCollectorC2:Math.floor(Number(r['Lely Collector C2']||0)),
-          QtyDiscoveryCollector:Math.floor(Number(r['Lely Discovery Collector']||0)),
-          QtyDiscoverySsw:Math.floor(Number(r['Lely Discovery S/SW']||0)),
-          QtyJuno:Math.floor(Number(r['Lely Juno']||0)),
-          QtyVector:Math.floor(Number(r['Lely Vector']||0)),
-          QtyLdReader:Math.floor(Number(r['LD Reader']||0)),
-          QtyShuttle:Math.floor(Number(r['Shuttle']||0)),
-          QtyLuna:Math.floor(Number(r['Luna']||0)),
-          QtyCalm:Math.floor(Number(r['Calm']||0)),
-          QtyCosmix:Math.floor(Number(r['Cosmix']||0)),
-          QtyNautilus:Math.floor(Number(r['Nautilus']||0)),
-          QtyCrs:Math.floor(Number(r['CRS']||0)),
-          QtyConsumabili:Math.floor(Number(r['consumabili']||0))
+          ContrattoAssistenza:r['Contratto di assi']||null
         });
       }
 
-      // 2. Parse Assets sheet
+      // 2. Parse Assets sheet (base data + descriptions)
       let asSheet=wb.Sheets['Assets'];
       const assets=[];
+      const assetsBySerieNorm={};
+      function normSerie(s){if(!s)return '';s=String(s).replace(/\.0$/,'');return /^\d+$/.test(s)?String(parseInt(s,10)):s}
+
       if(asSheet){
         const asRows=XLSX.utils.sheet_to_json(asSheet,{defval:null});
         for(const r of asRows){
           const serie=r['Numero di serie'];
           if(!serie)continue;
           const movex=r['Movex']?String(Math.floor(Number(r['Movex']))):'';
-          assets.push({
+          const asset={
             IdAccount:r['ID account']||null,IdAsset:r['ID asset']||null,
             CodiceM3:movex||null,NomeAccount:r['Nome account']||null,
             TitolareAccount:r['Titolare account']||null,
@@ -2584,12 +2696,15 @@ async function importAnagXlsx(file){
             DataInstallazione:r['Data di installazione']||null,
             DataCreazione:r['Data creazione']||null,
             DataUltimaModifica:r['Data ultima modifica']||null,
-            Status:'Attivo',TipoFoglio:'Assets'
-          });
+            Status:r['Status']||'Attivo',TipoFoglio:'Assets',
+            Provincia:null,RhLh:null,Ind:null,Note:null,SalesAdvisor:null
+          };
+          assets.push(asset);
+          assetsBySerieNorm[normSerie(serie)]=asset;
         }
       }
 
-      // 3. Parse individual asset sheets for extra coverage
+      // 3. Build M3 resolution helpers
       const movexSheet=wb.Sheets['MOVEX'];
       const movexMap={};
       if(movexSheet){
@@ -2598,38 +2713,130 @@ async function importAnagXlsx(file){
       }
       const nomeInternoMap={};
       clienti.forEach(c=>{if(c.NomeInterno&&c.CodiceM3)nomeInternoMap[c.NomeInterno.toUpperCase()]=c.CodiceM3});
-      const seenSeries=new Set(assets.map(a=>a.NumeroSerie));
+      const nomeAccountMap={};
+      clienti.forEach(c=>{if(c.NomeAccount&&c.CodiceM3)nomeAccountMap[c.NomeAccount.toUpperCase()]=c.CodiceM3});
 
       function resolveM3(cli,mvx){
-        if(mvx){const m=String(mvx).replace(/\.0$/,'').replace(/^0+/,'');if(m)return m}
+        if(mvx){const m=String(mvx).replace(/\.0$/,'').replace(/^0+/,'');if(m&&m!=='0')return m}
         if(!cli)return null;
         const up=String(cli).trim().toUpperCase();
-        return nomeInternoMap[up]||movexMap[up]||null;
+        return nomeInternoMap[up]||nomeAccountMap[up]||movexMap[up]||null;
       }
 
-      const sheetCfgs={ROBOT:{hr:3,cc:0,mc:1,sc:8,dc:10},JUNO:{hr:3,cc:1,mc:11,sc:3,dc:4},VECTOR:{hr:3,cc:0,mc:1,sc:3,dc:7},DISCOVERY:{hr:3,cc:0,mc:1,sc:3,dc:7},COLLECTOR:{hr:3,cc:0,mc:1,sc:3,dc:7}};
+      // 4. Parse ALL individual asset sheets with full column mappings
+      // Each config: hr=header row (0-based), data starts at hr+1
+      // Right-side table (extended): cc=client col, sc=serial col, dc=date col, mc=movex col, nc=note col, pc=provincia col, sa=sales advisor col, stc=status col, modc=model col
+      const sheetCfgs={
+        ROBOT:  {hr:4,cc:0,mc:1,sc:9,dc:10,pc:11,sa:12,nc:14,modc:null,stc:null,rhlh:6,ind:7},
+        JUNO:   {hr:4,cc:1,mc:11,sc:3,dc:4,pc:6,sa:7,nc:9,modc:2,stc:12,rhlh:null,ind:null},
+        VECTOR: {hr:4,cc:13,mc:23,sc:15,dc:16,pc:18,sa:19,nc:21,modc:14,stc:24,rhlh:null,ind:null},
+        DISCOVERY:{hr:4,cc:13,mc:23,sc:15,dc:16,pc:18,sa:19,nc:21,modc:14,stc:24,rhlh:null,ind:null},
+        COLLECTOR:{hr:4,cc:16,mc:null,sc:18,dc:19,pc:21,sa:22,nc:null,modc:17,stc:null,rhlh:null,ind:null},
+        CU:     {hr:4,cc:17,mc:27,sc:19,dc:20,pc:22,sa:23,nc:25,modc:18,stc:28,rhlh:null,ind:null},
+        CALM:   {hr:4,cc:8,mc:18,sc:10,dc:11,pc:13,sa:14,nc:16,modc:9,stc:19,rhlh:null,ind:null},
+        COMPRESSORI:{hr:4,cc:15,mc:25,sc:17,dc:18,pc:20,sa:21,nc:23,modc:16,stc:26,rhlh:null,ind:null},
+        COSMIX: {hr:4,cc:16,mc:26,sc:18,dc:19,pc:21,sa:22,nc:null,modc:17,stc:27,rhlh:null,ind:null},
+        NAUTILUS:{hr:4,cc:8,mc:18,sc:10,dc:11,pc:13,sa:14,nc:16,modc:9,stc:19,rhlh:null,ind:null},
+        LUNA:   {hr:4,cc:13,mc:23,sc:15,dc:16,pc:18,sa:19,nc:21,modc:14,stc:24,rhlh:null,ind:null},
+        METEOR: {hr:4,cc:11,mc:21,sc:13,dc:14,pc:16,sa:17,nc:19,modc:12,stc:22,rhlh:null,ind:null},
+        GRAZEWAY:{hr:4,cc:7,mc:17,sc:9,dc:10,pc:12,sa:13,nc:15,modc:8,stc:18,rhlh:null,ind:null},
+        'L4C LED':{hr:4,cc:7,mc:17,sc:9,dc:10,pc:12,sa:13,nc:15,modc:8,stc:18,rhlh:null,ind:null}
+      };
+
+      // Also simple sheets with minimal columns (left-side only)
+      const simpleCfgs={
+        ARLA:   {hr:2,cc:0,sc:1,dc:2},
+        TITANIA:{hr:2,cc:0,sc:null,dc:2}
+      };
+
+      const seenSeries=new Set(assets.map(a=>normSerie(a.NumeroSerie)));
+
       for(const[sname,cfg] of Object.entries(sheetCfgs)){
         const ws=wb.Sheets[sname];if(!ws)continue;
         const allRows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
-        for(let ri=cfg.hr+1;ri<allRows.length;ri++){
+        let added=0,enriched=0;
+        for(let ri=cfg.hr;ri<allRows.length;ri++){
+          const row=allRows[ri];if(!row)continue;
+          const cli=row[cfg.cc];if(!cli||typeof cli==='number'&&cli<10)continue;
+          const serie=row[cfg.sc];
+          const serieNorm=normSerie(serie);
+
+          // Extract fields
+          const nota=cfg.nc!=null?row[cfg.nc]:null;
+          const prov=cfg.pc!=null?row[cfg.pc]:null;
+          const salesAdv=cfg.sa!=null?row[cfg.sa]:null;
+          const modelo=cfg.modc!=null?row[cfg.modc]:null;
+          const status=cfg.stc!=null?row[cfg.stc]:null;
+          const dataInst=cfg.dc!=null?row[cfg.dc]:null;
+          const rhlh=cfg.rhlh!=null?row[cfg.rhlh]:null;
+          const ind=cfg.ind!=null?row[cfg.ind]:null;
+
+          // Try to enrich existing asset first
+          if(serieNorm&&assetsBySerieNorm[serieNorm]){
+            const existing=assetsBySerieNorm[serieNorm];
+            if(nota&&!existing.Note)existing.Note=String(nota);
+            if(prov&&!existing.Provincia)existing.Provincia=String(prov);
+            if(salesAdv&&!existing.SalesAdvisor)existing.SalesAdvisor=String(salesAdv);
+            if(rhlh&&!existing.RhLh)existing.RhLh=String(rhlh);
+            if(ind&&!existing.Ind)existing.Ind=String(ind);
+            if(status&&!existing.Status)existing.Status=String(status);
+            if(!existing.TipoFoglio||existing.TipoFoglio==='Assets')existing.TipoFoglio=sname;
+            if(!existing.GruppoAttrezzatura||existing.GruppoAttrezzatura==='Assets')existing.GruppoAttrezzatura=sname;
+            enriched++;
+            continue;
+          }
+
+          if(!serie)continue;
+          if(seenSeries.has(serieNorm))continue;
+          seenSeries.add(serieNorm);
+          const m3=resolveM3(cli,cfg.mc!=null?row[cfg.mc]:null);
+          const asset={
+            CodiceM3:m3,NomeAccount:String(cli),NumeroSerie:String(serie).replace(/\.0$/,''),
+            Modello:modelo?String(modelo):sname,GruppoAttrezzatura:sname,
+            DataInstallazione:dataInst||null,Status:status?String(status):'Attivo',TipoFoglio:sname,
+            Provincia:prov?String(prov):null,Note:nota?String(nota):null,
+            SalesAdvisor:salesAdv?String(salesAdv):null,
+            RhLh:rhlh?String(rhlh):null,Ind:ind?String(ind):null
+          };
+          assets.push(asset);
+          assetsBySerieNorm[serieNorm]=asset;
+          added++;
+        }
+        console.log(`${sname}: +${added} new, ${enriched} enriched`);
+      }
+
+      // Simple sheets
+      for(const[sname,cfg] of Object.entries(simpleCfgs)){
+        const ws=wb.Sheets[sname];if(!ws)continue;
+        const allRows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+        for(let ri=cfg.hr;ri<allRows.length;ri++){
           const row=allRows[ri];if(!row)continue;
           const cli=row[cfg.cc];if(!cli)continue;
-          const serie=row[cfg.sc];if(!serie)continue;
-          const serieStr=String(serie).replace(/\.0$/,'');
-          if(seenSeries.has(serieStr))continue;
-          seenSeries.add(serieStr);
-          assets.push({CodiceM3:resolveM3(cli,row[cfg.mc]),NomeAccount:String(cli),NumeroSerie:serieStr,Modello:sname,GruppoAttrezzatura:sname,DataInstallazione:row[cfg.dc]||null,Status:'Attivo',TipoFoglio:sname});
+          const serie=cfg.sc!=null?row[cfg.sc]:null;
+          const serieNorm=normSerie(serie||`${sname}_${cli}_${ri}`);
+          if(seenSeries.has(serieNorm))continue;
+          seenSeries.add(serieNorm);
+          assets.push({
+            CodiceM3:resolveM3(cli,null),NomeAccount:String(cli),
+            NumeroSerie:serie?String(serie):`${sname}-${ri}`,
+            Modello:sname,GruppoAttrezzatura:sname,
+            DataInstallazione:cfg.dc!=null?row[cfg.dc]:null,
+            Status:'Attivo',TipoFoglio:sname
+          });
         }
       }
 
+      // Normalize dates
+      assets.forEach(a=>{a.DataInstallazione=formatAnagDate(a.DataInstallazione)});
+
       toast(`Parsati: ${clienti.length} clienti, ${assets.length} assets. Importazione...`,'info');
 
-      // 4. Clear existing + import
+      // 5. Clear existing + import
       try{ await apiCall('clearAnagrafica',{},'POST'); toast('Dati precedenti cancellati','info'); }catch(ce){ console.warn('Clear failed, continuing:',ce); }
       const r1=await apiCall('importAnagraficaClienti',{rows:clienti},'POST');
       toast(`Clienti: ${r1.inserted} importati`,'ok');
       const r2=await apiCall('importAnagraficaAssets',{rows:assets},'POST');
-      toast(`Assets: ${r2.inserted} importati`,'ok');
+      toast(`Assets: ${r2.inserted} importati, ${r2.skipped||0} skipped`,'ok');
 
       loadAnagClients();
     }catch(ex){
