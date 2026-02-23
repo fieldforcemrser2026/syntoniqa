@@ -1364,15 +1364,25 @@ Rispondi SOLO con JSON array: [{ "urgenzaId": "...", "tecnicoId": "...", "data":
       const results = { inserted: 0, skipped: 0, errors: [] };
       // Batch insert
       const batch = [];
+      const allKeys = new Set();
       for (const row of rows) {
         const fields = {};
         for (const [k, v] of Object.entries(row)) {
-          if (v !== null && v !== undefined && v !== '') fields[toSnake(k)] = v;
+          const sk = toSnake(k);
+          fields[sk] = (v !== null && v !== undefined && v !== '') ? v : null;
+          allKeys.add(sk);
         }
         if (fields.codice_m3 && !validM3.has(fields.codice_m3)) {
           fields.codice_m3 = null;
         }
         batch.push(fields);
+      }
+      // Ensure all objects have uniform keys (Supabase requires it)
+      const keyList = [...allKeys];
+      for (const row of batch) {
+        for (const k of keyList) {
+          if (!(k in row)) row[k] = null;
+        }
       }
       // Insert in chunks of 100
       for (let i = 0; i < batch.length; i += 100) {
@@ -1388,6 +1398,7 @@ Rispondi SOLO con JSON array: [{ "urgenzaId": "...", "tecnicoId": "...", "data":
               results.inserted++;
             } catch (e2) {
               results.skipped++;
+              results.errors.push({ serie: row.numero_serie || '?', err: e2.message });
             }
           }
         }

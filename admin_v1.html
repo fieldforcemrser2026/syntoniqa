@@ -2625,7 +2625,7 @@ async function importAnagXlsx(file){
       toast(`Parsati: ${clienti.length} clienti, ${assets.length} assets. Importazione...`,'info');
 
       // 4. Clear existing + import
-      await apiCall('clearAnagrafica',{},'POST').catch(()=>{});
+      try{ await apiCall('clearAnagrafica',{},'POST'); toast('Dati precedenti cancellati','info'); }catch(ce){ console.warn('Clear failed, continuing:',ce); }
       const r1=await apiCall('importAnagraficaClienti',{rows:clienti},'POST');
       toast(`Clienti: ${r1.inserted} importati`,'ok');
       const r2=await apiCall('importAnagraficaAssets',{rows:assets},'POST');
