@@ -1329,12 +1329,25 @@ Rispondi SOLO con JSON array: [{ "urgenzaId": "...", "tecnicoId": "...", "data":
 
     case 'getAnagraficaAssets': {
       const { codice_m3, search, all } = body;
-      let url = 'anagrafica_assets?select=*&order=gruppo_attrezzatura.asc,nome_asset.asc';
-      if (!all) url += '&limit=2000';
-      if (codice_m3) url += `&codice_m3=eq.${codice_m3}`;
-      if (search && search.trim()) url += `&or=(nome_asset.ilike.*${search}*,numero_serie.ilike.*${search}*,modello.ilike.*${search}*,nome_account.ilike.*${search}*)`;
-      const data = await sb(env, url, 'GET');
-      return ok(data.map(pascalizeRecord));
+      let base = 'anagrafica_assets?select=*&order=gruppo_attrezzatura.asc,nome_asset.asc';
+      if (codice_m3) base += `&codice_m3=eq.${codice_m3}`;
+      if (search && search.trim()) base += `&or=(nome_asset.ilike.*${search}*,numero_serie.ilike.*${search}*,modello.ilike.*${search}*,nome_account.ilike.*${search}*)`;
+      if (!all) {
+        const data = await sb(env, base + '&limit=2000', 'GET');
+        return ok(data.map(pascalizeRecord));
+      }
+      // Paginate: Supabase PostgREST caps at 1000 rows per request
+      let allData = [];
+      let offset = 0;
+      const pageSize = 1000;
+      while (true) {
+        const page = await sb(env, base, 'GET', null, '', { 'Range': `${offset}-${offset + pageSize - 1}`, 'Prefer': 'count=exact' });
+        if (!Array.isArray(page) || page.length === 0) break;
+        allData = allData.concat(page);
+        if (page.length < pageSize) break;
+        offset += pageSize;
+      }
+      return ok(allData.map(pascalizeRecord));
     }
 
     case 'importAnagraficaClienti': {
