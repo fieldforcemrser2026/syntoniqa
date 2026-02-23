@@ -1009,14 +1009,14 @@ Rispondi con JSON:
       await sb(env, 'config', 'POST', {
         chiave: `approval_${id}`,
         valore: JSON.stringify({ id, piano, creato_da, ruolo_creatore, stato, data_creazione }),
-        tenant_id: env.TENANT_ID || 'default'
+        tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
       }, null, { 'Prefer': 'return=minimal,resolution=merge-duplicates' });
       return ok({ id, stato });
     }
 
     case 'getApprovals': {
       const filter = body.filter || '';
-      const configs = await sb(env, 'config', 'GET', null, `?chiave=like.approval_%&tenant_id=eq.${env.TENANT_ID || 'default'}`);
+      const configs = await sb(env, 'config', 'GET', null, `?chiave=like.approval_*&tenant_id=eq.${env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'}`);
       let approvals = configs.map(c => {
         try { return JSON.parse(c.valore); } catch { return null; }
       }).filter(Boolean);
@@ -1036,21 +1036,21 @@ Rispondi con JSON:
     }
 
     case 'getApproval': {
-      const cfg = await sb(env, 'config', 'GET', null, `?chiave=eq.approval_${body.id}&tenant_id=eq.${env.TENANT_ID || 'default'}`);
+      const cfg = await sb(env, 'config', 'GET', null, `?chiave=eq.approval_${body.id}&tenant_id=eq.${env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'}`);
       if (!cfg.length) return err('Approvazione non trovata', 404);
       return ok(JSON.parse(cfg[0].valore));
     }
 
     case 'updateApproval': {
       const { id, stato, approvato_da, note_approvazione, data_approvazione } = body;
-      const cfg = await sb(env, 'config', 'GET', null, `?chiave=eq.approval_${id}&tenant_id=eq.${env.TENANT_ID || 'default'}`);
+      const cfg = await sb(env, 'config', 'GET', null, `?chiave=eq.approval_${id}&tenant_id=eq.${env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'}`);
       if (!cfg.length) return err('Approvazione non trovata', 404);
       const approval = JSON.parse(cfg[0].valore);
       approval.stato = stato;
       approval.approvato_da = approvato_da;
       approval.note_approvazione = note_approvazione;
       approval.data_approvazione = data_approvazione;
-      await sb(env, `config?chiave=eq.approval_${id}&tenant_id=eq.${env.TENANT_ID || 'default'}`, 'PATCH', {
+      await sb(env, `config?chiave=eq.approval_${id}&tenant_id=eq.${env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'}`, 'PATCH', {
         valore: JSON.stringify(approval)
       });
       return ok(approval);
@@ -1058,7 +1058,7 @@ Rispondi con JSON:
 
     case 'notifyPlanApproved': {
       const { approval_id } = body;
-      const cfg = await sb(env, 'config', 'GET', null, `?chiave=eq.approval_${approval_id}&tenant_id=eq.${env.TENANT_ID || 'default'}`);
+      const cfg = await sb(env, 'config', 'GET', null, `?chiave=eq.approval_${approval_id}&tenant_id=eq.${env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'}`);
       if (!cfg.length) return ok({ notified: 0 });
       const approval = JSON.parse(cfg[0].valore);
       if (approval.stato !== 'approvato') return ok({ notified: 0 });
@@ -1081,7 +1081,7 @@ Rispondi con JSON:
         '?latitudine=is.null&obsoleto=eq.false&select=id,indirizzo,citta,prov,cap');
 
       // Legge config email per User-Agent (Nominatim ToS richiede contatto)
-      const cfgArr = await sb(env, 'config', 'GET', null, '?tenant_id=eq.' + (env.TENANT_ID || 'default') + '&chiave=eq.email_mittente');
+      const cfgArr = await sb(env, 'config', 'GET', null, '?tenant_id=eq.' + (env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045') + '&chiave=eq.email_mittente');
       const contactEmail = cfgArr?.[0]?.valore || 'admin@syntoniqa.app';
 
       // Helper: geocoda singolo indirizzo con retry + backoff
