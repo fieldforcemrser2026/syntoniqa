@@ -1414,7 +1414,14 @@ async function handlePost(action, body, env) {
     // -------- INTELLIGENCE --------
 
     case 'generateAIPlan': {
-      if (!env.GEMINI_KEY) return err('Gemini API key non configurata');
+      let geminiKey = env.GEMINI_KEY || '';
+      if (!geminiKey) {
+        try {
+          const gkCfg = await sb(env, 'config', 'GET', null, '?chiave=eq.gemini_key&select=valore&limit=1');
+          if (gkCfg?.[0]?.valore) geminiKey = gkCfg[0].valore;
+        } catch(e) {}
+      }
+      if (!geminiKey) return err('Gemini API key non configurata. Configura GEMINI_KEY nelle variabili d\'ambiente del Worker Cloudflare o nella tabella config con chiave "gemini_key".');
 
       const vincoli = body.vincoli || {};
       const testo = vincoli.testo || '';
@@ -1477,7 +1484,7 @@ Rispondi con JSON:
 }`;
 
       const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1937,10 +1944,11 @@ Rispondi con JSON:
 
       // ---- Helper: send with inline keyboard ----
       async function sendTelegramWithButtons(chatId, text, buttons) {
+        const htmlText = text.replace(/\*([^*\n]+)\*/g,'<b>$1</b>').replace(/`([^`\n]+)`/g,'<code>$1</code>').replace(/_([^_\n]+)_/g,'<i>$1</i>');
         return fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
           method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({
-            chat_id: chatId, text, parse_mode: 'Markdown',
+            chat_id: chatId, text: htmlText, parse_mode: 'HTML',
             reply_markup: { inline_keyboard: buttons }
           })
         }).then(r=>r.json()).catch(()=>null);
@@ -2758,10 +2766,15 @@ async function sendTelegram(env, chatId, text) {
     } catch(e) {}
   }
   if (!token) return null;
+  // Auto-convert Markdown *bold* and `code` to HTML <b> and <code>
+  let htmlText = text
+    .replace(/\*([^*\n]+)\*/g, '<b>$1</b>')
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    .replace(/_([^_\n]+)_/g, '<i>$1</i>');
   return fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' })
+    body: JSON.stringify({ chat_id: chatId, text: htmlText, parse_mode: 'HTML' })
   }).then(r => r.json()).catch(() => null);
 }
 
@@ -2782,10 +2795,10 @@ async function sendTelegramNotification(env, event, data) {
   const group = cfg.telegram_group_generale;
   if (group) {
     const messages = {
-      nuova_urgenza:      `🚨 *NUOVA URGENZA*\nID: ${data.id}\nProblema: ${data.problema}\nPriorità: ${data.priorita_id}`,
-      nuovo_intervento:   `📅 *NUOVO INTERVENTO* ${data.id}\nData: ${data.data} | Tecnico: ${data.tecnico_id}`,
-      urgenza_assegnata:  `✅ Urgenza *${data.id}* assegnata a ${data.tecnicoAssegnato}`,
-      richiesta_risposta: `📋 Richiesta *${data.id}* → ${data.stato}`,
+      nuova_urgenza:      `🚨 <b>NUOVA URGENZA</b>\nID: ${data.id}\nProblema: ${(data.problema||'').replace(/</g,'&lt;')}\nPriorità: ${data.priorita_id||'?'}`,
+      nuovo_intervento:   `📅 <b>NUOVO INTERVENTO</b> ${data.id}\nData: ${data.data||'?'} | Tecnico: ${data.tecnico_id||'?'}`,
+      urgenza_assegnata:  `✅ Urgenza <b>${data.id}</b> assegnata a ${data.tecnicoAssegnato||'?'}`,
+      richiesta_risposta: `📋 Richiesta <b>${data.id}</b> → ${data.stato||'?'}`,
     };
     const msg = messages[event];
     if (msg) await sendTelegram(env, group, msg);

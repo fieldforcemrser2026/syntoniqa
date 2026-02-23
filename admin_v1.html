@@ -783,7 +783,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card-body">
 <div class="map-controls">
 <select id="mapFiltroTec" onchange="updateMap()" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem"><option value="">Tutti i tecnici</option></select>
-<select id="mapFiltroGiorno" onchange="updateMap()" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem"><option value="oggi">Oggi</option><option value="domani">Domani</option><option value="settimana">Settimana</option></select>
+<select id="mapFiltroGiorno" onchange="updateMap()" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem"><option value="tutti_clienti">🏠 Tutti i clienti</option><option value="oggi">Oggi</option><option value="domani">Domani</option><option value="settimana">Settimana</option></select>
 <label class="field-check" style="font-size:.8125rem"><input type="checkbox" id="mapPercorso" onchange="updateMap()"> Mostra percorso</label>
 <button class="btn btn-sm btn-ok" onclick="openGoogleMaps()">📍 Apri in Google Maps</button>
 </div>
@@ -1680,7 +1680,17 @@ async function apiCall(action,data={},method='GET'){
   }
 }
 
-async function refreshData(){
+async function refreshData(silent){
+  if(silent){
+    // Refresh silenzioso: NO loading overlay
+    try{
+      let url=API_URL+'?'+new URLSearchParams({action:'getAll',token:API_TOKEN,userId:USER?.ID||''});
+      const r=await fetch(url,{signal:AbortSignal.timeout(15000)});
+      const json=await r.json();
+      if(json.success&&json.data){DATA=json.data;renderAll()}
+    }catch(e){console.warn('[SILENT-REFRESH]',e.message)}
+    return;
+  }
   try{DATA=await apiCall('getAll',{userId:USER?.ID||''});renderAll();loadAnagClients().then(()=>{renderMacchine();populateModalClientsFromAnag()}).catch(()=>{})}catch(e){toast('Errore: '+e.message,'err')}
 }
 
@@ -1746,8 +1756,8 @@ function enterApp(){
   populateSelects();
   renderAll();
   loadAnagClients().then(()=>{renderMacchine();populateModalClientsFromAnag()}).catch(()=>{});
-  // Auto-refresh dashboard ogni 60 sec
-  setInterval(()=>{refreshData()},60000);
+  // Auto-refresh dashboard ogni 5 min (silenzioso, senza overlay)
+  setInterval(()=>{refreshData(true)},300000);
 }
 
 // ============ POPULATE SELECTS ============
@@ -2757,20 +2767,69 @@ async function geocodeCity(city){
   return _geoQueue[k];
 }
 
-function initMap(){
-  if(MAP){MAP.invalidateSize();updateMap();return}
+async function initMap(){
+  if(MAP){MAP.invalidateSize();await updateMap();return}
   MAP=L.map('mapAdmin').setView([44.6471,10.9252],9);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(MAP);
-  updateMap();
+  // Assicurati che anagrafica sia caricata prima della mappa
+  if(!ANAG_CLIENTI||!ANAG_CLIENTI.length){try{await loadAnagClients()}catch(e){}}
+  await updateMap();
 }
 
 async function updateMap(){
   if(!MAP)return;
   MARKERS.forEach(m=>MAP.removeLayer(m));MARKERS=[];
   const filtTec=$('mapFiltroTec')?.value||'';
-  const filtGiorno=$('mapFiltroGiorno')?.value||'oggi';
+  const filtGiorno=$('mapFiltroGiorno')?.value||'tutti_clienti';
   const showRoute=$('mapPercorso')?.checked||false;
+  const waypoints=[];
 
+  // Risolvi coordinate da anagrafica
+  async function getAnagCoords(anag){
+    if(anag.Lat&&anag.Lng)return[parseFloat(anag.Lat),parseFloat(anag.Lng)];
+    const citta=anag.CittaFatturazione||anag.CittaSpedizioni||'';
+    if(citta){const coords=await geocodeCity(citta);if(coords)return coords}
+    return null;
+  }
+  // Risolvi coordinate clienti (da campo Lat/Lng, poi anagrafica, poi geocoding città)
+  async function getClientCoords(cli){
+    if(cli.Latitudine&&cli.Longitudine)return[parseFloat(cli.Latitudine),parseFloat(cli.Longitudine)];
+    const anag=(ANAG_CLIENTI||[]).find(a=>a.CodiceM3===cli.ID||a.NomeInterno===cli.Nome);
+    if(anag){const c=await getAnagCoords(anag);if(c)return c}
+    const citta=cli.Citta||cli.Indirizzo||'';
+    if(citta){const coords=await geocodeCity(citta);if(coords)return coords}
+    return null;
+  }
+
+  // ──── MODALITÀ "TUTTI I CLIENTI" ────
+  if(filtGiorno==='tutti_clienti'){
+    const anagList=ANAG_CLIENTI||[];
+    let placed=0,total=anagList.length;
+    for(const anag of anagList){
+      const coords=await getAnagCoords(anag);
+      if(!coords)continue;
+      const [lat,lng]=coords;
+      const nome=anag.NomeAccount||anag.NomeInterno||anag.CodiceM3;
+      const citta=anag.CittaFatturazione||'';
+      // Conta macchine
+      const counts=anag._assetCounts||{};
+      const nMac=counts._total||0;
+      const icon=L.divIcon({className:'',html:`<div style="background:#C30A14;color:white;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.3)">${nMac||'·'}</div>`,iconSize:[22,22],iconAnchor:[11,11]});
+      const m=L.marker([lat,lng],{icon}).addTo(MAP);
+      m.bindPopup(`<strong>${nome}</strong><br>${citta}<br>Macchine: ${nMac}<br>ID: ${anag.CodiceM3}`);
+      MARKERS.push(m);
+      waypoints.push({lat,lng,name:nome});
+      placed++;
+    }
+    const allPts=MARKERS.filter(m=>m.getLatLng).map(m=>[m.getLatLng().lat,m.getLatLng().lng]);
+    if(allPts.length>1)MAP.fitBounds(allPts,{padding:[40,40]});
+    else if(allPts.length===1)MAP.setView(allPts[0],12);
+    $('mapInfo').innerHTML=`🏠 ${placed}/${total} clienti su mappa`;
+    MAP._ffWaypoints=waypoints;
+    return;
+  }
+
+  // ──── MODALITÀ INTERVENTI PER GIORNO ────
   let targetDate=today();
   if(filtGiorno==='domani'){const d=new Date();d.setDate(d.getDate()+1);targetDate=d.toISOString().split('T')[0]}
 
@@ -2783,18 +2842,8 @@ async function updateMap(){
   const colors=['#00C9A7','#3B7EF7','#10B981','#F59E0B','#8B5CF6','#EC4899'];
   let colorIdx=0;
 
-  // Risolvi coordinate clienti (da campo Lat/Lng o da città via geocoding)
-  async function getClientCoords(cli){
-    if(cli.Latitudine&&cli.Longitudine)return[parseFloat(cli.Latitudine),parseFloat(cli.Longitudine)];
-    const citta=cli.Citta||cli.Indirizzo||'';
-    if(citta){const coords=await geocodeCity(citta);if(coords)return coords}
-    return null;
-  }
-
-  // Gruppo per tecnico
   const tecGroup={};
   piano.forEach(p=>{const tid=p.TecnicoID||'notech';if(!tecGroup[tid])tecGroup[tid]=[];tecGroup[tid].push(p)});
-  const waypoints=[];
 
   for(const [tid,items] of Object.entries(tecGroup)){
     const color=colors[colorIdx++%colors.length];
@@ -2811,7 +2860,9 @@ async function updateMap(){
       pts.push([lat,lng]);
       const icon=L.divIcon({className:'',html:`<div style="background:${color};color:white;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.3)">${i+1}</div>`,iconSize:[24,24],iconAnchor:[12,12]});
       const m=L.marker([lat,lng],{icon}).addTo(MAP);
-      m.bindPopup(`<strong>${i+1}. ${cli.Nome||cli.ID}</strong><br>${cli.Citta||''}<br>${p.OraInizio||''} · ${getName(DATA.tipiIntervento||[],p.TipoInterventoID)}<br>Tecnico: ${getName(DATA.utenti||[],tid)}`);
+      const anag=(ANAG_CLIENTI||[]).find(a=>a.CodiceM3===cli.ID);
+      const cittaLabel=anag?.CittaFatturazione||cli.Citta||'';
+      m.bindPopup(`<strong>${i+1}. ${cli.Nome||cli.ID}</strong><br>${cittaLabel}<br>${p.OraInizio||''} · ${getName(DATA.tipiIntervento||[],p.TipoInterventoID)}<br>Tecnico: ${getName(DATA.utenti||[],tid)}`);
       MARKERS.push(m);
       waypoints.push({lat,lng,name:cli.Nome||cli.ID});
     }
@@ -2819,15 +2870,12 @@ async function updateMap(){
     if(showRoute&&pts.length>1){const line=L.polyline(pts,{color,weight:3,opacity:.7,dashArray:'8,8'}).addTo(MAP);MARKERS.push(line)}
   }
 
-  // Fit bounds
   const allPts=MARKERS.filter(m=>m.getLatLng).map(m=>[m.getLatLng().lat,m.getLatLng().lng]);
   if(allPts.length>1)MAP.fitBounds(allPts,{padding:[40,40]});
   else if(allPts.length===1)MAP.setView(allPts[0],12);
-  else $('mapInfo').innerHTML='⚠️ Nessun intervento con coordinate trovato per il periodo selezionato. Prova "Settimana".';
+  else $('mapInfo').innerHTML='⚠️ Nessun intervento trovato. Prova "Tutti i clienti" o "Settimana".';
 
   $('mapInfo').innerHTML=`${piano.length} interventi · ${clientiIds.length} clienti · ${allPts.length} su mappa · ${Object.keys(tecGroup).length} tecnici`;
-
-  // Store waypoints for Google Maps export
   MAP._ffWaypoints=waypoints;
 }
 
@@ -4251,6 +4299,10 @@ async function runAI(){
     const result=await apiCall('generateAIPlan',{vincoli:{testo:prompt, files:filesData}},'POST');
     AI_PLAN=result;
     // Render AI result nicely
+    if(!result||typeof result!=='object'||(!result.piano&&!result.summary)){
+      $('aiResult').innerHTML='<div style="color:var(--err)">❌ Il server non ha generato un piano. Verifica che la chiave Gemini AI sia configurata nelle impostazioni del Worker Cloudflare (variabile GEMINI_KEY) o nella tabella config.</div>';
+      return;
+    }
     if(typeof result==='object'&&result.piano){
       let html='<h4 style="margin:0 0 12px">📋 Piano Generato</h4>';
       if(result.summary) html+=`<p style="margin:0 0 12px">${result.summary}</p>`;
