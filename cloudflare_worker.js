@@ -1805,6 +1805,36 @@ Rispondi SOLO con JSON valido:
       if (reply) {
         try { await sendTelegram(env, chatId, reply); } catch(e) { console.error('TG send error:', e.message); }
       }
+
+      // ---- MIRROR Telegram → Chat Admin ----
+      // Salva ogni messaggio ricevuto da Telegram nella chat interna
+      try {
+        const senderName = (msg.from?.first_name || '') + (msg.from?.last_name ? ' ' + msg.from.last_name : '');
+        const msgId = 'TG_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+        // Determina canale: messaggi con keywords urgenza vanno in CH_URGENZE, altrimenti CH_GENERALE
+        const urgKwMirror = ['urgenza','fermo','guasto','errore','rotto','emergenza','allarme'];
+        const isUrgMsg = urgKwMirror.some(k => (text||'').toLowerCase().includes(k));
+        const targetCanale = isUrgMsg ? 'CH_URGENZE' : 'CH_GENERALE';
+        const chatMsg = {
+          id: msgId,
+          canale_id: targetCanale,
+          mittente_id: utente?.id || null,
+          testo: `[Telegram - ${senderName}] ${text || ''}${mediaUrl ? ' 📎' + (mediaType||'') : ''}`,
+          tipo: 'telegram',
+          created_at: new Date().toISOString()
+        };
+        await sb(env, 'chat_messaggi', 'POST', chatMsg).catch(e => console.error('Mirror save error:', e.message));
+        // Se il bot ha risposto, salva anche la risposta come messaggio del bot
+        if (reply) {
+          const botMsgId = 'TG_BOT_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+          await sb(env, 'chat_messaggi', 'POST', {
+            id: botMsgId, canale_id: targetCanale, mittente_id: 'BOT',
+            testo: reply.replace(/\*/g, '').replace(/_/g, ''), // strip markdown
+            tipo: 'telegram_bot', created_at: new Date(Date.now() + 1000).toISOString()
+          }).catch(() => {});
+        }
+      } catch(mirrorErr) { console.error('Mirror error:', mirrorErr.message); }
+
       return ok();
       } catch (tgErr) {
         console.error('Telegram handler error:', tgErr.message, tgErr.stack);
@@ -1861,6 +1891,32 @@ Rispondi SOLO con JSON valido:
       if (mittente) {
         await sb(env, 'chat_membri', 'POST', { id: `${canale_id}_${mittente}`, canale_id, utente_id: mittente, ultimo_letto: new Date().toISOString() }).catch(() => {});
       }
+      // MIRROR → Telegram: invia il messaggio anche al gruppo Telegram
+      try {
+        const cfgRows = await sb(env, 'config', 'GET', null, '?chiave=in.(telegram_bot_token,telegram_group_generale)&select=chiave,valore');
+        const cfg = {};
+        (cfgRows || []).forEach(c => { cfg[c.chiave] = c.valore; });
+        const tgToken = cfg.telegram_bot_token || env.TELEGRAM_BOT_TOKEN;
+        const tgGroup = cfg.telegram_group_generale;
+        if (tgToken && tgGroup) {
+          // Trova nome mittente
+          let senderName = 'Admin';
+          if (mittente) {
+            const users = await sb(env, 'utenti', 'GET', null, `?id=eq.${mittente}&select=nome,cognome`).catch(() => []);
+            if (users?.[0]) senderName = (users[0].nome || '') + ' ' + (users[0].cognome || '');
+          }
+          // Trova nome canale
+          const canaleInfo = await sb(env, 'chat_canali', 'GET', null, `?id=eq.${canale_id}&select=nome,icona`).catch(() => []);
+          const canaleNome = canaleInfo?.[0]?.nome || canale_id;
+          const canaleIcona = canaleInfo?.[0]?.icona || '💬';
+          const tgText = `${canaleIcona} <b>[${canaleNome}]</b>\n👤 <b>${senderName}</b>:\n${testo}`;
+          await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: tgGroup, text: tgText, parse_mode: 'HTML' })
+          }).catch(() => {});
+        }
+      } catch(tgErr) { console.error('Telegram mirror error:', tgErr); }
       return ok({ messaggio: pascalizeRecord(result[0]) });
     }
 

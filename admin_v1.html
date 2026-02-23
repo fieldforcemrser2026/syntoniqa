@@ -424,7 +424,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <button class="nav-item" onclick="showSec('kpi',this)"><span class="ico">📈</span>KPI</button>
 <button class="nav-item" onclick="showSec('pagellini',this)"><span class="ico">🎯</span>Pagellini</button>
 <button class="nav-item" onclick="showSec('checklist',this)"><span class="ico">✅</span>Checklist</button>
-<button class="nav-item" onclick="showSec('chat',this)"><span class="ico">💬</span>Chat Interna<span class="badge" id="chatBadge" style="display:none">0</span></button>
+<button class="nav-item" onclick="showSec('chat',this)"><span class="ico">💬</span>Chat Telegram<span class="badge" id="chatBadge" style="display:none">0</span></button>
 <div class="nav-label">Sistema</div>
 <button class="nav-item" onclick="showSec('sla',this)"><span class="ico">⏱️</span>SLA Monitor</button>
 <button class="nav-item" onclick="showSec('documenti',this)"><span class="ico">📁</span>Documenti</button>
@@ -1602,7 +1602,7 @@ function showSec(id,btn){
   const sec=$('sec'+id.charAt(0).toUpperCase()+id.slice(1));
   if(sec)sec.classList.add('active');
   if(btn)btn.classList.add('active');
-  const titles={'dashboard':'📊 Dashboard','calendario':'📅 Calendario','piano':'📋 Interventi','urgenze':'🚨 Urgenze','ordini':'📦 Ordini','installazioni':'🏗️ Installazioni','reperibilita':'📞 Reperibilità','trasferte':'🧳 Trasferte','notifiche':'🔔 Notifiche','richieste':'📝 Richieste','clienti':'🏢 Clienti','macchine':'⚙️ Macchine','automezzi':'🚐 Automezzi','tecnici':'👥 Tecnici','ai':'🤖 AI Planner','planner':'📆 Planner Visuale','mappa':'🗺️ Mappa','kpi':'📈 KPI','pagellini':'🎯 Pagellini','checklist':'✅ Checklist','sla':'⏱️ SLA Monitor','documenti':'📁 Documenti','allegati':'📎 Allegati','report':'📊 Report Builder','auditlog':'📜 Audit Log','powerbi':'⚡ Power BI','emailconfig':'📧 Email','telegramconfig':'💬 Telegram','backup':'💾 Backup','chat':'💬 Chat Interna','config':'🔧 Configurazione'};
+  const titles={'dashboard':'📊 Dashboard','calendario':'📅 Calendario','piano':'📋 Interventi','urgenze':'🚨 Urgenze','ordini':'📦 Ordini','installazioni':'🏗️ Installazioni','reperibilita':'📞 Reperibilità','trasferte':'🧳 Trasferte','notifiche':'🔔 Notifiche','richieste':'📝 Richieste','clienti':'🏢 Clienti','macchine':'⚙️ Macchine','automezzi':'🚐 Automezzi','tecnici':'👥 Tecnici','ai':'🤖 AI Planner','planner':'📆 Planner Visuale','mappa':'🗺️ Mappa','kpi':'📈 KPI','pagellini':'🎯 Pagellini','checklist':'✅ Checklist','sla':'⏱️ SLA Monitor','documenti':'📁 Documenti','allegati':'📎 Allegati','report':'📊 Report Builder','auditlog':'📜 Audit Log','powerbi':'⚡ Power BI','emailconfig':'📧 Email','telegramconfig':'💬 Telegram','backup':'💾 Backup','chat':'💬 Chat Telegram','config':'🔧 Configurazione'};
   $('headerTitle').textContent=titles[id]||id;
   if(id==='mappa')setTimeout(()=>initMap(),100);
   if(id==='kpi')loadKPIWithCharts();
