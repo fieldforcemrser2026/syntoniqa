@@ -1596,6 +1596,8 @@ const $=id=>document.getElementById(id);
 const today=()=>new Date().toISOString().split('T')[0];
 const fmtDate=d=>{if(!d)return '—';const p=String(d).substring(0,10).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:'—'};
 const fmtDateTime=d=>{if(!d)return '—';try{return new Date(d).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}catch{return '—'}};
+const today=()=>new Date().toISOString().slice(0,10);
+function calcOraFine(oraInizio,durata){const [h,m]=(oraInizio||'08:00').split(':').map(Number);const t=h*60+m+Math.round(durata*60);return String(Math.floor(t/60)%24).padStart(2,'0')+':'+String(t%60).padStart(2,'0')}
 const getName=(list,id,field='Nome')=>{const o=list.find(x=>x.ID===id||x.CodiceM3===id);if(!o)return id||'—';if(field!=='Nome'&&o[field])return o[field];return(o.NomeInterno||o.Nome||o.Descrizione||'')+(o.Cognome?' '+o.Cognome:'');};
 const getColor=(list,id)=>{const o=list.find(x=>x.ID===id);return o?.Colore||'#6B7280'};
 const statusTag=(s)=>{const m={'pianificato':['tag-info','📅'],'in_corso':['tag-warn','⚡'],'completato':['tag-ok','✅'],'chiuso':['tag-gray','🔒'],'aperta':['tag-err','🔴'],'assegnata':['tag-warn','👤'],'schedulata':['tag-info','📅'],'risolta':['tag-ok','✅'],'richiesto':['tag-info','📝'],'preso_in_carico':['tag-warn','👋'],'ordinato':['tag-purple','📦'],'in_arrivo':['tag-info','🚚'],'arrivato':['tag-ok','✅'],'attiva':['tag-ok','✅'],'pianificata':['tag-info','📅'],'completata':['tag-ok','✅'],'bozza':['tag-warn','📝'],'approvato':['tag-ok','✅'],'approvata':['tag-ok','✅'],'rifiutata':['tag-err','❌'],'in_attesa':['tag-warn','⏳']};const x=m[s]||['tag-gray',''];return `<span class="tag ${x[0]}">${x[1]} ${s||'—'}</span>`};
@@ -3686,10 +3688,34 @@ async function savePiano(){
 async function saveUrgenza(){
   try{
     const data={ClienteID:$('muCliente').value,MacchinaID:$('muMacchina').value,
-      Problema:$('muProblema').value,PrioritaID:$('muPriorita').value,Note:$('muNote').value};
+      Problema:$('muProblema').value,PrioritaID:$('muPriorita').value,Note:$('muNote').value,
+      Stato:'in_attesa',SegnalatoDa:USER?.ID,DataSegnalazione:new Date().toISOString()};
     if(!data.ClienteID||!data.Problema){toast('Compila Cliente e Problema','warn');return}
     await apiCall('createUrgenza',{data},'POST');
-    toast('Urgenza creata','ok');closeModal('modalUrgenza');await refreshData();
+
+    // Scheduling automatico in base a priorità
+    const priId=$('muPriorita').value;
+    const priObj=(DATA.priorita||[]).find(p=>p.ID===priId);
+    const priLivello=priObj?.Livello||1;
+    const priNome=priObj?.Nome||'Urgente';
+    let dataInt;const d=new Date();
+    if(priLivello<=2){dataInt=today()}
+    else if(priLivello===3){d.setDate(d.getDate()+1);dataInt=d.toISOString().slice(0,10)}
+    else{d.setDate(d.getDate()+2);dataInt=d.toISOString().slice(0,10)}
+    const oraInt=priLivello<=2?new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit',hour12:false}):'08:00';
+    try{
+      await apiCall('createPiano',{data:{ClienteID:data.ClienteID,MacchinaID:data.MacchinaID||null,
+        PrioritaID:priId,Data:dataInt,OraInizio:oraInt,OraFine:calcOraFine(oraInt,priLivello<=2?4:2),
+        DurataOre:priLivello<=2?4:2,Note:'[URGENZA ADMIN]\n🚨 Priorità: '+priNome+'\n'+data.Problema,
+        Stato:'pianificato'}},'POST');
+    }catch(e){console.warn('Piano da urgenza:',e)}
+
+    // Notifiche chat
+    const nome=((USER?.Nome||'')+' '+(USER?.Cognome||'')).trim();
+    const cliNome=getName(DATA.clienti,data.ClienteID);
+    try{await apiCall('sendChatMessage',{canale_id:'CH_URGENZE',testo:'🚨 URGENZA ('+priNome+') creata da '+nome+'\n🏢 '+cliNome+'\n📅 Schedulata: '+fmtDate(dataInt)+' '+oraInt+'\n📝 '+data.Problema,userId:USER?.ID},'POST')}catch(e){}
+
+    toast('Urgenza creata + schedulata il '+fmtDate(dataInt),'ok');closeModal('modalUrgenza');await refreshData();
   }catch(e){toast(e.message,'err')}
 }
 

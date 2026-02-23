@@ -765,9 +765,10 @@ async function handlePost(action, body, env) {
     case 'createNotifica': {
       const id = 'NOT_' + Date.now();
       const fields = getFields(body);
-      // Map messaggio/titolo/contenuto -> testo (only writable column)
-      const testo = fields.messaggio || fields.testo || fields.titolo || fields.contenuto || '';
-      const row = { id, tenant_id: fields.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045', tipo: fields.tipo || 'info', testo, stato: fields.stato || 'inviata', destinatario_id: fields.destinatario_id || null, riferimento_id: fields.riferimento_id || null, riferimento_tipo: fields.riferimento_tipo || null, data_invio: new Date().toISOString() };
+      const testo = fields.messaggio || fields.testo || fields.contenuto || '';
+      const oggetto = fields.oggetto || fields.titolo || null;
+      const priorita = fields.priorita || 'normale';
+      const row = { id, tenant_id: fields.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045', tipo: fields.tipo || 'info', oggetto, testo, priorita, stato: fields.stato || 'inviata', mittente_id: fields.mittente_id || null, destinatario_id: fields.destinatario_id || null, destinatari_ids: fields.destinatari_ids || null, riferimento_id: fields.riferimento_id || null, riferimento_tipo: fields.riferimento_tipo || null, data_invio: new Date().toISOString() };
       const result = await sb(env, 'notifiche', 'POST', row);
       return ok({ notifica: pascalizeRecord(result[0]) });
     }
