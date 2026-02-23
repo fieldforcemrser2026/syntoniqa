@@ -1277,6 +1277,50 @@ Rispondi con JSON:
       return ok({ telegram: data });
     }
 
+    // -------- TIPI INTERVENTO (Service Types) --------
+
+    case 'getServiceTypes': {
+      const types = await sb(env, 'tipi_intervento', 'GET', null, '?attivo=eq.true&order=nome');
+      return ok(types.map(pascalizeRecord));
+    }
+
+    // -------- FURGONI MANAGEMENT --------
+
+    case 'getFurgoni': {
+      const furgoni = await sb(env, 'automezzi', 'GET', null, '?obsoleto=eq.false&order=descrizione');
+      return ok(furgoni.map(pascalizeRecord));
+    }
+
+    case 'swapFurgone': {
+      // Scambia furgone tra due tecnici per una data specifica
+      const { tecnico1_id, tecnico2_id, data, note_swap } = body;
+      if (!tecnico1_id || !tecnico2_id || !data) return err('Serve tecnico1_id, tecnico2_id, data');
+      // Get current assignments
+      const [t1] = await sb(env, 'utenti', 'GET', null, `?id=eq.${tecnico1_id}&select=id,nome,automezzo_id`);
+      const [t2] = await sb(env, 'utenti', 'GET', null, `?id=eq.${tecnico2_id}&select=id,nome,automezzo_id`);
+      if (!t1 || !t2) return err('Tecnici non trovati');
+      // Update piano entries for that date to swap furgoni
+      await sb(env, `piano?data=eq.${data}&tecnico_id=eq.${tecnico1_id}&obsoleto=eq.false`, 'PATCH', { automezzo_id: t2.automezzo_id });
+      await sb(env, `piano?data=eq.${data}&tecnico_id=eq.${tecnico2_id}&obsoleto=eq.false`, 'PATCH', { automezzo_id: t1.automezzo_id });
+      return ok({ swap: `${t1.nome}(${t1.automezzo_id}) ↔ ${t2.nome}(${t2.automezzo_id})`, data });
+    }
+
+    case 'assignFurgone': {
+      // Assegna un furgone a un tecnico per una data specifica (piano)
+      const { tecnicoId, furgoneId, dataAssegna } = body;
+      if (!tecnicoId || !furgoneId) return err('Serve tecnicoId e furgoneId');
+      if (dataAssegna) {
+        // Assign for a specific date (only piano entries)
+        await sb(env, `piano?data=eq.${dataAssegna}&tecnico_id=eq.${tecnicoId}&obsoleto=eq.false`, 'PATCH', { automezzo_id: furgoneId });
+      } else {
+        // Permanent assignment
+        await sb(env, `automezzi?assegnatario_id=eq.${tecnicoId}`, 'PATCH', { assegnatario_id: null });
+        await sb(env, `automezzi?id=eq.${furgoneId}`, 'PATCH', { assegnatario_id: tecnicoId });
+        await sb(env, `utenti?id=eq.${tecnicoId}`, 'PATCH', { automezzo_id: furgoneId });
+      }
+      return ok({ tecnicoId, furgoneId, data: dataAssegna || 'permanente' });
+    }
+
     // -------- TELEGRAM BOT (webhook) --------
 
     case 'telegramWebhook': {
