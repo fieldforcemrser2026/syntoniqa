@@ -1481,6 +1481,14 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="field"><label>Email</label><input type="email" id="nuEmail" placeholder="marco@azienda.it"></div>
 </div>
 </div>
+<div id="resetPwdBox" style="display:none;margin-top:8px;padding:12px;background:#FEF3C7;border-radius:8px">
+<div style="font-size:.8125rem;font-weight:600;margin-bottom:8px">🔑 Reset Password</div>
+<div class="field-row">
+<div class="field"><label>Nuova Password</label><input type="text" id="nuResetPwd" placeholder="NuovaPassword123!"></div>
+<div class="field" style="display:flex;align-items:flex-end"><button class="btn btn-warn btn-sm" onclick="doResetPassword()" style="width:100%">🔑 Reset</button></div>
+</div>
+<button class="btn btn-ghost btn-sm" onclick="generateRandomPwd()" style="font-size:.75rem;margin-top:4px">🎲 Genera password casuale</button>
+</div>
 <div class="modal-foot">
 <button class="btn btn-outline" onclick="closeModal('modalUtente')">Annulla</button>
 <button class="btn btn-primary" onclick="saveUtente()">💾 Salva Utente</button>
@@ -3334,6 +3342,7 @@ function editUtente(id){
   $('nuSquadra').value=u.SquadraID||'';$('nuAutomezzo').value=u.AutomezzoID||'';
   $('nuBase').value=u.Base||'';$('nuTelefono').value=u.Telefono||'';$('nuEmail').value=u.Email||'';
   document.querySelector('#modalUtente .modal-head h2').textContent='✏️ Modifica Utente';
+  $('resetPwdBox').style.display='block';$('nuResetPwd').value='';
   openModal('modalUtente');
 }
 function editCliente(id){
@@ -3369,7 +3378,7 @@ function editAutomezzo(id){
 }
 
 // ============ RESET MODAL ON NEW ============
-function openNewUtente(){EDITING.utente=null;['nuNome','nuCognome','nuUsername','nuPassword','nuBase','nuTelefono','nuEmail'].forEach(id=>{if($(id))$(id).value=''});$('nuRuolo').value='tecnico';$('nuSquadra').value='';$('nuAutomezzo').value='';document.querySelector('#modalUtente .modal-head h2').textContent='👤 Nuovo Utente';openModal('modalUtente')}
+function openNewUtente(){EDITING.utente=null;['nuNome','nuCognome','nuUsername','nuPassword','nuBase','nuTelefono','nuEmail'].forEach(id=>{if($(id))$(id).value=''});$('nuRuolo').value='tecnico';$('nuSquadra').value='';$('nuAutomezzo').value='';$('resetPwdBox').style.display='none';document.querySelector('#modalUtente .modal-head h2').textContent='👤 Nuovo Utente';openModal('modalUtente')}
 function openNewCliente(){EDITING.cliente=null;['ncNome','ncCitta','ncProv','ncIndirizzo','ncCap','ncTelefono','ncEmail','ncContratto','ncNote'].forEach(id=>{if($(id))$(id).value=''});document.querySelector('#modalCliente .modal-head h2').textContent='🏢 Nuovo Cliente';openModal('modalCliente')}
 function openNewMacchina(){EDITING.macchina=null;['nmTipo','nmModello','nmSeriale','nmAnno','nmOre','nmUltimoTag','nmProssTag','nmGaranzia','nmNote'].forEach(id=>{if($(id))$(id).value=''});$('nmCliente').value='';document.querySelector('#modalMacchina .modal-head h2').textContent='⚙️ Nuova Macchina';openModal('modalMacchina')}
 function openNewAutomezzo(){EDITING.automezzo=null;['naTarga','naDesc','naAllestimento','naKm','naControllo','naNote'].forEach(id=>{if($(id))$(id).value=''});$('naStatus').value='disponibile';$('naAssegnatario').value='';document.querySelector('#modalAutomezzo .modal-head h2').textContent='🚐 Nuovo Automezzo';openModal('modalAutomezzo')}
@@ -3405,6 +3414,27 @@ async function saveUtente(){
     closeModal('modalUtente');EDITING.utente=null;
     await refreshData();populateSelects();
   }catch(e){toast(e.message,'err')}
+}
+
+// Reset Password (admin)
+async function doResetPassword(){
+  if(!EDITING.utente){toast('Nessun utente selezionato','warn');return}
+  const newPwd=$('nuResetPwd').value.trim();
+  if(!newPwd||newPwd.length<6){toast('La password deve avere almeno 6 caratteri','warn');return}
+  if(!confirm('Confermi il reset password per questo utente?'))return;
+  try{
+    await apiCall('resetPassword',{userId:EDITING.utente,newPassword:newPwd,operatoreId:USER?.ID},'POST');
+    toast('✅ Password resettata! Nuova pwd: '+newPwd,'ok');
+    $('nuResetPwd').value='';
+  }catch(e){toast('Errore reset: '+e.message,'err')}
+}
+function generateRandomPwd(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  const specials='!@#$%';
+  let pwd='';for(let i=0;i<8;i++)pwd+=chars.charAt(Math.floor(Math.random()*chars.length));
+  pwd+=specials.charAt(Math.floor(Math.random()*specials.length));
+  pwd+=Math.floor(Math.random()*90+10);
+  $('nuResetPwd').value=pwd;
 }
 
 async function saveCliente(){

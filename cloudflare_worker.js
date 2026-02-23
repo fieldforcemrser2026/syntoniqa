@@ -380,11 +380,71 @@ async function handlePost(action, body, env) {
     }
 
     case 'resetPassword': {
-      const { userId, newPassword } = body;
-      const hashed = await hashPassword(newPassword);
-      await sb(env, `utenti?id=eq.${userId}`, 'PATCH', { password_hash: hashed, updated_at: new Date().toISOString() });
-      await wlog('utente', userId, 'reset_password', body.operatoreId || 'system');
+      const uid = body.userId || body.user_id;
+      const newPwd = body.new_password || body.newPassword;
+      if (!uid || !newPwd) return err('userId e newPassword richiesti');
+      const hashed = await hashPassword(newPwd);
+      await sb(env, `utenti?id=eq.${uid}`, 'PATCH', { password_hash: hashed, updated_at: new Date().toISOString() });
+      await wlog('utente', uid, 'reset_password', body.operatoreId || body.operatore_id || 'system');
       return ok();
+    }
+
+    case 'changePassword': {
+      const uid = body.userId || body.user_id;
+      const { old_password, new_password } = body;
+      if (!uid || !old_password || !new_password) return err('userId, old_password e new_password richiesti');
+      if (new_password.length < 6) return err('La nuova password deve avere almeno 6 caratteri');
+      // Verifica vecchia password
+      const users = await sb(env, 'utenti', 'GET', null, `?id=eq.${uid}&select=id,password_hash`);
+      if (!users?.length) return err('Utente non trovato');
+      const oldHash = await hashPassword(old_password);
+      if (users[0].password_hash !== oldHash) return err('Password attuale non corretta');
+      // Aggiorna
+      const newHash = await hashPassword(new_password);
+      await sb(env, `utenti?id=eq.${uid}`, 'PATCH', { password_hash: newHash, updated_at: new Date().toISOString() });
+      await wlog('utente', uid, 'change_password', uid);
+      return ok({ message: 'Password aggiornata con successo' });
+    }
+
+    case 'requestPasswordReset': {
+      const { username } = body;
+      if (!username) return err('Username richiesto');
+      // Trova utente
+      const users = await sb(env, 'utenti', 'GET', null, `?username=eq.${username}&select=id,nome,cognome,username,email`);
+      if (!users?.length) return err('Username non trovato nel sistema');
+      const u = users[0];
+      // Crea notifica per admin (trova primo admin reale)
+      const admins = await sb(env, 'utenti', 'GET', null, '?ruolo=eq.admin&attivo=eq.true&select=id,tenant_id&limit=1').catch(()=>[]);
+      const adminId = admins?.[0]?.id || 'USR001';
+      const tenantId = admins?.[0]?.tenant_id || u.tenant_id || null;
+      const notifId = 'NOT_RST_' + Date.now();
+      await sb(env, 'notifiche', 'POST', {
+        id: notifId, tipo: 'reset_password', oggetto: '🔑 Richiesta Reset Password',
+        testo: `L'utente ${u.nome} ${u.cognome} (${u.username}) ha richiesto il reset della password. Vai su Gestione Utenti per resettarla.`,
+        destinatario_id: adminId, stato: 'inviata', priorita: 'alta',
+        tenant_id: tenantId
+      });
+      // Manda anche su chat admin
+      try {
+        const msgId = 'MSG_RST_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+        await sb(env, 'chat_messaggi', 'POST', {
+          id: msgId, canale_id: 'CH_ADMIN', mittente_id: 'TELEGRAM',
+          testo: `🔑 RICHIESTA RESET PASSWORD\n👤 ${u.nome} ${u.cognome} (${u.username})\n📧 ${u.email || 'nessuna email'}\n\n→ Vai su Gestione Utenti > Modifica > Reset Password`,
+          tipo: 'testo', created_at: new Date().toISOString()
+        });
+      } catch(e) {}
+      // Manda su Telegram
+      try {
+        const cfgRows = await sb(env, 'config', 'GET', null, '?chiave=in.(telegram_bot_token,telegram_group_generale)&select=chiave,valore');
+        const cfg = {}; (cfgRows||[]).forEach(c => { cfg[c.chiave] = c.valore; });
+        if (cfg.telegram_bot_token && cfg.telegram_group_generale) {
+          await fetch(`https://api.telegram.org/bot${cfg.telegram_bot_token}/sendMessage`, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ chat_id: cfg.telegram_group_generale, text: `🔑 <b>RESET PASSWORD</b>\n👤 ${u.nome} ${u.cognome} (${u.username}) ha chiesto il reset password.\nAdmin: vai su Gestione Utenti per resettarla.`, parse_mode: 'HTML' })
+          }).catch(()=>{});
+        }
+      } catch(e) {}
+      return ok({ message: 'Richiesta inviata. L\'admin riceverà una notifica per resettare la tua password.' });
     }
 
     // -------- PIANO (INTERVENTI) --------

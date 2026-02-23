@@ -234,6 +234,16 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <div id="loginErr" style="color:var(--err);font-size:.8125rem;margin-bottom:10px;display:none"></div>
 <button class="btn btn-primary btn-block" id="btnLogin" type="submit">Accedi</button>
 </form>
+<div id="forgotPwdSection" style="display:none;text-align:center;margin-top:16px">
+<a href="#" onclick="showForgotPwd();return false" style="font-size:.8125rem;color:var(--c1);text-decoration:none">🔑 Password dimenticata?</a>
+</div>
+<div id="forgotPwdForm" style="display:none;margin-top:16px;padding:16px;background:#F3F4F6;border-radius:12px">
+<p style="font-size:.8125rem;color:var(--gray);margin-bottom:12px">Inserisci il tuo username. L'admin riceverà una notifica per resettare la tua password.</p>
+<div class="field"><label>Username</label><input type="text" id="forgotUsername" placeholder="nome.cognome"></div>
+<div id="forgotMsg" style="font-size:.8125rem;margin-bottom:8px;display:none"></div>
+<button class="btn btn-primary btn-block btn-sm" onclick="sendForgotPwd()">📤 Invia richiesta reset</button>
+<a href="#" onclick="hideForgotPwd();return false" style="display:block;text-align:center;margin-top:8px;font-size:.8125rem;color:var(--gray)">← Torna al login</a>
+</div>
 </div>
 </div>
 
@@ -404,6 +414,15 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 </div>
 <div class="kpi-row" id="profKpi"></div>
 <div class="card" id="profCard"></div>
+<div class="card" style="margin-bottom:0">
+<div class="card-head"><h3>🔑 Cambia Password</h3></div>
+<div class="card-body">
+<div class="field"><label>Password attuale</label><input type="password" id="cpOld" placeholder="••••••"></div>
+<div class="field"><label>Nuova password</label><input type="password" id="cpNew" placeholder="••••••"></div>
+<div class="field"><label>Conferma nuova password</label><input type="password" id="cpConf" placeholder="••••••"></div>
+<button class="btn btn-primary btn-block btn-sm" onclick="doChangePassword()">🔑 Cambia Password</button>
+</div>
+</div>
 <div style="padding:16px"><button class="btn btn-outline btn-block" onclick="logout()">🚪 Esci</button></div>
 </div>
 
@@ -682,6 +701,7 @@ async function init(){
     DATA=await apiCall('getAll');
     $('loginLoad').style.display='none';
     $('loginForm').style.display='block';
+    $('forgotPwdSection').style.display='block';
     const s=localStorage.getItem('sq2tec');
     if(s){const o=JSON.parse(s);const u=(DATA.utenti||[]).find(x=>x.ID===o.id);if(u){USER=u;enterApp()}}
   }catch(e){$('loginLoad').innerHTML='<div style="color:var(--err)">Errore connessione: '+e.message+'</div>'}
@@ -1517,6 +1537,40 @@ function renderProf(){
     '<div><span style="color:var(--gray)">Ruolo</span><br><strong>'+(USER.Ruolo||'—')+'</strong></div>'+
     '</div></div>';
 }
+
+// ============ PASSWORD: FORGOT + CHANGE ============
+function showForgotPwd(){$('loginForm').style.display='none';$('forgotPwdForm').style.display='block';$('forgotPwdSection').style.display='none';$('forgotMsg').style.display='none'}
+function hideForgotPwd(){$('loginForm').style.display='block';$('forgotPwdForm').style.display='none';$('forgotPwdSection').style.display='block'}
+
+async function sendForgotPwd(){
+  const username=$('forgotUsername').value.trim();
+  if(!username){$('forgotMsg').textContent='Inserisci il tuo username';$('forgotMsg').style.color='var(--err)';$('forgotMsg').style.display='block';return}
+  try{
+    const r=await apiCall('requestPasswordReset',{username},'POST');
+    $('forgotMsg').textContent=r?.message||'Richiesta inviata! L\'admin ti contatterà.';
+    $('forgotMsg').style.color='var(--ok)';$('forgotMsg').style.display='block';
+  }catch(e){$('forgotMsg').textContent=e.message;$('forgotMsg').style.color='var(--err)';$('forgotMsg').style.display='block'}
+}
+
+async function doChangePassword(){
+  const oldPwd=$('cpOld').value;const newPwd=$('cpNew').value;const confPwd=$('cpConf').value;
+  if(!oldPwd||!newPwd){toast('Compila tutti i campi','warn');return}
+  if(newPwd!==confPwd){toast('Le password non coincidono','warn');return}
+  if(newPwd.length<6){toast('La password deve avere almeno 6 caratteri','warn');return}
+  try{
+    await apiCall('changePassword',{userId:USER?.ID,old_password:oldPwd,new_password:newPwd},'POST');
+    toast('✅ Password cambiata con successo!','ok');
+    $('cpOld').value='';$('cpNew').value='';$('cpConf').value='';
+  }catch(e){toast(e.message,'err')}
+}
+
+// Mostra "Password dimenticata?" dopo che il login form è visibile
+document.addEventListener('DOMContentLoaded',()=>{
+  const obs=new MutationObserver(()=>{
+    if($('loginForm')&&$('loginForm').style.display!=='none')$('forgotPwdSection').style.display='block';
+  });
+  if($('loginForm'))obs.observe($('loginForm'),{attributes:true,attributeFilter:['style']});
+});
 
 </script>
 </body>
