@@ -1,0 +1,1926 @@
+var __defProp = Object.defineProperty;
+var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
+
+// cloudflare_worker.js
+var corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Token"
+};
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json", ...corsHeaders }
+  });
+}
+__name(json, "json");
+function err(msg, status = 400) {
+  return json({ success: false, error: msg }, status);
+}
+__name(err, "err");
+function ok(data = {}) {
+  return json({ success: true, data });
+}
+__name(ok, "ok");
+function toPascal(key) {
+  if (key === "id") return "ID";
+  return key.split("_").map((part) => {
+    if (part === "id") return "ID";
+    if (part === "ids") return "IDs";
+    return part.charAt(0).toUpperCase() + part.slice(1);
+  }).join("");
+}
+__name(toPascal, "toPascal");
+function toSnake(key) {
+  if (key === "ID") return "id";
+  return key.replace(/IDs$/g, "_ids").replace(/ID$/g, "_id").replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, "").replace(/__+/g, "_");
+}
+__name(toSnake, "toSnake");
+function pascalizeRecord(obj) {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return obj;
+  return Object.fromEntries(Object.entries(obj).map(([k, v]) => [toPascal(k), v]));
+}
+__name(pascalizeRecord, "pascalizeRecord");
+function pascalizeArrays(data) {
+  const result = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (Array.isArray(value)) {
+      result[key] = value.map((item) => item && typeof item === "object" ? pascalizeRecord(item) : item);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+__name(pascalizeArrays, "pascalizeArrays");
+function getFields(body) {
+  const source = body.data && typeof body.data === "object" && !Array.isArray(body.data) ? body.data : body;
+  const skip = /* @__PURE__ */ new Set(["action", "userId", "operatoreId", "token", "method"]);
+  const result = {};
+  for (const [k, v] of Object.entries(source)) {
+    if (skip.has(k)) continue;
+    if (v === null || v === void 0 || v === "") continue;
+    result[toSnake(k)] = v;
+  }
+  return result;
+}
+__name(getFields, "getFields");
+function normalizeBody(raw) {
+  const isDataWrapper = raw.data && typeof raw.data === "object" && !Array.isArray(raw.data);
+  const dataObj = isDataWrapper ? raw.data : {};
+  const converted = {};
+  for (const [k, v] of Object.entries(dataObj)) {
+    converted[toSnake(k)] = v;
+  }
+  const { action, token, data, method, ...rest } = raw;
+  const result = {};
+  for (const [k, v] of Object.entries(rest)) {
+    if (k === "userId" || k === "operatoreId") {
+      result[k] = v;
+    } else {
+      result[toSnake(k)] = v;
+    }
+  }
+  if (data !== void 0 && !isDataWrapper) {
+    result.data = data;
+  }
+  Object.assign(result, converted);
+  return result;
+}
+__name(normalizeBody, "normalizeBody");
+async function sb(env, table, method = "GET", body = null, params = "", extraHeaders = {}) {
+  const url = `${env.SUPABASE_URL}/rest/v1/${table}${params}`;
+  const res = await fetch(url, {
+    method,
+    headers: {
+      "apikey": env.SUPABASE_SERVICE_KEY,
+      "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+      "Content-Type": "application/json",
+      "Prefer": method === "POST" ? "return=representation" : "return=minimal",
+      ...extraHeaders
+    },
+    body: body ? JSON.stringify(body) : null
+  });
+  if (!res.ok) {
+    const text2 = await res.text();
+    throw new Error(`Supabase ${method} ${table}: ${res.status} ${text2}`);
+  }
+  const text = await res.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+__name(sb, "sb");
+async function hashPassword(password) {
+  const data = new TextEncoder().encode(password);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+__name(hashPassword, "hashPassword");
+function checkToken(request, env, bodyToken) {
+  const token = request.headers.get("X-Token") || new URL(request.url).searchParams.get("token") || bodyToken || "";
+  return token === env.SQ_TOKEN;
+}
+__name(checkToken, "checkToken");
+var cloudflare_worker_default = {
+  async fetch(request, env) {
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers: corsHeaders });
+    }
+    const url = new URL(request.url);
+    const action = url.searchParams.get("action") || url.pathname.split("/").pop();
+    if (action === "telegramWebhook") {
+      const body = await request.json().catch(() => ({}));
+      return await handlePost(action, body, env);
+    }
+    try {
+      if (request.method === "GET") {
+        if (!checkToken(request, env)) return err("Token non valido", 401);
+        return await handleGet(action, url, env);
+      } else if (request.method === "POST") {
+        const rawBody = await request.json().catch(() => ({}));
+        if (!checkToken(request, env, rawBody.token)) return err("Token non valido", 401);
+        const postAction = action || rawBody.action || "";
+        const body = normalizeBody(rawBody);
+        return await handlePost(postAction, body, env);
+      }
+      return err("Metodo non supportato", 405);
+    } catch (e) {
+      console.error("Worker error:", e);
+      return err(`Errore interno: ${e.message}`, 500);
+    }
+  }
+};
+async function handleGet(action, url, env) {
+  switch (action) {
+    case "getAll": {
+      const [
+        utenti,
+        clienti,
+        macchine,
+        piano,
+        urgenze,
+        ordini,
+        reperibilita,
+        trasferte,
+        notifiche,
+        richieste,
+        installazioni,
+        pagellini,
+        automezzi,
+        tipi_intervento,
+        priorita,
+        squadre,
+        tagliandi,
+        fasi_installazione,
+        sla_config,
+        checklist_template,
+        documenti,
+        config
+      ] = await Promise.all([
+        sb(env, "utenti", "GET", null, "?select=*&obsoleto=eq.false&order=cognome"),
+        sb(env, "clienti", "GET", null, "?select=*&obsoleto=eq.false&order=nome"),
+        sb(env, "macchine", "GET", null, "?select=*&obsoleto=eq.false"),
+        sb(env, "piano", "GET", null, "?select=*&obsoleto=eq.false&order=data.desc&limit=500"),
+        sb(env, "urgenze", "GET", null, "?select=*&obsoleto=eq.false&order=data_segnalazione.desc&limit=200"),
+        sb(env, "ordini", "GET", null, "?select=*&obsoleto=eq.false&order=data_richiesta.desc&limit=300"),
+        sb(env, "reperibilita", "GET", null, "?select=*&obsoleto=eq.false&order=data_inizio.desc&limit=200"),
+        sb(env, "trasferte", "GET", null, "?select=*&obsoleto=eq.false&order=data_inizio.desc&limit=100"),
+        sb(env, "notifiche", "GET", null, "?select=*&obsoleto=eq.false&order=data_invio.desc&limit=200"),
+        sb(env, "richieste", "GET", null, "?select=*&obsoleto=eq.false&order=data_richiesta.desc"),
+        sb(env, "installazioni", "GET", null, "?select=*&obsoleto=eq.false"),
+        sb(env, "pagellini", "GET", null, "?select=*&obsoleto=eq.false&order=data_creazione.desc"),
+        sb(env, "automezzi", "GET", null, "?select=*&obsoleto=eq.false"),
+        sb(env, "tipi_intervento", "GET", null, "?select=*&attivo=eq.true"),
+        sb(env, "priorita", "GET", null, "?select=*&attivo=eq.true&order=livello"),
+        sb(env, "squadre", "GET", null, "?select=*&attivo=eq.true"),
+        sb(env, "tagliandi", "GET", null, "?select=*&attivo=eq.true"),
+        sb(env, "fasi_installazione", "GET", null, "?select=*&attivo=eq.true&order=ordine"),
+        sb(env, "sla_config", "GET", null, "?select=*&attivo=eq.true"),
+        sb(env, "checklist_template", "GET", null, "?select=*&attivo=eq.true"),
+        sb(env, "documenti", "GET", null, "?select=*&obsoleto=eq.false&order=data_caricamento.desc"),
+        sb(env, "config", "GET", null, "?select=chiave,valore")
+      ]);
+      const utentiSafe = utenti.map((u) => {
+        const { password_hash, ...rest } = u;
+        return rest;
+      });
+      return ok(pascalizeArrays({
+        utenti: utentiSafe,
+        clienti,
+        macchine,
+        piano,
+        urgenze,
+        ordini,
+        reperibilita,
+        trasferte,
+        notifiche,
+        richieste,
+        installazioni,
+        pagellini,
+        automezzi,
+        tipiIntervento: tipi_intervento,
+        priorita,
+        squadre,
+        tagliandi,
+        fasiInstallazione: fasi_installazione,
+        slaConfig: sla_config,
+        checklistTemplate: checklist_template,
+        documenti,
+        config: Object.fromEntries(config.map((c) => [c.chiave, c.valore])),
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      }));
+    }
+    case "getKPI": {
+      const tecnicoId = url.searchParams.get("tecnicoId") || "";
+      const periodo = url.searchParams.get("periodo") || "mese";
+      let dateFilter = "";
+      const now = /* @__PURE__ */ new Date();
+      if (periodo === "settimana") {
+        const d = new Date(now);
+        d.setDate(d.getDate() - 7);
+        dateFilter = `&data=gte.${d.toISOString().split("T")[0]}`;
+      } else if (periodo === "mese") {
+        dateFilter = `&data=gte.${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+      } else if (periodo === "anno") {
+        dateFilter = `&data=gte.${now.getFullYear()}-01-01`;
+      }
+      const tecnicoFilter = tecnicoId ? `&tecnico_id=eq.${tecnicoId}` : "";
+      const kpi = await sb(env, "kpi_log", "GET", null, `?select=*${dateFilter}${tecnicoFilter}`);
+      return ok({ kpi, periodo, tecnicoId });
+    }
+    case "getKPITecnici": {
+      const mese = url.searchParams.get("mese") || (/* @__PURE__ */ new Date()).toISOString().slice(0, 7);
+      const interventi = await sb(
+        env,
+        "piano",
+        "GET",
+        null,
+        `?select=tecnico_id,stato,ore_lavorate,km_percorsi&data=gte.${mese}-01&data=lte.${mese}-31`
+      );
+      const byTecnico = {};
+      interventi.forEach((i) => {
+        if (!i.tecnico_id) return;
+        if (!byTecnico[i.tecnico_id]) byTecnico[i.tecnico_id] = { total: 0, completati: 0, ore: 0, km: 0 };
+        byTecnico[i.tecnico_id].total++;
+        if (i.stato === "completato" || i.stato === "chiuso") byTecnico[i.tecnico_id].completati++;
+        byTecnico[i.tecnico_id].ore += parseFloat(i.ore_lavorate || 0);
+        byTecnico[i.tecnico_id].km += parseInt(i.km_percorsi || 0);
+      });
+      return ok({ kpiTecnici: byTecnico, mese });
+    }
+    case "getBackupHistory": {
+      const backups = await sb(
+        env,
+        "kpi_snapshot",
+        "GET",
+        null,
+        "?tipo_snapshot=eq.backup&order=data.desc&limit=30"
+      );
+      return ok({ backups });
+    }
+    case "getAuditLog": {
+      const entityType = url.searchParams.get("entityType") || "";
+      const userId = url.searchParams.get("userId") || "";
+      const limit = url.searchParams.get("limit") || "100";
+      let params = `?order=timestamp_at.desc&limit=${limit}`;
+      if (entityType) params += `&entity_type=eq.${entityType}`;
+      if (userId) params += `&user_id=eq.${userId}`;
+      const logs = await sb(env, "workflow_log", "GET", null, params);
+      return ok({ logs });
+    }
+    case "getChecklistTemplates": {
+      const templates = await sb(env, "checklist_template", "GET", null, "?attivo=eq.true");
+      return ok({ templates });
+    }
+    case "getPagellini": {
+      const tecnicoId = url.searchParams.get("tecnicoId") || "";
+      const params = tecnicoId ? `?tecnico_id=eq.${tecnicoId}&obsoleto=eq.false` : "?obsoleto=eq.false";
+      const [pagellini, voci] = await Promise.all([
+        sb(env, "pagellini", "GET", null, params),
+        sb(env, "pagellini_voci", "GET", null, "?select=*")
+      ]);
+      return ok({ pagellini, voci });
+    }
+    case "exportPowerBI": {
+      const [piano, urgenze, utenti, clienti, macchine, kpiLog] = await Promise.all([
+        sb(env, "piano", "GET", null, "?select=*&obsoleto=eq.false&order=data.desc&limit=5000"),
+        sb(env, "urgenze", "GET", null, "?select=*&obsoleto=eq.false&order=data_segnalazione.desc&limit=2000"),
+        sb(env, "utenti", "GET", null, "?select=id,nome,cognome,ruolo,squadra_id&obsoleto=eq.false"),
+        sb(env, "clienti", "GET", null, "?select=id,nome,citta,prov&obsoleto=eq.false"),
+        sb(env, "macchine", "GET", null, "?select=id,cliente_id,tipo,modello&obsoleto=eq.false"),
+        sb(env, "kpi_log", "GET", null, "?order=data.desc&limit=1000")
+      ]);
+      return ok({ fact_interventi: piano, fact_urgenze: urgenze, fact_kpi: kpiLog, dim_tecnici: utenti, dim_clienti: clienti, dim_macchine: macchine });
+    }
+    default:
+      return err(`Azione GET non trovata: ${action}`, 404);
+  }
+}
+__name(handleGet, "handleGet");
+async function handlePost(action, body, env) {
+  async function wlog(entityType, entityId, action2, userId, note = "") {
+    await sb(env, "workflow_log", "POST", {
+      id: `WL_${Date.now()}`,
+      entity_type: entityType,
+      entity_id: entityId,
+      action: action2,
+      user_id: userId,
+      note,
+      timestamp_at: (/* @__PURE__ */ new Date()).toISOString()
+    }).catch(() => {
+    });
+  }
+  __name(wlog, "wlog");
+  switch (action) {
+    // -------- AUTH --------
+    case "login": {
+      const { username, password } = body;
+      if (!username || !password) return err("Username e password richiesti");
+      const utenti = await sb(
+        env,
+        "utenti",
+        "GET",
+        null,
+        `?username=eq.${encodeURIComponent(username)}&attivo=eq.true&obsoleto=eq.false`
+      );
+      if (!utenti.length) return err("Credenziali non valide", 401);
+      const utente = utenti[0];
+      const hashed = await hashPassword(password);
+      const validHash = utente.password_hash === hashed;
+      const validPlain = utente.password_hash === password;
+      if (!validHash && !validPlain) return err("Credenziali non valide", 401);
+      if (validPlain && !validHash) {
+        await sb(env, `utenti?id=eq.${utente.id}`, "PATCH", { password_hash: hashed });
+      }
+      const { password_hash, ...utenteSafe } = utente;
+      await wlog("auth", utente.id, "login", utente.id);
+      return ok({ user: pascalizeRecord(utenteSafe) });
+    }
+    case "resetPassword": {
+      const { userId, newPassword } = body;
+      const hashed = await hashPassword(newPassword);
+      await sb(env, `utenti?id=eq.${userId}`, "PATCH", { password_hash: hashed, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+      await wlog("utente", userId, "reset_password", body.operatoreId || "system");
+      return ok();
+    }
+    // -------- PIANO (INTERVENTI) --------
+    case "createPiano": {
+      const id = "INT_" + Date.now();
+      const fields = getFields(body);
+      const row = { id, ...fields, stato: fields.stato || "pianificato", created_at: (/* @__PURE__ */ new Date()).toISOString(), updated_at: (/* @__PURE__ */ new Date()).toISOString() };
+      const result = await sb(env, "piano", "POST", row);
+      await wlog("piano", id, "created", body.operatoreId || body.userId);
+      await sendTelegramNotification(env, "nuovo_intervento", row);
+      return ok({ intervento: pascalizeRecord(result[0]) });
+    }
+    case "updatePiano": {
+      const id = body.id;
+      const updates = getFields(body);
+      delete updates.id;
+      updates.updated_at = (/* @__PURE__ */ new Date()).toISOString();
+      await sb(env, `piano?id=eq.${id}`, "PATCH", updates);
+      await wlog("piano", id, `updated_stato_${updates.stato || "unknown"}`, body.operatoreId || body.userId);
+      if (updates.stato === "completato") {
+        await triggerKPISnapshot(env, id, updates.tecnico_id);
+      }
+      return ok();
+    }
+    // -------- URGENZE --------
+    case "createUrgenza": {
+      const id = "URG_" + Date.now();
+      const fields = getFields(body);
+      let slaScadenza = null;
+      const pId = fields.priorita_id;
+      if (pId) {
+        const sla = await sb(env, "sla_config", "GET", null, `?priorita_id=eq.${pId}&attivo=eq.true`);
+        if (sla.length && sla[0].tempo_risoluzione_ore) {
+          const d = /* @__PURE__ */ new Date();
+          d.setHours(d.getHours() + sla[0].tempo_risoluzione_ore);
+          slaScadenza = d.toISOString();
+        }
+      }
+      const row = { id, ...fields, stato: "aperta", sla_scadenza: slaScadenza, sla_status: "ok", data_segnalazione: (/* @__PURE__ */ new Date()).toISOString() };
+      const result = await sb(env, "urgenze", "POST", row);
+      await wlog("urgenza", id, "created", body.operatoreId || body.userId);
+      await sendTelegramNotification(env, "nuova_urgenza", row);
+      return ok({ urgenza: pascalizeRecord(result[0]) });
+    }
+    case "assignUrgenza": {
+      const { id, tecnicoAssegnato, TecnicoID, tecniciIds, TecniciIDs, operatoreId, userId } = body;
+      const tecId = tecnicoAssegnato || TecnicoID;
+      const tecIds = tecniciIds || TecniciIDs;
+      await sb(env, `urgenze?id=eq.${id}`, "PATCH", {
+        tecnico_assegnato: tecId,
+        tecnici_ids: tecIds,
+        stato: "assegnata",
+        data_assegnazione: (/* @__PURE__ */ new Date()).toISOString(),
+        updated_at: (/* @__PURE__ */ new Date()).toISOString()
+      });
+      await wlog("urgenza", id, "assigned", operatoreId || userId, `a ${tecId}`);
+      await sendTelegramNotification(env, "urgenza_assegnata", { id, tecnicoAssegnato: tecId });
+      return ok();
+    }
+    // FIX CRIT-05: Aggiunta azione updateUrgenza (mancava completamente)
+    case "updateUrgenza": {
+      const id = body.id;
+      const updates = getFields(body);
+      delete updates.id;
+      updates.updated_at = (/* @__PURE__ */ new Date()).toISOString();
+      await sb(env, `urgenze?id=eq.${id}`, "PATCH", updates);
+      await wlog("urgenza", id, "updated", body.operatoreId || body.userId);
+      return ok();
+    }
+    // -------- ORDINI --------
+    case "createOrdine": {
+      const id = "ORD_" + Date.now();
+      const fields = getFields(body);
+      const qty = fields.quantita || fields.qty;
+      if (qty !== void 0 && qty !== null && (isNaN(qty) || Number(qty) <= 0)) {
+        return err("Quantit\xE0 non valida: deve essere un numero maggiore di 0");
+      }
+      const row = { id, ...fields, stato: "richiesto", data_richiesta: (/* @__PURE__ */ new Date()).toISOString() };
+      const result = await sb(env, "ordini", "POST", row);
+      await wlog("ordine", id, "created", body.operatoreId || body.userId);
+      return ok({ ordine: pascalizeRecord(result[0]) });
+    }
+    case "updateOrdineStato": {
+      const { id, stato, operatoreId, userId: _u2, ...rest } = body;
+      await sb(env, `ordini?id=eq.${id}`, "PATCH", { stato, ...rest, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+      await wlog("ordine", id, `stato_${stato}`, operatoreId);
+      return ok();
+    }
+    // -------- UTENTI --------
+    case "createUtente": {
+      const id = "TEC_" + String(Date.now()).slice(-3);
+      const hashed = await hashPassword(body.password || "Syntoniqa2026!");
+      const row = { id, ...getFields(body), password_hash: hashed, created_at: (/* @__PURE__ */ new Date()).toISOString(), updated_at: (/* @__PURE__ */ new Date()).toISOString() };
+      delete row.password;
+      const result = await sb(env, "utenti", "POST", row);
+      if (row.automezzo_id) {
+        await sb(env, `automezzi?id=eq.${row.automezzo_id}`, "PATCH", { assegnatario_id: id }).catch(() => {
+        });
+      }
+      await wlog("utente", id, "created", body.operatoreId);
+      const { password_hash, ...safe } = result[0];
+      return ok({ utente: safe });
+    }
+    case "updateUtente": {
+      const { id, password, userId: _u3, operatoreId: _op3, tenant_id: _t, ...updates } = body;
+      if (password) updates.password_hash = await hashPassword(password);
+      updates.updated_at = (/* @__PURE__ */ new Date()).toISOString();
+      for (const k of Object.keys(updates)) {
+        if (updates[k] === null && (k.endsWith("_id") || k === "squadra_id" || k === "automezzo_id")) delete updates[k];
+      }
+      const newAutoId = updates.automezzo_id;
+      if (newAutoId) {
+        const [oldUser] = await sb(env, "utenti", "GET", null, `?id=eq.${id}&select=automezzo_id`);
+        const oldAutoId = oldUser?.automezzo_id;
+        if (oldAutoId && oldAutoId !== newAutoId) {
+          await sb(env, `automezzi?id=eq.${oldAutoId}`, "PATCH", { assegnatario_id: null }).catch(() => {
+          });
+        }
+        await sb(env, `automezzi?id=eq.${newAutoId}`, "PATCH", { assegnatario_id: id }).catch(() => {
+        });
+        const otherUsers = await sb(env, "utenti", "GET", null, `?automezzo_id=eq.${newAutoId}&id=neq.${id}&select=id`);
+        for (const ou of otherUsers || []) {
+          await sb(env, `utenti?id=eq.${ou.id}`, "PATCH", { automezzo_id: null, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).catch(() => {
+          });
+        }
+      }
+      await sb(env, `utenti?id=eq.${id}`, "PATCH", updates);
+      await wlog("utente", id, "updated", body.operatoreId);
+      return ok({ synced: !!newAutoId });
+    }
+    // -------- CLIENTI --------
+    case "createCliente": {
+      const id = "CLI_" + Date.now();
+      const row = { id, ...getFields(body), created_at: (/* @__PURE__ */ new Date()).toISOString(), updated_at: (/* @__PURE__ */ new Date()).toISOString() };
+      const result = await sb(env, "clienti", "POST", row);
+      return ok({ cliente: pascalizeRecord(result[0]) });
+    }
+    case "updateCliente": {
+      const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
+      updates.updated_at = (/* @__PURE__ */ new Date()).toISOString();
+      for (const k of Object.keys(updates)) {
+        if (updates[k] === null && k.endsWith("_id")) delete updates[k];
+      }
+      await sb(env, `clienti?id=eq.${id}`, "PATCH", updates);
+      return ok();
+    }
+    // -------- MACCHINE --------
+    case "createMacchina": {
+      const id = "MAC_" + Date.now();
+      const result = await sb(env, "macchine", "POST", { id, ...getFields(body), created_at: (/* @__PURE__ */ new Date()).toISOString() });
+      return ok({ macchina: pascalizeRecord(result[0]) });
+    }
+    case "updateMacchina": {
+      const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
+      for (const k of Object.keys(updates)) {
+        if (updates[k] === null && k.endsWith("_id")) delete updates[k];
+      }
+      await sb(env, `macchine?id=eq.${id}`, "PATCH", updates);
+      return ok();
+    }
+    // -------- AUTOMEZZI --------
+    case "createAutomezzo": {
+      const id = "AUT_" + Date.now();
+      const fields = getFields(body);
+      const result = await sb(env, "automezzi", "POST", { id, ...fields });
+      if (fields.assegnatario_id) {
+        await sb(env, `utenti?id=eq.${fields.assegnatario_id}`, "PATCH", { automezzo_id: id, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).catch(() => {
+        });
+      }
+      return ok({ automezzo: pascalizeRecord(result[0]) });
+    }
+    case "updateAutomezzo": {
+      const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
+      for (const k of Object.keys(updates)) {
+        if (updates[k] === null && k.endsWith("_id")) delete updates[k];
+      }
+      const newAssId = updates.assegnatario_id;
+      if (newAssId) {
+        const [oldAuto] = await sb(env, "automezzi", "GET", null, `?id=eq.${id}&select=assegnatario_id`);
+        const oldAssId = oldAuto?.assegnatario_id;
+        if (oldAssId && oldAssId !== newAssId) {
+          await sb(env, `utenti?id=eq.${oldAssId}`, "PATCH", { automezzo_id: null, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).catch(() => {
+          });
+        }
+        await sb(env, `utenti?id=eq.${newAssId}`, "PATCH", { automezzo_id: id, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).catch(() => {
+        });
+        const otherUsers = await sb(env, "utenti", "GET", null, `?automezzo_id=eq.${id}&id=neq.${newAssId}&select=id`);
+        for (const ou of otherUsers || []) {
+          await sb(env, `utenti?id=eq.${ou.id}`, "PATCH", { automezzo_id: null, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).catch(() => {
+          });
+        }
+      }
+      await sb(env, `automezzi?id=eq.${id}`, "PATCH", updates);
+      return ok({ synced: !!newAssId });
+    }
+    // -------- INSTALLAZIONI --------
+    case "createInstallazione": {
+      const id = "INS_" + Date.now();
+      const result = await sb(env, "installazioni", "POST", { id, ...getFields(body), stato: "pianificata", created_at: (/* @__PURE__ */ new Date()).toISOString() });
+      return ok({ installazione: pascalizeRecord(result[0]) });
+    }
+    case "updateInstallazione": {
+      const { id, userId: _u, operatoreId: _op, ...updates } = body;
+      updates.updated_at = (/* @__PURE__ */ new Date()).toISOString();
+      await sb(env, `installazioni?id=eq.${id}`, "PATCH", updates);
+      return ok();
+    }
+    // -------- REPERIBILITA --------
+    case "createReperibilita": {
+      const id = "REP_" + Date.now();
+      const result = await sb(env, "reperibilita", "POST", { id, ...getFields(body), created_at: (/* @__PURE__ */ new Date()).toISOString() });
+      return ok({ reperibilita: pascalizeRecord(result[0]) });
+    }
+    // -------- TRASFERTE --------
+    case "createTrasferta": {
+      const id = "TRA_" + Date.now();
+      const result = await sb(env, "trasferte", "POST", { id, ...getFields(body), created_at: (/* @__PURE__ */ new Date()).toISOString() });
+      return ok({ trasferta: pascalizeRecord(result[0]) });
+    }
+    // -------- NOTIFICHE --------
+    case "createNotifica": {
+      const id = "NOT_" + Date.now();
+      const result = await sb(env, "notifiche", "POST", { id, ...getFields(body), data_invio: (/* @__PURE__ */ new Date()).toISOString() });
+      return ok({ notifica: pascalizeRecord(result[0]) });
+    }
+    case "markNotifica": {
+      const { id } = body;
+      await sb(env, `notifiche?id=eq.${id}`, "PATCH", { stato: "letta", data_lettura: (/* @__PURE__ */ new Date()).toISOString() });
+      return ok();
+    }
+    case "markAllRead": {
+      const { userId } = body;
+      await sb(
+        env,
+        `notifiche?destinatario_id=eq.${userId}&stato=eq.inviata`,
+        "PATCH",
+        { stato: "letta", data_lettura: (/* @__PURE__ */ new Date()).toISOString() }
+      );
+      return ok();
+    }
+    // -------- RICHIESTE --------
+    case "createRichiesta": {
+      const id = "RIC_" + Date.now();
+      const result = await sb(env, "richieste", "POST", { id, ...getFields(body), stato: "in_attesa", data_richiesta: (/* @__PURE__ */ new Date()).toISOString() });
+      return ok({ richiesta: pascalizeRecord(result[0]) });
+    }
+    case "updateRichiesta": {
+      const { id, userId: _u, operatoreId: _op, ...updates } = body;
+      if (updates.stato !== "in_attesa") updates.data_risposta = (/* @__PURE__ */ new Date()).toISOString();
+      await sb(env, `richieste?id=eq.${id}`, "PATCH", updates);
+      await sendTelegramNotification(env, "richiesta_risposta", { id, stato: updates.stato });
+      return ok();
+    }
+    // -------- PAGELLINI --------
+    case "createPagellino": {
+      const id = "PAG_" + Date.now();
+      const result = await sb(env, "pagellini", "POST", { id, ...getFields(body), stato: "bozza", data_creazione: (/* @__PURE__ */ new Date()).toISOString() });
+      return ok({ pagellino: pascalizeRecord(result[0]) });
+    }
+    case "approvaPagellino": {
+      const { id } = body;
+      await sb(env, `pagellini?id=eq.${id}`, "PATCH", { stato: "approvato", data_approvazione: (/* @__PURE__ */ new Date()).toISOString() });
+      return ok();
+    }
+    // -------- CHECKLIST --------
+    case "createChecklistTemplate": {
+      const id = "CHK_" + Date.now();
+      const result = await sb(env, "checklist_template", "POST", { id, ...getFields(body), created_at: (/* @__PURE__ */ new Date()).toISOString() });
+      return ok({ template: result[0] });
+    }
+    case "updateChecklistTemplate": {
+      const { id, userId: _u, operatoreId: _op, ...updates } = body;
+      await sb(env, `checklist_template?id=eq.${id}`, "PATCH", updates);
+      return ok();
+    }
+    case "deleteChecklistTemplate": {
+      const { id } = body;
+      await sb(env, `checklist_template?id=eq.${id}`, "PATCH", { attivo: false });
+      return ok();
+    }
+    case "compileChecklist": {
+      const id = "CKC_" + Date.now();
+      const result = await sb(env, "checklist_compilata", "POST", { id, ...getFields(body), data_compilazione: (/* @__PURE__ */ new Date()).toISOString() });
+      if (body.intervento_id) {
+        await sb(env, `piano?id=eq.${body.intervento_id}`, "PATCH", { checklist_id: id });
+      }
+      return ok({ checklist: pascalizeRecord(result[0]) });
+    }
+    // -------- DOCUMENTI & ALLEGATI --------
+    case "createDocumento": {
+      const id = "DOC_" + Date.now();
+      const result = await sb(env, "documenti", "POST", { id, ...getFields(body), data_caricamento: (/* @__PURE__ */ new Date()).toISOString() });
+      return ok({ documento: pascalizeRecord(result[0]) });
+    }
+    case "deleteDocumento": {
+      const { id } = body;
+      await sb(env, `documenti?id=eq.${id}`, "PATCH", { obsoleto: true });
+      return ok();
+    }
+    case "createAllegato": {
+      const id = "ALL_" + Date.now();
+      const result = await sb(env, "allegati", "POST", { id, ...getFields(body), data_upload: (/* @__PURE__ */ new Date()).toISOString() });
+      return ok({ allegato: pascalizeRecord(result[0]) });
+    }
+    case "deleteAllegato": {
+      const { id } = body;
+      await sb(env, `allegati?id=eq.${id}`, "PATCH", { obsoleto: true });
+      return ok();
+    }
+    case "uploadFile": {
+      const { fileName, base64Data, mimeType, riferimentoTipo, riferimentoId, uploaderId } = body;
+      const bucket = "syntoniqa-allegati";
+      const path = `${riferimentoTipo}/${riferimentoId}/${Date.now()}_${fileName}`;
+      const fileData = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+      const uploadRes = await fetch(
+        `${env.SUPABASE_URL}/storage/v1/object/${bucket}/${path}`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+            "Content-Type": mimeType
+          },
+          body: fileData
+        }
+      );
+      if (!uploadRes.ok) throw new Error("Upload storage fallito");
+      const fileUrl = `${env.SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+      const id = "ALL_" + Date.now();
+      await sb(env, "allegati", "POST", {
+        id,
+        nome: fileName,
+        file_url: fileUrl,
+        mime_type: mimeType,
+        uploader_id: uploaderId,
+        riferimento_tipo: riferimentoTipo,
+        riferimento_id: riferimentoId,
+        data_upload: (/* @__PURE__ */ new Date()).toISOString()
+      });
+      return ok({ url: fileUrl, id });
+    }
+    case "uploadFotoProfilo": {
+      const { userId, base64Data, mimeType } = body;
+      const bucket = "syntoniqa-profili";
+      const path = `profili/${userId}.jpg`;
+      const fileData = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+      await fetch(`${env.SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`, "Content-Type": mimeType },
+        body: fileData
+      });
+      const url = `${env.SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+      await sb(env, `utenti?id=eq.${userId}`, "PATCH", { foto_url: url });
+      return ok({ url });
+    }
+    // -------- NOTIFICHE ESTERNE --------
+    case "sendEmail": {
+      const { to, subject, html, text } = body;
+      if (!env.RESEND_API_KEY) return err("Email non configurata");
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ from: "Syntoniqa <noreply@syntoniqa.app>", to, subject, html, text })
+      });
+      const result = await res.json();
+      return ok({ result });
+    }
+    case "testEmail": {
+      return handlePost("sendEmail", { to: body.email, subject: "Test Syntoniqa", html: "<h1>Test OK</h1>" }, env);
+    }
+    case "sendTelegramMsg": {
+      const { chatId, text } = body;
+      const res = await sendTelegram(env, chatId, text);
+      return ok({ result: res });
+    }
+    case "testTelegram": {
+      const res = await sendTelegram(env, body.chatId, "\u{1F916} Syntoniqa v2.0 \u2013 Telegram OK!");
+      return ok({ result: res });
+    }
+    // -------- PUSH NOTIFICATIONS (FIX F-30) --------
+    case "getVapidPublicKey": {
+      if (!env.VAPID_PUBLIC_KEY) return err("VAPID non configurato");
+      return ok({ vapidPublicKey: env.VAPID_PUBLIC_KEY });
+    }
+    case "savePushSubscription": {
+      const userId = body.userId || body.operatoreId;
+      const sub = body.subscription || body;
+      if (!sub.endpoint) return err("Subscription endpoint richiesto");
+      const keys = sub.keys || {};
+      const id = "PUSH_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+      await sb(env, `push_subscriptions?user_id=eq.${encodeURIComponent(userId)}&endpoint=eq.${encodeURIComponent(sub.endpoint)}`, "DELETE");
+      await sb(env, "push_subscriptions", "POST", {
+        id,
+        user_id: userId,
+        endpoint: sub.endpoint,
+        p256dh: keys.p256dh || "",
+        auth: keys.auth || "",
+        user_agent: body.userAgent || "",
+        active: true,
+        created_at: (/* @__PURE__ */ new Date()).toISOString(),
+        updated_at: (/* @__PURE__ */ new Date()).toISOString()
+      });
+      await wlog("push", id, "subscription_saved", userId);
+      return ok({ id });
+    }
+    case "removePushSubscription": {
+      const userId = body.userId || body.operatoreId;
+      const endpoint = body.endpoint;
+      if (endpoint) {
+        await sb(env, `push_subscriptions?user_id=eq.${encodeURIComponent(userId)}&endpoint=eq.${encodeURIComponent(endpoint)}`, "DELETE");
+      } else {
+        await sb(env, `push_subscriptions?user_id=eq.${encodeURIComponent(userId)}`, "PATCH", { active: false, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+      }
+      return ok();
+    }
+    case "sendPush": {
+      const { targetUserIds, title, body: pushBody, url, tag, actions } = body;
+      if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return err("VAPID keys non configurate");
+      if (!targetUserIds || !targetUserIds.length) return err("targetUserIds richiesti");
+      const subs = await sb(
+        env,
+        "push_subscriptions",
+        "GET",
+        null,
+        `?user_id=in.(${targetUserIds.map((id) => encodeURIComponent(id)).join(",")})&active=eq.true`
+      );
+      const payload = JSON.stringify({
+        title: title || "Syntoniqa",
+        body: pushBody || "",
+        url: url || "./",
+        tag: tag || "syntoniqa-" + Date.now(),
+        actions: actions || []
+      });
+      let sent = 0, failed = 0;
+      for (const sub of subs) {
+        try {
+          const res = await sendWebPush(env, {
+            endpoint: sub.endpoint,
+            keys: { p256dh: sub.p256dh, auth: sub.auth }
+          }, payload);
+          if (res.ok) {
+            sent++;
+          } else if (res.status === 410 || res.status === 404) {
+            await sb(env, `push_subscriptions?id=eq.${sub.id}`, "DELETE");
+            failed++;
+          } else {
+            failed++;
+          }
+        } catch (e) {
+          failed++;
+        }
+      }
+      return ok({ sent, failed, total: subs.length });
+    }
+    // -------- INTELLIGENCE --------
+    case "generateAIPlan": {
+      if (!env.GEMINI_KEY) return err("Gemini API key non configurata");
+      const vincoli = body.vincoli || {};
+      const testo = vincoli.testo || "";
+      const files = vincoli.files || [];
+      const urgenze = body.urgenze || [];
+      const tecnici = body.tecnici || [];
+      const [allTecnici, allUrgenze, allPiano, allClienti] = await Promise.all([
+        tecnici.length ? Promise.resolve(tecnici) : sb(env, "utenti", "GET", null, "?attivo=eq.true&ruolo=in.(tecnico,caposquadra)&select=id,nome,cognome,base,squadra_id").catch(() => []),
+        urgenze.length ? Promise.resolve(urgenze) : sb(env, "urgenze", "GET", null, "?stato=in.(aperta,assegnata)&order=data_segnalazione.desc&limit=50").catch(() => []),
+        sb(env, "piano", "GET", null, "?obsoleto=eq.false&order=data.desc&limit=100").catch(() => []),
+        sb(env, "anagrafica_clienti", "GET", null, "?select=codice_m3,nome_account,nome_interno,citta&limit=200").catch(() => [])
+      ]);
+      let fileContext = "";
+      for (const f of files) {
+        if (f.name.match(/\.(csv|txt)$/i) && typeof f.content === "string" && !f.content.includes("base64")) {
+          fileContext += `
+--- FILE: ${f.name} ---
+${f.content.substring(0, 3e3)}
+`;
+        } else {
+          fileContext += `
+--- FILE: ${f.name} (${f.type}, ${Math.round((f.size || 0) / 1024)}KB) ---
+[Documento allegato]
+`;
+        }
+      }
+      const prompt = `Sei l'AI planner di Syntoniqa, il sistema FSM di MRS Lely Center Emilia Romagna.
+Genera un piano di interventi ottimizzato per la prossima settimana.
+
+VINCOLI UTENTE: ${testo || "Nessun vincolo specificato"}
+
+TECNICI DISPONIBILI (${allTecnici.length}):
+${allTecnici.map((t) => `- ${t.nome || ""} ${t.cognome || ""} (ID: ${t.id}, base: ${t.base || "?"}, squadra: ${t.squadra_id || "?"})`).join("\n")}
+
+URGENZE APERTE (${allUrgenze.length}):
+${allUrgenze.slice(0, 30).map((u) => `- ${u.id}: ${u.problema || "?"} | Cliente: ${u.cliente_id || "?"} | Priorit\xE0: ${u.priorita_id || "?"} | SLA: ${u.sla_scadenza || "?"}`).join("\n")}
+
+INTERVENTI GI\xC0 PIANIFICATI: ${allPiano.length}
+
+CLIENTI: ${allClienti.slice(0, 50).map((c) => `${c.nome_account || c.nome_interno} (${c.codice_m3}, ${c.citta || "?"})`).join(", ")}
+${fileContext ? "\nDOCUMENTI ALLEGATI:" + fileContext : ""}
+
+Genera un piano ottimizzato che:
+1. Rispetti i vincoli dell'utente
+2. Prioritizzi le urgenze per SLA
+3. Minimizzi i km (raggruppa interventi per zona)
+4. Bilanci il carico tra tecnici
+5. Consideri i documenti allegati se presenti
+
+Rispondi con JSON:
+{
+  "summary": "breve riepilogo del piano",
+  "piano": [
+    {"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"id","cliente":"nome","clienteId":"codice_m3","tipo":"urgenza|tagliando|service|installazione","oraInizio":"HH:MM","durataOre":2,"note":"...","urgenzaId":"se applicabile"}
+  ],
+  "warnings": ["eventuali avvisi/conflitti"]
+}`;
+      const geminiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        }
+      );
+      const geminiData = await geminiRes.json();
+      const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+      const cleanText = rawText.replace(/```json\n?|\n?```/g, "").trim();
+      try {
+        const result = JSON.parse(cleanText);
+        return ok(result);
+      } catch (e) {
+        return ok({ summary: "Piano generato (testo)", piano: [], warnings: ["Risposta AI non parsabile"], raw: cleanText });
+      }
+    }
+    case "applyAIPlan": {
+      const { piano, operatoreId } = body;
+      const created = [];
+      for (const item of piano) {
+        const id = "INT_AI_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+        await sb(env, "piano", "POST", {
+          id,
+          tecnico_id: item.tecnicoId,
+          data: item.data,
+          ora_inizio: item.oraInizio,
+          urgenza_id: item.urgenzaId,
+          stato: "pianificato",
+          origine: "ai",
+          created_at: (/* @__PURE__ */ new Date()).toISOString(),
+          updated_at: (/* @__PURE__ */ new Date()).toISOString()
+        });
+        if (item.urgenzaId) {
+          await sb(env, `urgenze?id=eq.${item.urgenzaId}`, "PATCH", {
+            stato: "assegnata",
+            tecnico_assegnato: item.tecnicoId,
+            data_assegnazione: (/* @__PURE__ */ new Date()).toISOString()
+          });
+        }
+        created.push(id);
+        await wlog("piano", id, "ai_created", operatoreId, item.motivazione);
+      }
+      return ok({ created, count: created.length });
+    }
+    case "importExcelPlan": {
+      const { rows, operatoreId } = body;
+      if (!rows || !rows.length) return err("rows richiesto");
+      const tecnici = await sb(env, "utenti", "GET", null, "?attivo=eq.true&select=id,nome,cognome");
+      const tecMap = {};
+      tecnici.forEach((t) => {
+        const nome = (t.nome || "").toLowerCase();
+        const full = ((t.nome || "") + " " + (t.cognome || "")).toLowerCase().trim();
+        tecMap[nome] = t.id;
+        tecMap[full] = t.id;
+      });
+      const created = [], errors = [];
+      for (const row of rows) {
+        try {
+          const tecId = tecMap[(row.tecnico_nome || "").toLowerCase()] || null;
+          const id = "INT_XLS_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+          const noteParts = [row.cliente, row.service_detail, row.reperibilita ? "REP: " + row.reperibilita : ""].filter(Boolean);
+          await sb(env, "piano", "POST", {
+            id,
+            tecnico_id: tecId,
+            data: row.data,
+            stato: "pianificato",
+            origine: "excel_import",
+            note: noteParts.join(" | ") || row.note_complete || "",
+            automezzo_id: row.furgone ? "FURG_" + row.furgone : null,
+            obsoleto: false,
+            tenant_id: env.TENANT_ID || "785d94d0-b947-4a00-9c4e-3b67833e7045",
+            created_at: (/* @__PURE__ */ new Date()).toISOString(),
+            updated_at: (/* @__PURE__ */ new Date()).toISOString()
+          });
+          created.push(id);
+        } catch (e) {
+          errors.push({ row: row.data + " " + row.tecnico_nome, err: e.message });
+        }
+      }
+      return ok({ created: created.length, errors });
+    }
+    // -------- WORKFLOW APPROVATIVO --------
+    case "createApproval": {
+      const { id, piano, creato_da, ruolo_creatore, stato, data_creazione } = body;
+      await sb(env, "config", "POST", {
+        chiave: `approval_${id}`,
+        valore: JSON.stringify({ id, piano, creato_da, ruolo_creatore, stato, data_creazione }),
+        tenant_id: env.TENANT_ID || "785d94d0-b947-4a00-9c4e-3b67833e7045"
+      }, null, { "Prefer": "return=minimal,resolution=merge-duplicates" });
+      return ok({ id, stato });
+    }
+    case "getApprovals": {
+      const filter = body.filter || "";
+      const configs = await sb(env, "config", "GET", null, `?chiave=like.approval_*&tenant_id=eq.${env.TENANT_ID || "785d94d0-b947-4a00-9c4e-3b67833e7045"}`);
+      let approvals = configs.map((c) => {
+        try {
+          return JSON.parse(c.valore);
+        } catch {
+          return null;
+        }
+      }).filter(Boolean);
+      if (filter) approvals = approvals.filter((a) => a.stato === filter);
+      approvals.sort((a, b) => (b.data_creazione || "").localeCompare(a.data_creazione || ""));
+      const userIds = [...new Set(approvals.map((a) => a.creato_da).concat(approvals.map((a) => a.approvato_da)).filter(Boolean))];
+      if (userIds.length) {
+        const users = await sb(env, "utenti", "GET", null, `?id=in.(${userIds.join(",")})&select=id,nome,cognome`).catch(() => []);
+        const userMap = Object.fromEntries(users.map((u) => [u.id, (u.nome || "") + " " + (u.cognome || "")]));
+        approvals.forEach((a) => {
+          a.creato_da_nome = userMap[a.creato_da] || a.creato_da;
+          a.approvato_da_nome = userMap[a.approvato_da] || "";
+        });
+      }
+      return ok(approvals);
+    }
+    case "getApproval": {
+      const cfg = await sb(env, "config", "GET", null, `?chiave=eq.approval_${body.id}&tenant_id=eq.${env.TENANT_ID || "785d94d0-b947-4a00-9c4e-3b67833e7045"}`);
+      if (!cfg.length) return err("Approvazione non trovata", 404);
+      return ok(JSON.parse(cfg[0].valore));
+    }
+    case "updateApproval": {
+      const { id, stato, approvato_da, note_approvazione, data_approvazione } = body;
+      const cfg = await sb(env, "config", "GET", null, `?chiave=eq.approval_${id}&tenant_id=eq.${env.TENANT_ID || "785d94d0-b947-4a00-9c4e-3b67833e7045"}`);
+      if (!cfg.length) return err("Approvazione non trovata", 404);
+      const approval = JSON.parse(cfg[0].valore);
+      approval.stato = stato;
+      approval.approvato_da = approvato_da;
+      approval.note_approvazione = note_approvazione;
+      approval.data_approvazione = data_approvazione;
+      await sb(env, `config?chiave=eq.approval_${id}&tenant_id=eq.${env.TENANT_ID || "785d94d0-b947-4a00-9c4e-3b67833e7045"}`, "PATCH", {
+        valore: JSON.stringify(approval)
+      });
+      return ok(approval);
+    }
+    case "notifyPlanApproved": {
+      const { approval_id } = body;
+      const cfg = await sb(env, "config", "GET", null, `?chiave=eq.approval_${approval_id}&tenant_id=eq.${env.TENANT_ID || "785d94d0-b947-4a00-9c4e-3b67833e7045"}`);
+      if (!cfg.length) return ok({ notified: 0 });
+      const approval = JSON.parse(cfg[0].valore);
+      if (approval.stato !== "approvato") return ok({ notified: 0 });
+      const tecnici = await sb(env, "utenti", "GET", null, "?attivo=eq.true&ruolo=in.(tecnico,caposquadra)&telegram_chat_id=not.is.null");
+      let notified = 0;
+      for (const tec of tecnici) {
+        if (tec.telegram_chat_id) {
+          await sendTelegram(env, tec.telegram_chat_id, `\u{1F4CB} *Piano approvato!*
+Il piano \xE8 stato approvato. Controlla i tuoi interventi su Syntoniqa.`);
+          notified++;
+        }
+      }
+      return ok({ notified });
+    }
+    case "geocodeAll": {
+      const batchSize = Math.min(parseInt(body?.limit) || 20, 50);
+      const clientiSenzaGeo = await sb(
+        env,
+        "clienti",
+        "GET",
+        null,
+        "?latitudine=is.null&obsoleto=eq.false&select=id,indirizzo,citta,prov,cap"
+      );
+      const cfgArr = await sb(env, "config", "GET", null, "?tenant_id=eq." + (env.TENANT_ID || "785d94d0-b947-4a00-9c4e-3b67833e7045") + "&chiave=eq.email_mittente");
+      const contactEmail = cfgArr?.[0]?.valore || "admin@syntoniqa.app";
+      const geocodeOne = /* @__PURE__ */ __name(async (c, attempt = 0) => {
+        const query = [c.indirizzo, c.citta, c.prov, "Italia"].filter(Boolean).join(", ");
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&addressdetails=0`;
+        try {
+          const res = await fetch(url, {
+            headers: {
+              "User-Agent": `Syntoniqa/2.0 (${contactEmail})`,
+              "Accept-Language": "it"
+            }
+          });
+          if (res.status === 429) {
+            if (attempt >= 3) return { ok: false, reason: "rate_limit_exceeded" };
+            await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 1500));
+            return geocodeOne(c, attempt + 1);
+          }
+          if (!res.ok) return { ok: false, reason: `http_${res.status}` };
+          const data = await res.json();
+          if (!data.length) return { ok: false, reason: "no_results" };
+          return { ok: true, lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+        } catch (e) {
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 2e3));
+            return geocodeOne(c, attempt + 1);
+          }
+          return { ok: false, reason: e.message };
+        }
+      }, "geocodeOne");
+      let updated = 0;
+      const errors = [];
+      const batch = clientiSenzaGeo.slice(0, batchSize);
+      for (let i = 0; i < batch.length; i++) {
+        const c = batch[i];
+        const result = await geocodeOne(c);
+        if (result.ok) {
+          await sb(env, `clienti?id=eq.${c.id}`, "PATCH", {
+            latitudine: result.lat,
+            longitudine: result.lon
+          });
+          updated++;
+        } else {
+          errors.push({ id: c.id, citta: c.citta, reason: result.reason });
+          await wlog("clienti", c.id, "geocode_failed", "system", result.reason).catch(() => {
+          });
+        }
+        if (i < batch.length - 1) {
+          await new Promise((r) => setTimeout(r, 1200));
+        }
+      }
+      return ok({
+        updated,
+        failed: errors.length,
+        skipped: Math.max(0, clientiSenzaGeo.length - batchSize),
+        total_senza_geo: clientiSenzaGeo.length,
+        errors: errors.slice(0, 10),
+        // max 10 errori nel response
+        message: errors.length ? `${updated} geocodificati, ${errors.length} falliti. Controlla audit log per dettagli.` : `${updated} clienti geocodificati con successo.`
+      });
+    }
+    case "generateReport": {
+      const { tipo, dateFrom, dateTo, tecnicoId } = body;
+      let filter = `?data=gte.${dateFrom}&data=lte.${dateTo}`;
+      if (tecnicoId) filter += `&tecnico_id=eq.${tecnicoId}`;
+      const [interventi, urgenze] = await Promise.all([
+        sb(env, "piano", "GET", null, filter + "&obsoleto=eq.false"),
+        sb(env, "urgenze", "GET", null, `?data_segnalazione=gte.${dateFrom}&obsoleto=eq.false`)
+      ]);
+      const report = {
+        periodo: { from: dateFrom, to: dateTo },
+        interventi: { totale: interventi.length, completati: interventi.filter((i) => i.stato === "completato" || i.stato === "chiuso").length },
+        urgenze: { totale: urgenze.length, risolte: urgenze.filter((u) => u.stato === "risolta").length },
+        ore_totali: interventi.reduce((s, i) => s + parseFloat(i.ore_lavorate || 0), 0),
+        km_totali: interventi.reduce((s, i) => s + parseInt(i.km_percorsi || 0), 0)
+      };
+      return ok({ report });
+    }
+    case "logKPISnapshot": {
+      const id = "KSN_" + Date.now();
+      await sb(env, "kpi_snapshot", "POST", { id, ...getFields(body), data: (/* @__PURE__ */ new Date()).toISOString().split("T")[0], ora: (/* @__PURE__ */ new Date()).toTimeString().split(" ")[0] });
+      return ok({ id });
+    }
+    case "updateSLAStatus": {
+      const urgenze = await sb(env, "urgenze", "GET", null, "?stato=in.(aperta,assegnata,in_corso)&sla_scadenza=not.is.null");
+      const now = /* @__PURE__ */ new Date();
+      let updated = 0;
+      for (const u of urgenze) {
+        const scadenza = new Date(u.sla_scadenza);
+        const diffOre = (scadenza - now) / 36e5;
+        let newStatus = "ok";
+        if (diffOre < 0) newStatus = "scaduto";
+        else if (diffOre < 2) newStatus = "critical";
+        else if (diffOre < 6) newStatus = "warning";
+        if (newStatus !== u.sla_status) {
+          await sb(env, `urgenze?id=eq.${u.id}`, "PATCH", { sla_status: newStatus });
+          updated++;
+        }
+      }
+      return ok({ updated, total: urgenze.length });
+    }
+    case "saveConfig":
+    case "updateConfig": {
+      const { config } = body;
+      for (const [chiave, valore] of Object.entries(config)) {
+        await sb(env, "config", "POST", { chiave, valore }).catch(async () => {
+          await sb(env, `config?chiave=eq.${chiave}`, "PATCH", { valore });
+        });
+      }
+      return ok();
+    }
+    case "backupNow": {
+      const [piano, urgenze, ordini] = await Promise.all([
+        sb(env, "piano", "GET", null, "?obsoleto=eq.false&order=created_at.desc&limit=1000"),
+        sb(env, "urgenze", "GET", null, "?obsoleto=eq.false&stato=in.(aperta,assegnata,in_corso)"),
+        sb(env, "ordini", "GET", null, "?obsoleto=eq.false&stato=in.(richiesto,preso_in_carico,ordinato)")
+      ]);
+      const id = "BAK_" + Date.now();
+      await sb(env, "kpi_snapshot", "POST", {
+        id,
+        tipo_snapshot: "backup",
+        data: (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
+        ora: (/* @__PURE__ */ new Date()).toTimeString().split(" ")[0],
+        dati: { piano_count: piano.length, urgenze_aperte: urgenze.length, ordini_attivi: ordini.length }
+      });
+      return ok({ backupId: id, piano: piano.length, urgenze: urgenze.length, ordini: ordini.length });
+    }
+    case "setupWebhook": {
+      const { webhookUrl } = body;
+      const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setWebhook?url=${encodeURIComponent(webhookUrl)}`);
+      const data = await res.json();
+      return ok({ telegram: data });
+    }
+    case "removeWebhook": {
+      const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/deleteWebhook`);
+      const data = await res.json();
+      return ok({ telegram: data });
+    }
+    // -------- TELEGRAM BOT (webhook) --------
+    case "telegramWebhook": {
+      const update = body;
+      if (!update.message && !update.callback_query) return ok();
+      try {
+        if (update.callback_query) {
+          const cb = update.callback_query;
+          const cbChatId = cb.message?.chat?.id;
+          const cbData = cb.data || "";
+          try {
+            await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ callback_query_id: cb.id })
+            });
+            const [cbAction] = cbData.split(":");
+            if (cbAction === "cancel") {
+              await sendTelegram(env, cbChatId, "\u274C Azione annullata.");
+            }
+          } catch (e) {
+            console.error("CB error:", e.message);
+          }
+          return ok();
+        }
+        const msg = update.message;
+        const chatId = msg.chat.id;
+        const fromId = msg.from?.id || null;
+        const text = msg.text || msg.caption || "";
+        const parts = text.split(" ");
+        const cmd = parts[0]?.toLowerCase() || "";
+        let utente = null;
+        if (fromId) {
+          const byChatId = await sb(env, "utenti", "GET", null, `?telegram_chat_id=eq.${fromId}&attivo=eq.true`).catch(() => []);
+          utente = byChatId[0] || null;
+        }
+        if (!utente) {
+          const firstName = (msg.from?.first_name || "").toLowerCase();
+          const lastName = (msg.from?.last_name || "").toLowerCase();
+          if (firstName) {
+            const allUtenti = await sb(env, "utenti", "GET", null, "?attivo=eq.true&select=id,nome,cognome,ruolo").catch(() => []);
+            utente = allUtenti.find((u) => (u.nome || "").toLowerCase() === firstName && (!lastName || (u.cognome || "").toLowerCase().startsWith(lastName))) || null;
+            if (utente && fromId) {
+              await sb(env, `utenti?id=eq.${utente.id}`, "PATCH", { telegram_chat_id: String(fromId) }).catch(() => {
+              });
+            }
+          }
+        }
+        if (!utente && cmd !== "/start") {
+          const nome = msg.from?.first_name || "utente";
+          await sendTelegram(env, chatId, `\u274C Ciao ${nome}, non ti trovo nel sistema. Chiedi all'admin di aggiungere il tuo Telegram ID (${fromId}) nel profilo Syntoniqa.`);
+          return ok();
+        }
+        async function getTelegramFileUrl(fileId) {
+          const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`);
+          const d = await res.json();
+          return d.ok ? `https://api.telegram.org/file/bot${env.TELEGRAM_BOT_TOKEN}/${d.result.file_path}` : null;
+        }
+        __name(getTelegramFileUrl, "getTelegramFileUrl");
+        async function sendTelegramWithButtons(chatId2, text2, buttons) {
+          return fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: chatId2,
+              text: text2,
+              parse_mode: "Markdown",
+              reply_markup: { inline_keyboard: buttons }
+            })
+          }).then((r) => r.json()).catch(() => null);
+        }
+        __name(sendTelegramWithButtons, "sendTelegramWithButtons");
+        async function aiParseMessage(text2, mediaUrl2, mediaType2) {
+          if (!env.GEMINI_KEY) return null;
+          const clienti = await sb(env, "anagrafica_clienti", "GET", null, "?select=codice_m3,nome_account,nome_interno&limit=200").catch(() => []);
+          const clientiList = clienti.map((c) => `${c.nome_account || c.nome_interno} (${c.codice_m3})`).join(", ");
+          const systemPrompt = `Sei l'assistente AI di Syntoniqa, il sistema FSM di MRS Lely Center.
+Analizza il messaggio e determina il tipo di azione da creare.
+
+CLIENTI DISPONIBILI: ${clientiList}
+
+TIPI DI AZIONE:
+1. "urgenza" - Problema tecnico urgente su un robot/macchina (robot fermo, errore, guasto)
+2. "ordine" - Richiesta ricambi (codici tipo X.XXXX.XXXX.X, quantit\xE0, destinazione)
+3. "intervento" - Intervento programmato (manutenzione, service, installazione)
+4. "nota" - Informazione generica, aggiornamento stato, nessuna azione specifica
+
+CODICI RICAMBI LELY: formato X.XXXX.XXXX.X (es. 9.1189.0283.0)
+
+Rispondi SOLO con JSON valido:
+{
+  "tipo": "urgenza|ordine|intervento|nota",
+  "cliente": "nome cliente pi\xF9 probabile o null",
+  "codice_m3": "codice M3 del cliente o null",
+  "problema": "descrizione sintetica del problema",
+  "macchina": "tipo macchina (Astronaut/Juno/Vector/Discovery/etc) o null",
+  "robot_id": "numero robot (101-108) o null",
+  "priorita": "alta|media|bassa",
+  "ricambi": [{"codice":"X.XXXX.XXXX.X","quantita":1,"descrizione":"..."}] o [],
+  "note": "eventuali note aggiuntive"
+}`;
+          const contentParts = [{ text: systemPrompt + "\n\nMESSAGGIO UTENTE: " + text2 }];
+          if (mediaUrl2 && mediaType2 === "photo") {
+            try {
+              const imgRes = await fetch(mediaUrl2);
+              const imgBuf = await imgRes.arrayBuffer();
+              const b64 = btoa(String.fromCharCode(...new Uint8Array(imgBuf)));
+              contentParts.push({ inline_data: { mime_type: "image/jpeg", data: b64 } });
+            } catch (e) {
+            }
+          }
+          const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contents: [{ parts: contentParts }] })
+          });
+          const gd = await geminiRes.json();
+          const raw = gd.candidates?.[0]?.content?.parts?.[0]?.text?.replace(/```json\n?|\n?```/g, "").trim();
+          try {
+            return JSON.parse(raw);
+          } catch {
+            return null;
+          }
+        }
+        __name(aiParseMessage, "aiParseMessage");
+        let mediaUrl = null, mediaType = null, fileName = null;
+        if (msg.photo && msg.photo.length) {
+          const photo = msg.photo[msg.photo.length - 1];
+          mediaUrl = await getTelegramFileUrl(photo.file_id);
+          mediaType = "photo";
+        } else if (msg.document) {
+          mediaUrl = await getTelegramFileUrl(msg.document.file_id);
+          mediaType = "document";
+          fileName = msg.document.file_name || "file";
+        } else if (msg.video) {
+          mediaUrl = await getTelegramFileUrl(msg.video.file_id);
+          mediaType = "video";
+        } else if (msg.voice || msg.audio) {
+          const audio = msg.voice || msg.audio;
+          mediaUrl = await getTelegramFileUrl(audio.file_id);
+          mediaType = "audio";
+        }
+        let reply = "";
+        switch (cmd) {
+          case "/start":
+            reply = `\u{1F44B} Benvenuto in *Syntoniqa MRS*!
+
+\u{1F4E4} Puoi inviarmi:
+\u2022 Testo con problemi/ordini
+\u2022 \u{1F4F7} Foto di guasti o ricambi
+\u2022 \u{1F4C4} Documenti (PDF, Excel)
+\u2022 \u{1F3A4} Audio/Video
+
+\u{1F916} L'AI analizzer\xE0 tutto e creer\xE0 le azioni giuste!
+
+Invia /help per i comandi.`;
+            break;
+          case "/help":
+            reply = `\u{1F4CB} *Comandi Syntoniqa:*
+
+\u{1F6A8} *Urgenze:*
+/stato - Urgenze aperte
+/vado - Prendi urgenza
+/incorso - Segna in corso
+/risolto [note] - Chiudi urgenza
+
+\u{1F4C5} *Interventi:*
+/oggi - I tuoi interventi oggi
+/settimana - Piano settimanale
+
+\u{1F4E6} *Ordini:*
+/ordine [cod] [qt] [cliente] - Ordine ricambio
+/servepezz [desc] - Ricambio generico
+
+\u{1F4E4} *Upload:*
+Invia foto, PDF, Excel, audio \u2192 l'AI analizza e crea azioni automaticamente!
+
+\u{1F4A1} Puoi anche scrivere testo libero, es: "Bondioli 102 fermo, errore laser"`;
+            break;
+          case "/stato": {
+            const urg = await sb(env, "urgenze", "GET", null, "?stato=in.(aperta,assegnata,in_corso)&order=data_segnalazione.desc&limit=10");
+            reply = urg.length ? `\u{1F6A8} *${urg.length} urgenze attive:*
+` + urg.map((u) => `\u2022 ${u.id}: ${u.problema} [${u.stato}]`).join("\n") : "\u2705 Nessuna urgenza attiva";
+            break;
+          }
+          case "/oggi": {
+            const oggi = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+            const intv = await sb(env, "piano", "GET", null, `?data=eq.${oggi}&tecnico_id=eq.${utente.id}&obsoleto=eq.false`);
+            reply = intv.length ? `\u{1F4C5} *Interventi oggi (${intv.length}):*
+` + intv.map((i) => `\u2022 ${i.id}: ${i.stato} \u2013 Cliente ${i.cliente_id}`).join("\n") : "\u{1F4C5} Nessun intervento programmato oggi";
+            break;
+          }
+          case "/settimana": {
+            const oggi = /* @__PURE__ */ new Date();
+            const lun = new Date(oggi);
+            lun.setDate(oggi.getDate() - oggi.getDay() + 1);
+            const dom = new Date(lun);
+            dom.setDate(lun.getDate() + 6);
+            const intv = await sb(env, "piano", "GET", null, `?data=gte.${lun.toISOString().split("T")[0]}&data=lte.${dom.toISOString().split("T")[0]}&tecnico_id=eq.${utente.id}&obsoleto=eq.false&order=data.asc`);
+            if (!intv.length) {
+              reply = "\u{1F4C5} Nessun intervento questa settimana";
+              break;
+            }
+            const byDay = {};
+            intv.forEach((i) => {
+              const d = i.data;
+              if (!byDay[d]) byDay[d] = [];
+              byDay[d].push(i);
+            });
+            reply = `\u{1F4C5} *Piano settimanale (${intv.length} interventi):*
+` + Object.entries(byDay).map(([d, items]) => `
+*${d}:*
+` + items.map((i) => `  \u2022 ${i.stato} \u2013 ${i.cliente_id}`).join("\n")).join("");
+            break;
+          }
+          case "/vado": {
+            const urg = await sb(env, "urgenze", "GET", null, "?stato=eq.aperta&order=data_segnalazione.asc&limit=1");
+            if (!urg.length) {
+              reply = "\u2705 Nessuna urgenza da prendere in carico";
+              break;
+            }
+            await sb(env, `urgenze?id=eq.${urg[0].id}`, "PATCH", { stato: "assegnata", tecnico_assegnato: utente.id, data_assegnazione: (/* @__PURE__ */ new Date()).toISOString() });
+            reply = `\u2705 Urgenza *${urg[0].id}* assegnata a te!
+Problema: ${urg[0].problema}`;
+            await sendTelegramNotification(env, "urgenza_assegnata", { id: urg[0].id, tecnicoAssegnato: utente.id });
+            break;
+          }
+          case "/incorso": {
+            const urg = await sb(env, "urgenze", "GET", null, `?tecnico_assegnato=eq.${utente.id}&stato=eq.assegnata&limit=1`);
+            if (!urg.length) {
+              reply = "Nessuna urgenza assegnata";
+              break;
+            }
+            await sb(env, `urgenze?id=eq.${urg[0].id}`, "PATCH", { stato: "in_corso", data_inizio: (/* @__PURE__ */ new Date()).toISOString() });
+            reply = `\u{1F527} Urgenza *${urg[0].id}* segnata come IN CORSO`;
+            break;
+          }
+          case "/risolto": {
+            const note = parts.slice(1).join(" ");
+            const urg = await sb(env, "urgenze", "GET", null, `?tecnico_assegnato=eq.${utente.id}&stato=in.(assegnata,in_corso)&limit=1`);
+            if (!urg.length) {
+              reply = "Nessuna urgenza in corso";
+              break;
+            }
+            await sb(env, `urgenze?id=eq.${urg[0].id}`, "PATCH", { stato: "risolta", data_risoluzione: (/* @__PURE__ */ new Date()).toISOString(), note });
+            reply = `\u2705 Urgenza *${urg[0].id}* RISOLTA${note ? "\nNote: " + note : ""}`;
+            break;
+          }
+          case "/ordine": {
+            const codice = parts[1] || "";
+            const qt = parseInt(parts[2]) || 1;
+            const cliente = parts.slice(3).join(" ") || "non specificato";
+            if (!codice || !/^\d\.\d{4}\.\d{4}\.\d$/.test(codice)) {
+              reply = "\u{1F4E6} Formato: /ordine [codice] [quantit\xE0] [cliente]\nEs: /ordine 9.1189.0283.0 2 Bondioli";
+              break;
+            }
+            const ordId = "ORD_TG_" + Date.now();
+            const ordTid = env.TENANT_ID || "785d94d0-b947-4a00-9c4e-3b67833e7045";
+            await sb(env, "ordini", "POST", { id: ordId, tenant_id: ordTid, tecnico_id: utente?.id || null, codice, descrizione: `${codice} x${qt} - ${cliente}`, quantita: qt, stato: "richiesto", data_richiesta: (/* @__PURE__ */ new Date()).toISOString() });
+            reply = `\u{1F4E6} Ordine *${ordId}* creato:
+Codice: \`${codice}\` x${qt}
+Cliente: ${cliente}`;
+            break;
+          }
+          case "/servepezz": {
+            const desc2 = parts.slice(1).join(" ");
+            if (!desc2) {
+              reply = "Usa: /servepezz [descrizione ricambio]";
+              break;
+            }
+            const spId = "ORD_TG_" + Date.now();
+            const spTid = env.TENANT_ID || "785d94d0-b947-4a00-9c4e-3b67833e7045";
+            await sb(env, "ordini", "POST", { id: spId, tenant_id: spTid, tecnico_id: utente?.id || null, descrizione: desc2, stato: "richiesto", data_richiesta: (/* @__PURE__ */ new Date()).toISOString() });
+            reply = `\u{1F4E6} Ordine ricambio *${spId}* creato:
+_${desc2}_`;
+            break;
+          }
+          default: {
+            if (text.length < 3 && !mediaUrl) {
+              reply = "\u{1F914} Messaggio troppo breve. Scrivi il problema o invia /help";
+              break;
+            }
+            let mediaInfo = null;
+            if (mediaUrl) {
+              mediaInfo = { url: mediaUrl, type: mediaType, fileName, telegramFileId: msg.photo?.[msg.photo.length - 1]?.file_id || msg.document?.file_id || msg.video?.file_id || msg.voice?.file_id || null };
+              if (!text && mediaType === "photo") {
+                await sendTelegram(env, chatId, "\u{1F4F7} Foto ricevuta! Aggiungi una descrizione o la analizzo con AI...");
+              }
+              if (!text && mediaType === "document") {
+                await sendTelegram(env, chatId, `\u{1F4C4} Documento *${fileName}* ricevuto! Aggiungi una descrizione oppure lo salvo come allegato.`);
+              }
+            }
+            const aiResult = await aiParseMessage(text || `[${mediaType} allegato: ${fileName || "foto"}]`, mediaUrl, mediaType);
+            if (!aiResult) {
+              reply = "\u{1F914} Non riesco ad analizzare. Prova con /help";
+              break;
+            }
+            if (aiResult.tipo === "nota") {
+              reply = `\u{1F4DD} *Nota registrata*
+${aiResult.problema || text}`;
+              if (aiResult.cliente) reply += `
+Cliente: ${aiResult.cliente}`;
+              break;
+            }
+            const now = (/* @__PURE__ */ new Date()).toISOString();
+            let payload = {}, actionReply = "";
+            const tid = env.TENANT_ID || "785d94d0-b947-4a00-9c4e-3b67833e7045";
+            if (aiResult.tipo === "urgenza") {
+              payload = {
+                id: "URG_TG_" + Date.now(),
+                tenant_id: tid,
+                problema: aiResult.problema,
+                cliente_id: aiResult.codice_m3 || null,
+                macchina_id: aiResult.robot_id ? `${aiResult.macchina || "ROBOT"}_${aiResult.robot_id}` : null,
+                priorita_id: null,
+                stato: "aperta",
+                data_segnalazione: now,
+                tecnico_assegnato: null,
+                note: `[Telegram ${utente?.nome || ""}] ${aiResult.macchina || ""} ${aiResult.robot_id || ""} - Priorit\xE0: ${aiResult.priorita}${mediaUrl ? " - Allegato: " + mediaUrl : ""}`
+              };
+              try {
+                await sb(env, "urgenze", "POST", payload);
+                actionReply = `\u{1F6A8} *URGENZA CREATA*
+ID: \`${payload.id}\`
+Cliente: ${aiResult.cliente || "?"}
+Problema: ${aiResult.problema}
+Macchina: ${aiResult.macchina || "?"} ${aiResult.robot_id || ""}
+Priorit\xE0: ${aiResult.priorita}${mediaUrl ? "\n\u{1F4CE} Allegato salvato" : ""}`;
+                await sendTelegramNotification(env, "nuova_urgenza", payload);
+              } catch (e) {
+                actionReply = "\u274C Errore creazione urgenza: " + e.message;
+              }
+            } else if (aiResult.tipo === "ordine") {
+              const ricambiDesc = (aiResult.ricambi || []).map((r) => `${r.codice} x${r.quantita}`).join(", ") || aiResult.problema;
+              payload = {
+                id: "ORD_TG_" + Date.now(),
+                tenant_id: tid,
+                tecnico_id: utente?.id || null,
+                cliente_id: aiResult.codice_m3 || null,
+                descrizione: ricambiDesc,
+                stato: "richiesto",
+                data_richiesta: now,
+                note: `[Telegram ${utente?.nome || ""}] ${aiResult.cliente || ""}${mediaUrl ? " - Allegato: " + mediaUrl : ""}`
+              };
+              try {
+                await sb(env, "ordini", "POST", payload);
+                actionReply = `\u{1F4E6} *ORDINE CREATO*
+ID: \`${payload.id}\`
+Cliente: ${aiResult.cliente || "?"}
+Ricambi: ${ricambiDesc}${mediaUrl ? "\n\u{1F4CE} Allegato salvato" : ""}`;
+              } catch (e) {
+                actionReply = "\u274C Errore creazione ordine: " + e.message;
+              }
+            } else if (aiResult.tipo === "intervento") {
+              payload = {
+                id: "INT_TG_" + Date.now(),
+                tenant_id: tid,
+                cliente_id: aiResult.codice_m3 || null,
+                tecnico_id: utente?.id || null,
+                stato: "pianificato",
+                data: now.split("T")[0],
+                note: `[Telegram ${utente?.nome || ""}] ${aiResult.problema}${mediaUrl ? " - Allegato: " + mediaUrl : ""}`,
+                obsoleto: false
+              };
+              try {
+                await sb(env, "piano", "POST", payload);
+                actionReply = `\u{1F4C5} *INTERVENTO PIANIFICATO*
+ID: \`${payload.id}\`
+Cliente: ${aiResult.cliente || "?"}
+Descrizione: ${aiResult.problema}${mediaUrl ? "\n\u{1F4CE} Allegato salvato" : ""}`;
+                await sendTelegramNotification(env, "nuovo_intervento", payload);
+              } catch (e) {
+                actionReply = "\u274C Errore creazione intervento: " + e.message;
+              }
+            }
+            if (actionReply) {
+              reply = actionReply;
+              if (aiResult.note) reply += `
+
+\u{1F4A1} _${aiResult.note}_`;
+            }
+          }
+        }
+        if (reply) {
+          try {
+            await sendTelegram(env, chatId, reply);
+          } catch (e) {
+            console.error("TG send error:", e.message);
+          }
+        }
+        return ok();
+      } catch (tgErr) {
+        console.error("Telegram handler error:", tgErr.message, tgErr.stack);
+        try {
+          const errChatId = body?.message?.chat?.id;
+          if (errChatId) await sendTelegram(env, errChatId, `\u26A0\uFE0F Errore bot: ${tgErr.message}`);
+        } catch (e2) {
+        }
+        return ok();
+      }
+    }
+    // -------- CHAT INTERNA --------
+    case "getChatCanali": {
+      const userId = body.userId || body.user_id || "";
+      const canali = await sb(env, "chat_canali", "GET", null, "?attivo=eq.true&order=nome");
+      const membri = userId ? await sb(env, "chat_membri", "GET", null, `?utente_id=eq.${userId}&select=canale_id,ultimo_letto`) : [];
+      const membroMap = {};
+      (membri || []).forEach((m) => {
+        membroMap[m.canale_id] = m;
+      });
+      const result = [];
+      for (const c of canali || []) {
+        const ultimoLetto = membroMap[c.id]?.ultimo_letto || "1970-01-01";
+        const nonLetti = await sb(
+          env,
+          "chat_messaggi",
+          "GET",
+          null,
+          `?canale_id=eq.${c.id}&created_at=gt.${ultimoLetto}&eliminato=eq.false&select=id`
+        ).catch(() => []);
+        result.push({ ...pascalizeRecord(c), nonLetti: (nonLetti || []).length, isMembro: !!membroMap[c.id] });
+      }
+      return ok({ canali: result });
+    }
+    case "getChatMessaggi": {
+      const { canale_id, limit: lim } = body;
+      if (!canale_id) return err("canale_id richiesto");
+      const messaggi = await sb(
+        env,
+        "chat_messaggi",
+        "GET",
+        null,
+        `?canale_id=eq.${canale_id}&eliminato=eq.false&order=created_at.desc&limit=${lim || 50}`
+      );
+      const userId = body.userId || body.user_id;
+      if (userId) {
+        await sb(env, "chat_membri", "POST", { id: `${canale_id}_${userId}`, canale_id, utente_id: userId, ultimo_letto: (/* @__PURE__ */ new Date()).toISOString() }).catch(() => sb(env, `chat_membri?canale_id=eq.${canale_id}&utente_id=eq.${userId}`, "PATCH", { ultimo_letto: (/* @__PURE__ */ new Date()).toISOString() }));
+      }
+      return ok({ messaggi: (messaggi || []).reverse().map(pascalizeRecord) });
+    }
+    case "sendChatMessage": {
+      const { canale_id, testo, tipo, rispondi_a } = body;
+      const mittente = body.userId || body.user_id || body.mittente_id;
+      if (!canale_id || !testo) return err("canale_id e testo richiesti");
+      const id = "MSG_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
+      const msg = { id, canale_id, mittente_id: mittente, testo, tipo: tipo || "testo", rispondi_a: rispondi_a || null, created_at: (/* @__PURE__ */ new Date()).toISOString() };
+      const result = await sb(env, "chat_messaggi", "POST", msg);
+      if (mittente) {
+        await sb(env, "chat_membri", "POST", { id: `${canale_id}_${mittente}`, canale_id, utente_id: mittente, ultimo_letto: (/* @__PURE__ */ new Date()).toISOString() }).catch(() => {
+        });
+      }
+      return ok({ messaggio: pascalizeRecord(result[0]) });
+    }
+    case "createChatCanale": {
+      const { nome, tipo, descrizione, icona, solo_admin, membri_ids } = body;
+      if (!nome) return err("nome richiesto");
+      const id = "CH_" + Date.now();
+      const canale = { id, nome, tipo: tipo || "gruppo", descrizione: descrizione || null, icona: icona || "\u{1F4AC}", solo_admin: solo_admin || false, creato_da: body.userId || null, created_at: (/* @__PURE__ */ new Date()).toISOString() };
+      const utenti = await sb(env, "utenti", "GET", null, "?select=tenant_id&limit=1");
+      if (utenti?.[0]?.tenant_id) canale.tenant_id = utenti[0].tenant_id;
+      const result = await sb(env, "chat_canali", "POST", canale);
+      if (membri_ids && Array.isArray(membri_ids)) {
+        for (const uid of membri_ids) {
+          await sb(env, "chat_membri", "POST", { id: `${id}_${uid}`, canale_id: id, utente_id: uid, ruolo: uid === body.userId ? "admin" : "membro" }).catch(() => {
+          });
+        }
+      }
+      return ok({ canale: pascalizeRecord(result[0]) });
+    }
+    case "joinChatCanale": {
+      const { canale_id } = body;
+      const userId = body.userId || body.user_id;
+      if (!canale_id || !userId) return err("canale_id e userId richiesti");
+      await sb(env, "chat_membri", "POST", { id: `${canale_id}_${userId}`, canale_id, utente_id: userId }).catch(() => {
+      });
+      return ok();
+    }
+    // ============ ANAGRAFICA (Clienti + Assets) ============
+    case "getAnagraficaClienti": {
+      const search = body.search || "";
+      let url = "anagrafica_clienti?select=*&order=nome_account.asc&limit=500";
+      if (search) url += `&or=(nome_account.ilike.*${search}*,nome_interno.ilike.*${search}*,codice_m3.ilike.*${search}*,citta_fatturazione.ilike.*${search}*)`;
+      const data = await sb(env, url, "GET");
+      return ok(data.map(pascalizeRecord));
+    }
+    case "getAnagraficaCliente": {
+      const { id, codice_m3 } = body;
+      let url = "anagrafica_clienti?select=*";
+      if (id) url += `&id=eq.${id}`;
+      else if (codice_m3) url += `&codice_m3=eq.${codice_m3}`;
+      else return err("id o codice_m3 richiesto");
+      const data = await sb(env, url, "GET");
+      if (!data.length) return err("Cliente non trovato", 404);
+      return ok(pascalizeRecord(data[0]));
+    }
+    case "getAnagraficaAssets": {
+      const { codice_m3, search, all } = body;
+      let base = "anagrafica_assets?select=*&order=gruppo_attrezzatura.asc,nome_asset.asc";
+      if (codice_m3) base += `&codice_m3=eq.${codice_m3}`;
+      if (search && search.trim()) base += `&or=(nome_asset.ilike.*${search}*,numero_serie.ilike.*${search}*,modello.ilike.*${search}*,nome_account.ilike.*${search}*)`;
+      if (!all) {
+        const data = await sb(env, base + "&limit=2000", "GET");
+        return ok(data.map(pascalizeRecord));
+      }
+      let allData = [];
+      let offset = 0;
+      const pageSize = 1e3;
+      while (true) {
+        const page = await sb(env, base, "GET", null, "", { "Range": `${offset}-${offset + pageSize - 1}`, "Prefer": "count=exact" });
+        if (!Array.isArray(page) || page.length === 0) break;
+        allData = allData.concat(page);
+        if (page.length < pageSize) break;
+        offset += pageSize;
+      }
+      return ok(allData.map(pascalizeRecord));
+    }
+    case "importAnagraficaClienti": {
+      const rows = body.rows || [];
+      if (!rows.length) return err("rows richiesto (array)");
+      const results = { inserted: 0, errors: [] };
+      for (const row of rows) {
+        const fields = {};
+        for (const [k, v] of Object.entries(row)) {
+          if (v !== null && v !== void 0 && v !== "") fields[toSnake(k)] = v;
+        }
+        try {
+          await sb(env, "anagrafica_clienti", "POST", fields, null, { "Prefer": "return=minimal,resolution=merge-duplicates" });
+          results.inserted++;
+        } catch (e) {
+          results.errors.push({ nome: fields.nome_account || "?", err: e.message });
+        }
+      }
+      return ok(results);
+    }
+    case "importAnagraficaAssets": {
+      const rows = body.rows || [];
+      if (!rows.length) return err("rows richiesto (array)");
+      const clienti = await sb(env, "anagrafica_clienti?select=codice_m3", "GET");
+      const validM3 = new Set(clienti.filter((c) => c.codice_m3).map((c) => c.codice_m3));
+      const results = { inserted: 0, skipped: 0, errors: [] };
+      const batch = [];
+      const allKeys = /* @__PURE__ */ new Set();
+      for (const row of rows) {
+        const fields = {};
+        for (const [k, v] of Object.entries(row)) {
+          const sk = toSnake(k);
+          fields[sk] = v !== null && v !== void 0 && v !== "" ? v : null;
+          allKeys.add(sk);
+        }
+        if (fields.codice_m3 && !validM3.has(fields.codice_m3)) {
+          fields.codice_m3 = null;
+        }
+        batch.push(fields);
+      }
+      const keyList = [...allKeys];
+      for (const row of batch) {
+        for (const k of keyList) {
+          if (!(k in row)) row[k] = null;
+        }
+      }
+      for (let i = 0; i < batch.length; i += 100) {
+        const chunk = batch.slice(i, i + 100);
+        try {
+          await sb(env, "anagrafica_assets", "POST", chunk, null, { "Prefer": "return=minimal" });
+          results.inserted += chunk.length;
+        } catch (e) {
+          for (const row of chunk) {
+            try {
+              await sb(env, "anagrafica_assets", "POST", row, null, { "Prefer": "return=minimal" });
+              results.inserted++;
+            } catch (e2) {
+              results.skipped++;
+              results.errors.push({ serie: row.numero_serie || "?", err: e2.message });
+            }
+          }
+        }
+      }
+      return ok(results);
+    }
+    case "clearAnagrafica": {
+      await sb(env, "anagrafica_assets?id=neq.00000000-0000-0000-0000-000000000000", "DELETE");
+      await sb(env, "anagrafica_clienti?id=neq.00000000-0000-0000-0000-000000000000", "DELETE");
+      return ok({ cleared: true });
+    }
+    default:
+      return err(`Azione POST non trovata: ${action}`, 404);
+  }
+}
+__name(handlePost, "handlePost");
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  return new Uint8Array([...rawData].map((c) => c.charCodeAt(0)));
+}
+__name(urlBase64ToUint8Array, "urlBase64ToUint8Array");
+function arrayBufferToBase64Url(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let str = "";
+  for (const b of bytes) str += String.fromCharCode(b);
+  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+__name(arrayBufferToBase64Url, "arrayBufferToBase64Url");
+async function createVapidJwt(env, audience) {
+  const header = { typ: "JWT", alg: "ES256" };
+  const now = Math.floor(Date.now() / 1e3);
+  const payload = {
+    aud: audience,
+    exp: now + 86400,
+    sub: env.VAPID_SUBJECT || "mailto:admin@syntoniqa.app"
+  };
+  const headerB64 = arrayBufferToBase64Url(new TextEncoder().encode(JSON.stringify(header)));
+  const payloadB64 = arrayBufferToBase64Url(new TextEncoder().encode(JSON.stringify(payload)));
+  const unsignedToken = `${headerB64}.${payloadB64}`;
+  const privateKeyBytes = urlBase64ToUint8Array(env.VAPID_PRIVATE_KEY);
+  const key = await crypto.subtle.importKey(
+    "pkcs8",
+    privateKeyBytes,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["sign"]
+  ).catch(() => {
+    return crypto.subtle.importKey(
+      "raw",
+      privateKeyBytes,
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["sign"]
+    );
+  });
+  const signature = await crypto.subtle.sign(
+    { name: "ECDSA", hash: { name: "SHA-256" } },
+    key,
+    new TextEncoder().encode(unsignedToken)
+  );
+  return `${unsignedToken}.${arrayBufferToBase64Url(signature)}`;
+}
+__name(createVapidJwt, "createVapidJwt");
+async function sendWebPush(env, subscription, payload) {
+  const endpoint = new URL(subscription.endpoint);
+  const audience = `${endpoint.protocol}//${endpoint.host}`;
+  try {
+    const jwt = await createVapidJwt(env, audience);
+    const vapidPublicKey = env.VAPID_PUBLIC_KEY;
+    const response = await fetch(subscription.endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Content-Encoding": "aes128gcm",
+        "TTL": "86400",
+        "Authorization": `vapid t=${jwt}, k=${vapidPublicKey}`,
+        "Urgency": "high"
+      },
+      body: payload
+    });
+    return response;
+  } catch (e) {
+    return { ok: false, status: 0, statusText: e.message };
+  }
+}
+__name(sendWebPush, "sendWebPush");
+async function sendTelegram(env, chatId, text) {
+  if (!env.TELEGRAM_BOT_TOKEN || !chatId) return null;
+  return fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown" })
+  }).then((r) => r.json()).catch(() => null);
+}
+__name(sendTelegram, "sendTelegram");
+async function sendTelegramNotification(env, event, data) {
+  const configRes = await sb(env, "config", "GET", null, "?chiave=in.(telegram_group_generale,telegram_bot_token)").catch(() => []);
+  const cfg = Object.fromEntries(configRes.map((c) => [c.chiave, c.valore]));
+  const group = cfg.telegram_group_generale;
+  if (group) {
+    const messages = {
+      nuova_urgenza: `\u{1F6A8} *NUOVA URGENZA*
+ID: ${data.id}
+Problema: ${data.problema}
+Priorit\xE0: ${data.priorita_id}`,
+      nuovo_intervento: `\u{1F4C5} *NUOVO INTERVENTO* ${data.id}
+Data: ${data.data} | Tecnico: ${data.tecnico_id}`,
+      urgenza_assegnata: `\u2705 Urgenza *${data.id}* assegnata a ${data.tecnicoAssegnato}`,
+      richiesta_risposta: `\u{1F4CB} Richiesta *${data.id}* \u2192 ${data.stato}`
+    };
+    const msg = messages[event];
+    if (msg) await sendTelegram(env, group, msg);
+  }
+  if (env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
+    try {
+      const pushMessages = {
+        nuova_urgenza: { title: "\u{1F6A8} Nuova Urgenza", body: data.problema || "Nuova urgenza ricevuta", tag: "urgenza-" + data.id },
+        nuovo_intervento: { title: "\u{1F4C5} Nuovo Intervento", body: `Intervento ${data.id} pianificato`, tag: "intervento-" + data.id },
+        urgenza_assegnata: { title: "\u2705 Urgenza Assegnata", body: `Urgenza ${data.id} assegnata a te`, tag: "assegnazione-" + data.id },
+        richiesta_risposta: { title: "\u{1F4CB} Risposta Richiesta", body: `Richiesta ${data.id}: ${data.stato}`, tag: "richiesta-" + data.id }
+      };
+      const pushMsg = pushMessages[event];
+      if (pushMsg) {
+        let targetUsers = [];
+        if (data.tecnico_id) targetUsers.push(data.tecnico_id);
+        if (data.tecnico_assegnato) targetUsers.push(data.tecnico_assegnato);
+        if (data.tecnicoAssegnato) targetUsers.push(data.tecnicoAssegnato);
+        if (data.tecnici_ids) {
+          try {
+            targetUsers = targetUsers.concat(JSON.parse(data.tecnici_ids));
+          } catch {
+          }
+        }
+        targetUsers = [...new Set(targetUsers.filter(Boolean))];
+        if (targetUsers.length) {
+          const subs = await sb(
+            env,
+            "push_subscriptions",
+            "GET",
+            null,
+            `?user_id=in.(${targetUsers.join(",")})&active=eq.true`
+          ).catch(() => []);
+          const payload = JSON.stringify({ ...pushMsg, url: "./" });
+          for (const sub of subs) {
+            sendWebPush(env, { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload).catch(() => {
+            });
+          }
+        }
+      }
+    } catch (e) {
+    }
+  }
+}
+__name(sendTelegramNotification, "sendTelegramNotification");
+async function triggerKPISnapshot(env, interventoId, tecnicoId) {
+  if (!tecnicoId) return;
+  const oggi = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+  const mese = oggi.slice(0, 7);
+  const completati = await sb(env, "piano", "GET", null, `?tecnico_id=eq.${tecnicoId}&stato=in.(completato,chiuso)&data=gte.${mese}-01`);
+  await sb(env, "kpi_log", "POST", {
+    id: "KPI_" + Date.now(),
+    data: oggi,
+    tecnico_id: tecnicoId,
+    metrica: "interventi_completati_mese",
+    valore: completati.length,
+    unita: "n",
+    periodo: mese
+  }).catch(() => {
+  });
+}
+__name(triggerKPISnapshot, "triggerKPISnapshot");
+export {
+  cloudflare_worker_default as default
+};
+//# sourceMappingURL=cloudflare_worker.js.map

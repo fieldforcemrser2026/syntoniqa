@@ -1481,6 +1481,24 @@ Rispondi con JSON:
         }
       }
 
+      // ---- MIRROR Telegram → Chat Admin (PRIMA di qualsiasi return) ----
+      // Salva TUTTI i messaggi ricevuti da Telegram nella chat admin, anche da utenti non registrati
+      if (text && !cmd.startsWith('/')) {
+        try {
+          const senderNameEarly = (msg.from?.first_name || '') + (msg.from?.last_name ? ' ' + msg.from.last_name : '');
+          const earlyMsgId = 'TG_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+          const urgKwEarly = ['urgenza','fermo','guasto','errore','rotto','emergenza','allarme'];
+          const isUrgEarly = urgKwEarly.some(k => text.toLowerCase().includes(k));
+          const earlyCanale = isUrgEarly ? 'CH_URGENZE' : 'CH_GENERALE';
+          await sb(env, 'chat_messaggi', 'POST', {
+            id: earlyMsgId, canale_id: earlyCanale,
+            mittente_id: utente?.id || 'TELEGRAM',
+            testo: `📱 [TG - ${senderNameEarly}] ${text}`,
+            tipo: 'testo', created_at: new Date().toISOString()
+          }).catch(e => console.error('Early mirror save error:', e.message));
+        } catch(e) { console.error('Early mirror error:', e.message); }
+      }
+
       // /start è permesso anche senza utente registrato
       if (!utente && cmd !== '/start') {
         const nome = msg.from?.first_name || 'utente';
@@ -1806,34 +1824,22 @@ Rispondi SOLO con JSON valido:
         try { await sendTelegram(env, chatId, reply); } catch(e) { console.error('TG send error:', e.message); }
       }
 
-      // ---- MIRROR Telegram → Chat Admin ----
-      // Salva ogni messaggio ricevuto da Telegram nella chat interna
-      try {
-        const senderName = (msg.from?.first_name || '') + (msg.from?.last_name ? ' ' + msg.from.last_name : '');
-        const msgId = 'TG_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
-        // Determina canale: messaggi con keywords urgenza vanno in CH_URGENZE, altrimenti CH_GENERALE
-        const urgKwMirror = ['urgenza','fermo','guasto','errore','rotto','emergenza','allarme'];
-        const isUrgMsg = urgKwMirror.some(k => (text||'').toLowerCase().includes(k));
-        const targetCanale = isUrgMsg ? 'CH_URGENZE' : 'CH_GENERALE';
-        const chatMsg = {
-          id: msgId,
-          canale_id: targetCanale,
-          mittente_id: utente?.id || null,
-          testo: `[Telegram - ${senderName}] ${text || ''}${mediaUrl ? ' 📎' + (mediaType||'') : ''}`,
-          tipo: 'telegram',
-          created_at: new Date().toISOString()
-        };
-        await sb(env, 'chat_messaggi', 'POST', chatMsg).catch(e => console.error('Mirror save error:', e.message));
-        // Se il bot ha risposto, salva anche la risposta come messaggio del bot
-        if (reply) {
+      // ---- MIRROR Bot response → Chat Admin ----
+      // Il mirror del messaggio in arrivo è già fatto sopra (prima del check utente)
+      // Qui salviamo solo la risposta del bot
+      if (reply) {
+        try {
+          const urgKwBot = ['urgenza','fermo','guasto','errore','rotto','emergenza','allarme'];
+          const isUrgBot = urgKwBot.some(k => (text||'').toLowerCase().includes(k));
+          const botCanale = isUrgBot ? 'CH_URGENZE' : 'CH_GENERALE';
           const botMsgId = 'TG_BOT_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
           await sb(env, 'chat_messaggi', 'POST', {
-            id: botMsgId, canale_id: targetCanale, mittente_id: 'BOT',
-            testo: reply.replace(/\*/g, '').replace(/_/g, ''), // strip markdown
-            tipo: 'telegram_bot', created_at: new Date(Date.now() + 1000).toISOString()
+            id: botMsgId, canale_id: botCanale, mittente_id: 'TELEGRAM',
+            testo: `🤖 [Bot] ${reply.replace(/\*/g, '').replace(/_/g, '')}`,
+            tipo: 'testo', created_at: new Date(Date.now() + 1000).toISOString()
           }).catch(() => {});
-        }
-      } catch(mirrorErr) { console.error('Mirror error:', mirrorErr.message); }
+        } catch(e) { console.error('Bot mirror error:', e.message); }
+      }
 
       return ok();
       } catch (tgErr) {
