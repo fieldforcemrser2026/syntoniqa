@@ -1492,13 +1492,20 @@ Rispondi con JSON:
         }
       );
       const geminiData = await geminiRes.json();
-      const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      // Check for Gemini API errors
+      if (geminiData.error) {
+        return err(`Errore Gemini AI: ${geminiData.error.message || JSON.stringify(geminiData.error)}`);
+      }
+      if (!geminiData.candidates || !geminiData.candidates.length) {
+        return err('Gemini AI non ha generato una risposta. Verifica la chiave API.');
+      }
+      const rawText = geminiData.candidates[0]?.content?.parts?.[0]?.text || '{}';
       const cleanText = rawText.replace(/```json\n?|\n?```/g, '').trim();
       try {
         const result = JSON.parse(cleanText);
         return ok(result);
       } catch (e) {
-        return ok({ summary: 'Piano generato (testo)', piano: [], warnings: ['Risposta AI non parsabile'], raw: cleanText });
+        return ok({ summary: 'Piano generato (testo)', piano: [], warnings: ['Risposta AI non parsabile in JSON — vedi raw'], raw: cleanText });
       }
     }
 
