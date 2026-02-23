@@ -1048,14 +1048,14 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
   <th>Prov.</th>
   <th>Stato</th>
   <th>Titolare</th>
-  <th title="Astronaut"><img src="assets/products/astronaut.png" style="width:22px;height:22px;object-fit:contain"></th>
-  <th title="Juno"><img src="assets/products/juno.png" style="width:22px;height:22px;object-fit:contain"></th>
-  <th title="Vector"><img src="assets/products/vector.png" style="width:22px;height:22px;object-fit:contain"></th>
-  <th title="Discovery+Collector"><img src="assets/products/discovery.png" style="width:22px;height:22px;object-fit:contain"></th>
-  <th title="CU"><img src="assets/products/cu.png" style="width:22px;height:22px;object-fit:contain"></th>
-  <th title="Cosmix"><img src="assets/products/cosmix.png" style="width:22px;height:22px;object-fit:contain"></th>
-  <th title="Nautilus"><img src="assets/products/nautilus.png" style="width:22px;height:22px;object-fit:contain"></th>
-  <th title="Luna+Meteor+Calm+Altri">📦</th>
+  <th title="Astronaut">🤖</th>
+  <th title="Juno">🔄</th>
+  <th title="Vector">🚜</th>
+  <th title="Discovery">🧹</th>
+  <th title="CU">🖥️</th>
+  <th title="Cosmix">🥣</th>
+  <th title="Nautilus">🔧</th>
+  <th title="Altri">📦</th>
   <th>Tot</th>
   <th style="width:80px"></th>
 </tr></thead>
@@ -1560,7 +1560,7 @@ async function apiCall(action,data={},method='GET'){
 }
 
 async function refreshData(){
-  try{DATA=await apiCall('getAll',{userId:USER?.ID||''});renderAll();loadAnagClients().then(()=>renderMacchine()).catch(()=>{})}catch(e){toast('Errore: '+e.message,'err')}
+  try{DATA=await apiCall('getAll',{userId:USER?.ID||''});renderAll();loadAnagClients().then(()=>{renderMacchine();populateModalClientsFromAnag()}).catch(()=>{})}catch(e){toast('Errore: '+e.message,'err')}
 }
 
 // ============ INIT & AUTH ============
@@ -1618,8 +1618,8 @@ function enterApp(){
   $('footUser').textContent=(USER.Nome||'')[0]+(USER.Cognome||'')[0]+' · '+USER.Ruolo;
   populateSelects();
   renderAll();
-  // Load anagrafica assets in background (needed for Macchine section)
-  loadAnagClients().then(()=>renderMacchine()).catch(()=>{});
+  // Load anagrafica assets in background (needed for Macchine section + modal selects)
+  loadAnagClients().then(()=>{renderMacchine();populateModalClientsFromAnag()}).catch(()=>{});
 }
 
 // ============ POPULATE SELECTS ============
@@ -1665,15 +1665,82 @@ function populateSelects(){
   fillSel('naAssegnatario',tecs,tecFmt);
   // Filtri
   fillSel('filtPianoTec',tecs,tecFmt);fillSel('calFiltroTec',tecs,tecFmt);fillSel('mapFiltroTec',tecs,tecFmt);fillSel('kpiTecnico',tecs,tecFmt);
-  fillSel('filtMacchCli',clis,cliFmt);
+  // filtMacchCli will be populated by renderMacchine from anagrafica
+}
+
+// After anagrafica loads, repopulate modal client selectors with anagrafica data
+function populateModalClientsFromAnag(){
+  if(!ANAG_CLIENTI.length)return;
+  ['mpCliente','muCliente','moCliente','mtCliente','miCliente','nmCliente'].forEach(id=>{
+    populateModalClients(id);
+  });
 }
 
 function loadMacchineCliente(prefix){
-  const cliId=$(prefix+'Cliente').value;
-  const maccs=(DATA.macchine||[]).filter(m=>!m.Obsoleto&&(!cliId||m.ClienteID===cliId));
+  const cliSel=$(prefix+'Cliente');
+  const cliId=cliSel?cliSel.value:'';
   const s=$(prefix+'Macchina');if(!s)return;
-  s.innerHTML='<option value="">—</option>';
+  s.innerHTML='<option value="">— Seleziona Macchina —</option>';
+
+  // First try anagrafica assets (primary data source)
+  if(cliId&&ANAG_CLIENTI.length){
+    // Find M3 code for this client
+    const cli=ANAG_CLIENTI.find(c=>c.CodiceM3===cliId)||
+              (DATA.clienti||[]).find(c=>c.ID===cliId);
+    const m3=cli?.CodiceM3||cliId;
+    const assets=(ANAG_ASSETS_CACHE[m3]||[]).filter(a=>{
+      const tf=(a.TipoFoglio||'').toUpperCase();
+      return tf&&tf!=='ASSETS'&&tf!=='NONE';
+    });
+    if(assets.length){
+      assets.forEach(a=>{
+        const tipo=normAssetType(a.GruppoAttrezzatura||a.TipoFoglio);
+        const cfg=PROD_CFG[tipo]||{};
+        const o=document.createElement('option');
+        o.value=a.NumeroSerie||a.NomeAsset||'';
+        o.textContent=(cfg.label||tipo)+' '+(a.Modello||'')+' — '+(a.NomeAsset||'')+(a.NumeroSerie?' (SN: '+a.NumeroSerie+')':'');
+        o.dataset.tipo=tipo;
+        o.dataset.modello=a.Modello||'';
+        o.dataset.seriale=a.NumeroSerie||'';
+        o.dataset.asset=a.NomeAsset||'';
+        o.dataset.m3=m3;
+        s.appendChild(o);
+      });
+      return;
+    }
+  }
+  // Fallback to CRUD macchine
+  const maccs=(DATA.macchine||[]).filter(m=>!m.Obsoleto&&(!cliId||m.ClienteID===cliId));
   maccs.forEach(m=>{const o=document.createElement('option');o.value=m.ID;o.textContent=m.Tipo+' '+m.Modello+(m.Seriale?' ('+m.Seriale+')':'');s.appendChild(o)});
+}
+
+// Populate client select in modals with BOTH CRUD and anagrafica clients
+function populateModalClients(selId){
+  const s=$(selId);if(!s)return;
+  const current=s.value;
+  s.innerHTML='<option value="">— Seleziona Cliente —</option>';
+
+  // Add anagrafica clients (primary)
+  const seen=new Set();
+  if(ANAG_CLIENTI.length){
+    ANAG_CLIENTI.filter(c=>c.CodiceM3&&!seen.has(c.CodiceM3)).forEach(c=>{
+      seen.add(c.CodiceM3);
+      const o=document.createElement('option');
+      o.value=c.CodiceM3;
+      o.textContent=c.NomeAccount||c.NomeInterno||c.CodiceM3;
+      s.appendChild(o);
+    });
+  }
+  // Add CRUD clients not already in anagrafica
+  (DATA.clienti||[]).forEach(c=>{
+    if(!seen.has(c.ID)){
+      const o=document.createElement('option');
+      o.value=c.ID;
+      o.textContent=c.Nome||c.ID;
+      s.appendChild(o);
+    }
+  });
+  if(current)s.value=current;
 }
 
 // ============ RENDER ALL ============
@@ -2018,20 +2085,26 @@ function renderMacchine(){
     const groups={};
     items.forEach(a=>{const k=normAssetType(a.GruppoAttrezzatura||a.TipoFoglio);if(!groups[k])groups[k]=[];groups[k].push(a)});
     let html='';
-    Object.entries(groups).sort((a,b)=>b[1].length-a[1].length).forEach(([tipo,assets])=>{
+    // Sort: ALTRI always last, rest by count desc
+    const sortedGroups=Object.entries(groups).sort((a,b)=>{
+      if(a[0]==='ALTRI')return 1;if(b[0]==='ALTRI')return -1;
+      return b[1].length-a[1].length;
+    });
+    sortedGroups.forEach(([tipo,assets])=>{
       const cfg=PROD_CFG[tipo]||{};
-      const imgHtml=cfg.img?`<img src="${PROD_IMG_BASE}${cfg.img}" style="width:40px;height:40px;object-fit:contain;margin-right:10px">`:`<span style="display:inline-block;width:40px;height:40px;background:${cfg.color||'#ddd'}20;border:1px solid ${cfg.color||'#ccc'}40;border-radius:6px;text-align:center;line-height:40px;font-size:1rem;margin-right:10px;color:${cfg.color||'#999'}">📦</span>`;
+      const iconBig=prodIcon(tipo,36);
+      // DEFAULT: tree CLOSED (display:none), arrow ▶
       html+=`<div style="margin-bottom:2px">
         <div onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.querySelector('.mac-arrow').textContent=this.nextElementSibling.style.display==='none'?'▶':'▼'" style="cursor:pointer;padding:10px 14px;background:linear-gradient(135deg,#f8f9fa,#fff);border-bottom:1px solid #eee;display:flex;align-items:center">
-          <span class="mac-arrow" style="margin-right:8px;font-size:.8rem;width:14px;color:${cfg.color||'#666'}">▼</span>
-          ${imgHtml}
+          <span class="mac-arrow" style="margin-right:8px;font-size:.8rem;width:14px;color:${cfg.color||'#666'}">▶</span>
+          <span style="margin-right:10px">${iconBig}</span>
           <div style="flex:1">
             <strong style="font-size:.95rem;color:${cfg.color||'#333'}">${cfg.label||tipo}</strong>
             <span class="badge" style="margin-left:8px;font-size:.7rem;background:${cfg.color||'#666'};color:#fff">${assets.length}</span>
           </div>
           ${cfg.url?`<a href="${cfg.url}" target="_blank" style="font-size:.7rem;color:${cfg.color||'var(--primary)'};text-decoration:none;opacity:.7" onclick="event.stopPropagation()">Info prodotto →</a>`:''}
         </div>
-        <div style="padding:0;display:block">
+        <div style="padding:0;display:none">
           <table class="tbl" style="font-size:.8125rem;margin:0"><thead><tr>
             <th style="width:30px"></th><th>Modello</th><th>Asset</th><th>N. Serie</th><th>Cliente</th><th>Stato</th><th style="width:180px">Azioni</th>
           </tr></thead><tbody>`;
@@ -2089,32 +2162,60 @@ function renderMacchine(){
 
 // Open action modal pre-filled with asset/client info from anagrafica
 function openAssetAction(action, codiceM3, assetInfo, clienteName){
-  // Find matching CRUD client by name (cross-reference anagrafica → CRUD)
-  const crudCli=(DATA.clienti||[]).find(c=>{
-    const n=(c.Nome||'').toUpperCase();
-    return n&&clienteName&&n===clienteName.toUpperCase();
-  });
-  const crudCliId=crudCli?crudCli.ID:'';
+  // Ensure modal client selects have anagrafica data
+  populateModalClientsFromAnag();
+
+  const setCliAndMacch=(prefix,serialeOrName)=>{
+    const cliSel=$(prefix+'Cliente');
+    if(cliSel){
+      // Try M3 code first (anagrafica), then CRUD client by name
+      cliSel.value=codiceM3;
+      if(!cliSel.value){
+        // Try by name match in CRUD
+        const crudCli=(DATA.clienti||[]).find(c=>(c.Nome||'').toUpperCase()===clienteName.toUpperCase());
+        if(crudCli)cliSel.value=crudCli.ID;
+      }
+      // Load machines for this client
+      loadMacchineCliente(prefix);
+      // Auto-select the specific machine/asset if we have a serial number
+      if(serialeOrName){
+        const macSel=$(prefix+'Macchina');
+        if(macSel){
+          // Try to find by serial number in the options
+          for(let i=0;i<macSel.options.length;i++){
+            if(macSel.options[i].value===serialeOrName||
+               macSel.options[i].textContent.includes(serialeOrName)){
+              macSel.selectedIndex=i;break;
+            }
+          }
+        }
+      }
+    }
+  };
+
+  // Extract serial from assetInfo string (format: "NomeAsset — SN:seriale")
+  const snMatch=assetInfo.match(/SN:([^\s']+)/);
+  const seriale=snMatch?snMatch[1]:'';
 
   if(action==='urgenza'){
     openModal('modalUrgenza');
-    if(crudCliId){const s=$('muCliente');if(s){s.value=crudCliId;loadMacchineCliente('mu')}}
-    const prob=$('muProblema');if(prob)prob.value='[Asset: '+assetInfo+'] ';
-    const note=$('muNote');if(note)note.value='Cliente: '+clienteName+' | M3: '+codiceM3;
+    setCliAndMacch('mu',seriale);
+    const prob=$('muProblema');if(prob)prob.value='';
+    const note=$('muNote');if(note)note.value='Asset: '+assetInfo.replace(/'/g,"'")+' | M3: '+codiceM3;
   }else if(action==='piano'){
     openModal('modalPiano');
     const d=$('mpData');if(d)d.value=today();
-    if(crudCliId){const s=$('mpCliente');if(s){s.value=crudCliId;loadMacchineCliente('mp')}}
-    const note=$('mpNote');if(note)note.value='Asset: '+assetInfo+' | Cliente: '+clienteName+' | M3: '+codiceM3;
+    setCliAndMacch('mp',seriale);
+    const note=$('mpNote');if(note)note.value='Asset: '+assetInfo.replace(/'/g,"'")+' | M3: '+codiceM3;
   }else if(action==='ordine'){
     openModal('modalOrdine');
-    const desc=$('moDesc');if(desc)desc.value='Ricambio per: '+assetInfo;
-    if(crudCliId){const s=$('moCliente');if(s)s.value=crudCliId}
-    const note=$('moNote');if(note)note.value='Cliente: '+clienteName+' | M3: '+codiceM3;
+    setCliAndMacch('mo',seriale);
+    const desc=$('moDesc');if(desc)desc.value='Ricambio per: '+assetInfo.replace(/'/g,"'");
+    const note=$('moNote');if(note)note.value='M3: '+codiceM3;
   }else if(action==='notifica'){
     openModal('modalNotifica');
-    const tit=$('mnTitolo');if(tit)tit.value='Notifica per asset: '+assetInfo;
-    const msg=$('mnMessaggio');if(msg)msg.value='Cliente: '+clienteName+' (M3: '+codiceM3+')\nAsset: '+assetInfo;
+    const tit=$('mnTitolo');if(tit)tit.value='Notifica per asset';
+    const msg=$('mnMessaggio');if(msg)msg.value='Cliente: '+clienteName.replace(/'/g,"'")+' (M3: '+codiceM3+')\nAsset: '+assetInfo.replace(/'/g,"'");
   }
 }
 
@@ -2544,31 +2645,34 @@ var anagView='list';
 // Product type config: real images, color, label, lelyUrl
 const PROD_IMG_BASE='assets/products/';
 const PROD_CFG={
-  ROBOT:{img:'astronaut.png',color:'#C30A14',label:'Astronaut',url:'https://www.lely.com/solutions/milking/astronaut/'},
-  JUNO:{img:'juno.png',color:'#3b82f6',label:'Juno',url:'https://www.lely.com/solutions/feeding/juno/'},
-  VECTOR:{img:'vector.png',color:'#8b5cf6',label:'Vector',url:'https://www.lely.com/solutions/feeding/vector/'},
-  DISCOVERY:{img:'discovery.png',color:'#06b6d4',label:'Discovery',url:'https://www.lely.com/solutions/manure/discovery/'},
-  COLLECTOR:{img:'collector.png',color:'#14b8a6',label:'Collector',url:'https://www.lely.com/solutions/manure/discovery-collector/'},
-  CU:{img:'cu.png',color:'#6366f1',label:'Central Unit',url:''},
-  CALM:{img:'calm.png',color:'#f59e0b',label:'Calm',url:'https://www.lely.com/solutions/calf-rearing/calm/'},
-  COMPRESSORI:{img:'compressori.png',color:'#78716c',label:'Compressori',url:''},
-  COSMIX:{img:'cosmix.png',color:'#22c55e',label:'Cosmix',url:'https://www.lely.com/solutions/feeding/cosmix/'},
-  NAUTILUS:{img:'nautilus.png',color:'#0ea5e9',label:'Nautilus',url:''},
-  LUNA:{img:'luna.png',color:'#a855f7',label:'Luna',url:'https://www.lely.com/solutions/housing-and-caring/luna/'},
-  METEOR:{img:'meteor.png',color:'#ef4444',label:'Meteor',url:''},
-  GRAZEWAY:{img:'grazeway.png',color:'#16a34a',label:'Grazeway',url:'https://www.lely.com/solutions/grazing/grazeway/'},
-  'L4C LED':{img:'l4c_led.png',color:'#eab308',label:'L4C LED',url:''},
-  ARLA:{img:'arla.png',color:'#94a3b8',label:'Arla',url:''},
-  TITANIA:{img:'titania.png',color:'#64748b',label:'Titania',url:''},
-  ALTRI:{img:'',color:'#9ca3af',label:'Altri',url:''}
+  ROBOT:{img:'astronaut.png',emoji:'🤖',color:'#C30A14',label:'Astronaut',url:'https://www.lely.com/solutions/milking/astronaut/'},
+  JUNO:{img:'juno.png',emoji:'🔄',color:'#3b82f6',label:'Juno',url:'https://www.lely.com/solutions/feeding/juno/'},
+  VECTOR:{img:'vector.png',emoji:'🚜',color:'#8b5cf6',label:'Vector',url:'https://www.lely.com/solutions/feeding/vector/'},
+  DISCOVERY:{img:'discovery.png',emoji:'🧹',color:'#06b6d4',label:'Discovery',url:'https://www.lely.com/solutions/manure/discovery/'},
+  COLLECTOR:{img:'collector.png',emoji:'♻️',color:'#14b8a6',label:'Collector',url:'https://www.lely.com/solutions/manure/discovery-collector/'},
+  CU:{emoji:'🖥️',color:'#6366f1',label:'Central Unit',url:''},
+  CALM:{img:'calm.png',emoji:'🍼',color:'#f59e0b',label:'Calm',url:'https://www.lely.com/solutions/calf-rearing/calm/'},
+  COMPRESSORI:{emoji:'💨',color:'#78716c',label:'Compressori',url:''},
+  COSMIX:{img:'cosmix.png',emoji:'🥣',color:'#22c55e',label:'Cosmix',url:'https://www.lely.com/solutions/feeding/cosmix/'},
+  NAUTILUS:{emoji:'🔧',color:'#0ea5e9',label:'Nautilus',url:''},
+  LUNA:{emoji:'🐄',color:'#a855f7',label:'Luna',url:'https://www.lely.com/solutions/housing-and-caring/luna/'},
+  METEOR:{emoji:'🛏️',color:'#ef4444',label:'Meteor',url:''},
+  GRAZEWAY:{emoji:'🚪',color:'#16a34a',label:'Grazeway',url:'https://www.lely.com/solutions/grazing/grazeway/'},
+  'L4C LED':{emoji:'💡',color:'#eab308',label:'L4C LED',url:''},
+  ARLA:{emoji:'🏭',color:'#94a3b8',label:'Arla',url:''},
+  TITANIA:{emoji:'⚙️',color:'#64748b',label:'Titania',url:''},
+  ALTRI:{emoji:'📦',color:'#9ca3af',label:'Altri',url:''}
 };
 function prodIcon(type,size){
   size=size||24;
   const cfg=PROD_CFG[type]||PROD_CFG[type.toUpperCase()]||{};
   const src=cfg.img?PROD_IMG_BASE+cfg.img:'';
-  if(!src)return `<span style="display:inline-block;width:${size}px;height:${size}px;background:#f0f0f0;border-radius:2px;text-align:center;line-height:${size}px;font-size:${Math.round(size*0.5)}px;color:#999">?</span>`;
+  const emoji=cfg.emoji||'📦';
+  // Emoji fallback if no image or image fails
+  const emojiHtml=`<span style="display:inline-flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;font-size:${Math.round(size*0.7)}px;vertical-align:middle" title="${cfg.label||type}">${emoji}</span>`;
+  if(!src) return emojiHtml;
   const lnk=cfg.url?`onclick="window.open('${cfg.url}','_blank')" style="cursor:pointer"`:''
-  return `<img src="${src}" alt="${cfg.label||type}" title="${cfg.label||type}" ${lnk} style="width:${size}px;height:${size}px;object-fit:contain;vertical-align:middle" onerror="this.style.display='none'">`;
+  return `<img src="${src}" alt="${cfg.label||type}" title="${cfg.label||type}" ${lnk} style="width:${size}px;height:${size}px;object-fit:contain;vertical-align:middle" onerror="this.outerHTML='${emojiHtml.replace(/'/g,"\\'")}'">`;
 }
 // Helper: normalize asset type to PROD_CFG key
 // SOLO i tipi con foglio dedicato nell'Excel + ARLA e TITANIA sono tipi reali
@@ -2595,10 +2699,16 @@ function normAssetType(tipo){
   // Tutto il resto è "ALTRI"
   return 'ALTRI';
 }
-// Get ALL anagrafica assets as flat array
+// Get ALL anagrafica assets as flat array - ONLY from dedicated sheets (no generic Assets sheet items)
+// Dedicated sheets: ROBOT, JUNO, VECTOR, DISCOVERY, COLLECTOR, CU, CALM, COMPRESSORI, COSMIX, NAUTILUS, LUNA, METEOR, GRAZEWAY, L4C LED
+const DEDICATED_SHEETS=new Set(['ROBOT','JUNO','VECTOR','DISCOVERY','COLLECTOR','CU','CALM','COMPRESSORI','COSMIX','NAUTILUS','LUNA','METEOR','GRAZEWAY','L4C LED']);
 function getAllAnagAssets(){
   let all=[];
-  Object.values(ANAG_ASSETS_CACHE).forEach(arr=>arr.forEach(a=>all.push(a)));
+  Object.values(ANAG_ASSETS_CACHE).forEach(arr=>arr.forEach(a=>{
+    // Include only items from dedicated sheets (TipoFoglio != 'Assets')
+    const tf=(a.TipoFoglio||'').toUpperCase();
+    if(tf&&tf!=='ASSETS'&&tf!=='NONE') all.push(a);
+  }));
   return all;
 }
 
@@ -2622,8 +2732,10 @@ async function loadAnagClients(){
         const m3=c.CodiceM3;
         const myAssets=byM3[m3]||[];
         ANAG_ASSETS_CACHE[m3]=myAssets;
-        const counts={_total:myAssets.length};
-        myAssets.forEach(a=>{
+        // Count only assets from dedicated sheets (not generic Assets sheet)
+        const dedicatedAssets=myAssets.filter(a=>{const tf=(a.TipoFoglio||'').toUpperCase();return tf&&tf!=='ASSETS'&&tf!=='NONE'});
+        const counts={_total:dedicatedAssets.length};
+        dedicatedAssets.forEach(a=>{
           const key=normAssetType(a.GruppoAttrezzatura||a.TipoFoglio||'Altro');
           counts[key]=(counts[key]||0)+1;
         });
