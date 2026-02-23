@@ -1687,6 +1687,8 @@ async function refreshData(){
 // ============ INIT & AUTH ============
 document.addEventListener('DOMContentLoaded',init);
 async function init(){
+  // Safety: assicurati che globalLoad non blocchi il login
+  showGlobalLoad(false);
   try{
     DATA=await apiCall('getAll');
     applyConfig();
@@ -1698,7 +1700,11 @@ async function init(){
       const u=(DATA.utenti||[]).find(x=>x.ID===s.id);
       if(u&&(u.Ruolo==='admin'||u.Ruolo==='caposquadra')){USER=u;enterApp()}
     }
-  }catch(e){$('loginLoad').innerHTML='<div style="color:var(--err)">❌ '+e.message+'</div><br><button class="btn btn-primary btn-sm" onclick="location.reload()">Riprova</button>'}
+  }catch(e){
+    showGlobalLoad(false);
+    console.error('[INIT]',e);
+    $('loginLoad').innerHTML='<div style="color:var(--err)">❌ '+e.message+'</div><br><button class="btn btn-primary btn-sm" onclick="location.reload()">Riprova</button>';
+  }
 }
 
 function applyConfig(){

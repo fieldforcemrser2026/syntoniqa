@@ -62,6 +62,25 @@ function validateTransition(validMap, currentStato, newStato, entityType) {
   return null; // valida
 }
 
+// ============ AUTHORIZATION HELPERS ============
+
+async function requireAdmin(env, body) {
+  const uid = body.operatoreId || body.userId;
+  if (!uid) return 'operatoreId richiesto';
+  const caller = await sb(env, 'utenti', 'GET', null, `?id=eq.${uid}&select=ruolo`).catch(()=>[]);
+  if (!caller?.[0]) return 'Utente non trovato';
+  if (caller[0].ruolo !== 'admin') return 'Solo admin può eseguire questa azione';
+  return null; // ok
+}
+
+function validateNumeric(value, field, min = 0) {
+  if (value === null || value === undefined || value === '') return null;
+  const num = Number(value);
+  if (isNaN(num)) return `${field} deve essere numerico`;
+  if (num < min) return `${field} deve essere >= ${min}`;
+  return null;
+}
+
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -247,6 +266,17 @@ async function handleGet(action, url, env) {
 
     case 'getAll': {
       // Carica tutti i dati per dashboard/login (equivalente GAS getAll)
+      // SECURITY: role-based filtering — tecnici vedono solo propri interventi/urgenze/ordini
+      const reqUserId = url.searchParams.get('userId') || '';
+      let userRole = 'admin';
+      if (reqUserId) {
+        const reqUser = await sb(env, 'utenti', 'GET', null, `?id=eq.${reqUserId}&select=ruolo`).catch(()=>[]);
+        userRole = reqUser?.[0]?.ruolo || 'tecnico';
+      }
+      const isTecnico = userRole === 'tecnico';
+      const tecFilter = isTecnico ? `&tecnico_id=eq.${reqUserId}` : '';
+      const tecFilterUrg = isTecnico ? `&or=(tecnico_assegnato.eq.${reqUserId},segnalato_da.eq.${reqUserId})` : '';
+
       const [
         utenti, clienti, macchine, piano, urgenze, ordini,
         reperibilita, trasferte, notifiche, richieste, installazioni,
@@ -257,15 +287,15 @@ async function handleGet(action, url, env) {
         sb(env, 'utenti',             'GET', null, '?select=*&obsoleto=eq.false&order=cognome'),
         sb(env, 'clienti',            'GET', null, '?select=*&obsoleto=eq.false&order=nome'),
         sb(env, 'macchine',           'GET', null, '?select=*&obsoleto=eq.false&limit=2000'),
-        sb(env, 'piano',              'GET', null, '?select=*&obsoleto=eq.false&order=data.desc&limit=500'),
-        sb(env, 'urgenze',            'GET', null, '?select=*&obsoleto=eq.false&order=data_segnalazione.desc&limit=200'),
-        sb(env, 'ordini',             'GET', null, '?select=*&obsoleto=eq.false&order=data_richiesta.desc&limit=300'),
-        sb(env, 'reperibilita',       'GET', null, '?select=*&obsoleto=eq.false&order=data_inizio.desc&limit=200'),
-        sb(env, 'trasferte',          'GET', null, '?select=*&obsoleto=eq.false&order=data_inizio.desc&limit=100'),
-        sb(env, 'notifiche',          'GET', null, '?select=*&obsoleto=eq.false&order=data_invio.desc&limit=200'),
+        sb(env, 'piano',              'GET', null, `?select=*&obsoleto=eq.false&order=data.desc&limit=500${tecFilter}`),
+        sb(env, 'urgenze',            'GET', null, `?select=*&obsoleto=eq.false&order=data_segnalazione.desc&limit=200${tecFilterUrg}`),
+        sb(env, 'ordini',             'GET', null, `?select=*&obsoleto=eq.false&order=data_richiesta.desc&limit=300${tecFilter}`),
+        sb(env, 'reperibilita',       'GET', null, `?select=*&obsoleto=eq.false&order=data_inizio.desc&limit=200${tecFilter}`),
+        sb(env, 'trasferte',          'GET', null, `?select=*&obsoleto=eq.false&order=data_inizio.desc&limit=100${tecFilter}`),
+        sb(env, 'notifiche',          'GET', null, isTecnico ? `?select=*&obsoleto=eq.false&destinatario_id=eq.${reqUserId}&order=data_invio.desc&limit=100` : '?select=*&obsoleto=eq.false&order=data_invio.desc&limit=200'),
         sb(env, 'richieste',          'GET', null, '?select=*&obsoleto=eq.false&order=data_richiesta.desc'),
         sb(env, 'installazioni',      'GET', null, '?select=*&obsoleto=eq.false'),
-        sb(env, 'pagellini',          'GET', null, '?select=*&obsoleto=eq.false&order=data_creazione.desc'),
+        sb(env, 'pagellini',          'GET', null, isTecnico ? `?select=*&obsoleto=eq.false&tecnico_id=eq.${reqUserId}&order=data_creazione.desc` : '?select=*&obsoleto=eq.false&order=data_creazione.desc'),
         sb(env, 'automezzi',          'GET', null, '?select=*&obsoleto=eq.false'),
         sb(env, 'tipi_intervento',    'GET', null, '?select=*&attivo=eq.true'),
         sb(env, 'priorita',           'GET', null, '?select=*&attivo=eq.true&order=livello'),
@@ -367,6 +397,12 @@ async function handleGet(action, url, env) {
     }
 
     case 'exportPowerBI': {
+      // SECURITY: solo admin
+      const pbiUser = url.searchParams.get('userId') || '';
+      if (pbiUser) {
+        const pbiCaller = await sb(env, 'utenti', 'GET', null, `?id=eq.${pbiUser}&select=ruolo`).catch(()=>[]);
+        if (pbiCaller?.[0]?.ruolo !== 'admin') return err('Solo admin può esportare PowerBI', 403);
+      }
       const [piano, urgenze, utenti, clienti, macchine, kpiLog] = await Promise.all([
         sb(env, 'piano',    'GET', null, '?select=*&obsoleto=eq.false&order=data.desc&limit=5000'),
         sb(env, 'urgenze',  'GET', null, '?select=*&obsoleto=eq.false&order=data_segnalazione.desc&limit=2000'),
@@ -529,6 +565,11 @@ async function handlePost(action, body, env) {
       const pianoWritable = ['tecnico_id','cliente_id','macchina_id','automezzo_id','tipo_intervento_id','priorita_id','data','ora_inizio','ora_fine','durata_ore','stato','note','data_fine','obsoleto'];
       const updates = {};
       for (const k of pianoWritable) { if (allFields[k] !== undefined) updates[k] = allFields[k]; }
+      // Validazione numerici
+      for (const [field, min] of [['durata_ore', 0], ['ore_lavorate', 0], ['km_percorsi', 0]]) {
+        const numErr = validateNumeric(updates[field], field, min);
+        if (numErr) return err(numErr);
+      }
       // Validazione transizione stato
       if (updates.stato) {
         const current = await sb(env, 'piano', 'GET', null, `?id=eq.${id}&select=stato`).catch(()=>[]);
@@ -855,6 +896,12 @@ async function handlePost(action, body, env) {
 
     case 'updateUtente': {
       const { id, password, userId: _u3, operatoreId: _op3, tenant_id: _t, ...updates } = body;
+      // SECURITY: tecnici possono modificare solo se stessi (campi limitati), admin può modificare tutti
+      const callerId3 = body.operatoreId || body.userId;
+      if (callerId3 && callerId3 !== id) {
+        const adminErr3 = await requireAdmin(env, body);
+        if (adminErr3) return err('Solo admin può modificare altri utenti', 403);
+      }
       if (password) updates.password_hash = await hashPassword(password);
       updates.updated_at = new Date().toISOString();
       // Remove null FK fields to avoid FK violations
@@ -887,38 +934,52 @@ async function handlePost(action, body, env) {
     // -------- CLIENTI --------
 
     case 'createCliente': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
       const id = 'CLI_' + Date.now();
       const row = { id, ...getFields(body), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       const result = await sb(env, 'clienti', 'POST', row);
+      await wlog('cliente', id, 'created', body.operatoreId);
       return ok({ cliente: pascalizeRecord(result[0]) });
     }
 
     case 'updateCliente': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
       const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
       updates.updated_at = new Date().toISOString();
       for (const k of Object.keys(updates)) { if (updates[k] === null && k.endsWith('_id')) delete updates[k]; }
       await sb(env, `clienti?id=eq.${id}`, 'PATCH', updates);
+      await wlog('cliente', id, 'updated', body.operatoreId);
       return ok();
     }
 
     // -------- MACCHINE --------
 
     case 'createMacchina': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
       const id = 'MAC_' + Date.now();
       const result = await sb(env, 'macchine', 'POST', { id, ...getFields(body), created_at: new Date().toISOString() });
+      await wlog('macchina', id, 'created', body.operatoreId);
       return ok({ macchina: pascalizeRecord(result[0]) });
     }
 
     case 'updateMacchina': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
       const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
       for (const k of Object.keys(updates)) { if (updates[k] === null && k.endsWith('_id')) delete updates[k]; }
       await sb(env, `macchine?id=eq.${id}`, 'PATCH', updates);
+      await wlog('macchina', id, 'updated', body.operatoreId);
       return ok();
     }
 
     // -------- AUTOMEZZI --------
 
     case 'createAutomezzo': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
       const id = 'AUT_' + Date.now();
       const fields = getFields(body);
       const result = await sb(env, 'automezzi', 'POST', { id, ...fields });
@@ -926,10 +987,13 @@ async function handlePost(action, body, env) {
       if (fields.assegnatario_id) {
         await sb(env, `utenti?id=eq.${fields.assegnatario_id}`, 'PATCH', { automezzo_id: id, updated_at: new Date().toISOString() }).catch(() => {});
       }
+      await wlog('automezzo', id, 'created', body.operatoreId);
       return ok({ automezzo: pascalizeRecord(result[0]) });
     }
 
     case 'updateAutomezzo': {
+      const adminErr2 = await requireAdmin(env, body);
+      if (adminErr2) return err(adminErr2, 403);
       const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
       for (const k of Object.keys(updates)) { if (updates[k] === null && k.endsWith('_id')) delete updates[k]; }
       // SYNC BIDIREZIONALE: se cambia assegnatario_id, aggiorna anche l'utente
@@ -951,12 +1015,15 @@ async function handlePost(action, body, env) {
         }
       }
       await sb(env, `automezzi?id=eq.${id}`, 'PATCH', updates);
+      await wlog('automezzo', id, 'updated', body.operatoreId);
       return ok({ synced: !!newAssId });
     }
 
     // -------- INSTALLAZIONI --------
 
     case 'createInstallazione': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
       const id = 'INS_' + Date.now();
       const fields = getFields(body);
       // Writable: id,tenant_id,cliente_id,macchina_id,stato,data_inizio,note,obsoleto
@@ -971,27 +1038,36 @@ async function handlePost(action, body, env) {
         created_at: new Date().toISOString()
       };
       const result = await sb(env, 'installazioni', 'POST', row);
+      await wlog('installazione', id, 'created', body.operatoreId);
       return ok({ installazione: pascalizeRecord(result[0]) });
     }
 
     case 'updateInstallazione': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
       const { id, userId: _u, operatoreId: _op, ...updates } = body;
       updates.updated_at = new Date().toISOString();
       await sb(env, `installazioni?id=eq.${id}`, 'PATCH', updates);
+      await wlog('installazione', id, 'updated', body.operatoreId);
       return ok();
     }
 
     // -------- REPERIBILITA --------
 
     case 'createReperibilita': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
       const id = 'REP_' + Date.now();
       const result = await sb(env, 'reperibilita', 'POST', { id, ...getFields(body), created_at: new Date().toISOString() });
+      await wlog('reperibilita', id, 'created', body.operatoreId);
       return ok({ reperibilita: pascalizeRecord(result[0]) });
     }
 
     // -------- TRASFERTE --------
 
     case 'createTrasferta': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
       const id = 'TRA_' + Date.now();
       const fields = getFields(body);
       // Writable: id,tenant_id,cliente_id,tecnico_id,automezzo_id,motivo,stato,note,data_inizio,obsoleto
@@ -1009,6 +1085,7 @@ async function handlePost(action, body, env) {
         created_at: new Date().toISOString()
       };
       const result = await sb(env, 'trasferte', 'POST', row);
+      await wlog('trasferta', id, 'created', body.operatoreId);
       return ok({ trasferta: pascalizeRecord(result[0]) });
     }
 

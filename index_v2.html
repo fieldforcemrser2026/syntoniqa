@@ -361,6 +361,7 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <div class="menu-item" onclick="goPage('documenti')"><span class="ico">📁</span><span class="lbl">Documenti</span></div>
 <div class="menu-item" onclick="goPage('mappa')"><span class="ico">🗺️</span><span class="lbl">Mappa Giro</span></div>
 <div class="menu-item" onclick="goPage('calendario')"><span class="ico">📅</span><span class="lbl">Calendario</span></div>
+<div class="menu-item" onclick="goPage('kpi')"><span class="ico">📊</span><span class="lbl">Le mie KPI</span></div>
 <div class="menu-item" onclick="goPage('profilo')"><span class="ico">👤</span><span class="lbl">Profilo</span></div>
 </div>
 </div>
@@ -779,6 +780,7 @@ async function refreshData(){
 // ============ AUTH ============
 document.addEventListener('DOMContentLoaded',init);
 async function init(){
+  showGlobalLoad(false);
   try{
     DATA=await apiCall('getAll');
     $('loginLoad').style.display='none';
@@ -786,7 +788,11 @@ async function init(){
     $('forgotPwdSection').style.display='block';
     const s=localStorage.getItem('sq2tec');
     if(s){const o=JSON.parse(s);const u=(DATA.utenti||[]).find(x=>x.ID===o.id);if(u){USER=u;enterApp()}}
-  }catch(e){$('loginLoad').innerHTML='<div style="color:var(--err)">Errore connessione: '+e.message+'</div>'}
+  }catch(e){
+    showGlobalLoad(false);
+    console.error('[INIT]',e);
+    $('loginLoad').innerHTML='<div style="color:var(--err)">Errore connessione: '+e.message+'</div><br><button class="btn btn-primary btn-sm" onclick="location.reload()">Riprova</button>';
+  }
 }
 
 async function doLogin(e){
