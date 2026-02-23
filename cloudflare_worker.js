@@ -888,8 +888,29 @@ async function handlePost(action, body, env) {
     }
 
     case 'testTelegram': {
-      const res = await sendTelegram(env, body.chatId, '🤖 Syntoniqa v2.0 – Telegram OK!');
-      return ok({ result: res });
+      const chatId = body.chatId;
+      if (!chatId) return err('Chat ID mancante');
+      const msg = body.message || '🤖 Syntoniqa v2.0 – Telegram OK!';
+      // Try env token first, then read from DB config
+      let token = env.TELEGRAM_BOT_TOKEN || '';
+      if (!token) {
+        try {
+          const cfgRows = await sb(env, 'config', 'GET', null, '?chiave=eq.telegram_bot_token&select=valore');
+          if (cfgRows && cfgRows[0]) token = cfgRows[0].valore || '';
+        } catch(e) {}
+      }
+      if (!token) return ok({ sent: false, reason: 'Bot token non configurato' });
+      try {
+        const tgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: chatId, text: msg, parse_mode: 'HTML' })
+        });
+        const tgJson = await tgRes.json();
+        return ok({ sent: !!tgJson.ok, reason: tgJson.ok ? '' : (tgJson.description || 'Errore Telegram') });
+      } catch(e) {
+        return ok({ sent: false, reason: e.message });
+      }
     }
 
     // -------- PUSH NOTIFICATIONS (FIX F-30) --------
@@ -2081,11 +2102,19 @@ async function sendWebPush(env, subscription, payload) {
 }
 
 async function sendTelegram(env, chatId, text) {
-  if (!env.TELEGRAM_BOT_TOKEN || !chatId) return null;
-  return fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+  if (!chatId) return null;
+  let token = env.TELEGRAM_BOT_TOKEN || '';
+  if (!token) {
+    try {
+      const cfgRows = await sb(env, 'config', 'GET', null, '?chiave=eq.telegram_bot_token&select=valore');
+      if (cfgRows && cfgRows[0]) token = cfgRows[0].valore || '';
+    } catch(e) {}
+  }
+  if (!token) return null;
+  return fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' })
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' })
   }).then(r => r.json()).catch(() => null);
 }
 
