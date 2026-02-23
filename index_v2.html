@@ -817,7 +817,8 @@ function renderHome(){
   const miei=my(DATA.piano);
   const oggi=miei.filter(p=>p.Data===d).sort((a,b)=>(a.OraInizio||'').localeCompare(b.OraInizio||''));
   const urgA=my(DATA.urgenze).filter(u=>u.Stato!=='risolta');
-  const reps=(DATA.reperibilita||[]).filter(r=>!r.Obsoleto&&r.Stato==='attiva'&&r.TecnicoID===USER?.ID&&r.DataInizio<=d&&r.DataFine>=d);
+  // Reperibilità attiva: data oggi è nell'intervallo (indipendentemente dallo Stato)
+  const reps=(DATA.reperibilita||[]).filter(r=>!r.Obsoleto&&r.TecnicoID===USER?.ID&&r.DataInizio<=d&&(r.DataFine||'9999')>=d);
 
   $('homeKpi').innerHTML=
     '<div class="kpi-mini"><div class="val" style="color:var(--c3)">'+oggi.length+'</div><div class="lbl">📋 Oggi</div></div>'+
@@ -1041,13 +1042,23 @@ async function markAllRead(){try{await apiCall('markAllRead',{},'POST');toast('T
 
 // ============ REPERIBILITA ============
 function renderRep(){
-  const items=(DATA.reperibilita||[]).filter(r=>!r.Obsoleto&&r.TecnicoID===USER?.ID).sort((a,b)=>(b.DataInizio||'').localeCompare(a.DataInizio||''));
+  const d=today();
+  const items=(DATA.reperibilita||[]).filter(r=>!r.Obsoleto&&r.TecnicoID===USER?.ID).sort((a,b)=>{
+    // Attive prima, poi per data
+    const aAct=(a.DataInizio<=d&&(a.DataFine||'9999')>=d)?1:0;
+    const bAct=(b.DataInizio<=d&&(b.DataFine||'9999')>=d)?1:0;
+    if(bAct!==aAct)return bAct-aAct;
+    return (b.DataInizio||'').localeCompare(a.DataInizio||'');
+  });
   $('repList').innerHTML=items.length?items.map(r=>{
-    const active=r.Stato==='attiva'&&r.DataInizio<=today()&&r.DataFine>=today();
-    return '<div class="card" '+(active?'style="border-left:4px solid var(--ok)"':'')+'><div class="card-body">'+
-      '<div style="display:flex;justify-content:space-between;margin-bottom:4px"><strong>'+(r.Turno||'24h')+'</strong>'+statusTag(r.Stato)+'</div>'+
+    // Attiva se la data di oggi è nell'intervallo, indipendentemente dallo Stato DB
+    const inCourse=r.DataInizio<=d&&(r.DataFine||'9999')>=d;
+    const past=(r.DataFine||'9999')<d;
+    return '<div class="card" style="'+(inCourse?'border-left:4px solid var(--ok)':past?'opacity:.6':'')+'"><div class="card-body">'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:4px"><strong>'+(r.Turno||'24h')+'</strong>'+
+      (inCourse?'<span class="tag tag-ok">🟢 ATTIVA</span>':past?'<span class="tag tag-gray">📁 Archivio</span>':statusTag(r.Stato))+'</div>'+
       '<div style="font-size:.875rem">📅 '+fmtDate(r.DataInizio)+' → '+fmtDate(r.DataFine)+'</div>'+
-      (active?'<div style="margin-top:6px"><span class="tag tag-ok">🟢 Attualmente attiva</span></div>':'')+
+      (inCourse?'<div style="margin-top:6px;font-size:.75rem;color:var(--ok)">📞 Reperibilità in corso ora</div>':'')+
       '</div></div>';
   }).join(''):'<div class="empty"><div class="ico">📞</div><p>Nessun turno</p></div>';
 }
@@ -1501,10 +1512,30 @@ async function saveUrgenzaTecnico(){
     const problema=$('suProbUrg').value.trim();
     if(!clienteID){toast('Seleziona un cliente','warn');return}
     if(!problema){toast('Descrivi il problema','warn');return}
+
+    const priId=$('suPriUrg').value;
+    const priObj=(DATA.priorita||[]).find(p=>p.ID===priId);
+    const priLivello=priObj?.Livello||1;
+    const priNome=priObj?.Nome||'Urgente';
+
+    // Calcola data scheduling in base alla priorità (stessa logica interventi)
+    let dataInt;
+    const d=new Date();
+    if(priLivello<=2){ dataInt=today(); }
+    else if(priLivello===3){ d.setDate(d.getDate()+1); dataInt=d.toISOString().slice(0,10); }
+    else if(priLivello===4){ d.setDate(d.getDate()+2); dataInt=d.toISOString().slice(0,10); }
+    else{ d.setDate(d.getDate()+3); dataInt=d.toISOString().slice(0,10); }
+
+    // Automezzo dall'ultimo intervento del tecnico
+    let autoId=null;
+    const mieiInt=(DATA.piano||[]).filter(p=>p.TecnicoID===USER?.ID&&p.AutomezzoID).sort((a,b)=>(b.Data||'').localeCompare(a.Data||''));
+    if(mieiInt.length) autoId=mieiInt[0].AutomezzoID;
+
+    // 1. Crea urgenza
     const data={
       ClienteID:clienteID,
       MacchinaID:$('suMacUrg').value||null,
-      PrioritaID:$('suPriUrg').value,
+      PrioritaID:priId,
       Problema:problema,
       Note:$('suNoteUrg').value||null,
       Stato:'in_attesa',
@@ -1512,19 +1543,55 @@ async function saveUrgenzaTecnico(){
       SegnalatoDa:USER?.ID,
       DataSegnalazione:new Date().toISOString()
     };
-    await apiCall('createUrgenza',{data},'POST');
-    // Upload allegato se presente
+    const urgResult=await apiCall('createUrgenza',{data},'POST');
+
+    // 2. Crea anche intervento nel piano (scheduling automatico)
+    const oraInt=priLivello<=2?new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit',hour12:false}):'08:00';
+    const durataUrg=priLivello<=2?4:2;
+    try{
+      await apiCall('createPiano',{data:{
+        TecnicoID:USER?.ID,
+        ClienteID:clienteID,
+        MacchinaID:$('suMacUrg').value||null,
+        PrioritaID:priId,
+        AutomezzoID:autoId,
+        Data:dataInt,
+        OraInizio:oraInt,
+        OraFine:calcOraFine(oraInt,durataUrg),
+        DurataOre:durataUrg,
+        Note:'[URGENZA - DA CONFERMARE]\n🚨 Priorità: '+priNome+'\n'+problema,
+        Stato:'pianificato'
+      }},'POST');
+    }catch(e){console.warn('Piano da urgenza non creato:',e)}
+
+    // 3. Upload allegato se presente
     if(urgAllegatoFile){
       try{
-        const up=await apiCall('uploadFile',{base64:urgAllegatoFile.base64,mimeType:urgAllegatoFile.type,fileName:urgAllegatoFile.name,userId:USER?.ID},'POST');
-        // TODO: collegare allegato all'urgenza
+        await apiCall('uploadFile',{base64Data:urgAllegatoFile.base64,mimeType:urgAllegatoFile.type,fileName:urgAllegatoFile.name,uploaderId:USER?.ID,riferimentoTipo:'urgenza',riferimentoId:urgResult?.id||''},'POST');
       }catch(e){}
     }
-    // Notifica admin via chat
-    try{
-      await apiCall('sendChatMessage',{canale_id:'CH_URGENZE',testo:'🚨 NUOVA URGENZA (da tecnico '+((USER?.Nome||'')+' '+(USER?.Cognome||'')).trim()+'):\n'+getName(DATA.clienti,clienteID)+' — '+problema+'\n⚠️ Stato: IN ATTESA approvazione',userId:USER?.ID},'POST');
-    }catch(e){}
-    toast('Urgenza inviata! In attesa di approvazione.','ok');
+
+    // 4. Notifiche
+    const tecNome=((USER?.Nome||'')+' '+(USER?.Cognome||'')).trim();
+    const cliNome=getName(DATA.clienti,clienteID);
+    const priIcon=priObj?.Icona||'🚨';
+    const msgTesto=priIcon+' URGENZA ('+priNome+')\n👤 Da: '+tecNome+'\n🏢 Cliente: '+cliNome+'\n📅 Schedulata: '+fmtDate(dataInt)+' '+oraInt+'\n📝 '+problema+'\n\n⏳ In attesa approvazione';
+
+    // Chat CH_URGENZE + CH_ADMIN
+    try{await apiCall('sendChatMessage',{canale_id:'CH_URGENZE',testo:msgTesto,userId:USER?.ID},'POST')}catch(e){}
+    try{await apiCall('sendChatMessage',{canale_id:'CH_ADMIN',testo:msgTesto,userId:USER?.ID},'POST')}catch(e){}
+
+    // Notifica push a caposquadra + admin
+    const capoSq=(DATA.utenti||[]).filter(u=>u.Ruolo==='caposquadra'&&u.Attivo);
+    const admins=(DATA.utenti||[]).filter(u=>u.Ruolo==='admin'&&u.Attivo);
+    for(const cs of capoSq){
+      try{await apiCall('createNotifica',{data:{Tipo:'urgenza',Oggetto:priIcon+' Urgenza — '+priNome,Testo:tecNome+' segnala urgenza per '+cliNome+': '+problema,DestinatarioID:cs.ID,Priorita:'alta'}},'POST')}catch(e){}
+    }
+    for(const adm of admins){
+      try{await apiCall('createNotifica',{data:{Tipo:'urgenza',Oggetto:'🚨 URGENZA — '+priNome,Testo:tecNome+' segnala urgenza per '+cliNome+': '+problema+'\nSchedulata: '+fmtDate(dataInt)+' '+oraInt,DestinatarioID:adm.ID,Priorita:'alta'}},'POST')}catch(e){}
+    }
+
+    toast('Urgenza inviata + schedulata il '+fmtDate(dataInt)+'! In attesa approvazione.','ok');
     closeSheet('shCreaUrg');
     await refreshData();
   }catch(e){toast(e.message,'err')}
@@ -1620,36 +1687,93 @@ async function saveCreaInt(){
     const note=$('ciNote').value.trim();
     if(!clienteID){toast('Seleziona un cliente','warn');return}
     if(!note){toast('Descrivi il motivo dell\'intervento','warn');return}
-    const dataInt=$('ciData').value;
+
+    const priId=$('ciPriorita').value;
+    const priObj=(DATA.priorita||[]).find(p=>p.ID===priId);
+    const priLivello=priObj?.Livello||5;
+    const priNome=priObj?.Nome||'Programmata';
+
+    // Calcola data scheduling in base alla priorità
+    let dataInt=$('ciData').value;
+    const ora=$('ciOra').value||'08:00';
+    const d=new Date();
+    if(priLivello===1){ // Urgente - Subito → oggi, primo slot
+      dataInt=today();
+    }else if(priLivello===2){ // Oggi → oggi
+      dataInt=today();
+    }else if(priLivello===3){ // Domani → domani
+      d.setDate(d.getDate()+1);
+      dataInt=d.toISOString().slice(0,10);
+    }else if(priLivello===4){ // Entro la settimana → primo giorno libero
+      if(!dataInt||dataInt<today()){
+        d.setDate(d.getDate()+2);
+        dataInt=d.toISOString().slice(0,10);
+      }
+    }
+    // Livello 5 = usa data selezionata dall'utente
     if(!dataInt){toast('Seleziona una data','warn');return}
-    const oraFine=$('ciOra').value?calcOraFine($('ciOra').value,parseFloat($('ciDurata').value)||2):null;
+
+    const durata=parseFloat($('ciDurata').value)||2;
+    const oraFine=calcOraFine(ora,durata);
+
+    // Automezzo: usa l'ultimo usato dal tecnico
+    let autoId=null;
+    const mieiInt=(DATA.piano||[]).filter(p=>p.TecnicoID===USER?.ID&&p.AutomezzoID).sort((a,b)=>(b.Data||'').localeCompare(a.Data||''));
+    if(mieiInt.length)autoId=mieiInt[0].AutomezzoID;
+
     const data={
       TecnicoID:USER?.ID,
       ClienteID:clienteID,
       MacchinaID:$('ciMacchina').value||null,
       TipoInterventoID:$('ciTipo').value||null,
-      PrioritaID:$('ciPriorita').value||null,
+      PrioritaID:priId,
+      AutomezzoID:autoId,
       Data:dataInt,
-      OraInizio:$('ciOra').value||'08:00',
+      OraInizio:ora,
       OraFine:oraFine,
-      DurataOre:parseFloat($('ciDurata').value)||2,
-      Note:'[RICHIESTA TECNICO - DA CONFERMARE] '+note,
+      DurataOre:durata,
+      Note:'[RICHIESTA TECNICO - DA CONFERMARE]\n🔴 Priorità: '+priNome+'\n'+note,
       Stato:'pianificato'
     };
     const result=await apiCall('createPiano',{data},'POST');
+
     // Upload allegato
     if(intAllegatoFile){
       try{
-        await apiCall('uploadFile',{base64Data:intAllegatoFile.base64,mimeType:intAllegatoFile.type,fileName:intAllegatoFile.name,uploaderId:USER?.ID,riferimentoTipo:'piano',riferimentoId:result?.id||''},'POST');
+        await apiCall('uploadFile',{base64Data:intAllegatoFile.base64,mimeType:intAllegatoFile.type,fileName:intAllegatoFile.name,uploaderId:USER?.ID,riferimentoTipo:'piano',riferimentoId:result?.id||result?.intervento?.ID||''},'POST');
       }catch(e){}
     }
-    // Notifica admin via chat + notifica
+
+    // Destinatario notifica in base alla priorità:
+    // Priorità 1-2 (Urgente/Oggi) → notifica ANCHE admin
+    // Tutte → notifica caposquadra
     const tecNome=((USER?.Nome||'')+' '+(USER?.Cognome||'')).trim();
     const cliNome=getName(DATA.clienti,clienteID);
-    try{
-      await apiCall('sendChatMessage',{canale_id:'CH_ADMIN',testo:'📋 RICHIESTA INTERVENTO (da '+tecNome+'):\n👤 Cliente: '+cliNome+'\n📅 Data: '+fmtDate(dataInt)+' '+($('ciOra').value||'')+'\n📝 '+note+'\n\n⚠️ Stato: DA APPROVARE — confermare per fissare in calendario',userId:USER?.ID},'POST');
-    }catch(e){}
-    toast('Richiesta intervento inviata! In attesa di approvazione admin.','ok');
+    const priIcon=priObj?.Icona||'📋';
+
+    // Trova caposquadra
+    const capoSq=(DATA.utenti||[]).filter(u=>u.Ruolo==='caposquadra'&&u.Attivo);
+    const admins=(DATA.utenti||[]).filter(u=>u.Ruolo==='admin'&&u.Attivo);
+
+    // Messaggio per chat
+    const msgTesto=priIcon+' RICHIESTA INTERVENTO ('+priNome+')\n👤 Da: '+tecNome+'\n🏢 Cliente: '+cliNome+'\n📅 '+fmtDate(dataInt)+' '+ora+' ('+durata+'h)\n📝 '+note+'\n\n⏳ In attesa approvazione '+(priLivello<=2?'ADMIN':'caposquadra');
+
+    // 1. Notifica su chat CH_ADMIN
+    try{await apiCall('sendChatMessage',{canale_id:'CH_ADMIN',testo:msgTesto,userId:USER?.ID},'POST')}catch(e){}
+
+    // 2. Notifica push al caposquadra
+    for(const cs of capoSq){
+      try{await apiCall('createNotifica',{data:{Tipo:'richiesta_intervento',Oggetto:priIcon+' Richiesta intervento — '+priNome,Testo:tecNome+' richiede intervento per '+cliNome+' il '+fmtDate(dataInt)+'. Motivo: '+note,DestinatarioID:cs.ID,Priorita:priLivello<=2?'alta':'media'}},'POST')}catch(e){}
+    }
+
+    // 3. Se priorità 1-2, notifica anche admin
+    if(priLivello<=2){
+      for(const adm of admins){
+        try{await apiCall('createNotifica',{data:{Tipo:'richiesta_intervento_urgente',Oggetto:'🚨 Intervento URGENTE richiesto — '+priNome,Testo:tecNome+' richiede intervento URGENTE per '+cliNome+' — '+note+'\nData: '+fmtDate(dataInt)+' '+ora,DestinatarioID:adm.ID,Priorita:'alta'}},'POST')}catch(e){}
+      }
+    }
+
+    toast('Richiesta intervento inviata! Priorità: '+priNome+'. In attesa approvazione.','ok');
     closeSheet('shCreaInt');
     await refreshData();
   }catch(e){toast(e.message,'err')}

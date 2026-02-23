@@ -1851,7 +1851,16 @@ function renderDashboard(){
   const comp=piano.filter(p=>p.Stato==='completato').length;
   const urgA=urg.filter(u=>u.Stato!=='risolta').length;
   const urgSLA=urg.filter(u=>u.SLAStatus==='breach').length;
-  const automezziAtt=(DATA.automezzi||[]).filter(f=>!f.Obsoleto&&f.Status==='attivo').length;
+  // Mezzi "attivi oggi": guarda l'automezzo assegnato negli interventi di oggi (pianificato/in_corso)
+  const oggiConAuto=oggi.filter(p=>(p.Stato==='pianificato'||p.Stato==='in_corso')&&p.AutomezzoID);
+  const autoOggiIds=[...new Set(oggiConAuto.map(p=>p.AutomezzoID))];
+  // Fallback: se intervento non ha automezzo, usa quello dell'ultimo intervento del tecnico
+  const tecSenzaAuto=oggi.filter(p=>(p.Stato==='pianificato'||p.Stato==='in_corso')&&!p.AutomezzoID).map(p=>p.TecnicoID).filter(Boolean);
+  for(const tid of tecSenzaAuto){
+    const ultimoInt=piano.filter(p=>p.TecnicoID===tid&&p.AutomezzoID&&p.Data<=d).sort((a,b)=>(b.Data||'').localeCompare(a.Data||''))[0];
+    if(ultimoInt?.AutomezzoID&&!autoOggiIds.includes(ultimoInt.AutomezzoID)) autoOggiIds.push(ultimoInt.AutomezzoID);
+  }
+  const automezziAtt=autoOggiIds.length;
   const automezziTot=(DATA.automezzi||[]).filter(f=>!f.Obsoleto).length;
   const tecs=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Attivo&&u.Ruolo==='tecnico').length;
   const reps=(DATA.reperibilita||[]).filter(r=>!r.Obsoleto&&r.Stato==='attiva'&&r.DataInizio<=d&&r.DataFine>=d);

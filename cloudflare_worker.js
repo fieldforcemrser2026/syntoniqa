@@ -189,6 +189,11 @@ export default {
       console.error('Worker error:', e);
       return err(`Errore interno: ${e.message}`, 500);
     }
+  },
+
+  // ============ CRON: notifiche automatiche interventi ============
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(checkInterventoReminders(env));
   }
 };
 
@@ -2310,4 +2315,97 @@ async function triggerKPISnapshot(env, interventoId, tecnicoId) {
     data: oggi, tecnico_id: tecnicoId,
     metrica: 'interventi_completati_mese', valore: completati.length, unita: 'n', periodo: mese
   }).catch(() => {});
+}
+
+// ============ CRON: Check interventi e manda notifiche ============
+async function checkInterventoReminders(env) {
+  const now = new Date();
+  const oggi = now.toISOString().split('T')[0];
+  const oraCorrente = now.toISOString().substring(11, 16); // HH:MM
+
+  // 1. Interventi PIANIFICATI oggi dove l'ora di inizio è passata da >1h → notifica "inizia intervento"
+  const pianificati = await sb(env, 'piano', 'GET', null,
+    `?data=eq.${oggi}&stato=eq.pianificato&obsoleto=eq.false&select=id,tecnico_id,cliente_id,ora_inizio,note`
+  ).catch(() => []);
+
+  for (const p of (pianificati || [])) {
+    if (!p.ora_inizio || !p.tecnico_id) continue;
+    const [h, m] = p.ora_inizio.split(':').map(Number);
+    const inizioMs = new Date(oggi + 'T' + p.ora_inizio + ':00Z').getTime();
+    const diffMin = (now.getTime() - inizioMs) / 60000;
+
+    // Se tra 60 e 75 minuti di ritardo (per evitare notifiche ripetute ogni 15 min del cron)
+    if (diffMin >= 60 && diffMin < 75) {
+      const cliNome = await getEntityName(env, 'clienti', p.cliente_id);
+      const notifId = 'NOT_REM1H_' + p.id + '_' + oggi;
+      // Evita duplicati
+      const existing = await sb(env, 'notifiche', 'GET', null, `?id=eq.${notifId}&select=id`).catch(() => []);
+      if (existing?.length) continue;
+
+      await sb(env, 'notifiche', 'POST', {
+        id: notifId, tipo: 'reminder',
+        oggetto: '⏰ Intervento non iniziato',
+        testo: `L'intervento delle ${p.ora_inizio} presso ${cliNome} non è stato ancora avviato. È passata più di 1 ora dall'orario previsto. Aggiorna lo stato!`,
+        destinatario_id: p.tecnico_id, stato: 'inviata', priorita: 'alta'
+      }).catch(e => console.error('Notifica 1h error:', e.message));
+
+      // Notifica anche su Telegram al tecnico
+      const tec = await sb(env, 'utenti', 'GET', null, `?id=eq.${p.tecnico_id}&select=nome,cognome,telegram_chat_id`).catch(() => []);
+      if (tec?.[0]?.telegram_chat_id) {
+        await sendTelegram(env, tec[0].telegram_chat_id,
+          `⏰ <b>Intervento non iniziato!</b>\n📋 ${cliNome} (ore ${p.ora_inizio})\nÈ passata 1 ora — aggiorna lo stato con /incorso o dall'app.`, 'HTML'
+        ).catch(() => {});
+      }
+      // Notifica anche su chat admin
+      await sb(env, 'chat_messaggi', 'POST', {
+        id: 'MSG_REM_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+        canale_id: 'CH_ADMIN', mittente_id: 'TELEGRAM',
+        testo: `⏰ REMINDER: Intervento ${p.id} (${cliNome}, ore ${p.ora_inizio}) — il tecnico ${tec?.[0]?.nome || ''} ${tec?.[0]?.cognome || ''} non ha ancora iniziato. +1h di ritardo.`,
+        tipo: 'testo', created_at: new Date().toISOString()
+      }).catch(() => {});
+    }
+  }
+
+  // 2. Interventi IN_CORSO da >8h → notifica "aggiorna stato/note"
+  const inCorso = await sb(env, 'piano', 'GET', null,
+    `?data=eq.${oggi}&stato=eq.in_corso&obsoleto=eq.false&select=id,tecnico_id,cliente_id,ora_inizio,note`
+  ).catch(() => []);
+
+  for (const p of (inCorso || [])) {
+    if (!p.ora_inizio || !p.tecnico_id) continue;
+    const inizioMs = new Date(oggi + 'T' + p.ora_inizio + ':00Z').getTime();
+    const diffMin = (now.getTime() - inizioMs) / 60000;
+
+    // Se tra 480 e 495 minuti (8h-8h15)
+    if (diffMin >= 480 && diffMin < 495) {
+      const cliNome = await getEntityName(env, 'clienti', p.cliente_id);
+      const notifId = 'NOT_REM8H_' + p.id + '_' + oggi;
+      const existing = await sb(env, 'notifiche', 'GET', null, `?id=eq.${notifId}&select=id`).catch(() => []);
+      if (existing?.length) continue;
+
+      await sb(env, 'notifiche', 'POST', {
+        id: notifId, tipo: 'reminder',
+        oggetto: '🔔 Aggiorna intervento (8h)',
+        testo: `L'intervento presso ${cliNome} è in corso da più di 8 ore (inizio: ${p.ora_inizio}). Aggiorna lo stato, le note o completa l'intervento.`,
+        destinatario_id: p.tecnico_id, stato: 'inviata', priorita: 'media'
+      }).catch(e => console.error('Notifica 8h error:', e.message));
+
+      const tec = await sb(env, 'utenti', 'GET', null, `?id=eq.${p.tecnico_id}&select=nome,cognome,telegram_chat_id`).catch(() => []);
+      if (tec?.[0]?.telegram_chat_id) {
+        await sendTelegram(env, tec[0].telegram_chat_id,
+          `🔔 <b>Aggiorna intervento!</b>\n📋 ${cliNome} — in corso da 8+ ore\nAggiorna le note o completa con /risolto`, 'HTML'
+        ).catch(() => {});
+      }
+    }
+  }
+  console.log(`[CRON] checkInterventoReminders: ${pianificati?.length || 0} pianificati, ${inCorso?.length || 0} in_corso checked`);
+}
+
+// Helper per nome entità
+async function getEntityName(env, table, id) {
+  if (!id) return '—';
+  const rows = await sb(env, table, 'GET', null, `?id=eq.${id}&select=nome,ragione_sociale,cognome`).catch(() => []);
+  if (!rows?.length) return id;
+  const r = rows[0];
+  return r.ragione_sociale || ((r.nome || '') + ' ' + (r.cognome || '')).trim() || id;
 }
