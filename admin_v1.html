@@ -636,16 +636,17 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="btn-group" style="flex-wrap:wrap;gap:6px">
 <input type="text" id="srcMacch" placeholder="Cerca macchina..." oninput="renderMacchine()" style="padding:6px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem;width:200px">
 <select id="filtMacchCli" onchange="renderMacchine()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti i clienti</option></select>
+<select id="filtMacchType" onchange="renderMacchine()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti i tipi</option></select>
 <select id="filtMacchView" onchange="renderMacchine()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem">
   <option value="tree">Vista ad albero</option>
   <option value="list">Vista lista</option>
 </select>
-<button class="btn btn-primary btn-sm" onclick="openNewMacchina()">+ Nuova Macchina</button>
 </div>
 </div>
+<div id="macchStats" style="padding:8px 14px;display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid #eee"></div>
 <div class="card-body np" style="max-height:700px;overflow-y:auto">
 <div id="macchTreeView"></div>
-<table class="tbl" id="macchListTable" style="display:none"><thead><tr><th style="width:40px"></th><th>Tipo</th><th>Modello</th><th>Seriale</th><th>Cliente</th><th>Ore</th><th>Pross. Tagliando</th><th>Garanzia</th><th></th></tr></thead><tbody id="tblMacchine"></tbody></table>
+<table class="tbl" id="macchListTable" style="display:none"><thead><tr><th style="width:40px"></th><th>Tipo</th><th>Asset</th><th>Seriale</th><th>Cliente</th><th>Stato</th><th></th></tr></thead><tbody id="tblMacchine"></tbody></table>
 </div>
 </div>
 <!-- Modal mappa singolo asset -->
@@ -1047,13 +1048,13 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
   <th>Prov.</th>
   <th>Stato</th>
   <th>Titolare</th>
-  <th title="Astronaut"><img src="assets/products/astronaut.jpg" style="width:22px;height:22px;border-radius:3px;object-fit:cover"></th>
-  <th title="Juno"><img src="assets/products/juno.jpg" style="width:22px;height:22px;border-radius:3px;object-fit:cover"></th>
-  <th title="Vector"><img src="assets/products/vector.jpg" style="width:22px;height:22px;border-radius:3px;object-fit:cover"></th>
-  <th title="Discovery+Collector"><img src="assets/products/discovery.jpg" style="width:22px;height:22px;border-radius:3px;object-fit:cover"></th>
-  <th title="CU"><img src="assets/products/cu.jpg" style="width:22px;height:22px;border-radius:3px;object-fit:cover"></th>
-  <th title="Cosmix"><img src="assets/products/cosmix.jpg" style="width:22px;height:22px;border-radius:3px;object-fit:cover"></th>
-  <th title="Nautilus"><img src="assets/products/nautilus.jpg" style="width:22px;height:22px;border-radius:3px;object-fit:cover"></th>
+  <th title="Astronaut"><img src="assets/products/astronaut.png" style="width:22px;height:22px;object-fit:contain"></th>
+  <th title="Juno"><img src="assets/products/juno.png" style="width:22px;height:22px;object-fit:contain"></th>
+  <th title="Vector"><img src="assets/products/vector.png" style="width:22px;height:22px;object-fit:contain"></th>
+  <th title="Discovery+Collector"><img src="assets/products/discovery.png" style="width:22px;height:22px;object-fit:contain"></th>
+  <th title="CU"><img src="assets/products/cu.png" style="width:22px;height:22px;object-fit:contain"></th>
+  <th title="Cosmix"><img src="assets/products/cosmix.png" style="width:22px;height:22px;object-fit:contain"></th>
+  <th title="Nautilus"><img src="assets/products/nautilus.png" style="width:22px;height:22px;object-fit:contain"></th>
   <th title="Luna+Meteor+Calm+Altri">📦</th>
   <th>Tot</th>
   <th style="width:80px"></th>
@@ -1559,7 +1560,7 @@ async function apiCall(action,data={},method='GET'){
 }
 
 async function refreshData(){
-  try{DATA=await apiCall('getAll',{userId:USER?.ID||''});renderAll()}catch(e){toast('Errore: '+e.message,'err')}
+  try{DATA=await apiCall('getAll',{userId:USER?.ID||''});renderAll();loadAnagClients().then(()=>renderMacchine()).catch(()=>{})}catch(e){toast('Errore: '+e.message,'err')}
 }
 
 // ============ INIT & AUTH ============
@@ -1617,6 +1618,8 @@ function enterApp(){
   $('footUser').textContent=(USER.Nome||'')[0]+(USER.Cognome||'')[0]+' · '+USER.Ruolo;
   populateSelects();
   renderAll();
+  // Load anagrafica assets in background (needed for Macchine section)
+  loadAnagClients().then(()=>renderMacchine()).catch(()=>{});
 }
 
 // ============ POPULATE SELECTS ============
@@ -1952,50 +1955,92 @@ function renderClienti(){
 // ============ MACCHINE ============
 function renderMacchine(){
   const q=($('srcMacch')?.value||'').toLowerCase();
-  const cli=$('filtMacchCli')?.value||'';
+  const cliFilter=$('filtMacchCli')?.value||'';
+  const typeFilter=$('filtMacchType')?.value||'';
   const view=$('filtMacchView')?.value||'tree';
-  let items=(DATA.macchine||[]).filter(m=>!m.Obsoleto);
-  if(q)items=items.filter(m=>(m.Tipo||'').toLowerCase().includes(q)||(m.Modello||'').toLowerCase().includes(q)||(m.Seriale||'').toLowerCase().includes(q));
-  if(cli)items=items.filter(m=>m.ClienteID===cli);
+
+  // Pull from anagrafica assets (the real data source with 1137+ assets)
+  let items=getAllAnagAssets();
+
+  // Populate client filter dropdown from anagrafica
+  const cliSel=$('filtMacchCli');
+  if(cliSel&&cliSel.options.length<=1&&ANAG_CLIENTI.length){
+    const seen=new Set();
+    ANAG_CLIENTI.filter(c=>{
+      const m3=c.CodiceM3;
+      if(!m3||seen.has(m3))return false;
+      seen.add(m3);
+      return (ANAG_ASSETS_CACHE[m3]||[]).length>0;
+    }).sort((a,b)=>(a.NomeAccount||'').localeCompare(b.NomeAccount||'')).forEach(c=>{
+      const o=document.createElement('option');o.value=c.CodiceM3;o.textContent=c.NomeAccount||c.NomeInterno||c.CodiceM3;cliSel.appendChild(o);
+    });
+  }
+  // Populate type filter dropdown
+  const typeSel=$('filtMacchType');
+  if(typeSel&&typeSel.options.length<=1&&items.length){
+    const typeCounts={};
+    items.forEach(a=>{const k=normAssetType(a.GruppoAttrezzatura||a.TipoFoglio);typeCounts[k]=(typeCounts[k]||0)+1});
+    Object.entries(typeCounts).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>{
+      const cfg=PROD_CFG[k]||{};
+      const o=document.createElement('option');o.value=k;o.textContent=(cfg.label||k)+` (${v})`;typeSel.appendChild(o);
+    });
+  }
+
+  // Apply filters
+  if(q)items=items.filter(a=>{
+    const s=[a.NomeAsset,a.NumeroSerie,a.Modello,a.NomeAccount,a.GruppoAttrezzatura].map(x=>(x||'').toLowerCase()).join(' ');
+    return s.includes(q);
+  });
+  if(cliFilter)items=items.filter(a=>a.CodiceM3===cliFilter);
+  if(typeFilter)items=items.filter(a=>normAssetType(a.GruppoAttrezzatura||a.TipoFoglio)===typeFilter);
+
+  // Stats bar
+  const statsDiv=$('macchStats');
+  if(statsDiv){
+    const typeCounts={};
+    items.forEach(a=>{const k=normAssetType(a.GruppoAttrezzatura||a.TipoFoglio);typeCounts[k]=(typeCounts[k]||0)+1});
+    const clientSet=new Set(items.map(a=>a.CodiceM3).filter(Boolean));
+    let cards=[[items.length,'Totale Assets'],[clientSet.size,'Clienti']];
+    Object.entries(typeCounts).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>{
+      cards.push([v,prodIcon(k,18)+' '+(PROD_CFG[k]?.label||k)]);
+    });
+    statsDiv.innerHTML=cards.map(([v,l])=>`<div style="min-width:70px;padding:4px 8px;text-align:center;background:#f8f9fa;border-radius:6px"><div style="font-size:1rem;font-weight:700;color:var(--primary)">${v}</div><div style="font-size:.6rem;color:var(--muted)">${l}</div></div>`).join('');
+  }
 
   if(view==='tree'){
-    // Tree view: group by Tipo
     $('macchListTable').style.display='none';
     const treeDiv=$('macchTreeView');treeDiv.style.display='block';
-    if(!items.length){treeDiv.innerHTML='<div class="empty"><p>Nessuna macchina trovata</p></div>';return}
+    if(!items.length){treeDiv.innerHTML='<div class="empty"><p>Nessuna macchina trovata. Importa l\'anagrafica Excel per popolare il parco macchine.</p></div>';return}
+    // Group by normalized type
     const groups={};
-    items.forEach(m=>{const tipo=m.Tipo||'Altro';if(!groups[tipo])groups[tipo]=[];groups[tipo].push(m)});
+    items.forEach(a=>{const k=normAssetType(a.GruppoAttrezzatura||a.TipoFoglio);if(!groups[k])groups[k]=[];groups[k].push(a)});
     let html='';
-    Object.entries(groups).sort((a,b)=>b[1].length-a[1].length).forEach(([tipo,machines])=>{
-      const cfg=PROD_CFG[tipo.toUpperCase()]||PROD_CFG[tipo]||{};
-      const imgHtml=cfg.img?`<img src="${PROD_IMG_BASE}${cfg.img}" style="width:40px;height:40px;border-radius:6px;object-fit:cover;margin-right:10px">`:'';
-      html+=`<div style="margin-bottom:4px">
-        <div onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.querySelector('.mac-arrow').textContent=this.nextElementSibling.style.display==='none'?'▶':'▼'" style="cursor:pointer;padding:10px 14px;background:#f8f9fa;border-bottom:1px solid #eee;display:flex;align-items:center">
-          <span class="mac-arrow" style="margin-right:8px;font-size:.8rem;width:14px">▼</span>
+    Object.entries(groups).sort((a,b)=>b[1].length-a[1].length).forEach(([tipo,assets])=>{
+      const cfg=PROD_CFG[tipo]||{};
+      const imgHtml=cfg.img?`<img src="${PROD_IMG_BASE}${cfg.img}" style="width:40px;height:40px;object-fit:contain;margin-right:10px">`:'';
+      html+=`<div style="margin-bottom:2px">
+        <div onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.querySelector('.mac-arrow').textContent=this.nextElementSibling.style.display==='none'?'▶':'▼'" style="cursor:pointer;padding:10px 14px;background:linear-gradient(135deg,#f8f9fa,#fff);border-bottom:1px solid #eee;display:flex;align-items:center">
+          <span class="mac-arrow" style="margin-right:8px;font-size:.8rem;width:14px;color:${cfg.color||'#666'}">▼</span>
           ${imgHtml}
           <div style="flex:1">
-            <strong style="font-size:.95rem">${cfg.label||tipo}</strong>
-            <span class="badge" style="margin-left:8px;font-size:.7rem">${machines.length}</span>
+            <strong style="font-size:.95rem;color:${cfg.color||'#333'}">${cfg.label||tipo}</strong>
+            <span class="badge" style="margin-left:8px;font-size:.7rem;background:${cfg.color||'#666'};color:#fff">${assets.length}</span>
           </div>
-          ${cfg.url?`<a href="${cfg.url}" target="_blank" style="font-size:.7rem;color:var(--primary);text-decoration:none" onclick="event.stopPropagation()">Info prodotto →</a>`:''}
+          ${cfg.url?`<a href="${cfg.url}" target="_blank" style="font-size:.7rem;color:${cfg.color||'var(--primary)'};text-decoration:none;opacity:.7" onclick="event.stopPropagation()">Info prodotto →</a>`:''}
         </div>
-        <div style="padding:0">
+        <div style="padding:0;display:block">
           <table class="tbl" style="font-size:.8125rem;margin:0"><tbody>`;
-      machines.forEach(m=>{
-        const gar=m.GaranziaFino&&m.GaranziaFino>=today();
-        const cliName=getName(DATA.clienti||[],m.ClienteID);
+      assets.forEach(a=>{
+        const stato=a.Stato||'';
+        const statoTag=stato.toLowerCase().includes('attiv')?'<span class="tag tag-ok">Attivo</span>':stato.toLowerCase().includes('dismess')?'<span class="tag tag-err">Dismesso</span>':stato?`<span class="tag tag-gray">${stato}</span>`:'';
         html+=`<tr>
-          <td style="width:36px">${cfg.img?`<img src="${PROD_IMG_BASE}${cfg.img}" style="width:24px;height:24px;border-radius:3px;object-fit:cover">`:''}</td>
-          <td><strong>${m.Modello||'—'}</strong></td>
-          <td style="font-family:var(--mono);font-size:.75rem">${m.Seriale||'—'}</td>
-          <td>${cliName}</td>
-          <td>${m.OreLavoro||'—'}</td>
-          <td>${m.ProssimoTagliando||'—'}</td>
-          <td>${gar?'<span class="tag tag-ok">Attiva</span>':'<span class="tag tag-gray">Scaduta</span>'}</td>
+          <td style="width:32px">${prodIcon(tipo,22)}</td>
+          <td><strong>${a.NomeAsset||a.Modello||'—'}</strong></td>
+          <td style="font-family:var(--mono);font-size:.75rem">${a.NumeroSerie||'—'}</td>
+          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.NomeAccount||'—'}</td>
+          <td>${statoTag}</td>
           <td>
-            <button class="btn btn-ghost btn-xs" onclick="editMacchina('${m.ID}')" title="Modifica">✏️</button>
-            <button class="btn btn-ghost btn-xs" onclick="showDetail('macchina','${m.ID}')" title="Dettaglio">👁️</button>
-            <button class="btn btn-ghost btn-xs" onclick="showMacchOnMap('${m.ID}')" title="Vedi sulla mappa">📍</button>
+            <button class="btn btn-ghost btn-xs" onclick="showAssetOnMap('${a.CodiceM3}','${(a.NomeAsset||'').replace(/'/g,"\\'")}')" title="Mappa">📍</button>
           </td>
         </tr>`;
       });
@@ -2003,69 +2048,56 @@ function renderMacchine(){
     });
     treeDiv.innerHTML=html;
   }else{
-    // List view (original flat table)
     $('macchTreeView').style.display='none';
     $('macchListTable').style.display='';
-    $('tblMacchine').innerHTML=items.length?items.map(m=>{
-      const gar=m.GaranziaFino&&m.GaranziaFino>=today();
-      const tipo=m.Tipo||'Altro';
-      const cfg=PROD_CFG[tipo.toUpperCase()]||{};
+    $('tblMacchine').innerHTML=items.length?items.map(a=>{
+      const tipo=normAssetType(a.GruppoAttrezzatura||a.TipoFoglio);
+      const cfg=PROD_CFG[tipo]||{};
+      const stato=a.Stato||'';
+      const statoTag=stato.toLowerCase().includes('attiv')?'<span class="tag tag-ok">Attivo</span>':stato.toLowerCase().includes('dismess')?'<span class="tag tag-err">Dismesso</span>':stato?`<span class="tag tag-gray">${stato}</span>`:'';
       return `<tr>
-      <td>${cfg.img?`<img src="${PROD_IMG_BASE}${cfg.img}" style="width:28px;height:28px;border-radius:4px;object-fit:cover" title="${cfg.label||tipo}">`:tipo}</td>
-      <td><strong>${m.Modello||'—'}</strong></td>
-      <td style="font-family:var(--mono);font-size:.75rem">${m.Seriale||'—'}</td>
-      <td>${getName(DATA.clienti||[],m.ClienteID)}</td>
-      <td>${m.OreLavoro||'—'}</td>
-      <td>${m.ProssimoTagliando||'—'}</td>
-      <td>${gar?'<span class="tag tag-ok">Attiva</span>':'<span class="tag tag-gray">Scaduta</span>'}</td>
+      <td>${prodIcon(tipo,26)}</td>
+      <td style="color:${cfg.color||'#333'}"><strong>${cfg.label||tipo}</strong></td>
+      <td><strong>${a.NomeAsset||a.Modello||'—'}</strong></td>
+      <td style="font-family:var(--mono);font-size:.75rem">${a.NumeroSerie||'—'}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.NomeAccount||'—'}</td>
+      <td>${statoTag}</td>
       <td>
-        <button class="btn btn-ghost btn-xs" onclick="editMacchina('${m.ID}')">✏️</button>
-        <button class="btn btn-ghost btn-xs" onclick="showDetail('macchina','${m.ID}')">👁️</button>
-        <button class="btn btn-ghost btn-xs" onclick="showMacchOnMap('${m.ID}')" title="Mappa">📍</button>
+        <button class="btn btn-ghost btn-xs" onclick="showAssetOnMap('${a.CodiceM3}','${(a.NomeAsset||'').replace(/'/g,"\\'")}')" title="Mappa">📍</button>
       </td>
-    </tr>`}).join(''):'<tr><td colspan="9" class="empty"><p>Nessuna macchina trovata</p></td></tr>';
+    </tr>`}).join(''):'<tr><td colspan="7" class="empty"><p>Nessuna macchina trovata</p></td></tr>';
   }
 }
 
-// Show single machine/asset on map
+// Show single asset on map (from anagrafica)
 var macchMapInst=null;
-function showMacchOnMap(macchId){
-  const m=(DATA.macchine||[]).find(x=>x.ID===macchId);
-  if(!m)return;
-  // Find client coordinates
-  const cli=(DATA.clienti||[]).find(c=>c.ID===m.ClienteID);
-  // Also check anagrafica for coordinates
-  let lat=null,lng=null,locName='';
-  if(cli){
-    locName=cli.Nome||cli.NomeAccount||'';
-    // Check if client has lat/lng in anagrafica
-    const anagCli=ANAG_CLIENTI.find(a=>a.NomeAccount&&cli.Nome&&a.NomeAccount.toUpperCase()===cli.Nome.toUpperCase());
-    if(anagCli&&anagCli.Lat){lat=anagCli.Lat;lng=anagCli.Lng}
-  }
-  if(!lat){
-    toast('Coordinate non disponibili per questo cliente. Aggiungi lat/lng nell\'anagrafica.','warn');
+function showAssetOnMap(codiceM3,assetName){
+  // Find client in anagrafica
+  const cli=ANAG_CLIENTI.find(c=>c.CodiceM3===codiceM3);
+  if(!cli||!cli.Lat||!cli.Lng){
+    toast('Coordinate non disponibili per questo cliente. Importa lat/lng nell\'anagrafica.','warn');
     return;
   }
-  const tipo=m.Tipo||'';
-  const cfg=PROD_CFG[tipo.toUpperCase()]||{};
-  $('macchMapTitle').innerHTML=`${cfg.img?`<img src="${PROD_IMG_BASE}${cfg.img}" style="width:24px;height:24px;border-radius:4px;object-fit:cover;margin-right:6px;vertical-align:middle">`:''}${m.Modello||tipo} — ${m.Seriale||''} <small style="color:var(--muted)">@ ${locName}</small>`;
+  const lat=parseFloat(cli.Lat),lng=parseFloat(cli.Lng);
+  if(isNaN(lat)||isNaN(lng)){toast('Coordinate non valide','warn');return}
+  const locName=cli.NomeAccount||cli.NomeInterno||codiceM3;
+  // Find asset to get type info
+  const assets=ANAG_ASSETS_CACHE[codiceM3]||[];
+  const asset=assetName?assets.find(a=>(a.NomeAsset||'')===(assetName||'')):assets[0];
+  const tipo=asset?normAssetType(asset.GruppoAttrezzatura||asset.TipoFoglio):'';
+  const cfg=PROD_CFG[tipo]||{};
+  $('macchMapTitle').innerHTML=`${prodIcon(tipo,24)} <span style="margin-left:6px">${asset?.NomeAsset||asset?.Modello||tipo} — ${asset?.NumeroSerie||''}</span> <small style="color:var(--muted)">@ ${locName}</small>`;
   $('macchMapModal').style.display='block';
-
-  if(!window.L){
-    const css=document.createElement('link');css.rel='stylesheet';css.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(css);
-    const js=document.createElement('script');js.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(js);
-    js.onload=()=>buildMacchMap(lat,lng,m,cfg,locName);
-  }else{buildMacchMap(lat,lng,m,cfg,locName)}
-}
-function buildMacchMap(lat,lng,m,cfg,locName){
-  if(macchMapInst){macchMapInst.remove();macchMapInst=null}
-  const cont=$('macchMapContainer');cont.innerHTML='';
-  macchMapInst=L.map(cont).setView([lat,lng],14);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'OSM'}).addTo(macchMapInst);
-  const color=cfg.color||'#C30A14';
-  L.circleMarker([lat,lng],{radius:12,color,fillColor:color,fillOpacity:.8,weight:2}).addTo(macchMapInst)
-    .bindPopup(`<b>${m.Modello||m.Tipo||''}</b><br>SN: ${m.Seriale||'-'}<br>Cliente: ${locName}<br><a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank">Apri in Google Maps →</a>`).openPopup();
-  setTimeout(()=>macchMapInst.invalidateSize(),200);
+  setTimeout(()=>{
+    if(macchMapInst){macchMapInst.remove();macchMapInst=null}
+    const cont=$('macchMapContainer');cont.innerHTML='';
+    macchMapInst=L.map(cont).setView([lat,lng],14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'OSM'}).addTo(macchMapInst);
+    const color=cfg.color||'#C30A14';
+    L.circleMarker([lat,lng],{radius:12,color,fillColor:color,fillOpacity:.8,weight:2}).addTo(macchMapInst)
+      .bindPopup(`<b>${asset?.NomeAsset||tipo}</b><br>SN: ${asset?.NumeroSerie||'-'}<br>Cliente: ${locName}<br><a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank">Apri in Google Maps →</a>`).openPopup();
+    setTimeout(()=>macchMapInst.invalidateSize(),200);
+  },100);
 }
 function closeMacchMap(){
   $('macchMapModal').style.display='none';
@@ -2463,30 +2495,57 @@ var anagView='list';
 // Product type config: real images, color, label, lelyUrl
 const PROD_IMG_BASE='assets/products/';
 const PROD_CFG={
-  ROBOT:{img:'astronaut.jpg',color:'#C30A14',label:'Astronaut',url:'https://www.lely.com/solutions/milking/astronaut/'},
-  JUNO:{img:'juno.jpg',color:'#3b82f6',label:'Juno',url:'https://www.lely.com/solutions/feeding/juno/'},
-  VECTOR:{img:'vector.jpg',color:'#8b5cf6',label:'Vector',url:'https://www.lely.com/solutions/feeding/vector/'},
-  DISCOVERY:{img:'discovery.jpg',color:'#06b6d4',label:'Discovery',url:'https://www.lely.com/solutions/manure/discovery/'},
-  COLLECTOR:{img:'collector.jpg',color:'#14b8a6',label:'Collector',url:'https://www.lely.com/solutions/manure/discovery-collector/'},
-  CU:{img:'cu.jpg',color:'#6366f1',label:'Central Unit',url:''},
-  CALM:{img:'calm.jpg',color:'#f59e0b',label:'Calm',url:'https://www.lely.com/solutions/calf-rearing/calm/'},
-  COMPRESSORI:{img:'compressori.jpg',color:'#78716c',label:'Compressori',url:''},
-  COSMIX:{img:'cosmix.jpg',color:'#22c55e',label:'Cosmix',url:'https://www.lely.com/solutions/feeding/cosmix/'},
-  NAUTILUS:{img:'nautilus.jpg',color:'#0ea5e9',label:'Nautilus',url:''},
-  LUNA:{img:'luna.jpg',color:'#a855f7',label:'Luna',url:'https://www.lely.com/solutions/housing-and-caring/luna/'},
-  METEOR:{img:'meteor.jpg',color:'#ef4444',label:'Meteor',url:''},
-  GRAZEWAY:{img:'grazeway.jpg',color:'#16a34a',label:'Grazeway',url:'https://www.lely.com/solutions/grazing/grazeway/'},
-  'L4C LED':{img:'l4c_led.jpg',color:'#eab308',label:'L4C LED',url:''},
-  ARLA:{img:'arla.jpg',color:'#94a3b8',label:'Arla',url:''},
-  TITANIA:{img:'titania.jpg',color:'#64748b',label:'Titania',url:''}
+  ROBOT:{img:'astronaut.png',color:'#C30A14',label:'Astronaut',url:'https://www.lely.com/solutions/milking/astronaut/'},
+  JUNO:{img:'juno.png',color:'#3b82f6',label:'Juno',url:'https://www.lely.com/solutions/feeding/juno/'},
+  VECTOR:{img:'vector.png',color:'#8b5cf6',label:'Vector',url:'https://www.lely.com/solutions/feeding/vector/'},
+  DISCOVERY:{img:'discovery.png',color:'#06b6d4',label:'Discovery',url:'https://www.lely.com/solutions/manure/discovery/'},
+  COLLECTOR:{img:'collector.png',color:'#14b8a6',label:'Collector',url:'https://www.lely.com/solutions/manure/discovery-collector/'},
+  CU:{img:'cu.png',color:'#6366f1',label:'Central Unit',url:''},
+  CALM:{img:'calm.png',color:'#f59e0b',label:'Calm',url:'https://www.lely.com/solutions/calf-rearing/calm/'},
+  COMPRESSORI:{img:'compressori.png',color:'#78716c',label:'Compressori',url:''},
+  COSMIX:{img:'cosmix.png',color:'#22c55e',label:'Cosmix',url:'https://www.lely.com/solutions/feeding/cosmix/'},
+  NAUTILUS:{img:'nautilus.png',color:'#0ea5e9',label:'Nautilus',url:''},
+  LUNA:{img:'luna.png',color:'#a855f7',label:'Luna',url:'https://www.lely.com/solutions/housing-and-caring/luna/'},
+  METEOR:{img:'meteor.png',color:'#ef4444',label:'Meteor',url:''},
+  GRAZEWAY:{img:'grazeway.png',color:'#16a34a',label:'Grazeway',url:'https://www.lely.com/solutions/grazing/grazeway/'},
+  'L4C LED':{img:'l4c_led.png',color:'#eab308',label:'L4C LED',url:''},
+  ARLA:{img:'arla.png',color:'#94a3b8',label:'Arla',url:''},
+  TITANIA:{img:'titania.png',color:'#64748b',label:'Titania',url:''}
 };
 function prodIcon(type,size){
   size=size||24;
   const cfg=PROD_CFG[type]||PROD_CFG[type.toUpperCase()]||{};
   const src=cfg.img?PROD_IMG_BASE+cfg.img:'';
-  if(!src)return `<span style="display:inline-block;width:${size}px;height:${size}px;background:#ccc;border-radius:4px;text-align:center;line-height:${size}px;font-size:${Math.round(size*0.6)}px">?</span>`;
+  if(!src)return `<span style="display:inline-block;width:${size}px;height:${size}px;background:#f0f0f0;border-radius:2px;text-align:center;line-height:${size}px;font-size:${Math.round(size*0.5)}px;color:#999">?</span>`;
   const lnk=cfg.url?`onclick="window.open('${cfg.url}','_blank')" style="cursor:pointer"`:''
-  return `<img src="${src}" alt="${cfg.label||type}" title="${cfg.label||type}" ${lnk} style="width:${size}px;height:${size}px;border-radius:4px;object-fit:cover;vertical-align:middle" onerror="this.style.display='none'">`;
+  return `<img src="${src}" alt="${cfg.label||type}" title="${cfg.label||type}" ${lnk} style="width:${size}px;height:${size}px;object-fit:contain;vertical-align:middle" onerror="this.style.display='none'">`;
+}
+// Helper: normalize asset type to PROD_CFG key
+function normAssetType(tipo){
+  tipo=(tipo||'').toUpperCase();
+  if(tipo.includes('ASTRONAUT')||tipo==='ROBOT')return 'ROBOT';
+  if(tipo.includes('JUNO'))return 'JUNO';
+  if(tipo.includes('VECTOR'))return 'VECTOR';
+  if(tipo.includes('DISCOVERY')&&!tipo.includes('COLLECTOR'))return 'DISCOVERY';
+  if(tipo.includes('COLLECTOR'))return 'COLLECTOR';
+  if(tipo.includes('CENTRAL')||tipo==='CU')return 'CU';
+  if(tipo.includes('CALM')||tipo.includes('ALLAT'))return 'CALM';
+  if(tipo.includes('COMPRESS'))return 'COMPRESSORI';
+  if(tipo.includes('COSMIX'))return 'COSMIX';
+  if(tipo.includes('NAUTILUS'))return 'NAUTILUS';
+  if(tipo.includes('LUNA'))return 'LUNA';
+  if(tipo.includes('METEOR'))return 'METEOR';
+  if(tipo.includes('GRAZEWAY'))return 'GRAZEWAY';
+  if(tipo.includes('L4C'))return 'L4C LED';
+  if(tipo.includes('ARLA'))return 'ARLA';
+  if(tipo.includes('TITANIA'))return 'TITANIA';
+  return tipo||'ALTRO';
+}
+// Get ALL anagrafica assets as flat array
+function getAllAnagAssets(){
+  let all=[];
+  Object.values(ANAG_ASSETS_CACHE).forEach(arr=>arr.forEach(a=>all.push(a)));
+  return all;
 }
 
 async function loadAnagClients(){
@@ -2511,25 +2570,7 @@ async function loadAnagClients(){
         ANAG_ASSETS_CACHE[m3]=myAssets;
         const counts={_total:myAssets.length};
         myAssets.forEach(a=>{
-          const tipo=(a.GruppoAttrezzatura||a.TipoFoglio||'Altro').toUpperCase();
-          // Normalize type names
-          let key=tipo;
-          if(tipo.includes('ASTRONAUT')||tipo==='ROBOT')key='ROBOT';
-          else if(tipo.includes('JUNO'))key='JUNO';
-          else if(tipo.includes('VECTOR'))key='VECTOR';
-          else if(tipo.includes('DISCOVERY')&&!tipo.includes('COLLECTOR'))key='DISCOVERY';
-          else if(tipo.includes('COLLECTOR'))key='COLLECTOR';
-          else if(tipo.includes('CENTRAL')||tipo==='CU')key='CU';
-          else if(tipo.includes('CALM')||tipo.includes('ALLAT'))key='CALM';
-          else if(tipo.includes('COMPRESS'))key='COMPRESSORI';
-          else if(tipo.includes('COSMIX'))key='COSMIX';
-          else if(tipo.includes('NAUTILUS'))key='NAUTILUS';
-          else if(tipo.includes('LUNA'))key='LUNA';
-          else if(tipo.includes('METEOR'))key='METEOR';
-          else if(tipo.includes('GRAZEWAY'))key='GRAZEWAY';
-          else if(tipo.includes('L4C'))key='L4C LED';
-          else if(tipo.includes('ARLA'))key='ARLA';
-          else if(tipo.includes('TITANIA'))key='TITANIA';
+          const key=normAssetType(a.GruppoAttrezzatura||a.TipoFoglio||'Altro');
           counts[key]=(counts[key]||0)+1;
         });
         c._assetCounts=counts;
