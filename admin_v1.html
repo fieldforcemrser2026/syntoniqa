@@ -696,6 +696,11 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <input type="file" id="aiFileInput" multiple accept=".xlsx,.xls,.pdf,.docx,.doc,.jpg,.jpeg,.png,.csv" style="display:none" onchange="handleAIFiles(this.files)">
 </div>
 <div id="aiFileList" style="display:none;margin-bottom:12px"></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+<label class="btn btn-sm" style="background:#22c55e;color:white;cursor:pointer">📊 Importa Piano da Excel <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importPlanFromExcel(this.files[0])"></label>
+<span style="font-size:.75rem;color:rgba(255,255,255,.5);align-self:center">Carica il file Programmazione Mensile come base di partenza</span>
+</div>
+<div id="excelImportPreview" style="display:none;margin-bottom:12px"></div>
 </div>
 <div style="display:flex;gap:8px;flex-wrap:wrap">
 <button class="btn btn-lg" style="background:#6366F1;color:white" onclick="runAI()">🤖 Genera Piano</button>
@@ -3668,6 +3673,96 @@ async function readFileAsText(file){
       const r=new FileReader();r.onload=()=>resolve(r.result.split(',')[1]);r.readAsDataURL(file);
     }
   });
+}
+
+let EXCEL_PLAN_ROWS=[];
+async function importPlanFromExcel(file){
+  if(!file)return;
+  toast('Parsing Excel...','info');
+  // Load SheetJS if not loaded
+  if(typeof XLSX==='undefined'){
+    await new Promise(r=>{const s=document.createElement('script');s.onload=r;s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';document.head.appendChild(s)});
+  }
+  const buf=await file.arrayBuffer();
+  const wb=XLSX.read(buf,{type:'array',cellDates:true});
+  const rows=[];
+  const today=new Date().toISOString().split('T')[0];
+
+  for(const sheetName of wb.SheetNames){
+    // Only process month sheets
+    if(!sheetName.match(/\d{4}$/))continue;
+    const ws=wb.Sheets[sheetName];
+    const data=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    let currentDate=null,currentWeek='';
+
+    for(const row of data){
+      const vals=row.map(v=>v instanceof Date?v.toISOString():String(v||'').trim());
+      if(vals[1]&&vals[1].startsWith('SETTIMANA')){currentWeek=vals[1];continue}
+      // Detect date
+      if(vals[2]){
+        try{
+          const d=new Date(vals[2]);
+          if(!isNaN(d)&&d.getFullYear()===2026){currentDate=d.toISOString().split('T')[0];continue}
+        }catch{}
+      }
+      if(vals[1]==='furg.')continue;
+      // Data row
+      if(currentDate&&vals[2]&&vals[2]!=='NaN'){
+        const note=vals[5]||'';const attivita=vals[4]||'';
+        let tipo='service';
+        if(/INSTALL/i.test(note+attivita))tipo='installazione';
+        else if(/VECTOR/i.test(note)&&!/SERVICE/i.test(note))tipo='installazione';
+        else if(/VARIE|SEDE/i.test(attivita)&&!note)tipo='supporto';
+        else if(/COPERTURA/i.test(attivita))tipo='copertura';
+        else if(/FERIE/i.test(attivita+note))tipo='ferie';
+        else if(/SERVICE/i.test(note))tipo='tagliando';
+        rows.push({
+          data:currentDate,settimana:currentWeek,
+          furgone:vals[1],tecnico_nome:vals[2],
+          reperibilita:vals[3],cliente:attivita,
+          tipo_lavoro:tipo,service_detail:note,
+          note_complete:[attivita,note].filter(Boolean).join(' | ')
+        });
+      }
+    }
+  }
+
+  // Filter: only from today forward (don't go back in time)
+  EXCEL_PLAN_ROWS=rows.filter(r=>r.data>=today);
+  const past=rows.filter(r=>r.data<today);
+
+  // Show preview
+  const preview=$('excelImportPreview');
+  preview.style.display='block';
+  let html=`<div style="background:rgba(255,255,255,.05);border-radius:var(--radius);padding:12px;max-height:300px;overflow-y:auto">`;
+  html+=`<div style="margin-bottom:8px"><strong>📊 File parsato:</strong> ${rows.length} righe totali, ${past.length} passate (escluse), <strong>${EXCEL_PLAN_ROWS.length} da importare</strong> (dal ${today})</div>`;
+  if(EXCEL_PLAN_ROWS.length){
+    // Group by date
+    const byDate={};
+    EXCEL_PLAN_ROWS.forEach(r=>{if(!byDate[r.data])byDate[r.data]=[];byDate[r.data].push(r)});
+    html+='<table style="width:100%;font-size:.75rem;border-collapse:collapse"><thead><tr style="text-align:left;border-bottom:1px solid rgba(255,255,255,.1)"><th>Data</th><th>Furg</th><th>Tecnico</th><th>Rep</th><th>Cliente</th><th>Lavoro</th></tr></thead><tbody>';
+    Object.entries(byDate).forEach(([d,items])=>{
+      items.forEach((r,i)=>{
+        html+=`<tr style="border-bottom:1px solid rgba(255,255,255,.05)"><td>${i===0?d:''}</td><td>${r.furgone}</td><td>${r.tecnico_nome}</td><td>${r.reperibilita}</td><td>${r.cliente}</td><td>${r.service_detail||r.tipo_lavoro}</td></tr>`;
+      });
+    });
+    html+='</tbody></table>';
+    html+=`<div style="margin-top:12px"><button class="btn btn-sm btn-ok" onclick="confirmImportExcelPlan()">✅ Importa ${EXCEL_PLAN_ROWS.length} righe nel Piano</button> <button class="btn btn-sm btn-ghost" onclick="$('excelImportPreview').style.display='none'">Annulla</button></div>`;
+  }
+  html+='</div>';
+  preview.innerHTML=html;
+  toast(`${EXCEL_PLAN_ROWS.length} righe pronte per importazione`,'ok');
+}
+
+async function confirmImportExcelPlan(){
+  if(!EXCEL_PLAN_ROWS.length){toast('Nessun dato da importare','warn');return}
+  try{
+    const result=await apiCall('importExcelPlan',{rows:EXCEL_PLAN_ROWS},'POST');
+    toast(`Piano importato: ${result.created} interventi creati`+(result.errors?.length?`, ${result.errors.length} errori`:''),'ok');
+    $('excelImportPreview').style.display='none';
+    EXCEL_PLAN_ROWS=[];
+    await refreshData();
+  }catch(e){toast(e.message,'err')}
 }
 
 async function runAI(){

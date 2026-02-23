@@ -1001,6 +1001,47 @@ Rispondi con JSON:
       return ok({ created, count: created.length });
     }
 
+    case 'importExcelPlan': {
+      // Import plan rows from parsed Excel data
+      const { rows, operatoreId } = body;
+      if (!rows || !rows.length) return err('rows richiesto');
+      // Get tecnici for name→id mapping
+      const tecnici = await sb(env, 'utenti', 'GET', null, '?attivo=eq.true&select=id,nome,cognome');
+      const tecMap = {};
+      tecnici.forEach(t => {
+        const nome = (t.nome || '').toLowerCase();
+        const full = ((t.nome || '') + ' ' + (t.cognome || '')).toLowerCase().trim();
+        tecMap[nome] = t.id;
+        tecMap[full] = t.id;
+      });
+      const created = [], errors = [];
+      for (const row of rows) {
+        try {
+          const tecId = tecMap[(row.tecnico_nome || '').toLowerCase()] || null;
+          const id = 'INT_XLS_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+          // Build note with all details
+          const noteParts = [row.cliente, row.service_detail, row.reperibilita ? 'REP: ' + row.reperibilita : ''].filter(Boolean);
+          await sb(env, 'piano', 'POST', {
+            id,
+            tecnico_id: tecId,
+            data: row.data,
+            stato: 'pianificato',
+            origine: 'excel_import',
+            note: noteParts.join(' | ') || row.note_complete || '',
+            automezzo_id: row.furgone ? 'FURG_' + row.furgone : null,
+            obsoleto: false,
+            tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+          created.push(id);
+        } catch (e) {
+          errors.push({ row: row.data + ' ' + row.tecnico_nome, err: e.message });
+        }
+      }
+      return ok({ created: created.length, errors });
+    }
+
     // -------- WORKFLOW APPROVATIVO --------
 
     case 'createApproval': {
