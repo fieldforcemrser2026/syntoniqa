@@ -293,6 +293,12 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <div class="page" id="pgUrgenze">
 <button class="btn btn-primary btn-block" style="margin-bottom:12px" onclick="openCreaUrg()">🚨 + Crea Urgenza</button>
 <div style="font-size:.7rem;color:var(--warn);margin:-8px 0 12px;padding:0 4px">⚠️ Le urgenze create dal tecnico richiedono approvazione del caposquadra/admin</div>
+<div style="display:flex;gap:6px;margin-bottom:12px;overflow-x:auto">
+<button id="fUrgAll" class="btn btn-primary btn-xs" onclick="filtUrg('')">Tutte</button>
+<button id="fUrgAss" class="btn btn-outline btn-xs" onclick="filtUrg('assegnata')">Assegnate</button>
+<button id="fUrgCorso" class="btn btn-outline btn-xs" onclick="filtUrg('in_corso')">In Corso</button>
+<button id="fUrgRis" class="btn btn-outline btn-xs" onclick="filtUrg('risolta')">Risolte</button>
+</div>
 <div id="urgList"></div>
 </div>
 
@@ -661,7 +667,7 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
    ============================================================ */
 
 // ============ STATE ============
-let DATA={}, USER=null, intF='', scAllegatiFiles=[], mapTec=null;
+let DATA={}, USER=null, intF='', urgF='', scAllegatiFiles=[], mapTec=null;
 
 // ============ CONFIG (da white_label_config.js) ============
 const API_URL = (window.SYNTONIQA_CONFIG&&window.SYNTONIQA_CONFIG.api&&window.SYNTONIQA_CONFIG.api.url)
@@ -816,7 +822,7 @@ function renderHome(){
   const d=today();
   const miei=my(DATA.piano);
   const oggi=miei.filter(p=>p.Data===d).sort((a,b)=>(a.OraInizio||'').localeCompare(b.OraInizio||''));
-  const urgA=my(DATA.urgenze).filter(u=>u.Stato!=='risolta');
+  const urgA=my(DATA.urgenze).filter(u=>u.Stato!=='risolta'&&u.Stato!=='chiusa');
   // Reperibilità attiva: data oggi è nell'intervallo (indipendentemente dallo Stato)
   const reps=(DATA.reperibilita||[]).filter(r=>!r.Obsoleto&&r.TecnicoID===USER?.ID&&r.DataInizio<=d&&(r.DataFine||'9999')>=d);
 
@@ -831,10 +837,14 @@ function renderHome(){
     $('homeUrgBox').style.display='';
     $('homeUrg').innerHTML=urgA.slice(0,3).map(u=>{
       const pc=getColor(DATA.priorita,u.PrioritaID);
+      const actionBtn=u.Stato==='assegnata'||u.Stato==='schedulata'?
+        '<button class="btn btn-xs" style="background:var(--warn);color:#fff;margin-top:6px;font-size:.7rem;padding:4px 10px" onclick="event.stopPropagation();startUrg(\''+u.ID+'\')">⚡ Inizia</button>':
+        u.Stato==='in_corso'?
+        '<button class="btn btn-xs" style="background:var(--ok);color:#fff;margin-top:6px;font-size:.7rem;padding:4px 10px" onclick="event.stopPropagation();resolveUrg(\''+u.ID+'\')">✅ Risolvi</button>':'';
       return '<div style="padding:10px 16px;border-bottom:1px solid #E5E7EB;cursor:pointer" onclick="showUrg(\''+u.ID+'\')">'+
         '<div style="display:flex;justify-content:space-between;margin-bottom:2px"><span class="tag" style="background:'+pc+'20;color:'+pc+'">'+getName(DATA.priorita,u.PrioritaID)+'</span>'+statusTag(u.Stato)+'</div>'+
         '<div style="font-weight:600;font-size:.875rem">'+getName(DATA.clienti,u.ClienteID)+'</div>'+
-        '<div style="font-size:.75rem;color:var(--gray)">'+(u.Problema||'').substring(0,60)+'</div></div>';
+        '<div style="font-size:.75rem;color:var(--gray)">'+(u.Problema||'').substring(0,60)+'</div>'+actionBtn+'</div>';
     }).join('');
   }else{$('homeUrgBox').style.display='none'}
 
@@ -953,10 +963,19 @@ function addAllegatoFile(input){
 function rmAllegato(idx,el){scAllegatiFiles[idx]=null;el.remove()}
 
 // ============ URGENZE ============
+function filtUrg(s){
+  urgF=s;renderUrg();
+  ['fUrgAll','fUrgAss','fUrgCorso','fUrgRis'].forEach(id=>{const b=$(id);if(b)b.className=b.className.replace('btn-primary','btn-outline')});
+  if(!s)$('fUrgAll').className=$('fUrgAll').className.replace('btn-outline','btn-primary');
+  else if(s==='assegnata')$('fUrgAss').className=$('fUrgAss').className.replace('btn-outline','btn-primary');
+  else if(s==='in_corso')$('fUrgCorso').className=$('fUrgCorso').className.replace('btn-outline','btn-primary');
+  else if(s==='risolta')$('fUrgRis').className=$('fUrgRis').className.replace('btn-outline','btn-primary');
+}
 function renderUrg(){
-  const items=my(DATA.urgenze).sort((a,b)=>{const o={'breach':0,'critical':1,'warning':2,'ok':3,'':4};return(o[a.SLAStatus]||4)-(o[b.SLAStatus]||4)});
-  const aperte=items.filter(u=>u.Stato!=='risolta');
-  const risolte=items.filter(u=>u.Stato==='risolta').slice(0,5);
+  let items=my(DATA.urgenze).sort((a,b)=>{const o={'breach':0,'critical':1,'warning':2,'ok':3,'':4};return(o[a.SLAStatus]||4)-(o[b.SLAStatus]||4)});
+  if(urgF){items=items.filter(u=>u.Stato===urgF)}
+  const aperte=items.filter(u=>u.Stato!=='risolta'&&u.Stato!=='chiusa');
+  const risolte=items.filter(u=>u.Stato==='risolta'||u.Stato==='chiusa').slice(0,5);
   let h='';
   if(aperte.length){
     h+=aperte.map(u=>{

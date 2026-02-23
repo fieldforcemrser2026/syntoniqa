@@ -1968,6 +1968,7 @@ function renderUrgenze(){
 
 function openAssegna(urgId){$('maUrgId').value=urgId;$('maData').value=today();openModal('modalAssegna')}
 async function urgAction(id,action){try{await apiCall(action,{id,operatoreId:USER?.ID},'POST');toast(action==='startUrgenza'?'Urgenza in corso!':'Urgenza risolta!','ok');await refreshData()}catch(e){toast(e.message,'err')}}
+async function closeUrgenza(id){try{await apiCall('updateUrgenza',{id,Stato:'chiusa',operatoreId:USER?.ID},'POST');toast('Urgenza chiusa!','ok');closeModal('modalDetail');await refreshData()}catch(e){toast(e.message,'err')}}
 
 async function saveUrgenzaEdit(id){
   try{
@@ -4286,7 +4287,10 @@ function showDetail(type,id){
       <div class="mb"><strong>SLA:</strong> ${slaTag(item.SLAStatus)} ${item.SLAScadenza?'— Scadenza: '+fmtDateTime(item.SLAScadenza):''}</div>
       ${item.InterventoID?`<div class="mb"><strong>Intervento collegato:</strong> ${item.InterventoID}</div>`:''}`;
       foot=`<button class="btn btn-primary" onclick="saveUrgenzaEdit('${id}')">💾 Salva Modifiche</button> `;
-      if(item.Stato==='aperta')foot+=`<button class="btn btn-outline" onclick="closeModal('modalDetail');openAssegna('${id}')">👤 Assegna</button>`;
+      if(item.Stato==='aperta')foot+=`<button class="btn btn-outline" onclick="closeModal('modalDetail');openAssegna('${id}')">👤 Approva+Assegna</button> `;
+      if(item.Stato==='assegnata'||item.Stato==='schedulata')foot+=`<button class="btn btn-warn" onclick="urgAction('${id}','startUrgenza');closeModal('modalDetail')">⚡ Inizia</button> `;
+      if(item.Stato==='in_corso')foot+=`<button class="btn btn-ok" onclick="urgAction('${id}','resolveUrgenza');closeModal('modalDetail')">✅ Risolvi</button> `;
+      if(item.Stato==='risolta')foot+=`<button class="btn" style="background:#E0F2FE;color:#0369A1" onclick="closeUrgenza('${id}')">📁 Chiudi Urgenza</button> `;
       break;
 
     case 'ordine':
