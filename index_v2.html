@@ -195,6 +195,27 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 
 /* Calendar dot */
 .cal-dot{width:5px;height:5px;border-radius:50%;background:var(--c1);margin:2px auto 0;display:block}
+
+/* CHAT */
+.chat-wrap{display:flex;flex-direction:column;height:calc(100vh - var(--hh) - var(--nh) - 24px)}
+.chat-channels{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch}
+.chat-ch-btn{padding:6px 14px;border-radius:20px;border:1.5px solid var(--gray3);background:var(--white);font-size:.75rem;font-weight:600;cursor:pointer;white-space:nowrap;font-family:var(--font);transition:.15s}
+.chat-ch-btn.active{background:var(--c1);color:var(--white);border-color:var(--c1)}
+.chat-msgs{flex:1;overflow-y:auto;padding:8px 0;display:flex;flex-direction:column;gap:6px}
+.chat-msg{max-width:85%;padding:10px 14px;border-radius:16px;font-size:.8125rem;line-height:1.4;word-break:break-word}
+.chat-msg.mine{align-self:flex-end;background:var(--c1);color:var(--white);border-bottom-right-radius:4px}
+.chat-msg.other{align-self:flex-start;background:var(--white);border:1px solid #E5E7EB;border-bottom-left-radius:4px}
+.chat-msg .sender{font-size:.6875rem;font-weight:600;opacity:.8;margin-bottom:2px}
+.chat-msg .meta{font-size:.625rem;opacity:.6;text-align:right;margin-top:2px}
+.chat-msg.tg{border-left:3px solid #0088cc}
+.chat-input-bar{display:flex;gap:8px;padding:8px 0 4px;border-top:1px solid #E5E7EB;margin-top:auto}
+.chat-input-bar input{flex:1;padding:10px 14px;border:1.5px solid var(--gray3);border-radius:24px;font-size:.875rem;font-family:var(--font)}
+.chat-input-bar input:focus{border-color:var(--c1);outline:none}
+.chat-input-bar button{width:44px;height:44px;border-radius:50%;background:var(--c1);border:none;color:var(--white);font-size:1.1rem;cursor:pointer}
+
+/* ROUTE MAP */
+.map-controls{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.route-num{width:24px;height:24px;border-radius:50%;background:var(--c1);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3)}
 </style>
 </head>
 <body>
@@ -269,6 +290,20 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <div id="ordList"></div>
 </div>
 
+<!-- PAGE: CHAT TELEGRAM -->
+<div class="page" id="pgChat">
+<div class="chat-wrap">
+<div class="chat-channels" id="chatChannels"></div>
+<div class="chat-msgs" id="chatMsgs">
+<div class="empty"><div class="ico">💬</div><p>Seleziona un canale</p></div>
+</div>
+<div class="chat-input-bar">
+<input type="text" id="chatInput" placeholder="Scrivi messaggio..." onkeydown="if(event.key==='Enter')sendChatMsg()">
+<button onclick="sendChatMsg()">➤</button>
+</div>
+</div>
+</div>
+
 <!-- PAGE: MENU -->
 <div class="page" id="pgMenu">
 <div class="menu-grid">
@@ -280,7 +315,7 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <div class="menu-item" onclick="goPage('clienti')"><span class="ico">🏢</span><span class="lbl">Clienti</span></div>
 <div class="menu-item" onclick="goPage('macchine')"><span class="ico">⚙️</span><span class="lbl">Macchine</span></div>
 <div class="menu-item" onclick="goPage('documenti')"><span class="ico">📁</span><span class="lbl">Documenti</span></div>
-<div class="menu-item" onclick="goPage('mappa')"><span class="ico">🗺️</span><span class="lbl">Mappa</span></div>
+<div class="menu-item" onclick="goPage('mappa')"><span class="ico">🗺️</span><span class="lbl">Mappa Giro</span></div>
 <div class="menu-item" onclick="goPage('calendario')"><span class="ico">📅</span><span class="lbl">Calendario</span></div>
 <div class="menu-item" onclick="goPage('profilo')"><span class="ico">👤</span><span class="lbl">Profilo</span></div>
 </div>
@@ -333,8 +368,14 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 
 <!-- PAGE: MAPPA -->
 <div class="page" id="pgMappa">
+<div class="map-controls">
+<button class="btn btn-sm btn-primary" id="mapFAll" onclick="mapFilter('all')">📍 Tutti</button>
+<button class="btn btn-sm btn-outline" id="mapFToday" onclick="mapFilter('today')">📋 Oggi</button>
+<button class="btn btn-sm btn-outline" id="mapFWeek" onclick="mapFilter('week')">📅 Settimana</button>
+<button class="btn btn-sm btn-outline" id="mapFExport" onclick="exportGoogleMaps()" style="margin-left:auto">🗺️ Google Maps</button>
+</div>
 <div class="card">
-<div class="card-head"><h3>🗺️ Mappa Clienti</h3></div>
+<div class="card-head"><h3>🗺️ Mappa Giro Visite</h3><span id="mapInfo" style="font-size:.75rem;color:var(--gray)"></span></div>
 <div class="card-body np"><div id="mapTec"></div></div>
 </div>
 </div>
@@ -373,7 +414,7 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <button class="active" onclick="goPage('home')" data-p="home"><span class="ico">🏠</span>Home</button>
 <button onclick="goPage('interventi')" data-p="interventi"><span class="ico">📋</span>Interventi</button>
 <button onclick="goPage('urgenze')" data-p="urgenze"><span class="ico">🚨</span>Urgenze</button>
-<button onclick="goPage('ordini')" data-p="ordini"><span class="ico">📦</span>Ordini</button>
+<button onclick="goPage('chat')" data-p="chat"><span class="ico">💬</span>Chat TG</button>
 <button onclick="goPage('menu')" data-p="menu"><span class="ico">⋯</span>Menu</button>
 </nav>
 
@@ -488,6 +529,65 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 </div>
 </div>
 
+<!-- Sheet: Crea Urgenza (tecnico) -->
+<div class="sheet-overlay" id="shCreaUrg" onclick="if(event.target===this)closeSheet('shCreaUrg')">
+<div class="sheet">
+<div class="handle"></div>
+<div class="sheet-head"><h2>🚨 Crea Urgenza</h2><button onclick="closeSheet('shCreaUrg')">✕</button></div>
+<div class="sheet-body">
+<div style="background:#FEF3C7;padding:10px 14px;border-radius:var(--radius-sm);font-size:.8125rem;color:#92400E;margin-bottom:16px">⚠️ Le urgenze create dal tecnico vengono inviate con stato <strong>IN ATTESA</strong> di approvazione admin/caposquadra</div>
+<div class="field"><label>Cliente</label><select id="suCliUrg"><option value="">— Seleziona —</option></select></div>
+<div class="field"><label>Macchina</label><select id="suMacUrg"><option value="">— Seleziona —</option></select></div>
+<div class="field"><label>Priorità</label><select id="suPriUrg"></select></div>
+<div class="field"><label>Problema</label><textarea id="suProbUrg" rows="4" placeholder="Descrivi il problema in dettaglio..."></textarea></div>
+<div class="field"><label>Note aggiuntive</label><textarea id="suNoteUrg" rows="2" placeholder="Es. codice errore, foto fatta, etc."></textarea></div>
+<div style="margin-top:12px">
+<label style="font-weight:600;font-size:.8125rem;margin-bottom:8px;display:block">📎 Allegato (opzionale)</label>
+<div style="display:flex;gap:8px">
+<label class="btn btn-outline" style="flex:1;text-align:center;cursor:pointer">📷 Foto<input type="file" accept="image/*" capture="environment" style="display:none" onchange="urgAllegatoChange(this)"></label>
+<label class="btn btn-outline" style="flex:1;text-align:center;cursor:pointer">📎 File<input type="file" style="display:none" onchange="urgAllegatoChange(this)"></label>
+</div>
+<div id="urgAllegatoPreview" style="margin-top:8px"></div>
+</div>
+<div style="display:flex;gap:8px;margin-top:16px">
+<button class="btn btn-outline" onclick="closeSheet('shCreaUrg')" style="flex:1">Annulla</button>
+<button class="btn btn-err" onclick="saveUrgenzaTecnico()" style="flex:1">🚨 Invia Urgenza</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Sheet: Modifica Intervento -->
+<div class="sheet-overlay" id="shEditInt" onclick="if(event.target===this)closeSheet('shEditInt')">
+<div class="sheet">
+<div class="handle"></div>
+<div class="sheet-head"><h2>✏️ Modifica Intervento</h2><button onclick="closeSheet('shEditInt')">✕</button></div>
+<div class="sheet-body">
+<input type="hidden" id="eiId">
+<div id="eiOwnNotice" style="display:none;background:#FEF3C7;padding:10px 14px;border-radius:var(--radius-sm);font-size:.8125rem;color:#92400E;margin-bottom:12px">⚠️ Non è il tuo intervento — la modifica richiede approvazione admin</div>
+<div class="field"><label>Note</label><textarea id="eiNote" rows="3" placeholder="Aggiorna le note..."></textarea></div>
+<div class="field"><label>Stato</label><select id="eiStato"><option value="pianificato">📅 Pianificato</option><option value="in_corso">⚡ In Corso</option></select></div>
+<div class="field-row">
+<div class="field"><label>Data</label><input type="date" id="eiData"></div>
+<div class="field"><label>Ora Inizio</label><input type="time" id="eiOra"></div>
+</div>
+<div style="display:flex;gap:8px;margin-top:16px">
+<button class="btn btn-outline" onclick="closeSheet('shEditInt')" style="flex:1">Annulla</button>
+<button class="btn btn-primary" onclick="saveEditInt()" style="flex:1">💾 Salva</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Sheet: Installazione Detail -->
+<div class="sheet-overlay" id="shInstDet" onclick="if(event.target===this)closeSheet('shInstDet')">
+<div class="sheet">
+<div class="handle"></div>
+<div class="sheet-head"><h2 id="instDetTitle">🔧 Installazione</h2><button onclick="closeSheet('shInstDet')">✕</button></div>
+<div class="sheet-body" id="instDetBody"></div>
+</div>
+</div>
+
 <script>
 /* ============================================================
    SYNTONIQA TECNICO v2.0 — FULL JS
@@ -543,13 +643,14 @@ function goPage(name){
   const btn=document.querySelector('.bnav button[data-p="'+name+'"]');
   if(btn)btn.classList.add('active');
   const t={'home':'🏠 Home','interventi':'📋 Interventi','urgenze':'🚨 Urgenze','ordini':'📦 Ordini','menu':'⋯ Menu',
-    'notifiche':'🔔 Notifiche','richieste':'📝 Richieste','reperibilita':'📞 Reperibilità','trasferte':'🧳 Trasferte',
+    'chat':'💬 Chat Telegram','notifiche':'🔔 Notifiche','richieste':'📝 Richieste','reperibilita':'📞 Reperibilità','trasferte':'🧳 Trasferte',
     'installazioni':'🔧 Installazioni','clienti':'🏢 Clienti','macchine':'⚙️ Macchine','documenti':'📁 Documenti',
-    'mappa':'🗺️ Mappa','calendario':'📅 Calendario','profilo':'👤 Profilo'};
+    'mappa':'🗺️ Mappa Giro','calendario':'📅 Calendario','profilo':'👤 Profilo'};
   $('hdrTitle').textContent=t[name]||name;
   window.scrollTo(0,0);
   if(name==='calendario')renderCalMobile();
   if(name==='mappa')setTimeout(initMap,200);
+  if(name==='chat')initChat();
 }
 
 // ============ API (identica ad admin_v1) ============
@@ -730,6 +831,7 @@ function showInt(id){
     (cObj?.Latitudine&&cObj?.Longitudine?'<a href="https://www.google.com/maps/dir/?api=1&destination='+cObj.Latitudine+','+cObj.Longitudine+'&travelmode=driving" target="_blank" class="btn btn-outline">📍 Naviga</a>':'')+
     (p.Stato==='pianificato'?'<button class="btn btn-warn" onclick="startInt(\''+id+'\')">⚡ Inizia Intervento</button>':'')+
     (p.Stato==='in_corso'?'<button class="btn btn-ok" onclick="closeSheet(\'shInt\');openCompleta(\''+id+'\')">✅ Completa Intervento</button>':'')+
+    (p.Stato!=='completato'?'<button class="btn btn-outline" onclick="openEditInt(\''+id+'\')">✏️ Modifica Intervento</button>':'')+
     '</div>';
   openSheet('shInt');
 }
@@ -936,11 +1038,12 @@ function renderInst(){
   el.innerHTML=items.length?items.map(i=>{
     const cli=getName(DATA.clienti,i.ClienteID);
     const mac=getName(DATA.macchine,i.MacchinaID);
-    return '<div class="card"><div class="card-body">'+
+    const avz=i.Avanzamento||0;
+    return '<div class="card" style="cursor:pointer" onclick="showInstDetail(\''+i.ID+'\')"><div class="card-body">'+
       '<div style="display:flex;justify-content:space-between;margin-bottom:4px"><strong>'+cli+'</strong>'+statusTag(i.Stato)+'</div>'+
       '<div style="font-size:.8125rem;color:var(--gray)">'+mac+'</div>'+
-      '<div style="font-size:.75rem;color:var(--gray);margin-top:4px">📅 '+fmtDate(i.DataInizio)+'</div>'+
-      (i.Note?'<div style="font-size:.8125rem;color:var(--gray);margin-top:4px">'+i.Note+'</div>':'')+
+      '<div style="display:flex;align-items:center;gap:8px;margin-top:6px"><div style="flex:1;height:6px;background:var(--gray4);border-radius:3px;overflow:hidden"><div style="height:100%;width:'+avz+'%;background:var(--ok);border-radius:3px"></div></div><span style="font-size:.7rem;font-weight:600;color:var(--gray)">'+avz+'%</span></div>'+
+      '<div style="font-size:.75rem;color:var(--gray);margin-top:4px">📅 '+fmtDate(i.DataInizio)+(i.DataFine?' → '+fmtDate(i.DataFine):'')+' <span style="color:var(--gray3)">›</span></div>'+
       '</div></div>';
   }).join(''):'<div class="empty"><div class="ico">🔧</div><p>Nessuna installazione</p></div>';
 }
@@ -1014,25 +1117,119 @@ function renderDocMob(){
   $('docMobList').innerHTML=filtered.length?filtered.map(d=>'<div class="card"><div class="card-body"><div style="display:flex;justify-content:space-between;align-items:center"><div style="flex:1"><strong>'+(d.Nome||'—')+'</strong><div style="font-size:.75rem;color:var(--gray)">📅 '+fmtDate(d.DataCaricamento)+(d.DimensioneKB?' · '+d.DimensioneKB+'KB':'')+'</div></div><a href="'+(d.FileURL||'#')+'" target="_blank" style="color:var(--c1);text-decoration:none;font-size:1.25rem;padding:8px">↓</a></div></div></div>').join(''):'<div class="empty"><div class="ico">📁</div><p>Nessun documento</p></div>';
 }
 
-// ============ MAPPA (Leaflet) ============
+// ============ MAPPA GIRO VISITE (Leaflet) ============
+let mapFilterMode='today', mapMarkers=[], mapRouteLine=null, mapRouteStops=[];
+
 function initMap(){
-  if(mapTec){mapTec.invalidateSize();return}
+  if(mapTec){mapTec.invalidateSize();renderMapMarkers();return}
   const el=$('mapTec');if(!el)return;
   mapTec=L.map('mapTec').setView([44.65,10.92],9);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'OSM'}).addTo(mapTec);
-  const clients=(DATA.clienti||[]).filter(c=>!c.Obsoleto&&c.Latitudine&&c.Longitudine);
+  renderMapMarkers();
+}
+
+function mapFilter(mode){
+  mapFilterMode=mode;
+  ['mapFAll','mapFToday','mapFWeek'].forEach(id=>{const b=$(id);if(b)b.className=b.className.replace('btn-primary','btn-outline')});
+  const btn=$('mapF'+mode.charAt(0).toUpperCase()+mode.slice(1));
+  if(btn)btn.className=btn.className.replace('btn-outline','btn-primary');
+  renderMapMarkers();
+}
+
+function renderMapMarkers(){
+  if(!mapTec)return;
+  // Pulisci
+  mapMarkers.forEach(m=>mapTec.removeLayer(m));mapMarkers=[];
+  if(mapRouteLine){mapTec.removeLayer(mapRouteLine);mapRouteLine=null}
+  mapRouteStops=[];
+
   const todayStr=today();
-  const todayPiano=my(DATA.piano).filter(p=>p.Data===todayStr);
-  clients.forEach(c=>{
-    const hasTodayInt=todayPiano.some(p=>p.ClienteID===c.ID||p.ClienteID===c.CodiceM3);
-    const color=hasTodayInt?'var(--c1)':'#6B7280';
-    const marker=L.circleMarker([c.Latitudine,c.Longitudine],{radius:hasTodayInt?8:5,fillColor:color,color:color,weight:1,fillOpacity:.7}).addTo(mapTec);
-    marker.bindPopup('<strong>'+getName(DATA.clienti,c.ID)+'</strong><br>'+(c.Citta||'')+(hasTodayInt?'<br><span style="color:var(--c1);font-weight:600">📋 Intervento oggi</span>':''));
-  });
-  if(clients.length){
-    const lats=clients.map(c=>c.Latitudine),lngs=clients.map(c=>c.Longitudine);
-    mapTec.fitBounds([[Math.min(...lats),Math.min(...lngs)],[Math.max(...lats),Math.max(...lngs)]],{padding:[20,20]});
+  const miei=my(DATA.piano);
+  let pianoFiltered=[];
+
+  if(mapFilterMode==='today'){
+    pianoFiltered=miei.filter(p=>p.Data===todayStr);
+  }else if(mapFilterMode==='week'){
+    const d=new Date();const weekStart=new Date(d);weekStart.setDate(d.getDate()-d.getDay()+1);
+    const ws=weekStart.toISOString().split('T')[0];
+    const we=new Date(weekStart);we.setDate(we.getDate()+6);const wes=we.toISOString().split('T')[0];
+    pianoFiltered=miei.filter(p=>p.Data>=ws&&p.Data<=wes);
+  }else{
+    pianoFiltered=miei;
   }
+
+  // Ordina per ora
+  pianoFiltered.sort((a,b)=>(a.OraInizio||'').localeCompare(b.OraInizio||''));
+
+  // Raccogli coordinate con info
+  const stops=[];
+  pianoFiltered.forEach((p,idx)=>{
+    const c=(DATA.clienti||[]).find(c=>c.ID===p.ClienteID||c.CodiceM3===p.ClienteID);
+    if(c&&c.Latitudine&&c.Longitudine){
+      stops.push({lat:c.Latitudine,lng:c.Longitudine,name:getName(DATA.clienti,c.ID),piano:p,num:stops.length+1,cliente:c});
+    }
+  });
+
+  // Anche clienti senza interventi filtrati (solo in "tutti")
+  if(mapFilterMode==='all'){
+    const clientiConInt=new Set(stops.map(s=>s.cliente.ID));
+    const altriClienti=(DATA.clienti||[]).filter(c=>!c.Obsoleto&&c.Latitudine&&c.Longitudine&&!clientiConInt.has(c.ID));
+    altriClienti.forEach(c=>{
+      const m=L.circleMarker([c.Latitudine,c.Longitudine],{radius:4,fillColor:'#9CA3AF',color:'#9CA3AF',weight:1,fillOpacity:.5}).addTo(mapTec);
+      m.bindPopup('<strong>'+getName(DATA.clienti,c.ID)+'</strong><br><span style="color:var(--gray)">'+(c.Citta||'')+'</span>');
+      mapMarkers.push(m);
+    });
+  }
+
+  // Markers numerati per le tappe
+  stops.forEach(s=>{
+    const icon=L.divIcon({
+      className:'',
+      html:'<div class="route-num">'+s.num+'</div>',
+      iconSize:[24,24],iconAnchor:[12,12]
+    });
+    const m=L.marker([s.lat,s.lng],{icon}).addTo(mapTec);
+    const p=s.piano;
+    m.bindPopup(
+      '<div style="min-width:160px"><strong>'+s.num+'. '+s.name+'</strong><br>'+
+      '<span style="font-size:.8rem">🕐 '+(p.OraInizio||'—')+' · '+getName(DATA.tipiIntervento,p.TipoInterventoID)+'</span><br>'+
+      statusTag(p.Stato)+
+      '<br><a href="https://www.google.com/maps/dir/?api=1&destination='+s.lat+','+s.lng+'&travelmode=driving" target="_blank" style="color:#C30A14;font-size:.8rem;font-weight:600">📍 Naviga qui</a></div>'
+    );
+    mapMarkers.push(m);
+  });
+
+  // Polyline route
+  if(stops.length>=2){
+    const coords=stops.map(s=>[s.lat,s.lng]);
+    mapRouteLine=L.polyline(coords,{color:'#C30A14',weight:3,opacity:.7,dashArray:'8,8'}).addTo(mapTec);
+    mapMarkers.push(mapRouteLine);
+  }
+
+  mapRouteStops=stops;
+
+  // Info
+  $('mapInfo').textContent=stops.length+' tappe'+(mapFilterMode==='today'?' oggi':mapFilterMode==='week'?' settimana':'');
+
+  // Fit bounds
+  const allPts=stops.map(s=>[s.lat,s.lng]);
+  if(allPts.length){mapTec.fitBounds(allPts,{padding:[30,30]})}
+  else if(mapFilterMode!=='all'){
+    // Nessuna tappa, mostra tutti i clienti
+    const allCli=(DATA.clienti||[]).filter(c=>!c.Obsoleto&&c.Latitudine&&c.Longitudine);
+    if(allCli.length){mapTec.fitBounds(allCli.map(c=>[c.Latitudine,c.Longitudine]),{padding:[20,20]})}
+  }
+}
+
+function exportGoogleMaps(){
+  if(!mapRouteStops.length){toast('Nessuna tappa da esportare','warn');return}
+  // Google Maps directions URL (max ~10 waypoints)
+  const stops=mapRouteStops.slice(0,10);
+  const dest=stops[stops.length-1];
+  const waypoints=stops.slice(0,-1).map(s=>s.lat+','+s.lng).join('|');
+  let url='https://www.google.com/maps/dir/?api=1&destination='+dest.lat+','+dest.lng+'&travelmode=driving';
+  if(waypoints)url+='&waypoints='+encodeURIComponent(waypoints);
+  window.open(url,'_blank');
 }
 
 // ============ CALENDARIO ============
@@ -1077,6 +1274,220 @@ function showCalMobDay(ds){
     h+=urgs.map(u=>'<div class="card" style="border-left:3px solid var(--err)" onclick="showUrg(\''+u.ID+'\')"><div class="card-body" style="padding:10px 14px"><div style="display:flex;justify-content:space-between;margin-bottom:2px"><strong>🚨 Urgenza</strong>'+statusTag(u.Stato)+'</div><div style="font-size:.8125rem">'+getName(DATA.clienti,u.ClienteID)+'</div></div></div>').join('');
   }
   $('calMobDetail').innerHTML=h;
+}
+
+// ============ CHAT TELEGRAM ============
+let chatCanale='CH_GENERALE', chatMsgCache=[], chatPollTimer=null;
+
+function initChat(){
+  renderChatChannels();
+  loadChatMessages();
+  // Polling ogni 5 sec
+  if(chatPollTimer)clearInterval(chatPollTimer);
+  chatPollTimer=setInterval(()=>{
+    const pg=$('pgChat');
+    if(pg&&pg.classList.contains('active'))loadChatMessages(true);
+  },5000);
+}
+
+function renderChatChannels(){
+  const canali=[
+    {id:'CH_GENERALE',nome:'💬 Generale'},
+    {id:'CH_URGENZE',nome:'🚨 Urgenze'},
+    {id:'CH_ADMIN',nome:'👑 Admin & Capi'}
+  ];
+  $('chatChannels').innerHTML=canali.map(c=>
+    '<button class="chat-ch-btn'+(c.id===chatCanale?' active':'')+'" onclick="switchChatCh(\''+c.id+'\')">'+c.nome+'</button>'
+  ).join('');
+}
+
+function switchChatCh(id){
+  chatCanale=id;
+  renderChatChannels();
+  loadChatMessages();
+}
+
+async function loadChatMessages(silent){
+  try{
+    const msgs=await apiCall('getChatMessaggi',{canale_id:chatCanale,limit:'50'});
+    chatMsgCache=Array.isArray(msgs)?msgs:[];
+    renderChatMsgs();
+  }catch(e){if(!silent)toast('Errore chat: '+e.message,'err')}
+}
+
+function renderChatMsgs(){
+  const el=$('chatMsgs');
+  if(!chatMsgCache.length){el.innerHTML='<div class="empty"><div class="ico">💬</div><p>Nessun messaggio</p></div>';return}
+  const sorted=[...chatMsgCache].sort((a,b)=>(a.CreatedAt||'').localeCompare(b.CreatedAt||''));
+  el.innerHTML=sorted.map(m=>{
+    const isMine=m.MittenteID===USER?.ID;
+    const isTg=m.MittenteID==='TELEGRAM'||(m.Testo||'').startsWith('📱');
+    const sender=isMine?'':(getName(DATA.utenti||[],m.MittenteID)||(m.MittenteID==='TELEGRAM'?'Telegram':'?'));
+    const time=(m.CreatedAt||'').substring(11,16);
+    return '<div class="chat-msg'+(isMine?' mine':' other')+(isTg?' tg':'')+'">'+
+      (!isMine&&sender?'<div class="sender">'+(isTg?'📱 ':'')+sender+'</div>':'')+
+      '<div>'+(m.Testo||'')+'</div>'+
+      '<div class="meta">'+time+'</div></div>';
+  }).join('');
+  el.scrollTop=el.scrollHeight;
+}
+
+async function sendChatMsg(){
+  const inp=$('chatInput');
+  const txt=(inp.value||'').trim();
+  if(!txt)return;
+  inp.value='';
+  try{
+    await apiCall('sendChatMessage',{canale_id:chatCanale,testo:txt,userId:USER?.ID},'POST');
+    // Aggiungi subito alla cache locale per feedback istantaneo
+    chatMsgCache.push({MittenteID:USER?.ID,Testo:txt,CreatedAt:new Date().toISOString()});
+    renderChatMsgs();
+    // Ricarica dal server dopo 1 sec per sincronizzare
+    setTimeout(()=>loadChatMessages(true),1000);
+  }catch(e){toast('Errore invio: '+e.message,'err')}
+}
+
+// ============ CREA URGENZA (tecnico) ============
+let urgAllegatoFile=null;
+
+function openCreaUrg(){
+  // Popola selects
+  const cls=(DATA.clienti||[]).filter(c=>!c.Obsoleto);
+  const s=$('suCliUrg');
+  s.innerHTML='<option value="">— Seleziona —</option>';
+  cls.forEach(c=>{const o=document.createElement('option');o.value=c.CodiceM3||c.ID;o.textContent=getName(DATA.clienti,c.ID);s.appendChild(o)});
+  // Macchine (si aggiornano on change cliente)
+  $('suMacUrg').innerHTML='<option value="">— Tutte —</option>';
+  s.onchange=function(){
+    const cid=this.value;
+    const macs=(DATA.macchine||[]).filter(m=>!m.Obsoleto&&(m.ClienteID===cid));
+    const ms=$('suMacUrg');ms.innerHTML='<option value="">— Seleziona —</option>';
+    macs.forEach(m=>{const o=document.createElement('option');o.value=m.ID;o.textContent=(m.Tipo||'')+' '+(m.Modello||'')+' (S/N: '+(m.Seriale||'—')+')';ms.appendChild(o)});
+  };
+  // Priorità
+  const ps=$('suPriUrg');
+  ps.innerHTML='';
+  (DATA.priorita||[]).forEach(p=>{const o=document.createElement('option');o.value=p.ID;o.textContent=p.Nome||p.ID;ps.appendChild(o)});
+  // Reset
+  $('suProbUrg').value='';$('suNoteUrg').value='';urgAllegatoFile=null;$('urgAllegatoPreview').innerHTML='';
+  openSheet('shCreaUrg');
+}
+
+function urgAllegatoChange(input){
+  const file=input.files[0];if(!file)return;
+  if(file.size>20*1024*1024){toast('File troppo grande (max 20MB)','err');input.value='';return}
+  const reader=new FileReader();
+  reader.onload=function(){
+    urgAllegatoFile={base64:reader.result.split(',')[1],type:file.type,name:file.name,sizeKB:Math.round(file.size/1024)};
+    $('urgAllegatoPreview').innerHTML='<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--gray5);border-radius:8px"><span>'+(file.type.startsWith('image/')?'🖼️':'📄')+'</span><span style="flex:1;font-size:.8rem">'+file.name+' ('+urgAllegatoFile.sizeKB+'KB)</span><button onclick="urgAllegatoFile=null;this.parentElement.remove()" style="background:none;border:none;color:var(--err);cursor:pointer">✕</button></div>';
+    input.value='';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function saveUrgenzaTecnico(){
+  try{
+    const clienteID=$('suCliUrg').value;
+    const problema=$('suProbUrg').value.trim();
+    if(!clienteID){toast('Seleziona un cliente','warn');return}
+    if(!problema){toast('Descrivi il problema','warn');return}
+    const data={
+      ClienteID:clienteID,
+      MacchinaID:$('suMacUrg').value||null,
+      PrioritaID:$('suPriUrg').value,
+      Problema:problema,
+      Note:$('suNoteUrg').value||null,
+      Stato:'in_attesa',
+      TecnicoID:USER?.ID,
+      SegnalatoDa:USER?.ID,
+      DataSegnalazione:new Date().toISOString()
+    };
+    await apiCall('createUrgenza',{data},'POST');
+    // Upload allegato se presente
+    if(urgAllegatoFile){
+      try{
+        const up=await apiCall('uploadFile',{base64:urgAllegatoFile.base64,mimeType:urgAllegatoFile.type,fileName:urgAllegatoFile.name,userId:USER?.ID},'POST');
+        // TODO: collegare allegato all'urgenza
+      }catch(e){}
+    }
+    // Notifica admin via chat
+    try{
+      await apiCall('sendChatMessage',{canale_id:'CH_URGENZE',testo:'🚨 NUOVA URGENZA (da tecnico '+((USER?.Nome||'')+' '+(USER?.Cognome||'')).trim()+'):\n'+getName(DATA.clienti,clienteID)+' — '+problema+'\n⚠️ Stato: IN ATTESA approvazione',userId:USER?.ID},'POST');
+    }catch(e){}
+    toast('Urgenza inviata! In attesa di approvazione.','ok');
+    closeSheet('shCreaUrg');
+    await refreshData();
+  }catch(e){toast(e.message,'err')}
+}
+
+// ============ MODIFICA INTERVENTO ============
+function openEditInt(id){
+  const p=(DATA.piano||[]).find(x=>x.ID===id);if(!p)return;
+  closeSheet('shInt');
+  $('eiId').value=id;
+  $('eiNote').value=p.Note||'';
+  $('eiStato').value=p.Stato==='completato'?'in_corso':p.Stato;
+  $('eiData').value=p.Data||'';
+  $('eiOra').value=p.OraInizio||'';
+  // Mostra avviso se non è il proprio intervento
+  const isOwn=p.TecnicoID===USER?.ID||p.TecnicoAssegnato===USER?.ID||(p.TecniciIDs||'').includes(USER?.ID);
+  $('eiOwnNotice').style.display=isOwn?'none':'block';
+  openSheet('shEditInt');
+}
+
+async function saveEditInt(){
+  try{
+    const id=$('eiId').value;
+    const p=(DATA.piano||[]).find(x=>x.ID===id);if(!p)return;
+    const isOwn=p.TecnicoID===USER?.ID||p.TecnicoAssegnato===USER?.ID||(p.TecniciIDs||'').includes(USER?.ID);
+    const data={Note:$('eiNote').value,Stato:$('eiStato').value,Data:$('eiData').value,OraInizio:$('eiOra').value};
+    await apiCall('updatePiano',{id,data},'POST');
+    // Se non è il proprio intervento, notifica admin
+    if(!isOwn){
+      try{
+        await apiCall('sendChatMessage',{canale_id:'CH_ADMIN',testo:'✏️ MODIFICA INTERVENTO (da '+((USER?.Nome||'')+' '+(USER?.Cognome||'')).trim()+'):\nIntervento '+id+' di '+getName(DATA.clienti,p.ClienteID)+'\n⚠️ Richiede approvazione — l\'intervento non è assegnato a questo tecnico',userId:USER?.ID},'POST');
+      }catch(e){}
+      toast('Modifica inviata — attendi approvazione admin','warn');
+    }else{
+      // Notifica admin della modifica
+      try{
+        await apiCall('createNotifica',{data:{Tipo:'modifica_intervento',Oggetto:'Intervento modificato dal tecnico',Testo:((USER?.Nome||'')+' '+(USER?.Cognome||'')).trim()+' ha modificato l\'intervento '+id+' ('+getName(DATA.clienti,p.ClienteID)+')',DestinatarioID:'ADMIN',Priorita:'media'}},'POST');
+      }catch(e){}
+      toast('Intervento aggiornato!','ok');
+    }
+    closeSheet('shEditInt');
+    await refreshData();
+  }catch(e){toast(e.message,'err')}
+}
+
+// ============ INSTALLAZIONI (detail) ============
+function showInstDetail(id){
+  const i=(DATA.installazioni||[]).find(x=>x.ID===id);if(!i)return;
+  const cli=getName(DATA.clienti,i.ClienteID);
+  const mac=getName(DATA.macchine,i.MacchinaID);
+  const mObj=(DATA.macchine||[]).find(m=>m.ID===i.MacchinaID);
+  const cObj=(DATA.clienti||[]).find(c=>c.ID===i.ClienteID||c.CodiceM3===i.ClienteID);
+  // Fasi installazione
+  const fasi=i.Fasi||i.FasiCompletate||'';
+  $('instDetTitle').textContent='🔧 '+cli;
+  $('instDetBody').innerHTML=
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:.8125rem;margin-bottom:16px">'+
+    '<div><span style="color:var(--gray)">Cliente</span><br><strong>'+cli+'</strong></div>'+
+    '<div><span style="color:var(--gray)">Stato</span><br>'+statusTag(i.Stato)+'</div>'+
+    '<div><span style="color:var(--gray)">Macchina</span><br><strong>'+mac+'</strong></div>'+
+    '<div><span style="color:var(--gray)">S/N</span><br><strong>'+(mObj?.Seriale||'—')+'</strong></div>'+
+    '<div><span style="color:var(--gray)">Data Inizio</span><br><strong>'+fmtDate(i.DataInizio)+'</strong></div>'+
+    '<div><span style="color:var(--gray)">Data Fine</span><br><strong>'+fmtDate(i.DataFine)+'</strong></div>'+
+    '<div><span style="color:var(--gray)">Responsabile</span><br><strong>'+getName(DATA.utenti||[],i.ResponsabileID)+'</strong></div>'+
+    '<div><span style="color:var(--gray)">Avanzamento</span><br><strong>'+(i.Avanzamento||0)+'%</strong></div>'+
+    '</div>'+
+    (i.Avanzamento!=null?'<div style="margin-bottom:16px"><div style="height:8px;background:var(--gray4);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+(i.Avanzamento||0)+'%;background:var(--ok);border-radius:4px;transition:width .3s"></div></div></div>':'')+
+    (i.Note?'<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+i.Note+'</div></div>':'')+
+    '<div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">'+
+    (cObj?.Telefono?'<a href="tel:'+cObj.Telefono+'" class="btn btn-outline">📞 Chiama cliente</a>':'')+
+    (cObj?.Latitudine&&cObj?.Longitudine?'<a href="https://www.google.com/maps/dir/?api=1&destination='+cObj.Latitudine+','+cObj.Longitudine+'&travelmode=driving" target="_blank" class="btn btn-outline">📍 Naviga</a>':'')+
+    '<button class="btn btn-outline" onclick="closeSheet(\'shInstDet\')">Chiudi</button></div>';
+  openSheet('shInstDet');
 }
 
 // ============ PROFILO (con KPI personali) ============
