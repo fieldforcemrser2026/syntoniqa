@@ -2509,6 +2509,40 @@ Rispondi SOLO con JSON valido:
       return ok();
     }
 
+    // ============ SYNC CLIENTI DA ANAGRAFICA ============
+
+    case 'syncClientiFromAnagrafica': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      // Leggi anagrafica con lat/lng/citta
+      const anagAll = await sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_interno,lat,lng,citta_fatturazione,via_fatturazione&limit=500');
+      const clientiAll = await sb(env, 'clienti', 'GET', null, '?select=id,nome&obsoleto=eq.false&limit=500');
+      // Build lookup
+      const anagByM3 = {};
+      const anagByName = {};
+      for (const a of anagAll) {
+        if (a.codice_m3) anagByM3[String(a.codice_m3).replace(/^0+/,'')] = a;
+        if (a.nome_interno) anagByName[a.nome_interno.toUpperCase()] = a;
+      }
+      let updated = 0;
+      for (const cli of clientiAll) {
+        const cid = String(cli.id).replace(/^0+/,'');
+        const match = anagByM3[cid] || anagByName[(cli.nome||'').toUpperCase()];
+        if (!match) continue;
+        const updates = {};
+        if (match.lat != null) updates.latitudine = match.lat;
+        if (match.lng != null) updates.longitudine = match.lng;
+        if (match.citta_fatturazione) updates.citta = match.citta_fatturazione;
+        if (match.via_fatturazione) updates.indirizzo = match.via_fatturazione;
+        if (Object.keys(updates).length) {
+          await sb(env, `clienti?id=eq.${cli.id}`, 'PATCH', updates);
+          updated++;
+        }
+      }
+      await wlog('clienti', 'SYNC', 'sync_from_anagrafica', body.operatoreId, `${updated} aggiornati`);
+      return ok({ updated, total: clientiAll.length });
+    }
+
     // ============ ANAGRAFICA (Clienti + Assets) ============
 
     case 'getAnagraficaClienti': {

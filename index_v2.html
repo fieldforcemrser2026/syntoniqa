@@ -768,12 +768,22 @@ async function apiCall(action,data,method){
   }
 }
 
-async function refreshData(){
+async function refreshData(silent){
+  if(silent){
+    // Refresh silenzioso senza loading overlay
+    try{
+      let url=API_URL+'?'+new URLSearchParams({action:'getAll',token:API_TOKEN,userId:USER?.ID||''});
+      const r=await fetch(url,{signal:AbortSignal.timeout(15000)});
+      const json=await r.json();
+      if(json.success&&json.data){DATA=json.data;if(USER&&USER.ID){const fresh=(DATA.utenti||[]).find(x=>x.ID===USER.ID);if(fresh)USER={...fresh}}renderAll()}
+    }catch(e){console.warn('[SILENT-REFRESH]',e.message)}
+    return;
+  }
   try{
     DATA=await apiCall('getAll',{userId:USER?.ID||''});
     if(USER&&USER.ID){const fresh=(DATA.utenti||[]).find(x=>x.ID===USER.ID);if(fresh)USER={...fresh}}
     renderAll();
-    loadChatUnread(); // Aggiorna badge chat
+    loadChatUnread();
   }catch(e){toast('Errore: '+e.message,'err')}
 }
 
@@ -818,7 +828,8 @@ function enterApp(){
   $('hdrDate').textContent=new Date().toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'});
   fillSelects();
   renderAll();
-  setInterval(refreshData,60000);
+  // Auto-refresh silenzioso ogni 5 min (senza overlay)
+  setInterval(()=>{refreshData(true)},300000);
 }
 
 function fillSelects(){
