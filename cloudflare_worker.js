@@ -1491,10 +1491,15 @@ async function handlePost(action, body, env) {
         }
       }
 
+      const oggi = new Date().toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Europe/Rome' });
+      const isoOggi = new Date().toISOString().split('T')[0];
+
       const prompt = `Sei l'AI planner di Syntoniqa, il sistema FSM di MRS Lely Center Emilia Romagna.
-Genera un piano di interventi ottimizzato per la prossima settimana.
+OGGI È: ${oggi} (${isoOggi}). Genera date REALI a partire da oggi o domani. NON inventare date passate.
+Genera un piano di interventi ottimizzato.
 
 VINCOLI UTENTE: ${testo || 'Nessun vincolo specificato'}
+IMPORTANTE: Rispetta ESATTAMENTE i vincoli dell'utente. Se dice "solo X e Y disponibili", usa SOLO quei tecnici.
 
 TECNICI DISPONIBILI (${allTecnici.length}):
 ${allTecnici.map(t => `- ${t.nome||''} ${t.cognome||''} (ID: ${t.id}, base: ${t.base||'?'}, squadra: ${t.squadra_id||'?'})`).join('\n')}
