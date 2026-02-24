@@ -148,6 +148,9 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 .kpi-mini{background:var(--white);border-radius:var(--radius-sm);padding:12px;text-align:center;box-shadow:var(--shadow);border:1px solid #E5E7EB}
 .kpi-mini .val{font-size:1.375rem;font-weight:700;letter-spacing:-.02em}
 .kpi-mini .lbl{font-size:.625rem;color:var(--gray);text-transform:uppercase;margin-top:2px}
+.kpi-box{background:var(--white);border-radius:var(--radius-sm);padding:12px 8px;text-align:center;box-shadow:var(--shadow);border:1px solid #E5E7EB}
+.kpi-val{font-size:1.5rem;font-weight:700;letter-spacing:-.02em}
+.kpi-lbl{font-size:.6rem;color:var(--gray);text-transform:uppercase;margin-top:2px}
 
 /* BOTTOM SHEET */
 .sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:5000;opacity:0;pointer-events:none;transition:opacity .2s}
@@ -461,6 +464,17 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <div style="padding:16px"><button class="btn btn-outline btn-block" onclick="logout()">🚪 Esci</button></div>
 </div>
 
+<!-- PAGE: LE MIE KPI -->
+<div class="page" id="pgKpi">
+<div class="card"><div class="card-head"><h3>📊 Le mie KPI</h3><select id="kpiPeriodo" class="btn btn-ghost btn-sm" onchange="renderKpi()" style="font-size:.75rem"><option value="7">Ultimi 7 giorni</option><option value="30">Ultimo mese</option><option value="90">Ultimo trimestre</option></select></div>
+<div class="card-body">
+<div class="kpi-row" id="kpiCards" style="grid-template-columns:repeat(2,1fr)"></div>
+<div id="kpiCharts" style="margin-top:16px"></div>
+</div></div>
+<div class="card"><div class="card-head"><h3>📋 Dettaglio Interventi</h3></div>
+<div class="card-body np"><table class="tbl"><thead><tr><th>Data</th><th>Cliente</th><th>Tipo</th><th>Stato</th><th>Durata</th></tr></thead><tbody id="kpiIntervList"></tbody></table></div></div>
+</div>
+
 </main>
 
 <!-- BOTTOM NAV -->
@@ -732,12 +746,13 @@ function goPage(name){
   const t={'home':'🏠 Home','interventi':'📋 Interventi','urgenze':'🚨 Urgenze','ordini':'📦 Ordini','menu':'⋯ Menu',
     'chat':'💬 Chat Telegram','notifiche':'🔔 Notifiche','richieste':'📝 Richieste','reperibilita':'📞 Reperibilità','trasferte':'🧳 Trasferte',
     'installazioni':'🔧 Installazioni','clienti':'🏢 Clienti','macchine':'⚙️ Macchine','documenti':'📁 Documenti',
-    'mappa':'🗺️ Mappa Giro','calendario':'📅 Calendario','profilo':'👤 Profilo'};
+    'mappa':'🗺️ Mappa Giro','calendario':'📅 Calendario','profilo':'👤 Profilo','kpi':'📊 Le mie KPI'};
   $('hdrTitle').textContent=t[name]||name;
   window.scrollTo(0,0);
   if(name==='calendario')renderCalMobile();
   if(name==='mappa')setTimeout(initMap,200);
   if(name==='chat')initChat();
+  if(name==='kpi')renderKpi();
 }
 
 // ============ API (identica ad admin_v1) ============
@@ -2152,6 +2167,108 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
   if($('loginForm'))obs.observe($('loginForm'),{attributes:true,attributeFilter:['style']});
 });
+
+// ============ KPI DASHBOARD TECNICO ============
+function renderKpi(){
+  if(!USER||!DATA) return;
+  const days=parseInt($('kpiPeriodo')?.value||'7');
+  const now=new Date();
+  const from=new Date(now);from.setDate(now.getDate()-days);
+  const fromStr=from.toISOString().split('T')[0];
+  const uid=USER.ID;
+
+  // Filter my piano
+  const myPiano=(DATA.piano||[]).filter(p=>p.TecnicoID===uid&&!p.Obsoleto);
+  const period=myPiano.filter(p=>(p.Data||'')>=fromStr);
+  const completati=period.filter(p=>p.Stato==='completato');
+  const inCorso=period.filter(p=>p.Stato==='in_corso');
+  const pianificati=period.filter(p=>p.Stato==='pianificato');
+
+  // My urgenze
+  const myUrg=(DATA.urgenze||[]).filter(u=>u.TecnicoAssegnato===uid);
+  const urgPeriod=myUrg.filter(u=>(u.DataSegnalazione||'').substring(0,10)>=fromStr);
+  const urgRisolte=urgPeriod.filter(u=>u.Stato==='risolta'||u.Stato==='chiusa');
+
+  // Hours worked (sum DurataOre from completed piano)
+  const orelavorate=completati.reduce((s,p)=>s+(parseFloat(p.DurataOre)||0),0);
+
+  // SLA compliance
+  const urgConSla=urgPeriod.filter(u=>u.SLAStatus);
+  const slaOk=urgConSla.filter(u=>u.SLAStatus==='ok'||u.SLAStatus==='warning');
+  const slaPerc=urgConSla.length?Math.round(slaOk.length/urgConSla.length*100):100;
+
+  // Average resolution time
+  let avgResH=0;
+  const resolved=urgPeriod.filter(u=>u.DataRisoluzione&&u.DataSegnalazione);
+  if(resolved.length){
+    const totalH=resolved.reduce((s,u)=>{
+      const d1=new Date(u.DataSegnalazione),d2=new Date(u.DataRisoluzione);
+      return s+(d2-d1)/3600000;
+    },0);
+    avgResH=Math.round(totalH/resolved.length*10)/10;
+  }
+
+  // KPI cards
+  $('kpiCards').innerHTML=`
+    <div class="kpi-box"><div class="kpi-val" style="color:var(--ok)">${completati.length}</div><div class="kpi-lbl">Completati</div></div>
+    <div class="kpi-box"><div class="kpi-val" style="color:var(--warn)">${inCorso.length}</div><div class="kpi-lbl">In Corso</div></div>
+    <div class="kpi-box"><div class="kpi-val" style="color:var(--c1)">${urgRisolte.length}</div><div class="kpi-lbl">Urgenze Risolte</div></div>
+    <div class="kpi-box"><div class="kpi-val">${orelavorate.toFixed(1)}h</div><div class="kpi-lbl">Ore Lavorate</div></div>
+    <div class="kpi-box"><div class="kpi-val" style="color:${slaPerc>=80?'var(--ok)':slaPerc>=60?'var(--warn)':'var(--err)'}">${slaPerc}%</div><div class="kpi-lbl">SLA Compliance</div></div>
+    <div class="kpi-box"><div class="kpi-val">${avgResH}h</div><div class="kpi-lbl">Tempo Medio Risoluzione</div></div>
+  `;
+
+  // Chart: interventi per giorno (ultimi N giorni)
+  const byDay={};
+  for(let i=0;i<Math.min(days,30);i++){
+    const d=new Date(now);d.setDate(now.getDate()-i);
+    byDay[d.toISOString().split('T')[0]]={completati:0,pianificati:0,urgenze:0};
+  }
+  completati.forEach(p=>{const d=p.Data;if(byDay[d])byDay[d].completati++});
+  pianificati.forEach(p=>{const d=p.Data;if(byDay[d])byDay[d].pianificati++});
+  urgRisolte.forEach(u=>{const d=(u.DataRisoluzione||'').substring(0,10);if(byDay[d])byDay[d].urgenze++});
+
+  const labels=Object.keys(byDay).sort();
+  const maxVal=Math.max(1,...labels.map(d=>byDay[d].completati+byDay[d].pianificati+byDay[d].urgenze));
+
+  $('kpiCharts').innerHTML=`
+    <div style="font-weight:600;font-size:.8rem;margin-bottom:8px">📈 Attività per giorno</div>
+    <div style="overflow-x:auto">
+    <div style="display:flex;align-items:flex-end;gap:2px;height:120px;min-width:${labels.length*24}px">
+    ${labels.map(d=>{
+      const v=byDay[d];
+      const tot=v.completati+v.pianificati+v.urgenze;
+      const h=Math.max(4,Math.round(tot/maxVal*100));
+      const day=d.substring(8,10)+'/'+d.substring(5,7);
+      return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;min-width:20px" title="${day}: ${tot} attività">
+        <div style="font-size:.55rem;color:var(--gray);margin-bottom:2px">${tot||''}</div>
+        <div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:100px">
+          ${v.urgenze?`<div style="background:var(--err);height:${Math.round(v.urgenze/maxVal*100)}px;border-radius:2px 2px 0 0;min-height:3px"></div>`:''}
+          ${v.completati?`<div style="background:var(--ok);height:${Math.round(v.completati/maxVal*100)}px;min-height:3px"></div>`:''}
+          ${v.pianificati?`<div style="background:var(--warn);height:${Math.round(v.pianificati/maxVal*100)}px;border-radius:0 0 2px 2px;min-height:3px"></div>`:''}
+          ${!tot?`<div style="background:var(--border);height:4px;border-radius:2px"></div>`:''}
+        </div>
+        <div style="font-size:.5rem;color:var(--gray);margin-top:2px;writing-mode:vertical-rl;transform:rotate(180deg);height:30px;overflow:hidden">${day}</div>
+      </div>`;
+    }).join('')}
+    </div></div>
+    <div style="display:flex;gap:12px;font-size:.65rem;color:var(--gray);margin-top:6px;justify-content:center">
+      <span><span style="display:inline-block;width:8px;height:8px;background:var(--ok);border-radius:2px;margin-right:3px"></span>Completati</span>
+      <span><span style="display:inline-block;width:8px;height:8px;background:var(--warn);border-radius:2px;margin-right:3px"></span>Pianificati</span>
+      <span><span style="display:inline-block;width:8px;height:8px;background:var(--err);border-radius:2px;margin-right:3px"></span>Urgenze</span>
+    </div>
+  `;
+
+  // Interventi list
+  const recentInt=period.sort((a,b)=>(b.Data||'').localeCompare(a.Data||'')).slice(0,20);
+  $('kpiIntervList').innerHTML=recentInt.length?recentInt.map(p=>`<tr>
+    <td>${fmtDate(p.Data)}</td>
+    <td>${getName(DATA.clienti,p.ClienteID)}</td>
+    <td>${getName(DATA.tipiIntervento||[],p.TipoInterventoID)}</td>
+    <td>${statusTag(p.Stato)}</td>
+    <td>${p.DurataOre?p.DurataOre+'h':'—'}</td>
+  </tr>`).join(''):'<tr><td colspan="5" class="empty">Nessun intervento nel periodo</td></tr>';
+}
 
 // ============ SERVICE WORKER + OFFLINE ============
 if('serviceWorker' in navigator){
