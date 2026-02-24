@@ -66,6 +66,26 @@
   --radius:12px; --radius-sm:8px;
   --safe-b:env(safe-area-inset-bottom,0px);
 }
+[data-theme="dark"]{
+  --gray:#9CA3AF; --gray2:#6B7280; --gray3:#374151; --gray4:#1F2937; --gray5:#111827;
+  --dark:#F9FAFB; --white:#1F2937;
+  --shadow:0 1px 3px rgba(0,0,0,.3);
+  --shadow-lg:0 8px 24px rgba(0,0,0,.4);
+}
+[data-theme="dark"] body{background:#111827}
+[data-theme="dark"] .login{background:linear-gradient(160deg,#0F172A,var(--c1))}
+[data-theme="dark"] .card{border-color:#374151}
+[data-theme="dark"] .card-head{border-color:#374151}
+[data-theme="dark"] .bnav{background:#1F2937;border-color:#374151}
+[data-theme="dark"] .hdr{box-shadow:0 2px 8px rgba(0,0,0,.4)}
+[data-theme="dark"] .sheet-overlay{background:rgba(0,0,0,.6)}
+[data-theme="dark"] .sheet-content{background:#1F2937}
+[data-theme="dark"] .badge{opacity:.9}
+[data-theme="dark"] .field input,[data-theme="dark"] .field select,[data-theme="dark"] .field textarea{background:#111827;border-color:#374151;color:#F9FAFB}
+[data-theme="dark"] .btn-outline{background:#1F2937;border-color:#374151;color:#F9FAFB}
+[data-theme="dark"] .list-item{border-color:#374151}
+[data-theme="dark"] .stat-card{background:#1F2937}
+[data-theme="dark"] .kpi-box{background:#1F2937;border-color:#374151}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-height:100vh;min-height:100dvh;line-height:1.5;font-size:14px;overflow-x:hidden}
 ::-webkit-scrollbar{display:none}
@@ -466,6 +486,28 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <div id="pushStatus" style="font-size:.75rem;color:var(--gray)"></div>
 </div>
 </div>
+<div class="card">
+<div class="card-head"><h3>🎨 Aspetto</h3></div>
+<div class="card-body">
+<div style="display:flex;align-items:center;justify-content:space-between">
+<span style="font-size:.85rem">Modalità scura</span>
+<label style="position:relative;display:inline-block;width:48px;height:26px;cursor:pointer">
+<input type="checkbox" id="darkToggle" onchange="toggleDarkMode()" style="opacity:0;width:0;height:0">
+<span style="position:absolute;inset:0;background:#ccc;border-radius:26px;transition:.3s"></span>
+<span id="darkSlider" style="position:absolute;height:20px;width:20px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s"></span>
+</label>
+</div>
+</div>
+</div>
+<div class="card">
+<div class="card-head"><h3>🌍 Lingua</h3></div>
+<div class="card-body">
+<div style="display:flex;gap:8px">
+<button class="btn btn-sm" id="langIt" onclick="switchLang('it')" style="flex:1">🇮🇹 Italiano</button>
+<button class="btn btn-sm" id="langEn" onclick="switchLang('en')" style="flex:1">🇬🇧 English</button>
+</div>
+</div>
+</div>
 <div class="card" style="margin-bottom:0">
 <div class="card-head"><h3>🔑 Cambia Password</h3></div>
 <div class="card-body">
@@ -718,6 +760,65 @@ const API_URL = (window.SYNTONIQA_CONFIG&&window.SYNTONIQA_CONFIG.api&&window.SY
 const API_TOKEN = (window.SYNTONIQA_CONFIG&&window.SYNTONIQA_CONFIG.api&&window.SYNTONIQA_CONFIG.api.token)
   || 'FF_TOKEN_CAMBIA_QUESTO_IN_PRODUZIONE';
 
+// ============ i18n ============
+const I18N = {
+  it: {
+    // Nav
+    home:'Home', piano:'Piano', urgenze:'Urgenze', mappa:'Mappa', profilo:'Profilo', kpi:'Le mie KPI',
+    // Common
+    oggi:'Oggi', domani:'Domani', ieri:'Ieri', tutti:'Tutti', cerca:'Cerca...', salva:'Salva',
+    annulla:'Annulla', conferma:'Conferma', elimina:'Elimina', carica:'Carica', invia:'Invia',
+    nessun_risultato:'Nessun risultato', caricamento:'Caricamento...', errore:'Errore',
+    // Status
+    pianificato:'Pianificato', in_corso:'In corso', completato:'Completato', annullato:'Annullato',
+    aperta:'Aperta', assegnata:'Assegnata', schedulata:'Schedulata', risolta:'Risolta', chiusa:'Chiusa',
+    // Interventi
+    interventi_oggi:'Interventi di oggi', interventi:'Interventi', urgenze_aperte:'Urgenze aperte',
+    cliente:'Cliente', tecnico:'Tecnico', data:'Data', ora_inizio:'Ora inizio', ora_fine:'Ora fine',
+    tipo_intervento:'Tipo intervento', note:'Note', note_completamento:'Note completamento',
+    // Urgenze
+    priorita:'Priorità', alta:'Alta', media:'Media', bassa:'Bassa', critica:'Critica',
+    descrizione:'Descrizione', segnalato_da:'Segnalato da',
+    // Profile
+    cambia_password:'Cambia Password', password_attuale:'Password attuale',
+    nuova_password:'Nuova password', conferma_password:'Conferma nuova password',
+    notifiche_push:'Notifiche Push', aspetto:'Aspetto', modalita_scura:'Modalità scura',
+    esci:'Esci',
+    // KPI
+    completati:'Completati', ore_lavorate:'Ore lavorate', sla_rispettato:'SLA rispettato',
+    tempo_medio:'Tempo medio',
+    // Foto
+    foto_intervento:'Foto intervento', scatta_foto:'Scatta foto', galleria:'Galleria',
+    analisi_ai:'Analisi AI foto', diagnosi:'Diagnosi', gravita:'Gravità',
+    ricambio_suggerito:'Ricambio suggerito', ordina_ricambio:'Ordina ricambio',
+  },
+  en: {
+    home:'Home', piano:'Schedule', urgenze:'Emergencies', mappa:'Map', profilo:'Profile', kpi:'My KPIs',
+    oggi:'Today', domani:'Tomorrow', ieri:'Yesterday', tutti:'All', cerca:'Search...', salva:'Save',
+    annulla:'Cancel', conferma:'Confirm', elimina:'Delete', carica:'Upload', invia:'Send',
+    nessun_risultato:'No results', caricamento:'Loading...', errore:'Error',
+    pianificato:'Scheduled', in_corso:'In progress', completato:'Completed', annullato:'Cancelled',
+    aperta:'Open', assegnata:'Assigned', schedulata:'Scheduled', risolta:'Resolved', chiusa:'Closed',
+    interventi_oggi:'Today\'s interventions', interventi:'Interventions', urgenze_aperte:'Open emergencies',
+    cliente:'Customer', tecnico:'Technician', data:'Date', ora_inizio:'Start time', ora_fine:'End time',
+    tipo_intervento:'Intervention type', note:'Notes', note_completamento:'Completion notes',
+    priorita:'Priority', alta:'High', media:'Medium', bassa:'Low', critica:'Critical',
+    descrizione:'Description', segnalato_da:'Reported by',
+    cambia_password:'Change Password', password_attuale:'Current password',
+    nuova_password:'New password', conferma_password:'Confirm new password',
+    notifiche_push:'Push Notifications', aspetto:'Appearance', modalita_scura:'Dark mode',
+    esci:'Log out',
+    completati:'Completed', ore_lavorate:'Hours worked', sla_rispettato:'SLA compliance',
+    tempo_medio:'Average time',
+    foto_intervento:'Intervention photo', scatta_foto:'Take photo', galleria:'Gallery',
+    analisi_ai:'AI Photo Analysis', diagnosi:'Diagnosis', gravita:'Severity',
+    ricambio_suggerito:'Suggested spare part', ordina_ricambio:'Order spare part',
+  }
+};
+let LANG = localStorage.getItem('sq2_lang') || 'it';
+function t(key){ return (I18N[LANG] && I18N[LANG][key]) || (I18N.it[key]) || key; }
+function setLang(lang){ LANG = lang; localStorage.setItem('sq2_lang', lang); }
+
 // ============ HELPERS (coerenti con admin_v1) ============
 const $=id=>document.getElementById(id);
 const today=()=>new Date().toISOString().split('T')[0];
@@ -849,6 +950,55 @@ async function doLogin(e){
 }
 
 function logout(){localStorage.removeItem('sq2tec');location.reload()}
+
+/* ─── DARK MODE ─── */
+function initDarkMode(){
+  const saved = localStorage.getItem('sq2_theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme:dark)').matches;
+  if(saved === 'dark' || (!saved && prefersDark)){
+    document.documentElement.setAttribute('data-theme','dark');
+    const t = $('darkToggle'); if(t) t.checked = true;
+    updateDarkSlider(true);
+  }
+}
+function toggleDarkMode(){
+  const on = $('darkToggle').checked;
+  if(on){
+    document.documentElement.setAttribute('data-theme','dark');
+    localStorage.setItem('sq2_theme','dark');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem('sq2_theme','light');
+  }
+  updateDarkSlider(on);
+}
+function updateDarkSlider(on){
+  const s = $('darkSlider');
+  if(!s) return;
+  s.style.transform = on ? 'translateX(22px)' : 'translateX(0)';
+  s.parentElement.previousElementSibling.style.background = on ? 'var(--c1)' : '#ccc';
+}
+initDarkMode();
+
+function switchLang(lang){
+  setLang(lang);
+  updateLangButtons();
+  // Re-render current page titles
+  const titles = {
+    'home':'🏠 '+t('home'), 'piano':'📋 '+t('piano'), 'urgenze':'🚨 '+t('urgenze'),
+    'mappa':'🗺️ '+t('mappa'), 'calendario':'📅 Calendario', 'profilo':'👤 '+t('profilo'), 'kpi':'📊 '+t('kpi')
+  };
+  if(typeof NAV_LABELS!=='undefined') Object.assign(NAV_LABELS, titles);
+  toast('✅ '+(lang==='it'?'Lingua aggiornata':'Language updated'));
+}
+function updateLangButtons(){
+  const it=$('langIt'), en=$('langEn');
+  if(it) it.style.background = LANG==='it'?'var(--c1)':'var(--gray4)';
+  if(it) it.style.color = LANG==='it'?'#fff':'var(--dark)';
+  if(en) en.style.background = LANG==='en'?'var(--c1)':'var(--gray4)';
+  if(en) en.style.color = LANG==='en'?'#fff':'var(--dark)';
+}
+setTimeout(updateLangButtons, 500);
 
 function enterApp(){
   if(USER&&USER.ID){const full=(DATA.utenti||[]).find(x=>x.ID===USER.ID);if(full)USER={...full,...USER}}

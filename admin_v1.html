@@ -114,6 +114,24 @@
 --shadow-lg:0 10px 25px rgba(0,0,0,.1),0 4px 10px rgba(0,0,0,.06);
 --radius:10px;--radius-sm:6px;--radius-lg:16px;
 }
+[data-theme="dark"]{
+  --gray:#9CA3AF;--gray2:#6B7280;--gray3:#374151;--gray4:#111827;--gray5:#0F172A;
+  --dark:#F9FAFB;--dark2:#E5E7EB;--dark3:#D1D5DB;
+  --white:#1F2937;
+  --shadow:0 1px 3px rgba(0,0,0,.3),0 1px 2px rgba(0,0,0,.2);
+  --shadow-lg:0 10px 25px rgba(0,0,0,.3),0 4px 10px rgba(0,0,0,.2);
+}
+[data-theme="dark"] .sidebar{background:#0F172A;border-color:#1E293B}
+[data-theme="dark"] .header{background:#1F2937;border-color:#374151}
+[data-theme="dark"] .card{border-color:#374151}
+[data-theme="dark"] .tbl th{background:#0F172A}
+[data-theme="dark"] .tbl td{border-color:#374151}
+[data-theme="dark"] .modal-content{background:#1F2937}
+[data-theme="dark"] .field input,[data-theme="dark"] .field select,[data-theme="dark"] .field textarea{background:#111827;border-color:#374151;color:#F9FAFB}
+[data-theme="dark"] .nav-item:hover{background:rgba(255,255,255,.08)}
+[data-theme="dark"] .nav-item.active{background:rgba(0,201,167,.15)}
+[data-theme="dark"] .login-box{background:#1F2937}
+[data-theme="dark"] ::-webkit-scrollbar-thumb{background:#4B5563}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-height:1.5;font-size:13px;overflow-x:hidden}
 ::-webkit-scrollbar{width:6px;height:6px}
@@ -459,7 +477,8 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <button class="burger" onclick="toggleSidebar()">☰</button>
 <h1 id="headerTitle">📊 Dashboard</h1>
 </div>
-<div class="actions">
+<div class="actions" style="display:flex;align-items:center;gap:10px">
+<button onclick="toggleDarkMode()" id="darkBtn" title="Dark/Light mode" style="background:none;border:none;cursor:pointer;font-size:1.125rem;padding:4px">🌙</button>
 <span id="headerDate" style="font-size:.75rem;color:var(--gray)"></span>
 <span id="headerUser" style="font-size:.8125rem;font-weight:600"></span>
 </div>
@@ -1746,6 +1765,31 @@ async function doLogin(e){
 }
 
 function logout(){localStorage.removeItem('ff8_session');location.reload()}
+
+/* ─── DARK MODE ─── */
+function initDarkMode(){
+  const saved = localStorage.getItem('sq2_admin_theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme:dark)').matches;
+  if(saved === 'dark' || (!saved && prefersDark)){
+    document.documentElement.setAttribute('data-theme','dark');
+    updateDarkBtn(true);
+  }
+}
+function toggleDarkMode(){
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if(isDark){
+    document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem('sq2_admin_theme','light');
+  } else {
+    document.documentElement.setAttribute('data-theme','dark');
+    localStorage.setItem('sq2_admin_theme','dark');
+  }
+  updateDarkBtn(!isDark);
+}
+function updateDarkBtn(dark){
+  const b = $('darkBtn'); if(b) b.textContent = dark ? '☀️' : '🌙';
+}
+initDarkMode();
 
 function enterApp(){
   $('loginScreen').classList.add('hidden');
