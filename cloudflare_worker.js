@@ -213,6 +213,36 @@ function checkToken(request, env, bodyToken) {
   return token === env.SQ_TOKEN;
 }
 
+// ============ RATE LIMITER ============
+// In-memory sliding window per IP. Resettato al cold-start.
+const RATE_LIMITS = {
+  default:   { max: 120, windowSec: 60 },   // 120 req/min per IP
+  login:     { max: 5,   windowSec: 60 },   // 5 login/min
+  ai:        { max: 10,  windowSec: 60 },   // 10 AI calls/min
+};
+const _rateStore = new Map(); // key: "ip:bucket" → [timestamps]
+
+function rateLimit(ip, bucket = 'default') {
+  const cfg = RATE_LIMITS[bucket] || RATE_LIMITS.default;
+  const key = `${ip}:${bucket}`;
+  const now = Date.now();
+  const windowMs = cfg.windowSec * 1000;
+  let hits = _rateStore.get(key) || [];
+  hits = hits.filter(t => t > now - windowMs); // Remove expired
+  if (hits.length >= cfg.max) {
+    return { limited: true, retryAfter: Math.ceil((hits[0] + windowMs - now) / 1000) };
+  }
+  hits.push(now);
+  _rateStore.set(key, hits);
+  // Cleanup old keys periodically (every 1000th call)
+  if (Math.random() < 0.001) {
+    for (const [k, v] of _rateStore) {
+      if (!v.length || v[v.length - 1] < now - windowMs * 2) _rateStore.delete(k);
+    }
+  }
+  return { limited: false, remaining: cfg.max - hits.length };
+}
+
 // ============ ROUTER ============
 
 export default {
@@ -225,11 +255,27 @@ export default {
 
     const url = new URL(request.url);
     const action = url.searchParams.get('action') || url.pathname.split('/').pop();
+    const clientIP = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
 
-    // Telegram webhook bypassa il token check (usa secret_token separato)
+    // Telegram webhook bypassa rate limit e token check
     if (action === 'telegramWebhook') {
       const body = await request.json().catch(() => ({}));
       return await handlePost(action, body, env);
+    }
+
+    // Rate limit check
+    const bucket = action === 'login' ? 'login'
+      : (action === 'generateAIPlan' || action === 'analyzeImage') ? 'ai'
+      : 'default';
+    const rl = rateLimit(clientIP, bucket);
+    if (rl.limited) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: `Troppe richieste. Riprova tra ${rl.retryAfter} secondi.`
+      }), {
+        status: 429,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': String(rl.retryAfter) }
+      });
     }
 
     try {
