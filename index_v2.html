@@ -1074,7 +1074,10 @@ function fillSelects(){
 }
 
 // ============ FILTRO MIEI ITEMS ============
-function my(list){return(list||[]).filter(p=>!p.Obsoleto&&(p.TecnicoID===USER?.ID||p.TecnicoAssegnato===USER?.ID||(p.TecniciIDs||'').includes(USER?.ID)))}
+function my(list){
+  const isAdmin=USER?.Ruolo==='admin';
+  return(list||[]).filter(p=>!p.Obsoleto&&(isAdmin||p.TecnicoID===USER?.ID||p.TecnicoAssegnato===USER?.ID||(p.TecniciIDs||'').includes(USER?.ID)));
+}
 
 // ============ RENDER ALL ============
 function renderAll(){
