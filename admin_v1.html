@@ -804,10 +804,11 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card-body">
 <div class="map-controls">
 <select id="mapFiltroTec" onchange="updateMap()" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem"><option value="">Tutti i tecnici</option></select>
-<select id="mapFiltroGiorno" onchange="updateMap()" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem"><option value="tutti_clienti">🏠 Tutti i clienti</option><option value="oggi">Oggi</option><option value="domani">Domani</option><option value="settimana">Settimana</option></select>
-<label class="field-check" style="font-size:.8125rem"><input type="checkbox" id="mapPercorso" onchange="updateMap()"> Mostra percorso</label>
-<button class="btn btn-sm btn-ok" onclick="openGoogleMaps()">📍 Apri in Google Maps</button>
+<select id="mapFiltroGiorno" onchange="updateMap()" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem"><option value="tutti_clienti">🏠 Tutti i clienti</option><option value="oggi">📋 Oggi</option><option value="domani">📅 Domani</option><option value="settimana">📆 Settimana</option></select>
+<label class="field-check" style="font-size:.8125rem"><input type="checkbox" id="mapPercorso" onchange="updateMap()" checked> Mostra percorso</label>
+<button class="btn btn-sm btn-ok" onclick="openGoogleMaps()">📍 Google Maps</button>
 </div>
+<div id="mapLegenda" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;font-size:.75rem"></div>
 <div id="mapAdmin" style="height:500px"></div>
 <div id="mapInfo" style="margin-top:12px;font-size:.8125rem;color:var(--gray)"></div>
 </div>
@@ -2944,7 +2945,18 @@ async function geocodeCity(city){
   return _geoQueue[k];
 }
 
+function fillMapTecSelect(){
+  const sel=$('mapFiltroTec');if(!sel)return;
+  const cur=sel.value;
+  sel.innerHTML='<option value="">👥 Tutti i tecnici</option>';
+  (DATA.utenti||[]).filter(u=>!u.Obsoleto&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'||u.Ruolo==='tecnico_senior')).forEach(u=>{
+    const o=document.createElement('option');o.value=u.ID;o.textContent=(u.Nome||'')+' '+(u.Cognome||'');sel.appendChild(o);
+  });
+  if(cur)sel.value=cur;
+}
+
 async function initMap(){
+  fillMapTecSelect();
   if(MAP){MAP.invalidateSize();await updateMap();return}
   MAP=L.map('mapAdmin').setView([44.6471,10.9252],9);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(MAP);
@@ -3052,6 +3064,17 @@ async function updateMap(){
   else if(allPts.length===1)MAP.setView(allPts[0],12);
   else $('mapInfo').innerHTML='⚠️ Nessun intervento trovato. Prova "Tutti i clienti" o "Settimana".';
 
+  // Legenda multi-tecnico
+  const legendaEl=$('mapLegenda');
+  if(legendaEl){
+    let legendaIdx=0;
+    legendaEl.innerHTML=Object.entries(tecGroup).map(([tid])=>{
+      const c=colors[legendaIdx++%colors.length];
+      const tName=getName(DATA.utenti||[],tid);
+      const count=tecGroup[tid].length;
+      return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:${c}22;border:1px solid ${c};border-radius:12px"><span style="width:10px;height:10px;border-radius:50%;background:${c};display:inline-block"></span>${tName} (${count})</span>`;
+    }).join('');
+  }
   $('mapInfo').innerHTML=`${piano.length} interventi · ${clientiIds.length} clienti · ${allPts.length} su mappa · ${Object.keys(tecGroup).length} tecnici`;
   MAP._ffWaypoints=waypoints;
 }
