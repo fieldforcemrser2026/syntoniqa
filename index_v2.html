@@ -2153,6 +2153,85 @@ document.addEventListener('DOMContentLoaded',()=>{
   if($('loginForm'))obs.observe($('loginForm'),{attributes:true,attributeFilter:['style']});
 });
 
+// ============ SERVICE WORKER + OFFLINE ============
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').then(reg=>{
+    console.log('[SW] Registrato, scope:',reg.scope);
+    // Check for updates
+    reg.addEventListener('updatefound',()=>{
+      const newSW=reg.installing;
+      newSW.addEventListener('statechange',()=>{
+        if(newSW.state==='installed'&&navigator.serviceWorker.controller){
+          // New version available — show update banner
+          showOfflineBanner('🔄 Nuova versione disponibile!','Aggiorna',()=>{
+            newSW.postMessage('SKIP_WAITING');
+            location.reload();
+          });
+        }
+      });
+    });
+  }).catch(e=>console.warn('[SW] Errore registrazione:',e));
+
+  // Listen for messages from SW
+  navigator.serviceWorker.addEventListener('message',event=>{
+    if(event.data.type==='ACTION_QUEUED'){
+      toast('📡 '+event.data.message,'warn');
+      updateOfflineBadge();
+    }
+    if(event.data.type==='SYNC_COMPLETE'){
+      toast('✅ '+event.data.message,'ok');
+      updateOfflineBadge();
+      refreshData();
+    }
+    if(event.data.type==='PENDING_COUNT'){
+      const badge=document.getElementById('offlineBadge');
+      if(badge)badge.textContent=event.data.count>0?event.data.count:'';
+      if(badge)badge.style.display=event.data.count>0?'inline-block':'none';
+    }
+  });
+}
+
+// Offline/online status
+window.addEventListener('online',()=>{
+  toast('✅ Sei di nuovo online!','ok');
+  hideOfflineBanner();
+  if(navigator.serviceWorker?.controller){
+    navigator.serviceWorker.controller.postMessage('ONLINE');
+  }
+  refreshData();
+});
+window.addEventListener('offline',()=>{
+  showOfflineBanner('📡 Sei offline — le azioni verranno sincronizzate quando torni online');
+});
+
+function showOfflineBanner(msg,btnText,btnAction){
+  let banner=document.getElementById('offlineBanner');
+  if(!banner){
+    banner=document.createElement('div');
+    banner.id='offlineBanner';
+    banner.style.cssText='position:fixed;top:0;left:0;right:0;background:#FEF3C7;color:#92400E;padding:8px 16px;font-size:.8rem;text-align:center;z-index:10000;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,.15)';
+    document.body.prepend(banner);
+  }
+  banner.innerHTML=`<span>${msg}</span>`;
+  if(btnText&&btnAction){
+    const btn=document.createElement('button');
+    btn.textContent=btnText;
+    btn.style.cssText='background:#C30A14;color:#fff;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:.8rem';
+    btn.onclick=btnAction;
+    banner.appendChild(btn);
+  }
+  banner.style.display='flex';
+}
+function hideOfflineBanner(){
+  const b=document.getElementById('offlineBanner');
+  if(b)b.style.display='none';
+}
+function updateOfflineBadge(){
+  if(navigator.serviceWorker?.controller){
+    navigator.serviceWorker.controller.postMessage({type:'GET_PENDING_COUNT'});
+  }
+}
+
 </script>
 </body>
 </html>

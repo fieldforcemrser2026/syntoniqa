@@ -5493,10 +5493,24 @@ async function loadKPIWithCharts(){
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').then(reg=>{
     console.log('[SW] Registered:', reg.scope);
-    // Check for updates every 30min
     setInterval(()=>reg.update(), 30*60*1000);
+    reg.addEventListener('updatefound',()=>{
+      const nw=reg.installing;
+      nw.addEventListener('statechange',()=>{
+        if(nw.state==='installed'&&navigator.serviceWorker.controller){
+          toast('🔄 Nuova versione disponibile — ricarica la pagina','warn');
+          nw.postMessage('SKIP_WAITING');
+        }
+      });
+    });
   }).catch(e=>console.warn('[SW] Registration failed:', e));
+  navigator.serviceWorker.addEventListener('message',event=>{
+    if(event.data.type==='SYNC_COMPLETE'){toast('✅ '+event.data.message,'ok');refreshData()}
+    if(event.data.type==='ACTION_QUEUED'){toast('📡 '+event.data.message,'warn')}
+  });
 }
+window.addEventListener('online',()=>{toast('✅ Online!','ok');if(navigator.serviceWorker?.controller)navigator.serviceWorker.controller.postMessage('ONLINE');refreshData()});
+window.addEventListener('offline',()=>{toast('📡 Sei offline — le azioni verranno sincronizzate','warn')});
 
 // Push Subscription Manager
 const PushManager = {

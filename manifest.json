@@ -1,8 +1,8 @@
 {
-  "name": "MRS Lely Center Emilia Romagna",
-  "short_name": "MRS Field",
+  "name": "Syntoniqa — MRS Lely Center",
+  "short_name": "Syntoniqa",
   "description": "Field Service Management — MRS Lely Center Emilia Romagna",
-  "start_url": "./index_v1.html",
+  "start_url": "./index_v2.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#050505",
@@ -25,14 +25,14 @@
       "name": "Urgenze",
       "short_name": "Urgenze",
       "description": "Apri la sezione urgenze",
-      "url": "./index_v1.html#urgenze",
+      "url": "./index_v2.html#urgenze",
       "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
     },
     {
       "name": "Interventi oggi",
       "short_name": "Oggi",
       "description": "Lista interventi del giorno",
-      "url": "./index_v1.html#oggi",
+      "url": "./index_v2.html#oggi",
       "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
     }
   ],
