@@ -1083,6 +1083,15 @@ function showUrg(id){
     '</div>'+
     '<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Problema</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+(u.Problema||'—')+'</div></div>'+
     (u.Note?'<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+u.Note+'</div></div>':'')+
+    (u.NoteAi?'<div style="margin-bottom:16px;background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:12px"><strong>🤖 Analisi AI:</strong><br>'+u.NoteAi+(u.AiConfidence?' <span style="color:var(--gray);font-size:.8em">('+Math.round((u.AiConfidence||0)*100)+'%)</span>':'')+'</div>':'')+
+    '<div style="margin-bottom:16px;border:1px dashed rgba(124,58,237,0.4);border-radius:8px;padding:12px;background:rgba(124,58,237,0.05)">'+
+    '<strong>📷 Analisi Guasto AI</strong><br>'+
+    '<input type="file" id="aiVisionFileTec_'+u.ID+'" accept="image/*" capture="environment" style="display:none" onchange="previewAIPhotoTec(\''+u.ID+'\')">'+
+    '<button class="btn btn-outline" style="margin-top:8px;font-size:.8rem" onclick="document.getElementById(\'aiVisionFileTec_'+u.ID+'\').click()">📸 Scatta Foto</button>'+
+    '<div id="aiVisionPreviewTec_'+u.ID+'" style="display:none;margin-top:8px"><img id="aiVisionImgTec_'+u.ID+'" style="max-width:100%;max-height:200px;border-radius:8px"><div style="margin-top:6px;display:flex;gap:8px"><button class="btn btn-primary" style="flex:1;font-size:.8rem" onclick="runAIVisionTec(\''+u.ID+'\')">🤖 Analizza</button><button class="btn btn-ghost" style="font-size:.8rem" onclick="cancelAIPhotoTec(\''+u.ID+'\')">✕</button></div></div>'+
+    '<div id="aiVisionLoadingTec_'+u.ID+'" style="display:none;margin-top:8px;text-align:center"><span class="spinner"></span> Analisi...</div>'+
+    '<div id="aiVisionResultTec_'+u.ID+'" style="display:none;margin-top:8px"></div>'+
+    '</div>'+
     '<div style="display:flex;flex-direction:column;gap:8px">'+
     (u.Stato==='assegnata'||u.Stato==='schedulata'?'<button class="btn" style="background:var(--warn);color:#fff" onclick="startUrg(\''+u.ID+'\')">⚡ Inizia Urgenza</button><button class="btn" style="background:var(--err);color:#fff" onclick="rejectUrg(\''+u.ID+'\')">❌ Rifiuta Urgenza</button>':'')+
     (u.Stato==='in_corso'?'<button class="btn" style="background:var(--ok);color:#fff" onclick="resolveUrg(\''+u.ID+'\')">✅ Risolvi Urgenza</button>':'')+
@@ -1117,6 +1126,73 @@ async function rejectUrg(id){
     toast('Urgenza rifiutata — admin notificato','ok');closeSheet('shUrg');
     await refreshData();
   }catch(e){toast(e.message,'err')}
+}
+
+// ============ AI VISION (Tecnico) ============
+function previewAIPhotoTec(urgId){
+  const file=document.getElementById('aiVisionFileTec_'+urgId)?.files?.[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    document.getElementById('aiVisionImgTec_'+urgId).src=e.target.result;
+    document.getElementById('aiVisionPreviewTec_'+urgId).style.display='block';
+  };
+  reader.readAsDataURL(file);
+}
+function cancelAIPhotoTec(urgId){
+  document.getElementById('aiVisionPreviewTec_'+urgId).style.display='none';
+  document.getElementById('aiVisionFileTec_'+urgId).value='';
+  document.getElementById('aiVisionResultTec_'+urgId).style.display='none';
+}
+async function runAIVisionTec(urgId){
+  const file=document.getElementById('aiVisionFileTec_'+urgId)?.files?.[0];
+  if(!file){toast('Seleziona una foto','err');return}
+  const compressed=await compressImageTec(file,800,0.7);
+  const base64=compressed.split(',')[1];
+  document.getElementById('aiVisionLoadingTec_'+urgId).style.display='block';
+  document.getElementById('aiVisionResultTec_'+urgId).style.display='none';
+  const urg=(DATA.urgenze||[]).find(u=>u.ID===urgId);
+  const macchina=urg?getName(DATA.macchine,urg.MacchinaID):'';
+  const cliente=urg?getName(DATA.clienti,urg.ClienteID):'';
+  try{
+    const res=await apiCall('analyzeImage',{
+      image_base64:base64,urgenza_id:urgId,
+      contesto:`${macchina||'macchina agricola Lely'} - ${cliente||''} - ${urg?.Problema||''}`
+    },'POST');
+    document.getElementById('aiVisionLoadingTec_'+urgId).style.display='none';
+    const r=document.getElementById('aiVisionResultTec_'+urgId);
+    r.style.display='block';
+    const gc=res.gravita==='alta'?'#DC2626':res.gravita==='media'?'#F59E0B':'#10B981';
+    r.innerHTML='<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">'+
+      '<div style="font-weight:600;margin-bottom:6px">🔍 '+( res.diagnosi||'N/D')+'</div>'+
+      '<div style="margin-bottom:4px"><strong>Gravità:</strong> <span style="background:'+gc+'20;color:'+gc+';padding:2px 8px;border-radius:4px;font-weight:600">'+(res.gravita||'?').toUpperCase()+'</span></div>'+
+      (res.ricambio_suggerito?'<div style="margin-bottom:4px"><strong>Ricambio:</strong> '+res.ricambio_suggerito+(res.codice_ricambio?' ('+res.codice_ricambio+')':'')+'</div>':'')+
+      (res.azione_consigliata?'<div style="margin-bottom:4px"><strong>Azione:</strong> '+res.azione_consigliata+'</div>':'')+
+      '<div><strong>Confidenza:</strong> '+Math.round((res.confidence||0)*100)+'%</div></div>';
+    toast('Analisi completata!','ok');
+  }catch(e){
+    document.getElementById('aiVisionLoadingTec_'+urgId).style.display='none';
+    document.getElementById('aiVisionResultTec_'+urgId).style.display='block';
+    document.getElementById('aiVisionResultTec_'+urgId).innerHTML='<div style="color:var(--err)">❌ '+e.message+'</div>';
+  }
+}
+function compressImageTec(file,maxSize,quality){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        const canvas=document.createElement('canvas');
+        let w=img.width,h=img.height;
+        if(w>maxSize||h>maxSize){if(w>h){h=Math.round(h*maxSize/w);w=maxSize}else{w=Math.round(w*maxSize/h);h=maxSize}}
+        canvas.width=w;canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(canvas.toDataURL('image/jpeg',quality));
+      };
+      img.onerror=reject;img.src=e.target.result;
+    };
+    reader.onerror=reject;reader.readAsDataURL(file);
+  });
 }
 
 // ============ ORDINI ============

@@ -7,7 +7,7 @@
  *   SUPABASE_URL        = https://xxxx.supabase.co
  *   SUPABASE_SERVICE_KEY= eyJ...  (service_role key)
  *   SQ_TOKEN            = MRS_Syntoniqa_2026_MBGOAT   (o custom per tenant)
- *   GEMINI_KEY          = AIza...
+ *   [ai] binding        = AI (Workers AI — Llama 3.1 + LLaVA Vision)
  *   TELEGRAM_BOT_TOKEN  = 123456:ABC...
  *   RESEND_API_KEY      = re_...  (email via Resend - free 3k/mese)
  */
@@ -1414,14 +1414,8 @@ async function handlePost(action, body, env) {
     // -------- INTELLIGENCE --------
 
     case 'generateAIPlan': {
-      let geminiKey = env.GEMINI_KEY || '';
-      if (!geminiKey) {
-        try {
-          const gkCfg = await sb(env, 'config', 'GET', null, '?chiave=eq.gemini_key&select=valore&limit=1');
-          if (gkCfg?.[0]?.valore) geminiKey = gkCfg[0].valore;
-        } catch(e) {}
-      }
-      if (!geminiKey) return err('Gemini API key non configurata. Configura GEMINI_KEY nelle variabili d\'ambiente del Worker Cloudflare o nella tabella config con chiave "gemini_key".');
+      // Workers AI — no API key needed, uses env.AI binding
+      if (!env.AI) return err('Workers AI non configurato. Aggiungi [ai] binding = "AI" in wrangler.toml e rideploya.');
 
       const vincoli = body.vincoli || {};
       const testo = vincoli.testo || '';
@@ -1483,23 +1477,34 @@ Rispondi con JSON:
   "warnings": ["eventuali avvisi/conflitti"]
 }`;
 
-      const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      // Cloudflare Workers AI — Llama 3.1
+      let aiRes;
+      try {
+        aiRes = await env.AI.run('@cf/meta/llama-3.1-70b-instruct', {
+          messages: [
+            { role: 'system', content: 'Rispondi SOLO con JSON valido, nessun testo extra. Nessun markdown, nessun commento, solo JSON puro.' },
+            { role: 'user', content: prompt }
+          ],
+          max_tokens: 4096
+        });
+      } catch (aiErr) {
+        // Fallback a modello più piccolo se 70B non disponibile
+        try {
+          aiRes = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+            messages: [
+              { role: 'system', content: 'Rispondi SOLO con JSON valido, nessun testo extra. Nessun markdown, nessun commento, solo JSON puro.' },
+              { role: 'user', content: prompt }
+            ],
+            max_tokens: 4096
+          });
+        } catch (aiErr2) {
+          return err(`Errore Workers AI: ${aiErr2.message || aiErr.message}`);
         }
-      );
-      const geminiData = await geminiRes.json();
-      // Check for Gemini API errors
-      if (geminiData.error) {
-        return err(`Errore Gemini AI: ${geminiData.error.message || JSON.stringify(geminiData.error)}`);
       }
-      if (!geminiData.candidates || !geminiData.candidates.length) {
-        return err('Gemini AI non ha generato una risposta. Verifica la chiave API.');
+      if (!aiRes || !aiRes.response) {
+        return err('Workers AI non ha generato una risposta.');
       }
-      const rawText = geminiData.candidates[0]?.content?.parts?.[0]?.text || '{}';
+      const rawText = aiRes.response || '{}';
       const cleanText = rawText.replace(/```json\n?|\n?```/g, '').trim();
       try {
         const result = JSON.parse(cleanText);
@@ -1507,6 +1512,61 @@ Rispondi con JSON:
       } catch (e) {
         return ok({ summary: 'Piano generato (testo)', piano: [], warnings: ['Risposta AI non parsabile in JSON — vedi raw'], raw: cleanText });
       }
+    }
+
+    case 'analyzeImage': {
+      if (!env.AI) return err('Workers AI non configurato. Aggiungi [ai] binding in wrangler.toml.');
+      const { image_base64, urgenza_id, contesto } = body;
+      if (!image_base64) return err('Immagine mancante (campo image_base64 richiesto)');
+
+      // 1. Chiamata Vision AI (LLaVA)
+      let visionRes;
+      try {
+        visionRes = await env.AI.run('@cf/llava-hf/llava-1.5-7b-hf', {
+          image: [...Uint8Array.from(atob(image_base64), c => c.charCodeAt(0))],
+          prompt: `Sei un tecnico esperto di macchine agricole Lely (robot mungitura Astronaut, alimentatori Vector, spingivacca Juno, Discovery).
+Analizza questa foto di un guasto. Contesto macchina: ${contesto || 'non specificato'}
+Rispondi SOLO con JSON valido:
+{
+  "diagnosi": "descrizione del problema identificato",
+  "gravita": "alta|media|bassa",
+  "ricambio_suggerito": "nome del pezzo di ricambio necessario",
+  "codice_ricambio": "codice Lely se riconoscibile, altrimenti null",
+  "azione_consigliata": "cosa fare subito",
+  "confidence": 0.0
+}`,
+          max_tokens: 512
+        });
+      } catch (e) {
+        return err(`Errore Vision AI: ${e.message}`);
+      }
+
+      // 2. Parse risposta
+      let analisi;
+      try {
+        const raw = visionRes.description || visionRes.response || '';
+        analisi = JSON.parse(raw.replace(/```json\n?|\n?```/g, '').trim());
+      } catch (e) {
+        analisi = {
+          diagnosi: visionRes.description || visionRes.response || 'Analisi non disponibile',
+          gravita: 'media',
+          ricambio_suggerito: null,
+          codice_ricambio: null,
+          azione_consigliata: 'Verificare manualmente',
+          confidence: 0.3
+        };
+      }
+
+      // 3. Se urgenza_id fornito, aggiorna note
+      if (urgenza_id) {
+        const nota = `[AI Vision] ${analisi.diagnosi} | Gravità: ${analisi.gravita} | Ricambio: ${analisi.ricambio_suggerito || 'N/A'}`;
+        await sb(env, `urgenze?id=eq.${urgenza_id}`, 'PATCH', {
+          note_ai: nota,
+          ai_confidence: analisi.confidence
+        }).catch(e => console.error('Errore aggiornamento urgenza:', e));
+      }
+
+      return ok(analisi);
     }
 
     case 'applyAIPlan': {
@@ -1961,9 +2021,9 @@ Rispondi con JSON:
         }).then(r=>r.json()).catch(()=>null);
       }
 
-      // ---- Helper: AI parse message with Gemini ----
+      // ---- Helper: AI parse message with Workers AI (Llama + LLaVA) ----
       async function aiParseMessage(text, mediaUrl, mediaType) {
-        if (!env.GEMINI_KEY) return null;
+        if (!env.AI) return null;
         // Get clients list for context — usa nome_interno come chiave primaria
         const clienti = await sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno&limit=300').catch(()=>[]);
         const clientiList = clienti.map(c => `${c.nome_interno || c.nome_account} → codice_m3: ${c.codice_m3}`).join('\n');
@@ -1995,28 +2055,47 @@ Rispondi SOLO con JSON valido:
   "note": "eventuali note aggiuntive"
 }`;
 
-        const contentParts = [{ text: systemPrompt + '\n\nMESSAGGIO UTENTE: ' + text }];
-        // If there's a photo, use vision model
+        // If there's a photo, use LLaVA Vision model
         if (mediaUrl && mediaType === 'photo') {
           try {
             const imgRes = await fetch(mediaUrl);
             const imgBuf = await imgRes.arrayBuffer();
-            const b64 = btoa(String.fromCharCode(...new Uint8Array(imgBuf)));
-            contentParts.push({ inline_data: { mime_type: 'image/jpeg', data: b64 } });
-          } catch(e) { /* ignore image fetch errors */ }
+            const imgBytes = [...new Uint8Array(imgBuf)];
+            const visionRes = await env.AI.run('@cf/llava-hf/llava-1.5-7b-hf', {
+              image: imgBytes,
+              prompt: systemPrompt + '\n\nMESSAGGIO UTENTE: ' + (text || 'Analizza questa foto di un guasto/macchina agricola Lely.'),
+              max_tokens: 512
+            });
+            const raw = (visionRes.description || visionRes.response || '').replace(/```json\n?|\n?```/g, '').trim();
+            try { return JSON.parse(raw); } catch { console.error('Vision parse error, raw:', raw); /* fall through to text model */ }
+          } catch(e) { console.error('Vision AI error:', e.message); /* fall through to text model */ }
         }
 
-        const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`, {
-          method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ contents: [{ parts: contentParts }] })
-        });
-        if (!geminiRes.ok) {
-          console.error('Gemini API error:', geminiRes.status, await geminiRes.text().catch(()=>''));
-          return null;
+        // Text-only: use Llama 3.1
+        try {
+          const aiRes = await env.AI.run('@cf/meta/llama-3.1-70b-instruct', {
+            messages: [
+              { role: 'system', content: 'Rispondi SOLO con JSON valido, nessun testo extra.' },
+              { role: 'user', content: systemPrompt + '\n\nMESSAGGIO UTENTE: ' + text }
+            ],
+            max_tokens: 1024
+          });
+          const raw = (aiRes.response || '').replace(/```json\n?|\n?```/g, '').trim();
+          try { return JSON.parse(raw); } catch { console.error('AI parse error, raw:', raw); return null; }
+        } catch (aiErr) {
+          // Fallback a modello più piccolo
+          try {
+            const aiRes = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+              messages: [
+                { role: 'system', content: 'Rispondi SOLO con JSON valido, nessun testo extra.' },
+                { role: 'user', content: systemPrompt + '\n\nMESSAGGIO UTENTE: ' + text }
+              ],
+              max_tokens: 1024
+            });
+            const raw = (aiRes.response || '').replace(/```json\n?|\n?```/g, '').trim();
+            try { return JSON.parse(raw); } catch { return null; }
+          } catch { return null; }
         }
-        const gd = await geminiRes.json();
-        const raw = gd.candidates?.[0]?.content?.parts?.[0]?.text?.replace(/```json\n?|\n?```/g, '').trim();
-        try { return JSON.parse(raw); } catch { console.error('Gemini parse error, raw:', raw); return null; }
       }
 
       // ---- Handle media uploads (photo, document, video, audio) ----
@@ -2140,7 +2219,7 @@ Rispondi SOLO con JSON valido:
             }
           }
 
-          // AI Parse (with fallback to keyword-based parsing if Gemini quota exceeded)
+          // AI Parse (Workers AI Llama + LLaVA, with fallback to keyword-based parsing)
           let aiResult = await aiParseMessage(text || `[${mediaType} allegato: ${fileName || 'foto'}]`, mediaUrl, mediaType);
 
           if (!aiResult) {
@@ -2510,6 +2589,30 @@ Rispondi SOLO con JSON valido:
     }
 
     // ============ SYNC CLIENTI DA ANAGRAFICA ============
+
+    case 'migrateDB': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const results = [];
+      // Add note_ai column to urgenze
+      try {
+        await sb(env, 'urgenze?select=note_ai&limit=1', 'GET');
+        results.push('note_ai: già esistente');
+      } catch(e) {
+        // Column doesn't exist — add it via a dummy PATCH that will fail,
+        // then use raw SQL approach via Supabase REST
+        // Actually, we can't do ALTER TABLE via REST API.
+        // Instead, create a Supabase RPC function or use another approach.
+        results.push('note_ai: colonna mancante — eseguire: ALTER TABLE urgenze ADD COLUMN note_ai TEXT DEFAULT NULL;');
+      }
+      try {
+        await sb(env, 'urgenze?select=ai_confidence&limit=1', 'GET');
+        results.push('ai_confidence: già esistente');
+      } catch(e) {
+        results.push('ai_confidence: colonna mancante — eseguire: ALTER TABLE urgenze ADD COLUMN ai_confidence FLOAT DEFAULT NULL;');
+      }
+      return ok({ migrations: results, note: 'Se colonne mancanti, eseguire SQL su Supabase Dashboard > SQL Editor' });
+    }
 
     case 'syncClientiFromAnagrafica': {
       const adminErr = await requireAdmin(env, body);

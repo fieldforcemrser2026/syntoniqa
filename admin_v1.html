@@ -2191,6 +2191,96 @@ async function saveUrgenzaEdit(id){
   }catch(e){toast('Errore: '+e.message,'err')}
 }
 
+// ---- AI Vision: Analisi foto guasto ----
+function previewAIPhoto(urgId){
+  const file=document.getElementById('aiVisionFile_'+urgId)?.files?.[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    document.getElementById('aiVisionImg_'+urgId).src=e.target.result;
+    document.getElementById('aiVisionPreview_'+urgId).style.display='block';
+  };
+  reader.readAsDataURL(file);
+}
+function cancelAIPhoto(urgId){
+  document.getElementById('aiVisionPreview_'+urgId).style.display='none';
+  document.getElementById('aiVisionFile_'+urgId).value='';
+  document.getElementById('aiVisionResult_'+urgId).style.display='none';
+}
+async function runAIVision(urgId){
+  const file=document.getElementById('aiVisionFile_'+urgId)?.files?.[0];
+  if(!file){toast('Seleziona una foto','err');return}
+  // Compress image client-side (max 800px, quality 0.7)
+  const compressed=await compressImage(file,800,0.7);
+  const base64=compressed.split(',')[1]; // Remove data:image/...;base64, prefix
+  document.getElementById('aiVisionLoading_'+urgId).style.display='block';
+  document.getElementById('aiVisionResult_'+urgId).style.display='none';
+  // Get urgenza context
+  const urg=(DATA.urgenze||[]).find(u=>u.ID===urgId);
+  const macchina=urg?getName(DATA.macchine||[],urg.MacchinaID,'Tipo'):'';
+  const cliente=urg?getName(DATA.clienti||[],urg.ClienteID):'';
+  try{
+    const res=await apiCall('analyzeImage',{
+      image_base64:base64,
+      urgenza_id:urgId,
+      contesto:`${macchina||'macchina agricola Lely'} presso ${cliente||'cliente'} - Problema: ${urg?.Problema||'non specificato'}`
+    },'POST');
+    document.getElementById('aiVisionLoading_'+urgId).style.display='none';
+    const r=document.getElementById('aiVisionResult_'+urgId);
+    r.style.display='block';
+    const gravColor=res.gravita==='alta'?'#DC2626':res.gravita==='media'?'#F59E0B':'#10B981';
+    r.innerHTML=`<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px">
+      <div style="font-weight:600;margin-bottom:6px">🔍 Diagnosi: ${res.diagnosi||'N/D'}</div>
+      <div style="margin-bottom:4px"><strong>Gravità:</strong> <span style="background:${gravColor}20;color:${gravColor};padding:2px 8px;border-radius:4px;font-weight:600">${(res.gravita||'?').toUpperCase()}</span></div>
+      ${res.ricambio_suggerito?`<div style="margin-bottom:4px"><strong>Ricambio:</strong> ${res.ricambio_suggerito} ${res.codice_ricambio?'('+res.codice_ricambio+')':''}</div>`:''}
+      ${res.azione_consigliata?`<div style="margin-bottom:4px"><strong>Azione:</strong> ${res.azione_consigliata}</div>`:''}
+      <div style="margin-bottom:8px"><strong>Confidenza:</strong> <div style="background:var(--border);border-radius:4px;height:8px;width:150px;display:inline-block;vertical-align:middle"><div style="background:${gravColor};height:100%;border-radius:4px;width:${Math.round((res.confidence||0)*100)}%"></div></div> ${Math.round((res.confidence||0)*100)}%</div>
+      ${res.ricambio_suggerito?`<button class="btn btn-outline btn-sm" onclick="prefillOrdineFromAI('${urgId}','${(res.ricambio_suggerito||'').replace(/'/g,"\\'")}','${(res.codice_ricambio||'').replace(/'/g,"\\'")}')">📦 Ordina Ricambio</button>`:''}
+    </div>`;
+    toast('Analisi AI completata!','ok');
+    await refreshData();
+  }catch(e){
+    document.getElementById('aiVisionLoading_'+urgId).style.display='none';
+    document.getElementById('aiVisionResult_'+urgId).style.display='block';
+    document.getElementById('aiVisionResult_'+urgId).innerHTML=`<div style="color:var(--err)">❌ Errore: ${e.message}</div>`;
+  }
+}
+function compressImage(file,maxSize,quality){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        const canvas=document.createElement('canvas');
+        let w=img.width,h=img.height;
+        if(w>maxSize||h>maxSize){
+          if(w>h){h=Math.round(h*maxSize/w);w=maxSize}
+          else{w=Math.round(w*maxSize/h);h=maxSize}
+        }
+        canvas.width=w;canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(canvas.toDataURL('image/jpeg',quality));
+      };
+      img.onerror=reject;
+      img.src=e.target.result;
+    };
+    reader.onerror=reject;
+    reader.readAsDataURL(file);
+  });
+}
+function prefillOrdineFromAI(urgId,ricambio,codice){
+  const urg=(DATA.urgenze||[]).find(u=>u.ID===urgId);
+  closeModal('modalDetail');
+  openModal('modalOrdine');
+  setTimeout(()=>{
+    if($('ordCodice'))$('ordCodice').value=codice||'';
+    if($('ordDescrizione'))$('ordDescrizione').value=ricambio||'';
+    if($('ordQuantita'))$('ordQuantita').value='1';
+    if($('ordCliente')&&urg)$('ordCliente').value=urg.ClienteID||'';
+    if($('ordNote'))$('ordNote').value=`[AI Vision] Suggerito per urgenza ${urgId}`;
+  },200);
+}
+
 async function saveInterventoEdit(id){
   try{
     const updates={id,
@@ -4300,7 +4390,7 @@ async function runAI(){
     AI_PLAN=result;
     // Render AI result nicely
     if(!result||typeof result!=='object'||(!result.piano&&!result.summary)){
-      $('aiResult').innerHTML='<div style="color:var(--err)">❌ Il server non ha generato un piano. Verifica che la chiave Gemini AI sia configurata nelle impostazioni del Worker Cloudflare (variabile GEMINI_KEY) o nella tabella config.</div>';
+      $('aiResult').innerHTML='<div style="color:var(--err)">❌ Il server non ha generato un piano. Verifica che Workers AI sia configurato correttamente (binding [ai] in wrangler.toml).</div>';
       return;
     }
     if(typeof result==='object'&&result.piano){
@@ -4622,7 +4712,22 @@ function showDetail(type,id){
       <div class="mb"><strong>Problema:</strong><br><textarea id="edUrgProblema" class="inp" rows="2" style="width:100%">${item.Problema||''}</textarea></div>
       <div class="mb"><strong>Note:</strong><br><textarea id="edUrgNote" class="inp" rows="2" style="width:100%">${item.Note||''}</textarea></div>
       <div class="mb"><strong>SLA:</strong> ${slaTag(item.SLAStatus)} ${item.SLAScadenza?'— Scadenza: '+fmtDateTime(item.SLAScadenza):''}</div>
-      ${item.InterventoID?`<div class="mb"><strong>Intervento collegato:</strong> ${item.InterventoID}</div>`:''}`;
+      ${item.NoteAi?`<div class="mb" style="background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:12px"><strong>🤖 Analisi AI:</strong><br>${item.NoteAi}${item.AiConfidence?` <span style="color:var(--gray);font-size:.8em">(Confidenza: ${Math.round((item.AiConfidence||0)*100)}%)</span>`:''}</div>`:''}
+      ${item.InterventoID?`<div class="mb"><strong>Intervento collegato:</strong> ${item.InterventoID}</div>`:''}
+      <div class="mb" id="aiVisionBlock_${id}" style="border:1px dashed rgba(124,58,237,0.4);border-radius:8px;padding:12px;background:rgba(124,58,237,0.05)">
+        <strong>📷 Analisi Guasto con AI Vision</strong><br>
+        <input type="file" id="aiVisionFile_${id}" accept="image/*" capture="environment" style="display:none" onchange="previewAIPhoto('${id}')">
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('aiVisionFile_${id}').click()" style="margin-top:8px">📸 Scatta / Carica Foto</button>
+        <div id="aiVisionPreview_${id}" style="display:none;margin-top:8px">
+          <img id="aiVisionImg_${id}" style="max-width:300px;max-height:200px;border-radius:8px;border:1px solid var(--border)">
+          <div style="margin-top:6px">
+            <button class="btn btn-primary btn-sm" onclick="runAIVision('${id}')">🤖 Analizza</button>
+            <button class="btn btn-ghost btn-sm" onclick="cancelAIPhoto('${id}')">✕ Annulla</button>
+          </div>
+        </div>
+        <div id="aiVisionLoading_${id}" style="display:none;margin-top:8px"><span class="spinner"></span> Analisi in corso...</div>
+        <div id="aiVisionResult_${id}" style="display:none;margin-top:8px"></div>
+      </div>`;
       foot=`<button class="btn btn-primary" onclick="saveUrgenzaEdit('${id}')">💾 Salva Modifiche</button> `;
       if(item.Stato==='aperta')foot+=`<button class="btn btn-outline" onclick="closeModal('modalDetail');openAssegna('${id}')">👤 Approva+Assegna</button> `;
       if(item.Stato==='assegnata'||item.Stato==='schedulata')foot+=`<button class="btn btn-warn" onclick="urgAction('${id}','startUrgenza');closeModal('modalDetail')">⚡ Inizia</button> `;

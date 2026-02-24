@@ -7,6 +7,9 @@ compatibility_flags = ["nodejs_compat"]
 # Cron ogni 15 minuti: controlla interventi e manda notifiche reminder
 crons = ["*/15 * * * *"]
 
+[ai]
+binding = "AI"
+
 [vars]
 # NON mettere valori reali qui — usa i secrets di Cloudflare (passo 4 del runbook)
 # I secrets si configurano con: wrangler secret put NOME_SECRET
