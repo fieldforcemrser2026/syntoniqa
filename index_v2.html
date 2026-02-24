@@ -137,6 +137,18 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 .page{display:none;padding:12px 16px}
 .page.active{display:block}
 
+/* PULL TO REFRESH */
+.ptr{position:fixed;top:var(--hh);left:0;right:0;display:flex;justify-content:center;align-items:center;height:0;overflow:hidden;transition:height .2s;z-index:50;background:var(--gray5)}
+.ptr.active{height:50px}
+.ptr .ptr-spin{width:24px;height:24px;border:3px solid var(--gray3);border-top-color:var(--c1);border-radius:50%;animation:spin .7s linear infinite}
+
+/* SKELETON LOADING */
+.skel{background:linear-gradient(90deg,var(--gray4) 25%,var(--gray3) 50%,var(--gray4) 75%);background-size:200% 100%;animation:skelShimmer 1.5s ease-in-out infinite;border-radius:var(--radius-sm)}
+@keyframes skelShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.skel-card{height:80px;margin-bottom:12px;border-radius:var(--radius)}
+.skel-text{height:14px;margin-bottom:8px;width:80%}
+.skel-text.short{width:50%}
+
 /* CARDS */
 .card{background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-bottom:12px;border:1px solid #E5E7EB}
 .card-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #E5E7EB}
@@ -287,6 +299,7 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 </header>
 
 <!-- MAIN -->
+<div class="ptr" id="ptr"><div class="ptr-spin"></div></div>
 <main class="app" id="app">
 
 <!-- PAGE: HOME -->
@@ -1011,6 +1024,42 @@ function enterApp(){
   setInterval(()=>{refreshData(true)},300000);
   // Init push notifications
   setTimeout(()=>PushMgr.init().catch(()=>{}),2000);
+  // Init pull-to-refresh
+  initPullToRefresh();
+}
+
+/* ─── PULL TO REFRESH ─── */
+function initPullToRefresh(){
+  let startY=0, pulling=false, triggered=false;
+  const app=$('app'), ptr=$('ptr');
+  if(!app||!ptr) return;
+  app.addEventListener('touchstart',e=>{
+    if(window.scrollY===0 && e.touches.length===1){
+      startY=e.touches[0].clientY; pulling=true; triggered=false;
+    }
+  },{passive:true});
+  app.addEventListener('touchmove',e=>{
+    if(!pulling) return;
+    const dy=e.touches[0].clientY - startY;
+    if(dy>60 && !triggered){
+      ptr.classList.add('active'); triggered=true;
+    }
+  },{passive:true});
+  app.addEventListener('touchend',()=>{
+    if(triggered){
+      refreshData(true).then(()=>{
+        ptr.classList.remove('active');
+        toast('Aggiornato','ok');
+      }).catch(()=>ptr.classList.remove('active'));
+    } else { ptr.classList.remove('active'); }
+    pulling=false; triggered=false;
+  },{passive:true});
+}
+
+/* ─── SKELETON LOADING ─── */
+function showSkeleton(containerId, count=3){
+  const el=$(containerId); if(!el) return;
+  el.innerHTML = Array(count).fill('<div class="skel skel-card"></div>').join('');
 }
 
 function fillSelects(){
@@ -1159,6 +1208,7 @@ function showInt(id){
     (p.Note?'<div style="margin-bottom:12px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm);font-size:.8125rem">'+p.Note+'</div></div>':'')+
     (p.NoteCompletamento?'<div style="margin-bottom:12px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note completamento</div><div style="background:#D1FAE5;padding:12px;border-radius:var(--radius-sm);font-size:.8125rem">'+p.NoteCompletamento+'</div></div>':'')+
     (p.Stato==='in_corso'?'<div style="border:1px dashed var(--border);border-radius:8px;padding:12px;margin-bottom:12px"><strong style="font-size:.85rem">📷 Foto Intervento</strong><div style="display:flex;gap:8px;margin-top:8px"><label class="btn btn-outline" style="flex:1;text-align:center;cursor:pointer;font-size:.8rem">📸 Scatta<input type="file" accept="image/*" capture="environment" style="display:none" onchange="uploadFotoInt(this,\''+id+'\')"></label><label class="btn btn-outline" style="flex:1;text-align:center;cursor:pointer;font-size:.8rem">📁 Galleria<input type="file" accept="image/*" style="display:none" onchange="uploadFotoInt(this,\''+id+'\')"></label></div><div id="fotoIntPrev_'+id+'" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div></div>':'')+
+    (p.Stato==='in_corso'||p.Stato==='completato'?buildChecklistUI(id, p):'') +
     '<div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">'+
     (cObj?.Telefono?'<a href="tel:'+cObj.Telefono+'" class="btn btn-outline">📞 Chiama '+cObj.Telefono+'</a>':'')+
     (cObj?.Latitudine&&cObj?.Longitudine?'<a href="https://www.google.com/maps/dir/?api=1&destination='+cObj.Latitudine+','+cObj.Longitudine+'&travelmode=driving" target="_blank" class="btn btn-outline">📍 Naviga</a>':'')+
@@ -1167,6 +1217,84 @@ function showInt(id){
     (p.Stato!=='completato'?'<button class="btn btn-outline" onclick="openEditInt(\''+id+'\')">✏️ Modifica Intervento</button>':'')+
     '</div>';
   openSheet('shInt');
+  // Load checklist state if in_corso
+  if(p.Stato==='in_corso') loadChecklistState(id);
+}
+
+/* ─── CHECKLIST INTERVENTO ─── */
+function buildChecklistUI(intId, p){
+  const templates = DATA.checklistTemplate || DATA.ChecklistTemplate || [];
+  if(!templates.length) return '';
+  const readonly = p.Stato === 'completato';
+  let html = '<div style="border:1px solid var(--gray3);border-radius:var(--radius);padding:12px;margin-bottom:12px">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
+    '<strong style="font-size:.85rem">✅ Checklist</strong>' +
+    '<span id="clProgress_'+intId+'" style="font-size:.75rem;color:var(--gray)"></span></div>';
+  if(!readonly){
+    html += '<select id="clTemplate_'+intId+'" onchange="applyChecklistTemplate(\''+intId+'\')" style="width:100%;padding:8px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem;margin-bottom:10px">' +
+      '<option value="">— Seleziona template —</option>' +
+      templates.filter(t=>t.Attivo!==false&&t.Attivo!=='false').map(t=>'<option value="'+t.ID+'">'+t.Nome+'</option>').join('') +
+      '</select>';
+  }
+  html += '<div id="clItems_'+intId+'"></div></div>';
+  return html;
+}
+
+function applyChecklistTemplate(intId){
+  const sel = $('clTemplate_'+intId);
+  if(!sel) return;
+  const tplId = sel.value;
+  if(!tplId){ $('clItems_'+intId).innerHTML=''; return; }
+  const tpl = (DATA.checklistTemplate||DATA.ChecklistTemplate||[]).find(t=>t.ID===tplId);
+  if(!tpl) return;
+  let voci = [];
+  try { voci = typeof tpl.Voci === 'string' ? JSON.parse(tpl.Voci) : (tpl.Voci||[]); } catch(e){ voci = []; }
+  if(!voci.length){ $('clItems_'+intId).innerHTML='<div style="font-size:.8rem;color:var(--gray)">Template vuoto</div>'; return; }
+  const state = voci.map((v,i)=>({text: typeof v==='string'?v:v.testo||v.text||v, checked:false}));
+  localStorage.setItem('cl_'+intId, JSON.stringify({templateId:tplId, items:state}));
+  renderChecklistItems(intId, state, false);
+}
+
+function loadChecklistState(intId){
+  const saved = localStorage.getItem('cl_'+intId);
+  if(!saved) return;
+  try{
+    const data = JSON.parse(saved);
+    const items = data.items||[];
+    if(items.length) renderChecklistItems(intId, items, false);
+    if(data.templateId){
+      const sel = $('clTemplate_'+intId);
+      if(sel) sel.value = data.templateId;
+    }
+  }catch(e){}
+}
+
+function renderChecklistItems(intId, items, readonly){
+  const el = $('clItems_'+intId);
+  if(!el) return;
+  const done = items.filter(i=>i.checked).length;
+  const total = items.length;
+  const pct = total?Math.round(done/total*100):0;
+  const progEl = $('clProgress_'+intId);
+  if(progEl) progEl.textContent = done+'/'+total+' ('+pct+'%)';
+  el.innerHTML = items.map((item,i) =>
+    '<label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--gray4);cursor:'+(readonly?'default':'pointer')+';font-size:.8125rem">' +
+    '<input type="checkbox" '+(item.checked?'checked ':'')+
+    (readonly?'disabled ':'onchange="toggleChecklistItem(\''+intId+'\','+i+')" ') +
+    'style="width:18px;height:18px;accent-color:var(--ok)">' +
+    '<span style="'+(item.checked?'text-decoration:line-through;color:var(--gray2)':'')+'">'+item.text+'</span></label>'
+  ).join('');
+}
+
+function toggleChecklistItem(intId, idx){
+  const saved = localStorage.getItem('cl_'+intId);
+  if(!saved) return;
+  try{
+    const data = JSON.parse(saved);
+    data.items[idx].checked = !data.items[idx].checked;
+    localStorage.setItem('cl_'+intId, JSON.stringify(data));
+    renderChecklistItems(intId, data.items, false);
+  }catch(e){}
 }
 
 async function startInt(id){

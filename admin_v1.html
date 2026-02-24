@@ -579,6 +579,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <h3>📦 Gestione Ordini Ricambi</h3>
 <div class="btn-group">
 <select id="filtOrdStato" onchange="renderOrdini()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti</option><option value="richiesto">Richiesto</option><option value="preso_in_carico">Preso in Carico</option><option value="ordinato">Ordinato</option><option value="in_arrivo">In Arrivo</option><option value="arrivato">Arrivato</option></select>
+<button class="btn btn-ghost btn-sm" onclick="exportOrdiniCSV()" title="Esporta CSV">📥</button>
 <button class="btn btn-info btn-sm" onclick="openModal('modalOrdine')">+ Nuovo Ordine</button>
 </div>
 </div>
@@ -668,6 +669,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="btn-group">
 <input type="text" id="srcClienti" placeholder="🔍 Cerca..." oninput="renderClienti()" style="padding:6px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem;width:200px">
 <button class="btn btn-ok btn-sm" onclick="apiCall('geocodeAll',{},'POST').then(r=>{toast('Geocodificati '+r.updated+' clienti','ok');refreshData()})">🌍 Geocodifica</button>
+<button class="btn btn-ghost btn-sm" onclick="exportClientiCSV()" title="Esporta CSV">📥</button>
 <button class="btn btn-ok btn-sm" onclick="openNewCliente()">+ Nuovo Cliente</button>
 </div>
 </div>
@@ -2211,6 +2213,47 @@ function exportUrgenzeCSV(){
   const a=document.createElement('a');a.href=url;a.download='urgenze_'+today()+'.csv';a.click();
   URL.revokeObjectURL(url);
   toast(`Esportate ${items.length} urgenze`,'ok');
+}
+
+function exportOrdiniCSV(){
+  const items=(DATA.ordini||[]).filter(o=>!o.Obsoleto);
+  const stato=$('filtOrdStato')?.value;
+  const filtered=stato?items.filter(o=>o.Stato===stato):items;
+  if(!filtered.length){toast('Nessun dato da esportare','err');return}
+  const header='Codice Ricambio;Descrizione;Quantità;Tecnico;Cliente;Stato;Data Richiesta;ETA;Note';
+  const rows=filtered.map(o=>[
+    o.CodiceRicambio||'',
+    (o.Descrizione||'').replace(/;/g,',').replace(/\n/g,' ').substring(0,150),
+    o.Quantita||1,
+    getName(DATA.utenti||[],o.TecnicoID),
+    getName(DATA.clienti||[],o.ClienteID),
+    o.Stato||'',
+    (o.DataRichiesta||o.CreatedAt||'').substring(0,10),
+    (o.DataArrivo||'').substring(0,10),
+    (o.Note||'').replace(/;/g,',').replace(/\n/g,' ').substring(0,100)
+  ].join(';'));
+  downloadCSV('ordini_'+today()+'.csv', header, rows, filtered.length, 'ordini');
+}
+
+function exportClientiCSV(){
+  const items=(DATA.clienti||[]).filter(c=>!c.Obsoleto);
+  if(!items.length){toast('Nessun dato da esportare','err');return}
+  const header='Nome;Città;Provincia;Indirizzo;Telefono;Email;Contratto;Codice M3;Lat;Lng';
+  const rows=items.map(c=>[
+    (c.Nome||'').replace(/;/g,','),c.Citta||'',c.Provincia||'',
+    (c.Indirizzo||'').replace(/;/g,','),c.Telefono||'',c.Email||'',
+    c.TipoContratto||'',c.CodiceM3||'',c.Lat||'',c.Lng||''
+  ].join(';'));
+  downloadCSV('clienti_'+today()+'.csv', header, rows, items.length, 'clienti');
+}
+
+function downloadCSV(filename, header, rows, count, label){
+  const csv='\uFEFF'+header+'\n'+rows.join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=filename;a.click();
+  URL.revokeObjectURL(url);
+  toast(`Esportati ${count} ${label}`,'ok');
 }
 
 function openAssegna(urgId){$('maUrgId').value=urgId;$('maData').value=today();openModal('modalAssegna')}
