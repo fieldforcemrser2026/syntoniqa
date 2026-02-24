@@ -452,6 +452,20 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 </div>
 <div class="kpi-row" id="profKpi"></div>
 <div class="card" id="profCard"></div>
+<div class="card" id="pushCard" style="display:none">
+<div class="card-head"><h3>🔔 Notifiche Push</h3></div>
+<div class="card-body">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+<span style="font-size:.85rem">Ricevi notifiche urgenze e interventi</span>
+<label style="position:relative;display:inline-block;width:48px;height:26px;cursor:pointer">
+<input type="checkbox" id="pushToggle" onchange="togglePush()" style="opacity:0;width:0;height:0">
+<span style="position:absolute;inset:0;background:#ccc;border-radius:26px;transition:.3s"></span>
+<span id="pushSlider" style="position:absolute;height:20px;width:20px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s"></span>
+</label>
+</div>
+<div id="pushStatus" style="font-size:.75rem;color:var(--gray)"></div>
+</div>
+</div>
 <div class="card" style="margin-bottom:0">
 <div class="card-head"><h3>🔑 Cambia Password</h3></div>
 <div class="card-body">
@@ -845,6 +859,8 @@ function enterApp(){
   renderAll();
   // Auto-refresh silenzioso ogni 5 min (senza overlay)
   setInterval(()=>{refreshData(true)},300000);
+  // Init push notifications
+  setTimeout(()=>PushMgr.init().catch(()=>{}),2000);
 }
 
 function fillSelects(){
@@ -992,6 +1008,7 @@ function showInt(id){
     '</div>'+
     (p.Note?'<div style="margin-bottom:12px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm);font-size:.8125rem">'+p.Note+'</div></div>':'')+
     (p.NoteCompletamento?'<div style="margin-bottom:12px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note completamento</div><div style="background:#D1FAE5;padding:12px;border-radius:var(--radius-sm);font-size:.8125rem">'+p.NoteCompletamento+'</div></div>':'')+
+    (p.Stato==='in_corso'?'<div style="border:1px dashed var(--border);border-radius:8px;padding:12px;margin-bottom:12px"><strong style="font-size:.85rem">📷 Foto Intervento</strong><div style="display:flex;gap:8px;margin-top:8px"><label class="btn btn-outline" style="flex:1;text-align:center;cursor:pointer;font-size:.8rem">📸 Scatta<input type="file" accept="image/*" capture="environment" style="display:none" onchange="uploadFotoInt(this,\''+id+'\')"></label><label class="btn btn-outline" style="flex:1;text-align:center;cursor:pointer;font-size:.8rem">📁 Galleria<input type="file" accept="image/*" style="display:none" onchange="uploadFotoInt(this,\''+id+'\')"></label></div><div id="fotoIntPrev_'+id+'" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div></div>':'')+
     '<div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">'+
     (cObj?.Telefono?'<a href="tel:'+cObj.Telefono+'" class="btn btn-outline">📞 Chiama '+cObj.Telefono+'</a>':'')+
     (cObj?.Latitudine&&cObj?.Longitudine?'<a href="https://www.google.com/maps/dir/?api=1&destination='+cObj.Latitudine+','+cObj.Longitudine+'&travelmode=driving" target="_blank" class="btn btn-outline">📍 Naviga</a>':'')+
@@ -2167,6 +2184,89 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
   if($('loginForm'))obs.observe($('loginForm'),{attributes:true,attributeFilter:['style']});
 });
+
+// ============ FOTO INTERVENTO (in corso) ============
+async function uploadFotoInt(input,intId){
+  const file=input.files?.[0];if(!file)return;
+  if(file.size>10*1024*1024){toast('Max 10MB','err');input.value='';return}
+  toast('📤 Caricamento foto...','info');
+  try{
+    const compressed=await compressImageTec(file,1200,0.8);
+    const base64=compressed.split(',')[1];
+    const res=await apiCall('uploadFile',{
+      base64Data:base64,
+      mimeType:'image/jpeg',
+      fileName:'foto_'+intId+'_'+Date.now()+'.jpg',
+      riferimentoTipo:'piano',
+      riferimentoId:intId,
+      uploaderId:USER?.ID
+    },'POST');
+    const prev=document.getElementById('fotoIntPrev_'+intId);
+    if(prev&&res?.url){
+      const thumb=document.createElement('img');
+      thumb.src=compressed;
+      thumb.style.cssText='width:60px;height:60px;border-radius:6px;object-fit:cover;border:1px solid var(--border)';
+      thumb.onclick=()=>window.open(res.url,'_blank');
+      prev.appendChild(thumb);
+    }
+    toast('📷 Foto caricata!','ok');
+  }catch(e){toast('Errore upload: '+e.message,'err')}
+  input.value='';
+}
+
+// ============ PUSH NOTIFICATIONS ============
+const PushMgr={
+  vapidKey:null,
+  async init(){
+    if(!('PushManager' in window)||!('serviceWorker' in navigator)){$('pushCard').style.display='none';return}
+    $('pushCard').style.display='block';
+    try{
+      const r=await apiCall('getVapidPublicKey',{});
+      if(!r?.vapidPublicKey){$('pushStatus').textContent='Push non configurato sul server';return}
+      this.vapidKey=r.vapidPublicKey;
+      const sub=await this.isSubscribed();
+      $('pushToggle').checked=sub;
+      this.updateSlider(sub);
+      $('pushStatus').textContent=sub?'Notifiche attive':'Notifiche disattivate';
+    }catch(e){$('pushStatus').textContent='Errore: '+e.message}
+  },
+  async subscribe(){
+    if(!this.vapidKey){toast('Push non configurato','warn');return false}
+    try{
+      if(Notification.permission==='denied'){toast('Notifiche bloccate dal browser','err');return false}
+      const perm=await Notification.requestPermission();
+      if(perm!=='granted'){toast('Permesso negato','warn');return false}
+      const reg=await navigator.serviceWorker.ready;
+      const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:this.urlB64(this.vapidKey)});
+      const j=sub.toJSON();
+      await apiCall('subscribePush',{userId:USER?.ID,subscription:{endpoint:j.endpoint,keys:j.keys},userAgent:navigator.userAgent},'POST');
+      toast('Notifiche attivate!','ok');return true;
+    }catch(e){toast('Errore: '+e.message,'err');return false}
+  },
+  async unsubscribe(){
+    try{
+      const reg=await navigator.serviceWorker.ready;
+      const sub=await reg.pushManager.getSubscription();
+      if(sub){const ep=sub.endpoint;await sub.unsubscribe();await apiCall('unsubscribePush',{userId:USER?.ID,endpoint:ep},'POST')}
+      toast('Notifiche disattivate','ok');
+    }catch(e){toast('Errore: '+e.message,'err')}
+  },
+  async isSubscribed(){
+    try{const reg=await navigator.serviceWorker.ready;return!!(await reg.pushManager.getSubscription())}catch{return false}
+  },
+  updateSlider(on){
+    const s=$('pushSlider');if(!s)return;
+    s.style.transform=on?'translateX(22px)':'translateX(0)';
+    s.parentElement.querySelector('span').style.background=on?'var(--ok)':'#ccc';
+  },
+  urlB64(b){const p='='.repeat((4-b.length%4)%4);const r=atob((b+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from([...r].map(c=>c.charCodeAt(0)))}
+};
+async function togglePush(){
+  const on=$('pushToggle').checked;
+  if(on){const ok=await PushMgr.subscribe();if(!ok)$('pushToggle').checked=false;PushMgr.updateSlider(ok)}
+  else{await PushMgr.unsubscribe();PushMgr.updateSlider(false)}
+  $('pushStatus').textContent=$('pushToggle').checked?'Notifiche attive':'Notifiche disattivate';
+}
 
 // ============ KPI DASHBOARD TECNICO ============
 function renderKpi(){

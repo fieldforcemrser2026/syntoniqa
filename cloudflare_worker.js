@@ -1827,23 +1827,110 @@ Rispondi SOLO con JSON valido:
     }
 
     case 'generateReport': {
-      const { tipo, dateFrom, dateTo, tecnicoId } = body;
-      let filter = `?data=gte.${dateFrom}&data=lte.${dateTo}`;
-      if (tecnicoId) filter += `&tecnico_id=eq.${tecnicoId}`;
-      
-      const [interventi, urgenze] = await Promise.all([
-        sb(env, 'piano',   'GET', null, filter + '&obsoleto=eq.false'),
-        sb(env, 'urgenze', 'GET', null, `?data_segnalazione=gte.${dateFrom}&obsoleto=eq.false`),
+      const filtri = body.filtri || {};
+      const tipo = body.tipo || 'kpi_mensile';
+      const dateFrom = filtri.data_inizio || filtri.dataInizio || body.date_from || '';
+      const dateTo = filtri.data_fine || filtri.dataFine || body.date_to || '';
+      const tecnicoId = filtri.tecnico_id || filtri.tecnicoId || body.tecnico_id || '';
+      if (!dateFrom) return err('Data inizio richiesta');
+      const dtTo = dateTo || new Date().toISOString().split('T')[0];
+
+      // Load data
+      let pFilter = `?data=gte.${dateFrom}&data=lte.${dtTo}&obsoleto=eq.false`;
+      if (tecnicoId) pFilter += `&tecnico_id=eq.${tecnicoId}`;
+      const [piano, urgenze, utenti, clienti] = await Promise.all([
+        sb(env, 'piano', 'GET', null, pFilter + '&order=data.asc&limit=1000'),
+        sb(env, 'urgenze', 'GET', null, `?data_segnalazione=gte.${dateFrom}&data_segnalazione=lte.${dtTo}T23:59:59&obsoleto=eq.false&limit=1000`),
+        sb(env, 'utenti', 'GET', null, '?attivo=eq.true&select=id,nome,cognome,ruolo'),
+        sb(env, 'clienti', 'GET', null, '?obsoleto=eq.false&select=id,nome&limit=500'),
       ]);
-      
-      const report = {
-        periodo: { from: dateFrom, to: dateTo },
-        interventi: { totale: interventi.length, completati: interventi.filter(i => i.stato === 'completato' || i.stato === 'chiuso').length },
-        urgenze:    { totale: urgenze.length,    risolte: urgenze.filter(u => u.stato === 'risolta').length },
-        ore_totali: interventi.reduce((s, i) => s + parseFloat(i.ore_lavorate || 0), 0),
-        km_totali:  interventi.reduce((s, i) => s + parseInt(i.km_percorsi || 0), 0),
-      };
-      return ok({ report });
+      const getName = (list, id, field='nome') => { const f = list.find(x => x.id === id); return f ? (f[field] || f.nome || id) : id; };
+      const tecName = (id) => { const u = utenti.find(x => x.id === id); return u ? `${u.nome||''} ${u.cognome||''}`.trim() : id||'—'; };
+      const now = new Date().toISOString().substring(0, 19).replace('T', ' ');
+
+      let result = { titolo: '', colonne: [], righe: [], generato: now };
+
+      switch (tipo) {
+        case 'interventi_tecnico': {
+          result.titolo = `Interventi per Tecnico (${dateFrom} — ${dtTo})`;
+          result.colonne = ['Tecnico', 'Totale', 'Completati', 'In Corso', 'Pianificati', 'Ore', 'Km'];
+          const byTec = {};
+          piano.forEach(p => {
+            const t = p.tecnico_id || '—';
+            if (!byTec[t]) byTec[t] = { tot: 0, comp: 0, inCorso: 0, pian: 0, ore: 0, km: 0 };
+            byTec[t].tot++;
+            if (p.stato === 'completato') byTec[t].comp++;
+            else if (p.stato === 'in_corso') byTec[t].inCorso++;
+            else byTec[t].pian++;
+            byTec[t].ore += parseFloat(p.ore_lavorate || 0);
+            byTec[t].km += parseInt(p.km_percorsi || 0);
+          });
+          result.righe = Object.entries(byTec).map(([id, v]) => [tecName(id), v.tot, v.comp, v.inCorso, v.pian, v.ore.toFixed(1), v.km]);
+          break;
+        }
+        case 'urgenze_summary': {
+          result.titolo = `Riepilogo Urgenze (${dateFrom} — ${dtTo})`;
+          result.colonne = ['ID', 'Data', 'Cliente', 'Problema', 'Priorità', 'Stato', 'Tecnico', 'SLA'];
+          result.righe = urgenze.map(u => [u.id, (u.data_segnalazione||'').substring(0,10), getName(clienti, u.cliente_id), (u.problema||'').substring(0,60), u.priorita_id||'—', u.stato, tecName(u.tecnico_assegnato), u.sla_status||'—']);
+          break;
+        }
+        case 'kpi_mensile': {
+          result.titolo = `KPI Mensile (${dateFrom} — ${dtTo})`;
+          result.colonne = ['Metrica', 'Valore'];
+          const comp = piano.filter(p => p.stato === 'completato');
+          const ore = comp.reduce((s, p) => s + parseFloat(p.ore_lavorate || 0), 0);
+          const km = comp.reduce((s, p) => s + parseInt(p.km_percorsi || 0), 0);
+          const urgRisolte = urgenze.filter(u => u.stato === 'risolta' || u.stato === 'chiusa');
+          const urgSlaOk = urgenze.filter(u => u.sla_status === 'ok' || u.sla_status === 'warning');
+          const slaPerc = urgenze.length ? Math.round(urgSlaOk.length / urgenze.length * 100) : 100;
+          result.righe = [
+            ['Interventi totali', piano.length],
+            ['Interventi completati', comp.length],
+            ['% Completamento', piano.length ? Math.round(comp.length / piano.length * 100) + '%' : '—'],
+            ['Ore lavorate totali', ore.toFixed(1)],
+            ['Km percorsi totali', km],
+            ['Urgenze totali', urgenze.length],
+            ['Urgenze risolte', urgRisolte.length],
+            ['SLA Compliance', slaPerc + '%'],
+            ['Tecnici attivi', new Set(piano.map(p => p.tecnico_id).filter(Boolean)).size],
+            ['Clienti serviti', new Set(piano.map(p => p.cliente_id).filter(Boolean)).size],
+          ];
+          break;
+        }
+        case 'performance_squadra': {
+          result.titolo = `Performance per Squadra (${dateFrom} — ${dtTo})`;
+          result.colonne = ['Tecnico', 'Ruolo', 'Interventi', 'Completati', '%', 'Urgenze', 'Ore', 'Km'];
+          const tecIds = [...new Set([...piano.map(p => p.tecnico_id), ...urgenze.map(u => u.tecnico_assegnato)].filter(Boolean))];
+          result.righe = tecIds.map(tid => {
+            const pTec = piano.filter(p => p.tecnico_id === tid);
+            const uTec = urgenze.filter(u => u.tecnico_assegnato === tid);
+            const comp = pTec.filter(p => p.stato === 'completato');
+            const u = utenti.find(x => x.id === tid);
+            return [tecName(tid), u?.ruolo||'—', pTec.length, comp.length, pTec.length ? Math.round(comp.length/pTec.length*100)+'%':'—', uTec.filter(u=>u.stato==='risolta'||u.stato==='chiusa').length, comp.reduce((s,p)=>s+parseFloat(p.ore_lavorate||0),0).toFixed(1), comp.reduce((s,p)=>s+parseInt(p.km_percorsi||0),0)];
+          });
+          break;
+        }
+        case 'clienti_inattivi': {
+          result.titolo = `Clienti Inattivi (>90 giorni senza interventi)`;
+          result.colonne = ['Cliente', 'Ultimo Intervento', 'Giorni Inattivo'];
+          const d90 = new Date(); d90.setDate(d90.getDate() - 90);
+          const allPiano = await sb(env, 'piano', 'GET', null, '?obsoleto=eq.false&order=data.desc&limit=1000');
+          const lastByClient = {};
+          allPiano.forEach(p => { if (p.cliente_id && !lastByClient[p.cliente_id]) lastByClient[p.cliente_id] = p.data; });
+          result.righe = clienti.filter(c => {
+            const last = lastByClient[c.id];
+            return !last || new Date(last) < d90;
+          }).map(c => {
+            const last = lastByClient[c.id];
+            const days = last ? Math.round((new Date() - new Date(last)) / 86400000) : '—';
+            return [c.nome || c.id, last || 'Mai', days];
+          }).sort((a, b) => (typeof b[2] === 'number' ? b[2] : 9999) - (typeof a[2] === 'number' ? a[2] : 9999));
+          break;
+        }
+        default:
+          return err('Tipo report non supportato: ' + tipo);
+      }
+      return ok(result);
     }
 
     case 'logKPISnapshot': {
