@@ -1460,108 +1460,114 @@ async function handlePost(action, body, env) {
     // -------- INTELLIGENCE --------
 
     case 'generateAIPlan': {
-      // Workers AI — no API key needed, uses env.AI binding
       if (!env.AI) return err('Workers AI non configurato. Aggiungi [ai] binding = "AI" in wrangler.toml e rideploya.');
 
       const vincoli = body.vincoli || {};
       const testo = vincoli.testo || '';
       const files = vincoli.files || [];
 
-      // If called from old interface with urgenze/tecnici
-      const urgenze = body.urgenze || [];
-      const tecnici = body.tecnici || [];
-
-      // Load current data context
-      const [allTecnici, allUrgenze, allPiano, allClienti] = await Promise.all([
-        tecnici.length ? Promise.resolve(tecnici) : sb(env, 'utenti', 'GET', null, '?attivo=eq.true&ruolo=in.(tecnico,caposquadra)&select=id,nome,cognome,base,squadra_id').catch(()=>[]),
-        urgenze.length ? Promise.resolve(urgenze) : sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata)&order=data_segnalazione.desc&limit=50').catch(()=>[]),
-        sb(env, 'piano', 'GET', null, '?obsoleto=eq.false&order=data.desc&limit=100').catch(()=>[]),
-        sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno,citta&limit=200').catch(()=>[])
+      // Load data context (lean queries to avoid timeout)
+      const [allTecnici, allUrgenze, allClienti] = await Promise.all([
+        sb(env, 'utenti', 'GET', null, '?attivo=eq.true&obsoleto=eq.false&select=id,nome,cognome,base,ruolo').catch(()=>[]),
+        sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,schedulata)&order=data_segnalazione.desc&limit=20&select=id,problema,cliente_id,priorita_id').catch(()=>[]),
+        sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno,citta_fatturazione&limit=150').catch(()=>[])
       ]);
 
-      // Build file descriptions for context
+      // File context (max 3000 chars)
       let fileContext = '';
       for (const f of files) {
         const content = typeof f.content === 'string' ? f.content : '';
-        // Se il contenuto sembra testo leggibile (CSV, foglio parsed, etc.) — includi tutto
         if (content.length > 10 && !content.match(/^[A-Za-z0-9+/=]{50,}$/)) {
-          fileContext += `\n--- FILE: ${f.name} ---\n${content.substring(0, 8000)}\n`;
-        } else if (content.length > 0) {
-          fileContext += `\n--- FILE: ${f.name} (${f.type}, ${Math.round((f.size||0)/1024)}KB) ---\n[Documento binario allegato]\n`;
+          fileContext += `\n[${f.name}]:\n${content.substring(0, 3000)}\n`;
         }
       }
 
-      const oggi = new Date().toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Europe/Rome' });
-      const isoOggi = new Date().toISOString().split('T')[0];
+      // Date
+      const isoOggi = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
+      const oggiIt = new Intl.DateTimeFormat('it-IT', { weekday:'long', year:'numeric', month:'long', day:'numeric', timeZone:'Europe/Rome' }).format(new Date());
 
-      const prompt = `Sei l'AI planner di Syntoniqa, il sistema FSM di MRS Lely Center Emilia Romagna.
-OGGI È: ${oggi} (${isoOggi}). Genera date REALI a partire da oggi o domani. NON inventare date passate.
-Genera un piano di interventi ottimizzato.
+      // Compact data
+      const tecList = allTecnici.filter(t=>t.ruolo!=='admin').map(t => `${t.nome} ${t.cognome}(${t.id},${t.ruolo},${t.base||'?'})`).join('; ');
+      const urgList = allUrgenze.slice(0,15).map(u => `${u.id}:${(u.problema||'').substring(0,30)}|${u.cliente_id}|pri:${u.priorita_id}`).join('; ');
+      const cliList = allClienti.slice(0,80).map(c => `${c.codice_m3}:${c.nome_interno||c.nome_account||'?'}(${c.citta_fatturazione||''})`).join(', ');
 
-VINCOLI UTENTE: ${testo || 'Nessun vincolo specificato'}
-IMPORTANTE: Rispetta ESATTAMENTE i vincoli dell'utente. Se dice "solo X e Y disponibili", usa SOLO quei tecnici.
+      const prompt = `PLANNER FSM MRS LELY CENTER — Robot mungitura Emilia Romagna
+OGGI: ${oggiIt} (${isoOggi})
 
-TECNICI DISPONIBILI (${allTecnici.length}):
-${allTecnici.map(t => `- ${t.nome||''} ${t.cognome||''} (ID: ${t.id}, base: ${t.base||'?'}, squadra: ${t.squadra_id||'?'})`).join('\n')}
+=== VINCOLI UTENTE (OBBLIGATORI — violazione = errore grave) ===
+${testo || 'Nessuno'}
 
-URGENZE APERTE (${allUrgenze.length}):
-${allUrgenze.slice(0,30).map(u => `- ${u.id}: ${u.problema||'?'} | Cliente: ${u.cliente_id||'?'} | Priorità: ${u.priorita_id||'?'} | SLA: ${u.sla_scadenza||'?'}`).join('\n')}
+REGOLE FISSE TEAM:
+- Junior (Emanuele,Gino,Giuseppe) → SEMPRE affiancati a un senior (Jacopo,Anton,Giovanni)
+- Mirko ASSENTE fino al prossimo mese → NON assegnarlo MAI
+- Fabio lavora SOLO da solo
+- Fabrizio in apprendimento → ok in coppia
+- Se utente dice "X non può fare Y" → NON dare interventi tipo Y a X. MAI.
 
-INTERVENTI GIÀ PIANIFICATI: ${allPiano.length}
+TECNICI: ${tecList}
+URGENZE APERTE: ${urgList || 'Nessuna'}
+CLIENTI: ${cliList}
+${fileContext ? '\nFILE CARICATO (riferimento parziale — genera piano COMPLETO per TUTTI i giorni richiesti, non solo quelli nel file):\n' + fileContext : ''}
 
-CLIENTI: ${allClienti.slice(0,50).map(c => `${c.nome_account||c.nome_interno} (${c.codice_m3}, ${c.citta||'?'})`).join(', ')}
-${fileContext ? '\nDOCUMENTI ALLEGATI:' + fileContext : ''}
+ISTRUZIONI GENERAZIONE:
+1. Genera piano per OGNI giorno lavorativo (lun-ven) del periodo richiesto dall'utente
+2. Se l'utente chiede "marzo" → genera TUTTI i giorni lav di marzo
+3. Se carica un Excel di 3 giorni ma chiede una settimana → genera 5 giorni
+4. Assegna 2-4 interventi/giorno per tecnico. Usa clienti REALI (codice_m3 sopra).
+5. Raggruppa per zona (stessa città/provincia nello stesso giorno)
+6. Urgenze aperte hanno priorità assoluta nei primi giorni
+7. Rispetta OGNI vincolo utente senza eccezioni
 
-Genera un piano ottimizzato che:
-1. Rispetti i vincoli dell'utente
-2. Prioritizzi le urgenze per SLA
-3. Minimizzi i km (raggruppa interventi per zona)
-4. Bilanci il carico tra tecnici
-5. Consideri i documenti allegati se presenti
+Rispondi SOLO JSON:
+{"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|service|urgenza|installazione","oraInizio":"HH:MM","durataOre":N,"note":"..."}],"warnings":["..."]}`;
 
-Rispondi con JSON:
-{
-  "summary": "breve riepilogo del piano",
-  "piano": [
-    {"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"id","cliente":"nome","clienteId":"codice_m3","tipo":"urgenza|tagliando|service|installazione","oraInizio":"HH:MM","durataOre":2,"note":"...","urgenzaId":"se applicabile"}
-  ],
-  "warnings": ["eventuali avvisi/conflitti"]
-}`;
-
-      // Cloudflare Workers AI — Llama 3.1
+      // Workers AI with model fallback chain
       let aiRes;
-      try {
-        aiRes = await env.AI.run('@cf/meta/llama-3.1-70b-instruct', {
-          messages: [
-            { role: 'system', content: 'Rispondi SOLO con JSON valido, nessun testo extra. Nessun markdown, nessun commento, solo JSON puro.' },
-            { role: 'user', content: prompt }
-          ],
-          max_tokens: 4096
-        });
-      } catch (aiErr) {
-        // Fallback a modello più piccolo se 70B non disponibile
+      const models = ['@cf/meta/llama-3.1-70b-instruct', '@cf/meta/llama-3.1-8b-instruct'];
+      for (const model of models) {
         try {
-          aiRes = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+          aiRes = await env.AI.run(model, {
             messages: [
-              { role: 'system', content: 'Rispondi SOLO con JSON valido, nessun testo extra. Nessun markdown, nessun commento, solo JSON puro.' },
+              { role: 'system', content: 'Sei un pianificatore FSM. Rispondi SOLO JSON valido. Zero testo extra.' },
               { role: 'user', content: prompt }
             ],
             max_tokens: 4096
           });
-        } catch (aiErr2) {
-          return err(`Errore Workers AI: ${aiErr2.message || aiErr.message}`);
+          if (aiRes && aiRes.response) break;
+        } catch (aiErr) {
+          if (model === models[models.length - 1]) {
+            return err(`Workers AI errore: ${aiErr.message || 'timeout'}. Riprova con prompt più breve.`);
+          }
         }
       }
-      if (!aiRes || !aiRes.response) {
-        return err('Workers AI non ha generato una risposta.');
-      }
+
+      if (!aiRes || !aiRes.response) return err('Workers AI non ha generato risposta. Riprova.');
+
       const rawText = aiRes.response || '{}';
-      const cleanText = rawText.replace(/```json\n?|\n?```/g, '').trim();
+      // Aggressive JSON extraction
+      let cleanText = rawText.replace(/```json\n?|\n?```/g, '').trim();
+      const jsonStart = cleanText.indexOf('{');
+      const jsonEnd = cleanText.lastIndexOf('}');
+      if (jsonStart >= 0 && jsonEnd > jsonStart) cleanText = cleanText.substring(jsonStart, jsonEnd + 1);
+
       try {
         const result = JSON.parse(cleanText);
+        // Post-process: validate tecnicoId exists
+        const validIds = new Set(allTecnici.map(t => t.id));
+        if (result.piano && Array.isArray(result.piano)) {
+          result.piano = result.piano.map(p => {
+            if (p.tecnicoId && !validIds.has(p.tecnicoId)) {
+              const match = allTecnici.find(t => (t.nome + ' ' + t.cognome).toLowerCase().includes((p.tecnico||'').split(' ')[0].toLowerCase()));
+              if (match) { p.tecnicoId = match.id; p.tecnico = match.nome + ' ' + match.cognome; }
+            }
+            return p;
+          }).filter(p => p.tecnicoId && validIds.has(p.tecnicoId));
+        }
         return ok(result);
       } catch (e) {
-        return ok({ summary: 'Piano generato (testo)', piano: [], warnings: ['Risposta AI non parsabile in JSON — vedi raw'], raw: cleanText });
+        const m = rawText.match(/\{[\s\S]*\}/);
+        if (m) { try { return ok(JSON.parse(m[0])); } catch {} }
+        return ok({ summary: 'Errore formato', piano: [], warnings: ['Risposta AI non parsabile. Riprova.'], raw: rawText.substring(0, 1500) });
       }
     }
 

@@ -4498,33 +4498,94 @@ async function runAI(){
   try{
     const result=await apiCall('generateAIPlan',{vincoli:{testo:prompt, files:filesData}},'POST');
     AI_PLAN=result;
-    // Render AI result nicely
     if(!result||typeof result!=='object'||(!result.piano&&!result.summary)){
-      $('aiResult').innerHTML='<div style="color:var(--err)">❌ Il server non ha generato un piano. Verifica che Workers AI sia configurato correttamente (binding [ai] in wrangler.toml).</div>';
+      $('aiResult').innerHTML='<div style="padding:16px;background:rgba(239,68,68,.1);border:1px solid var(--err);border-radius:var(--radius)"><strong>❌ Errore</strong><br>Workers AI non ha generato un piano. Riprova con un prompt più specifico.</div>';
       return;
     }
-    if(typeof result==='object'&&result.piano){
-      let html='<h4 style="margin:0 0 12px">📋 Piano Generato</h4>';
-      if(result.summary) html+=`<p style="margin:0 0 12px">${result.summary}</p>`;
-      if(Array.isArray(result.piano)){
-        html+='<table class="tbl" style="font-size:.8125rem"><thead><tr><th>Data</th><th>Tecnico</th><th>Cliente</th><th>Tipo</th><th>Note</th></tr></thead><tbody>';
-        result.piano.forEach(r=>{
-          html+=`<tr><td>${r.data||''}</td><td>${r.tecnico||''}</td><td>${r.cliente||''}</td><td>${r.tipo||''}</td><td>${r.note||''}</td></tr>`;
+    // ─── RENDERING PREMIUM ───
+    let html='';
+    const piano=result.piano||[];
+    const nGiorni=[...new Set(piano.map(p=>p.data))].length;
+    const nTecnici=[...new Set(piano.map(p=>p.tecnicoId||p.tecnico))].length;
+    // Header con KPI
+    html+=`<div style="background:linear-gradient(135deg,#009B83,#00C9A7);color:white;border-radius:var(--radius-lg);padding:24px;margin-bottom:16px">
+      <h3 style="margin:0 0 4px;font-size:1.25rem">📋 Piano Generato con AI</h3>
+      <p style="margin:0;opacity:.85;font-size:.85rem">${result.summary||''}</p>
+      <div style="display:flex;gap:24px;margin-top:16px">
+        <div><span style="font-size:1.75rem;font-weight:700">${piano.length}</span><br><span style="font-size:.75rem;opacity:.7">Interventi</span></div>
+        <div><span style="font-size:1.75rem;font-weight:700">${nGiorni}</span><br><span style="font-size:.75rem;opacity:.7">Giorni</span></div>
+        <div><span style="font-size:1.75rem;font-weight:700">${nTecnici}</span><br><span style="font-size:.75rem;opacity:.7">Tecnici</span></div>
+      </div>
+    </div>`;
+    // Tabella per giorno con colori tecnico
+    if(piano.length){
+      const byDate={};
+      piano.forEach(p=>{const d=p.data||'?';if(!byDate[d])byDate[d]=[];byDate[d].push(p)});
+      const tecColors={};
+      const palette=['#00C9A7','#3B7EF7','#10B981','#F59E0B','#8B5CF6','#EC4899','#06B6D4','#EF4444'];
+      let ci=0;
+      const giorni=['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+      for(const [dt,items] of Object.entries(byDate)){
+        const d=new Date(dt+'T00:00:00');
+        const dayName=isNaN(d)?dt:giorni[d.getDay()]+' '+dt.split('-').reverse().join('/');
+        html+=`<div style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="background:var(--c1);color:white;padding:4px 12px;border-radius:20px;font-size:.8125rem;font-weight:600">📅 ${dayName}</span>
+            <span style="font-size:.75rem;color:var(--gray)">${items.length} interventi</span>
+          </div>
+          <div style="display:grid;gap:8px">`;
+        items.forEach(p=>{
+          const tid=p.tecnicoId||p.tecnico||'?';
+          if(!tecColors[tid])tecColors[tid]=palette[ci++%palette.length];
+          const col=tecColors[tid];
+          const tipoIcons={'tagliando':'🔧','service':'⚙️','urgenza':'🚨','installazione':'🏗️','ispezione':'🔍'};
+          const ico=tipoIcons[p.tipo]||'📋';
+          html+=`<div style="display:flex;gap:12px;padding:10px 14px;background:var(--white);border-left:4px solid ${col};border-radius:var(--radius-sm);box-shadow:var(--shadow)">
+            <div style="flex:0 0 auto;text-align:center">
+              <div style="font-size:1.25rem">${ico}</div>
+              <div style="font-size:.7rem;color:var(--gray)">${p.oraInizio||'—'}</div>
+              <div style="font-size:.65rem;color:var(--gray2)">${p.durataOre||'?'}h</div>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600;font-size:.85rem;margin-bottom:2px">${p.cliente||'—'}</div>
+              <div style="font-size:.75rem;color:var(--gray)">
+                <span style="color:${col};font-weight:600">👤 ${p.tecnico||'—'}</span> · ${p.tipo||'—'}${p.note?' · <em>'+p.note+'</em>':''}
+              </div>
+            </div>
+          </div>`;
         });
-        html+='</tbody></table>';
+        html+='</div></div>';
       }
-      if(result.warnings&&result.warnings.length){
-        html+='<div style="margin-top:12px;padding:8px;background:rgba(245,158,11,.1);border-radius:var(--radius-sm)">⚠️ '+result.warnings.join('<br>')+'</div>';
+      // Legenda tecnici
+      html+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin:16px 0;padding:12px;background:var(--gray5);border-radius:var(--radius-sm)">';
+      html+='<span style="font-size:.75rem;font-weight:600;color:var(--gray);margin-right:8px">Tecnici:</span>';
+      for(const [tid,col] of Object.entries(tecColors)){
+        const tname=(DATA.utenti||[]).find(u=>u.ID===tid);
+        html+=`<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 10px;background:${col}18;border:1px solid ${col}40;border-radius:12px;font-size:.75rem"><span style="width:8px;height:8px;border-radius:50%;background:${col}"></span>${tname?tname.Nome+' '+tname.Cognome:tid}</span>`;
       }
-      $('aiResult').innerHTML=html;
-    } else {
-      $('aiResult').textContent=typeof result==='string'?result:JSON.stringify(result,null,2);
+      html+='</div>';
     }
+    // Warnings
+    if(result.warnings&&result.warnings.length){
+      html+=`<div style="padding:10px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius-sm);margin-top:8px;font-size:.8125rem">
+        ⚠️ <strong>Avvisi:</strong> ${result.warnings.join(' · ')}
+      </div>`;
+    }
+    // Raw fallback
+    if(result.raw){
+      html+=`<details style="margin-top:12px"><summary style="font-size:.75rem;color:var(--gray);cursor:pointer">Mostra risposta grezza</summary><pre style="font-size:.7rem;overflow-x:auto;padding:8px;background:var(--gray5);border-radius:var(--radius-sm);margin-top:4px">${result.raw}</pre></details>`;
+    }
+    $('aiResult').innerHTML=html;
     $('btnApplyAI').disabled=false;
     $('btnSubmitPlan').disabled=false;
     $('btnDownloadPlan').disabled=false;
-    toast('Piano AI generato!','ok');
-  }catch(e){$('aiResult').textContent='❌ Errore: '+e.message;toast(e.message,'err')}
+    toast(`Piano generato: ${piano.length} interventi, ${nGiorni} giorni`,'ok');
+  }catch(e){
+    $('aiResult').innerHTML=`<div style="padding:16px;background:rgba(239,68,68,.1);border:1px solid var(--err);border-radius:var(--radius)">
+      <strong>❌ Errore</strong><br>${e.message}<br><span style="font-size:.75rem;color:var(--gray)">Prova con un prompt più breve o riprova tra qualche secondo.</span>
+    </div>`;
+    toast(e.message,'err');
+  }
 }
 
 async function downloadAIPlanXlsx(){
