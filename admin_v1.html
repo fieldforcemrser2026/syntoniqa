@@ -1671,6 +1671,7 @@ function showSec(id,btn){
   if(id==='planner')setTimeout(()=>initPlanner(),100);
   if(id==='ai'){renderApprovalQueue();renderTecnicoPlan()}
   if(id==='chat')loadChatCanali();
+  if(id==='backup')loadBackupHistory();
   if(id==='anagrafica'){loadAnagClients()}
   $('sidebar').classList.remove('open');$('sideOverlay').classList.remove('show');
 }
@@ -1938,7 +1939,7 @@ function renderAll(){
   renderClienti();renderMacchine();renderAutomezzi();renderTecnici();
   renderSLA();renderAuditLog();renderPowerBI();renderConfig();renderPagellini();
   renderCal();renderDocumenti();renderChecklist();renderAllegati();
-  renderEmailConfig();renderTelegramConfig();renderTelegramExtras();loadBackupHistory();
+  renderEmailConfig();renderTelegramConfig();renderTelegramExtras();
   updateBadges();
 }
 
@@ -3340,7 +3341,11 @@ async function openChat(canaleId,nome){
 async function loadChatMessages(){
   if(!CHAT_CANALE)return;
   try{
-    const r=await apiCall('getChatMessaggi',{canale_id:CHAT_CANALE,userId:USER?.ID,limit:100},'POST');
+    // Usa fetch diretto (senza apiCall) per non mostrare l'overlay globale ogni 5s
+    const resp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action:'getChatMessaggi',canale_id:CHAT_CANALE,userId:USER?.ID,limit:100}),signal:AbortSignal.timeout(10000)});
+    const json=await resp.json();
+    if(!json.success)throw new Error(json.error||'Errore chat');
+    const r=json.data||json;
     const msgs=r.messaggi||[];
     const el=$('chatMessages');
     const wasAtBottom=el.scrollHeight-el.scrollTop-el.clientHeight<50;

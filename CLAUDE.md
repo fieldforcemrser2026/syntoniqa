@@ -16,10 +16,10 @@ cd syntoniqa
 npm install
 
 # Dev locale worker
-CLOUDFLARE_API_TOKEN=RJaqPOdGoM314VM41tNulvS97tMfgntSPu2juoCv npx wrangler dev
+CLOUDFLARE_API_TOKEN=<CF_API_TOKEN> npx wrangler dev
 
 # Deploy produzione
-CLOUDFLARE_API_TOKEN=RJaqPOdGoM314VM41tNulvS97tMfgntSPu2juoCv npx wrangler deploy
+CLOUDFLARE_API_TOKEN=<CF_API_TOKEN> npx wrangler deploy
 
 # Push frontend (GitHub Pages si aggiorna automaticamente)
 git add cloudflare_worker.js admin_v1.html index_v2.html
@@ -59,12 +59,12 @@ git push origin main
 | **Frontend Admin** | `https://fieldforcemrser2026.github.io/syntoniqa/admin_v1.html` |
 | **Frontend Tecnico** | `https://fieldforcemrser2026.github.io/syntoniqa/index_v2.html` |
 | **GitHub Repo** | `https://github.com/fieldforcemrser2026/syntoniqa` |
-| **CF API Token** | `RJaqPOdGoM314VM41tNulvS97tMfgntSPu2juoCv` |
+| **CF API Token** | `<REDACTED - vedi .env locale>` |
 | **Supabase URL** | `https://sajzbanhkehkkhhgztkq.supabase.co` |
-| **Supabase Service Key** | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhanpiYW5oa2Voa2toaGd6dGtxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTc5MDc3OCwiZXhwIjoyMDg3MzY2Nzc4fQ._fihqFYRQMaZXd1USNrbnqXnAVmBgBxFgtAD1krUmI8` |
-| **API Token (X-Token)** | `SQ_2026_MRS_88FNJz0TFbdzHMikOeN2HQ` |
+| **Supabase Service Key** | `<REDACTED - vedi .env locale>` |
+| **API Token (X-Token)** | `<REDACTED - vedi .env locale>` |
 | **Tenant UUID** | `785d94d0-b947-4a00-9c4e-3b67833e7045` |
-| **Telegram Bot Token** | `8411203312:AAF0NpKqDZ54hY6yJwzA1-s5ls2FJVADuXI` |
+| **Telegram Bot Token** | `<REDACTED - vedi .env locale>` |
 | **Telegram Group Chat** | `-5236723213` |
 | **Admin Login** | `m.bozzarelli` / (password hashata nel DB) |
 
@@ -72,11 +72,11 @@ git push origin main
 
 ```
 SUPABASE_URL = https://sajzbanhkehkkhhgztkq.supabase.co
-SUPABASE_SERVICE_KEY = eyJ... (service role)
-SQ_TOKEN = SQ_2026_MRS_88FNJz0TFbdzHMikOeN2HQ
-GEMINI_KEY = (Gemini API key per AI Planner)
-TELEGRAM_BOT_TOKEN = 8411203312:AAF0NpKqDZ54hY6yJwzA1-s5ls2FJVADuXI
-RESEND_API_KEY = re_... (email via Resend)
+SUPABASE_SERVICE_KEY = <REDACTED>
+SQ_TOKEN = <REDACTED>
+GEMINI_KEY = <REDACTED>
+TELEGRAM_BOT_TOKEN = <REDACTED>
+RESEND_API_KEY = <REDACTED>
 TENANT_ID = 785d94d0-b947-4a00-9c4e-3b67833e7045
 ```
 
@@ -319,7 +319,7 @@ features: {
 
 ```bash
 # Solo worker (backend)
-CLOUDFLARE_API_TOKEN=RJaqPOdGoM314VM41tNulvS97tMfgntSPu2juoCv npx wrangler deploy
+CLOUDFLARE_API_TOKEN=<CF_API_TOKEN> npx wrangler deploy
 
 # Solo frontend (push to GitHub Pages)
 git add admin_v1.html index_v2.html white_label_config.js
@@ -327,15 +327,15 @@ git commit -m "fix: descrizione"
 git push origin main
 
 # Entrambi
-CLOUDFLARE_API_TOKEN=RJaqPOdGoM314VM41tNulvS97tMfgntSPu2juoCv npx wrangler deploy && \
+CLOUDFLARE_API_TOKEN=<CF_API_TOKEN> npx wrangler deploy && \
 git add -A && git commit -m "feat: descrizione" && git push origin main
 
 # Test API
-curl -s "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev?action=getAll&token=SQ_2026_MRS_88FNJz0TFbdzHMikOeN2HQ" | python3 -m json.tool | head -20
+curl -s "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev?action=getAll&token=<SQ_TOKEN>" | python3 -m json.tool | head -20
 
 # Test login
 curl -s -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \
   -H "Content-Type: application/json" \
-  -H "X-Token: SQ_2026_MRS_88FNJz0TFbdzHMikOeN2HQ" \
+  -H "X-Token: <SQ_TOKEN>" \
   -d '{"action":"login","username":"m.bozzarelli","password":"..."}'
 ```
