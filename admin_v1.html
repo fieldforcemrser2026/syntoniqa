@@ -2958,6 +2958,24 @@ function fillMapTecSelect(){
   if(cur)sel.value=cur;
 }
 
+// Routing su strade reali via OSRM (open source, gratuito)
+// Usa endpoint /trip per ottimizzare l'ordine di visita (TSP)
+async function fetchOSRMRoute(waypoints){
+  if(!waypoints||waypoints.length<2)return null;
+  // OSRM vuole lng,lat
+  const coords=waypoints.map(w=>`${w.lng},${w.lat}`).join(';');
+  try{
+    const url=`https://router.project-osrm.org/trip/v1/driving/${coords}?roundtrip=false&source=first&destination=last&overview=full&geometries=geojson`;
+    const r=await fetch(url,{signal:AbortSignal.timeout(8000)});
+    if(!r.ok)return null;
+    const json=await r.json();
+    if(json.code==='Ok'&&json.trips?.[0]){
+      return {geometry:json.trips[0].geometry,distance:json.trips[0].distance,duration:json.trips[0].duration};
+    }
+  }catch(e){console.warn('[OSRM]',e.message)}
+  return null;
+}
+
 async function initMap(){
   fillMapTecSelect();
   if(MAP){MAP.invalidateSize();await updateMap();return}
@@ -3036,6 +3054,7 @@ async function updateMap(){
 
   const tecGroup={};
   piano.forEach(p=>{const tid=p.TecnicoID||'notech';if(!tecGroup[tid])tecGroup[tid]=[];tecGroup[tid].push(p)});
+  const routeSummary=[];
 
   for(const [tid,items] of Object.entries(tecGroup)){
     const color=colors[colorIdx++%colors.length];
@@ -3059,7 +3078,26 @@ async function updateMap(){
       waypoints.push({lat,lng,name:cli.Nome||cli.ID});
     }
 
-    if(showRoute&&pts.length>1){const line=L.polyline(pts,{color,weight:3,opacity:.7,dashArray:'8,8'}).addTo(MAP);MARKERS.push(line)}
+    if(showRoute&&pts.length>1){
+      // Routing su strade reali con OSRM
+      const osrmRoute=await fetchOSRMRoute(pts.map(p=>({lat:p[0],lng:p[1]})));
+      if(osrmRoute&&osrmRoute.geometry){
+        // GeoJSON coordinates sono [lng, lat] — inverti per Leaflet
+        const routeCoords=osrmRoute.geometry.coordinates.map(c=>[c[1],c[0]]);
+        const km=Math.round((osrmRoute.distance||0)/1000);
+        const min=Math.round((osrmRoute.duration||0)/60);
+        const tecName=getName(DATA.utenti||[],tid)||tid;
+        const linea=L.polyline(routeCoords,{color,weight:4,opacity:.88}).addTo(MAP);
+        linea.bindPopup(`<b>${tecName}</b><br>📍 ${pts.length} tappe<br>🛣️ ${km} km totali<br>⏱️ ~${min} min di guida`);
+        MARKERS.push(linea);
+        routeSummary.push(`${tecName.split(' ')[0]}: ${km}km ~${min}min`);
+      }else{
+        // Fallback linea dritta se OSRM non risponde
+        const linea=L.polyline(pts,{color,weight:3,opacity:.7,dashArray:'8,8'}).addTo(MAP);
+        MARKERS.push(linea);
+        routeSummary.push(getName(DATA.utenti||[],tid).split(' ')[0]+': (routing non disponibile)');
+      }
+    }
   }
 
   const allPts=MARKERS.filter(m=>m.getLatLng).map(m=>[m.getLatLng().lat,m.getLatLng().lng]);
@@ -3078,7 +3116,8 @@ async function updateMap(){
       return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:${c}22;border:1px solid ${c};border-radius:12px"><span style="width:10px;height:10px;border-radius:50%;background:${c};display:inline-block"></span>${tName} (${count})</span>`;
     }).join('');
   }
-  $('mapInfo').innerHTML=`${piano.length} interventi · ${clientiIds.length} clienti · ${allPts.length} su mappa · ${Object.keys(tecGroup).length} tecnici`;
+  const routeText=routeSummary.length>0?' 🛣️ '+routeSummary.join(' | '):'';
+  $('mapInfo').innerHTML=`${piano.length} interventi · ${clientiIds.length} clienti · ${allPts.length} su mappa · ${Object.keys(tecGroup).length} tecnici${routeText}`;
   MAP._ffWaypoints=waypoints;
 }
 
@@ -3095,36 +3134,68 @@ function openGoogleMaps(){
 
 // ============ KPI ============
 async function loadKPI(){
-  const periodo=$('kpiPeriodo')?.value||'settimana';
-  const tecnico=$('kpiTecnico')?.value||'';
+  const periodo=$('kpiPeriodo')?.value||'mese';
+  const filtTec=$('kpiTecnico')?.value||'';
   try{
-    const kpi=await apiCall('getKPI',{periodo,tecnicoId:tecnico});
-    $('kpiGrid').innerHTML=`
-      <div class="kpi blue"><div class="kpi-val">${kpi.totaleInterventi}</div><div class="kpi-lbl">Interventi Totali</div></div>
-      <div class="kpi green"><div class="kpi-val">${kpi.completati}</div><div class="kpi-lbl">Completati</div></div>
-      <div class="kpi ${kpi.tassoCompletamento>=90?'green':kpi.tassoCompletamento>=70?'yellow':'red'}"><div class="kpi-val">${kpi.tassoCompletamento}%</div><div class="kpi-lbl">Tasso Completamento</div></div>
-      <div class="kpi blue"><div class="kpi-val">${kpi.interventiPerGiorno}</div><div class="kpi-lbl">Interventi/Giorno</div></div>
-      <div class="kpi purple"><div class="kpi-val">${kpi.tempoMedio}h</div><div class="kpi-lbl">Tempo Medio</div></div>
-      <div class="kpi blue"><div class="kpi-val">${kpi.kmMedio}km</div><div class="kpi-lbl">Km Medio</div></div>
-      <div class="kpi ${kpi.slaCompliance>=95?'green':kpi.slaCompliance>=80?'yellow':'red'}"><div class="kpi-val">${kpi.slaCompliance}%</div><div class="kpi-lbl">SLA Compliance</div></div>
-      <div class="kpi yellow"><div class="kpi-val">${kpi.urgenzeAperte}</div><div class="kpi-lbl">Urgenze Aperte</div></div>
-      <div class="kpi purple"><div class="kpi-val">${kpi.ordiniInAttesa}</div><div class="kpi-lbl">Ordini In Attesa</div></div>
-      <div class="kpi blue"><div class="kpi-val">${kpi.tempoMedioRispostaOrdini}h</div><div class="kpi-lbl">Tempo Risposta Ordini</div></div>
-      <div class="kpi ${kpi.mediaValutazione>=4?'green':kpi.mediaValutazione>=3?'yellow':'red'}"><div class="kpi-val">${kpi.mediaValutazione||'—'}</div><div class="kpi-lbl">⭐ Media Valutazione</div></div>
+    // Calcolo locale da DATA — no API call (kpi_log potrebbe essere vuoto)
+    let piano=(DATA.piano||[]).filter(p=>!p.Obsoleto);
+    if(filtTec) piano=piano.filter(p=>p.TecnicoID===filtTec);
+    const now=new Date();
+    let fromDate='';
+    if(periodo==='settimana'){const d=new Date(now);d.setDate(d.getDate()-7);fromDate=d.toISOString().split('T')[0]}
+    else if(periodo==='mese'){fromDate=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01'}
+    else if(periodo==='trimestre'){const d=new Date(now);d.setMonth(d.getMonth()-3);fromDate=d.toISOString().split('T')[0]}
+    else if(periodo==='anno'){fromDate=now.getFullYear()+'-01-01'}
+    if(fromDate) piano=piano.filter(p=>(p.Data||'')>=fromDate);
+    const totale=piano.length;
+    const completati=piano.filter(p=>p.Stato==='completato'||p.Stato==='chiuso').length;
+    const inCorso=piano.filter(p=>p.Stato==='in_corso').length;
+    const tasso=totale>0?Math.round(completati/totale*100):0;
+    const giorni=fromDate?Math.max(1,Math.round((now-new Date(fromDate))/(1000*86400))):7;
+    const perGiorno=totale>0?(totale/giorni).toFixed(1):'0';
+    const tempoMedio=totale>0?(piano.reduce((s,p)=>s+parseFloat(p.DurataOre||0),0)/totale).toFixed(1):'0';
+    const kmMedio=totale>0?Math.round(piano.reduce((s,p)=>s+parseInt(p.KmPercorsi||0),0)/totale):0;
+    const urgenzeAperte=(DATA.urgenze||[]).filter(u=>!u.Obsoleto&&!['risolta','chiusa'].includes(u.Stato)).length;
+    const ordiniInAttesa=(DATA.ordini||[]).filter(o=>!o.Obsoleto&&['richiesto','preso_in_carico'].includes(o.Stato)).length;
+    const urgenzeChiuse=(DATA.urgenze||[]).filter(u=>!u.Obsoleto&&['risolta','chiusa'].includes(u.Stato));
+    const slaOk=urgenzeChiuse.filter(u=>!u.DataScadenzaSLA||!u.DataRisoluzione||u.DataRisoluzione<=u.DataScadenzaSLA).length;
+    const sla=urgenzeChiuse.length>0?Math.round(slaOk/urgenzeChiuse.length*100):100;
+    const grid=$('kpiGrid');
+    if(grid) grid.innerHTML=`
+      <div class="kpi blue"><div class="kpi-val">${totale}</div><div class="kpi-lbl">Interventi Totali</div></div>
+      <div class="kpi green"><div class="kpi-val">${completati}</div><div class="kpi-lbl">Completati</div></div>
+      <div class="kpi ${tasso>=90?'green':tasso>=70?'yellow':'red'}"><div class="kpi-val">${tasso}%</div><div class="kpi-lbl">Tasso Completamento</div></div>
+      <div class="kpi blue"><div class="kpi-val">${inCorso}</div><div class="kpi-lbl">In Corso</div></div>
+      <div class="kpi purple"><div class="kpi-val">${perGiorno}</div><div class="kpi-lbl">Interventi/Giorno</div></div>
+      <div class="kpi blue"><div class="kpi-val">${tempoMedio}h</div><div class="kpi-lbl">Durata Media</div></div>
+      <div class="kpi blue"><div class="kpi-val">${kmMedio}km</div><div class="kpi-lbl">Km Medio</div></div>
+      <div class="kpi ${sla>=95?'green':sla>=80?'yellow':'red'}"><div class="kpi-val">${sla}%</div><div class="kpi-lbl">SLA Compliance</div></div>
+      <div class="kpi yellow"><div class="kpi-val">${urgenzeAperte}</div><div class="kpi-lbl">Urgenze Aperte</div></div>
+      <div class="kpi purple"><div class="kpi-val">${ordiniInAttesa}</div><div class="kpi-lbl">Ordini In Attesa</div></div>
     `;
-
-    // Classifica tecnici
-    const tecKPI=await apiCall('getKPITecnici',{periodo});
-    $('tblKpiTec').innerHTML=(tecKPI||[]).sort((a,b)=>b.completati-a.completati).map(t=>`<tr>
+    // Classifica tecnici — calcolo locale
+    const tecnici=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
+    const rows=tecnici.map(t=>{
+      const tp=piano.filter(p=>p.TecnicoID===t.ID);
+      const co=tp.filter(p=>p.Stato==='completato'||p.Stato==='chiuso').length;
+      const ta=tp.length>0?Math.round(co/tp.length*100):100;
+      const ore=tp.reduce((s,p)=>s+parseFloat(p.DurataOre||0),0).toFixed(1);
+      const km=tp.reduce((s,p)=>s+parseInt(p.KmPercorsi||0),0);
+      const tUrg=(DATA.urgenze||[]).filter(u=>!u.Obsoleto&&u.TecnicoAssegnato===t.ID&&['risolta','chiusa'].includes(u.Stato));
+      const tSla=tUrg.length>0?Math.round(tUrg.filter(u=>!u.DataScadenzaSLA||!u.DataRisoluzione||u.DataRisoluzione<=u.DataScadenzaSLA).length/tUrg.length*100):100;
+      return {nome:(t.Nome||'')+' '+(t.Cognome||''),tot:tp.length,comp:co,ta,km,ore,sla:tSla};
+    }).filter(r=>r.tot>0).sort((a,b)=>b.comp-a.comp);
+    const tbl=$('tblKpiTec');
+    if(tbl) tbl.innerHTML=rows.map(t=>`<tr>
       <td><strong>${t.nome}</strong></td>
-      <td>${t.totaleInterventi}</td>
-      <td>${t.completati}</td>
-      <td><div class="stat-bar"><div style="width:${t.tassoCompletamento}%;background:${t.tassoCompletamento>=90?'var(--ok)':t.tassoCompletamento>=70?'var(--warn)':'var(--err)'}">${t.tassoCompletamento}%</div></div></td>
-      <td>${t.kmTotali}</td>
-      <td>${t.oreTotali}</td>
-      <td>${t.mediaValutazione||'—'}</td>
-      <td>${t.slaCompliance}%</td>
-    </tr>`).join('');
+      <td>${t.tot}</td>
+      <td>${t.comp}</td>
+      <td><div class="stat-bar"><div style="width:${t.ta}%;background:${t.ta>=90?'var(--ok)':t.ta>=70?'var(--warn)':'var(--err)'}">${t.ta}%</div></div></td>
+      <td>${t.km}</td>
+      <td>${t.ore}</td>
+      <td>—</td>
+      <td>${t.sla}%</td>
+    </tr>`).join('')||'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--gray)">Nessun dato nel periodo</td></tr>';
   }catch(e){toast('Errore KPI: '+e.message,'err')}
 }
 
@@ -3408,16 +3479,10 @@ function normAssetType(tipo){
   // Tutto il resto è "ALTRI"
   return 'ALTRI';
 }
-// Get ALL anagrafica assets as flat array - ONLY from dedicated sheets (no generic Assets sheet items)
-// Dedicated sheets: ROBOT, JUNO, VECTOR, DISCOVERY, COLLECTOR, CU, CALM, COMPRESSORI, COSMIX, NAUTILUS, LUNA, METEOR, GRAZEWAY, L4C LED
-const DEDICATED_SHEETS=new Set(['ROBOT','JUNO','VECTOR','DISCOVERY','COLLECTOR','CU','CALM','COMPRESSORI','COSMIX','NAUTILUS','LUNA','METEOR','GRAZEWAY','L4C LED']);
+// Get ALL anagrafica assets as flat array - tutti gli asset, nessun filtro
 function getAllAnagAssets(){
   let all=[];
-  Object.values(ANAG_ASSETS_CACHE).forEach(arr=>arr.forEach(a=>{
-    // Include only items from dedicated sheets (TipoFoglio != 'Assets')
-    const tf=(a.TipoFoglio||'').toUpperCase();
-    if(tf&&tf!=='ASSETS'&&tf!=='NONE') all.push(a);
-  }));
+  Object.values(ANAG_ASSETS_CACHE).forEach(arr=>all=all.concat(arr));
   return all;
 }
 
@@ -3441,10 +3506,9 @@ async function loadAnagClients(){
         const m3=c.CodiceM3;
         const myAssets=byM3[m3]||[];
         ANAG_ASSETS_CACHE[m3]=myAssets;
-        // Count only assets from dedicated sheets (not generic Assets sheet)
-        const dedicatedAssets=myAssets.filter(a=>{const tf=(a.TipoFoglio||'').toUpperCase();return tf&&tf!=='ASSETS'&&tf!=='NONE'});
-        const counts={_total:dedicatedAssets.length};
-        dedicatedAssets.forEach(a=>{
+        // Conta tutti gli asset del cliente senza filtri
+        const counts={_total:myAssets.length};
+        myAssets.forEach(a=>{
           const key=normAssetType(a.GruppoAttrezzatura||a.TipoFoglio||'Altro');
           counts[key]=(counts[key]||0)+1;
         });
@@ -5580,11 +5644,14 @@ async function runAIPlanner(){
   try {
     toast('AI sta generando il piano...','warn');
     const result = await apiCall('generateAIPlan',{vincoli:{testo:prompt}},'POST');
+    AI_PLAN = result;
     const el = document.getElementById('aiResult');
-    if(el){ el.style.display='block'; el.innerHTML='<h4>Piano AI generato</h4><pre style="white-space:pre-wrap;font-size:.8125rem">'+(typeof result==='string'?result:JSON.stringify(result,null,2))+'</pre>'; }
+    if(el){ el.style.display='block'; el.innerHTML='<h4>Piano AI generato dal Planner Visuale</h4><p style="font-size:.8125rem;color:var(--gray)">Settimana '+week[0]+' — '+week[6]+' · '+tecnici.length+' tecnici · '+(result.piano?.length||0)+' interventi</p><pre style="white-space:pre-wrap;font-size:.75rem;max-height:400px;overflow-y:auto">'+JSON.stringify(result,null,2)+'</pre>'; }
     const btn = document.getElementById('btnApplyAI');
     if(btn) btn.disabled = false;
-    toast('Piano AI generato! Vai su AI Planner per applicarlo.','ok');
+    toast('Piano AI generato! Apro AI Planner...','ok');
+    // Naviga alla sezione AI Planner per mostrare il risultato e applicarlo
+    setTimeout(()=>showSec('ai'),800);
   } catch(e){ toast('Errore AI: '+e.message,'err') }
 }
 
@@ -5635,28 +5702,30 @@ async function loadKPIWithCharts(){
   });
 
   // Charts 3 & 4: Per tecnico
-  try {
-    const tecKPI = await apiCall('getKPITecnici',{periodo});
-    if(tecKPI && tecKPI.length > 0){
-      const tecNames = tecKPI.map(t=>(t.nome||'?').split(' ')[0]);
-      const tecSLA = tecKPI.map(t=>t.slaCompliance||0);
-      const tecOre = tecKPI.map(t=>t.oreTotali||0);
-
-      const ctxSLA = document.getElementById('chartSLATec')?.getContext('2d');
-      if(ctxSLA) CHARTS.sla = new Chart(ctxSLA, {
-        type:'bar', data:{ labels:tecNames, datasets:[{ label:'SLA %', data:tecSLA, backgroundColor:tecSLA.map(v=>v>=90?'#10B981':v>=75?'#F59E0B':'#EF4444'), borderRadius:4 }]},
-        options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
-          scales:{ x:{min:0,max:100,ticks:{callback:v=>v+'%'},grid:{color:'#F3F4F6'}}, y:{grid:{display:false}} } }
-      });
-
-      const ctxOre = document.getElementById('chartOreTec')?.getContext('2d');
-      if(ctxOre) CHARTS.ore = new Chart(ctxOre, {
-        type:'bar', data:{ labels:tecNames, datasets:[{ label:'Ore', data:tecOre, backgroundColor:'#6366F1', borderRadius:4, borderSkipped:false }]},
-        options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
-          scales:{ y:{beginAtZero:true, grid:{color:'#F3F4F6'}}, x:{grid:{display:false}} } }
-      });
-    }
-  } catch(e){ console.warn('Chart tecnici:', e.message); }
+  // Calcolo KPI tecnici da DATA — no API call (risposta non compatibile con formato atteso)
+  const allTecnici=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
+  const kpiData=allTecnici.map(t=>{
+    const tp=piano.filter(p=>p.TecnicoID===t.ID);
+    const co=tp.filter(p=>p.Stato==='completato'||p.Stato==='chiuso').length;
+    return {nome:(t.Nome||'').split(' ')[0],slaCompliance:tp.length>0?Math.round(co/tp.length*100):100,oreTotali:parseFloat(tp.reduce((s,p)=>s+parseFloat(p.DurataOre||0),0).toFixed(1))};
+  }).filter(t=>t.oreTotali>0);
+  if(kpiData.length>0){
+    const tecNames=kpiData.map(t=>t.nome);
+    const tecSLA=kpiData.map(t=>t.slaCompliance);
+    const tecOre=kpiData.map(t=>t.oreTotali);
+    const ctxSLA=document.getElementById('chartSLATec')?.getContext('2d');
+    if(ctxSLA) CHARTS.sla=new Chart(ctxSLA,{
+      type:'bar',data:{labels:tecNames,datasets:[{label:'SLA %',data:tecSLA,backgroundColor:tecSLA.map(v=>v>=90?'#10B981':v>=75?'#F59E0B':'#EF4444'),borderRadius:4}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+        scales:{x:{min:0,max:100,ticks:{callback:v=>v+'%'},grid:{color:'#F3F4F6'}},y:{grid:{display:false}}}}
+    });
+    const ctxOre=document.getElementById('chartOreTec')?.getContext('2d');
+    if(ctxOre) CHARTS.ore=new Chart(ctxOre,{
+      type:'bar',data:{labels:tecNames,datasets:[{label:'Ore',data:tecOre,backgroundColor:'#6366F1',borderRadius:4,borderSkipped:false}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+        scales:{y:{beginAtZero:true,grid:{color:'#F3F4F6'}},x:{grid:{display:false}}}}
+    });
+  }
 }
 
 </script>
