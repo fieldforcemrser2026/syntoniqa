@@ -257,8 +257,14 @@ export default {
     const action = url.searchParams.get('action') || url.pathname.split('/').pop();
     const clientIP = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
 
-    // Telegram webhook bypassa rate limit e token check
+    // Telegram webhook bypassa rate limit e token check ma valida secret se configurato
     if (action === 'telegramWebhook') {
+      if (env.TELEGRAM_WEBHOOK_SECRET) {
+        const webhookSecret = request.headers.get('X-Telegram-Bot-Api-Secret-Token') || '';
+        if (webhookSecret !== env.TELEGRAM_WEBHOOK_SECRET) {
+          return new Response('Unauthorized', { status: 401 });
+        }
+      }
       const body = await request.json().catch(() => ({}));
       return await handlePost(action, body, env);
     }
@@ -582,6 +588,8 @@ async function handlePost(action, body, env) {
     case 'createPiano': {
       const id = 'INT_' + Date.now();
       const fields = getFields(body);
+      if (!fields.data) return err('Campo data obbligatorio per createPiano');
+      if (!fields.cliente_id) return err('Campo cliente_id obbligatorio per createPiano');
       // Writable: id,tenant_id,tecnico_id,cliente_id,automezzo_id,tipo_intervento_id,data,ora_inizio,ora_fine,stato,note,data_fine
       const row = {
         id,
@@ -647,6 +655,16 @@ async function handlePost(action, body, env) {
             await wlog('urgenza', u.id, 'auto_started_from_piano', body.operatoreId || body.userId);
           }
         } catch(e){ console.error('Auto-start urgenza error:', e.message); }
+      }
+      if (updates.stato === 'annullato') {
+        // Ripristina urgenze collegate a stato aperta (l'intervento è annullato, l'urgenza rimane aperta)
+        try {
+          const linkedUrgAnn = await sb(env, 'urgenze', 'GET', null, `?intervento_id=eq.${id}&stato=in.(assegnata,schedulata,in_corso)&select=id`).catch(()=>[]);
+          for (const u of (linkedUrgAnn||[])) {
+            await sb(env, `urgenze?id=eq.${u.id}`, 'PATCH', { stato: 'aperta', intervento_id: null, tecnico_assegnato: null, updated_at: new Date().toISOString() });
+            await wlog('urgenza', u.id, 'reopened_from_piano_annullato', body.operatoreId || body.userId, `piano ${id} annullato`);
+          }
+        } catch(e){ console.error('Reopen urgenza from annullato error:', e.message); }
       }
       return ok();
     }
@@ -1145,7 +1163,7 @@ async function handlePost(action, body, env) {
       const priorita = fields.priorita || 'normale';
       const row = { id, tenant_id: fields.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045', tipo: fields.tipo || 'info', oggetto, testo, priorita, stato: fields.stato || 'inviata', mittente_id: fields.mittente_id || null, destinatario_id: fields.destinatario_id || null, destinatari_ids: fields.destinatari_ids || null, riferimento_id: fields.riferimento_id || null, riferimento_tipo: fields.riferimento_tipo || null, data_invio: new Date().toISOString() };
       const result = await sb(env, 'notifiche', 'POST', row);
-      return ok({ notifica: pascalizeRecord(result[0]) });
+      return ok({ notifica: result?.[0] ? pascalizeRecord(result[0]) : { id } });
     }
 
     case 'markNotifica': {
@@ -1198,7 +1216,8 @@ async function handlePost(action, body, env) {
 
     case 'updateRichiesta': {
       const { id, userId: _u, operatoreId: _op, ...updates } = body;
-      if (updates.stato !== 'in_attesa') updates.data_risposta = new Date().toISOString();
+      if (updates.stato && updates.stato !== 'in_attesa') updates.data_risposta = new Date().toISOString();
+      updates.updated_at = new Date().toISOString();
       await sb(env, `richieste?id=eq.${id}`, 'PATCH', updates);
       await sendTelegramNotification(env, 'richiesta_risposta', { id, stato: updates.stato });
       return ok();
@@ -1344,7 +1363,9 @@ async function handlePost(action, body, env) {
     }
 
     case 'testEmail': {
-      return handlePost('sendEmail', { to: body.email, subject: 'Test Syntoniqa', html: '<h1>Test OK</h1>' }, env);
+      const toAddr = body.email || body.destinatario || body.to;
+      if (!toAddr) return err('Campo email/destinatario mancante');
+      return handlePost('sendEmail', { to: toAddr, subject: 'Test Syntoniqa', html: '<h1>✅ Test Email Syntoniqa — OK</h1><p>Connessione email funzionante.</p>' }, env);
     }
 
     case 'sendTelegramMsg': {
@@ -1726,7 +1747,8 @@ Rispondi SOLO con JSON valido:
     case 'getApproval': {
       const cfg = await sb(env, 'config', 'GET', null, `?chiave=eq.approval_${body.id}&tenant_id=eq.${env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'}`);
       if (!cfg.length) return err('Approvazione non trovata', 404);
-      return ok(JSON.parse(cfg[0].valore));
+      try { return ok(JSON.parse(cfg[0].valore)); }
+      catch { return err('Dati approvazione corrotti', 500); }
     }
 
     case 'updateApproval': {
@@ -2668,7 +2690,8 @@ Rispondi SOLO con JSON valido:
           const canaleInfo = await sb(env, 'chat_canali', 'GET', null, `?id=eq.${canale_id}&select=nome,icona`).catch(() => []);
           const canaleNome = canaleInfo?.[0]?.nome || canale_id;
           const canaleIcona = canaleInfo?.[0]?.icona || '💬';
-          const tgText = `${canaleIcona} <b>[${canaleNome}]</b>\n👤 <b>${senderName}</b>:\n${testo}`;
+          const escapedTesto = (testo || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          const tgText = `${canaleIcona} <b>[${canaleNome}]</b>\n👤 <b>${senderName}</b>:\n${escapedTesto}`;
           await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -3072,7 +3095,11 @@ async function notifyTecnicoTG(env, tecnicoId, text) {
   try {
     const tec = await sb(env, 'utenti', 'GET', null, `?id=eq.${tecnicoId}&select=telegram_chat_id,nome,cognome`).catch(()=>[]);
     const chatId = tec?.[0]?.telegram_chat_id;
-    if (chatId) await sendTelegram(env, chatId, text);
+    if (chatId) {
+      await sendTelegram(env, chatId, text);
+    } else {
+      console.log(`[TG-PRIV] Tecnico ${tecnicoId} (${tec?.[0]?.nome || '?'} ${tec?.[0]?.cognome || ''}) non ha telegram_chat_id — notifica non inviata`);
+    }
   } catch(e) { console.error('[TG-PRIV]', e.message); }
 }
 
@@ -3154,7 +3181,6 @@ async function checkInterventoReminders(env) {
 
   for (const p of (pianificati || [])) {
     if (!p.ora_inizio || !p.tecnico_id) continue;
-    const [h, m] = p.ora_inizio.split(':').map(Number);
     // Calcola diff in minuti tra ora corrente italiana e ora inizio
     const [ih, im] = p.ora_inizio.substring(0,5).split(':').map(Number);
     const [ch, cm] = oraCorrente.split(':').map(Number);
@@ -3179,7 +3205,7 @@ async function checkInterventoReminders(env) {
       const tec = await sb(env, 'utenti', 'GET', null, `?id=eq.${p.tecnico_id}&select=nome,cognome,telegram_chat_id`).catch(() => []);
       if (tec?.[0]?.telegram_chat_id) {
         await sendTelegram(env, tec[0].telegram_chat_id,
-          `⏰ <b>Intervento non iniziato!</b>\n📋 ${cliNome} (ore ${p.ora_inizio})\nÈ passata 1 ora — aggiorna lo stato con /incorso o dall'app.`, 'HTML'
+          `⏰ <b>Intervento non iniziato!</b>\n📋 ${cliNome} (ore ${p.ora_inizio})\nÈ passata 1 ora — aggiorna lo stato con /incorso o dall'app.`
         ).catch(() => {});
       }
       // Notifica anche su chat admin
@@ -3221,7 +3247,7 @@ async function checkInterventoReminders(env) {
       const tec = await sb(env, 'utenti', 'GET', null, `?id=eq.${p.tecnico_id}&select=nome,cognome,telegram_chat_id`).catch(() => []);
       if (tec?.[0]?.telegram_chat_id) {
         await sendTelegram(env, tec[0].telegram_chat_id,
-          `🔔 <b>Aggiorna intervento!</b>\n📋 ${cliNome} — in corso da 8+ ore\nAggiorna le note o completa con /risolto`, 'HTML'
+          `🔔 <b>Aggiorna intervento!</b>\n📋 ${cliNome} — in corso da 8+ ore\nAggiorna le note o completa con /risolto`
         ).catch(() => {});
       }
     }

@@ -64,7 +64,7 @@ git push origin main
 | **Supabase Service Key** | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhanpiYW5oa2Voa2toaGd6dGtxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTc5MDc3OCwiZXhwIjoyMDg3MzY2Nzc4fQ._fihqFYRQMaZXd1USNrbnqXnAVmBgBxFgtAD1krUmI8` |
 | **API Token (X-Token)** | `SQ_2026_MRS_88FNJz0TFbdzHMikOeN2HQ` |
 | **Tenant UUID** | `785d94d0-b947-4a00-9c4e-3b67833e7045` |
-| **Telegram Bot Token** | `8411203312:AAGMlSkXRV0FUjCxWx1cGCSv6TyL2FYiOpo` |
+| **Telegram Bot Token** | `8411203312:AAF0NpKqDZ54hY6yJwzA1-s5ls2FJVADuXI` |
 | **Telegram Group Chat** | `-5236723213` |
 | **Admin Login** | `m.bozzarelli` / (password hashata nel DB) |
 
@@ -75,7 +75,7 @@ SUPABASE_URL = https://sajzbanhkehkkhhgztkq.supabase.co
 SUPABASE_SERVICE_KEY = eyJ... (service role)
 SQ_TOKEN = SQ_2026_MRS_88FNJz0TFbdzHMikOeN2HQ
 GEMINI_KEY = (Gemini API key per AI Planner)
-TELEGRAM_BOT_TOKEN = 8411203312:AAGMlSkXRV0FUjCxWx1cGCSv6TyL2FYiOpo
+TELEGRAM_BOT_TOKEN = 8411203312:AAF0NpKqDZ54hY6yJwzA1-s5ls2FJVADuXI
 RESEND_API_KEY = re_... (email via Resend)
 TENANT_ID = 785d94d0-b947-4a00-9c4e-3b67833e7045
 ```
