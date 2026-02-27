@@ -1664,6 +1664,8 @@ function showSec(id,btn){
   if(btn)btn.classList.add('active');
   const titles={'dashboard':'📊 Dashboard','calendario':'📅 Calendario','piano':'📋 Interventi','urgenze':'🚨 Urgenze','ordini':'📦 Ordini','installazioni':'🏗️ Installazioni','reperibilita':'📞 Reperibilità','trasferte':'🧳 Trasferte','notifiche':'🔔 Notifiche','richieste':'📝 Richieste','clienti':'🏢 Clienti','macchine':'⚙️ Macchine','automezzi':'🚐 Automezzi','tecnici':'👥 Tecnici','ai':'🤖 AI Planner','planner':'📆 Planner Visuale','mappa':'🗺️ Mappa','kpi':'📈 KPI','pagellini':'🎯 Pagellini','checklist':'✅ Checklist','sla':'⏱️ SLA Monitor','documenti':'📁 Documenti','allegati':'📎 Allegati','report':'📊 Report Builder','auditlog':'📜 Audit Log','powerbi':'⚡ Power BI','emailconfig':'📧 Email','telegramconfig':'💬 Telegram','backup':'💾 Backup','chat':'💬 Chat Telegram','config':'🔧 Configurazione'};
   $('headerTitle').textContent=titles[id]||id;
+  // Stop chat polling when navigating away from chat section
+  if(id!=='chat'&&CHAT_POLL){clearInterval(CHAT_POLL);CHAT_POLL=null;}
   if(id==='mappa')setTimeout(()=>initMap(),100);
   if(id==='kpi')loadKPIWithCharts();
   if(id==='planner')setTimeout(()=>initPlanner(),100);
@@ -1702,18 +1704,19 @@ async function apiCall(action,data={},method='GET'){
   }
 }
 
+let _refreshBusy=false;
 async function refreshData(silent){
-  if(silent){
-    // Refresh silenzioso: NO loading overlay
-    try{
-      let url=API_URL+'?'+new URLSearchParams({action:'getAll',token:API_TOKEN,userId:USER?.ID||''});
-      const r=await fetch(url,{signal:AbortSignal.timeout(15000)});
-      const json=await r.json();
-      if(json.success&&json.data){DATA=json.data;renderAll()}
-    }catch(e){console.warn('[SILENT-REFRESH]',e.message)}
-    return;
-  }
-  try{DATA=await apiCall('getAll',{userId:USER?.ID||''});renderAll();loadAnagClients().then(()=>{renderMacchine();populateModalClientsFromAnag()}).catch(()=>{})}catch(e){toast('Errore: '+e.message,'err')}
+  // Debounce: skip se già in corso
+  if(_refreshBusy){console.warn('[REFRESH] skipped, already in progress');return}
+  _refreshBusy=true;
+  try{
+    // Sempre fetch diretto senza overlay (apiCall userebbe lo spinner globale)
+    let url=API_URL+'?'+new URLSearchParams({action:'getAll',token:API_TOKEN,userId:USER?.ID||''});
+    const r=await fetch(url,{signal:AbortSignal.timeout(15000)});
+    const json=await r.json();
+    if(json.success&&json.data){DATA=json.data;renderAll()}
+  }catch(e){if(!silent)toast('Errore refresh: '+e.message,'err');else console.warn('[REFRESH]',e.message)}
+  finally{_refreshBusy=false}
 }
 
 // ============ INIT & AUTH ============
@@ -2258,8 +2261,8 @@ function downloadCSV(filename, header, rows, count, label){
 }
 
 function openAssegna(urgId){$('maUrgId').value=urgId;$('maData').value=today();openModal('modalAssegna')}
-async function urgAction(id,action){try{await apiCall(action,{id,operatoreId:USER?.ID},'POST');toast(action==='startUrgenza'?'Urgenza in corso!':'Urgenza risolta!','ok');await refreshData()}catch(e){toast(e.message,'err')}}
-async function closeUrgenza(id){try{await apiCall('updateUrgenza',{id,Stato:'chiusa',operatoreId:USER?.ID},'POST');toast('Urgenza chiusa!','ok');closeModal('modalDetail');await refreshData()}catch(e){toast(e.message,'err')}}
+async function urgAction(id,action){try{await apiCall(action,{id,operatoreId:USER?.ID},'POST');toast(action==='startUrgenza'?'Urgenza in corso!':'Urgenza risolta!','ok');await refreshData(true)}catch(e){toast(e.message,'err')}}
+async function closeUrgenza(id){try{await apiCall('updateUrgenza',{id,Stato:'chiusa',operatoreId:USER?.ID},'POST');toast('Urgenza chiusa!','ok');closeModal('modalDetail');await refreshData(true)}catch(e){toast(e.message,'err')}}
 
 async function saveUrgenzaEdit(id){
   try{
@@ -2275,7 +2278,7 @@ async function saveUrgenzaEdit(id){
     await apiCall('updateUrgenza',updates,'POST');
     toast('Urgenza aggiornata!','ok');
     closeModal('modalDetail');
-    await refreshData();
+    await refreshData(true);
   }catch(e){toast('Errore: '+e.message,'err')}
 }
 
@@ -2326,7 +2329,7 @@ async function runAIVision(urgId){
       ${res.ricambio_suggerito?`<button class="btn btn-outline btn-sm" onclick="prefillOrdineFromAI('${urgId}','${(res.ricambio_suggerito||'').replace(/'/g,"\\'")}','${(res.codice_ricambio||'').replace(/'/g,"\\'")}')">📦 Ordina Ricambio</button>`:''}
     </div>`;
     toast('Analisi AI completata!','ok');
-    await refreshData();
+    await refreshData(true);
   }catch(e){
     document.getElementById('aiVisionLoading_'+urgId).style.display='none';
     document.getElementById('aiVisionResult_'+urgId).style.display='block';
@@ -2383,7 +2386,7 @@ async function saveInterventoEdit(id){
     await apiCall('updatePiano',updates,'POST');
     toast('Intervento aggiornato!','ok');
     closeModal('modalDetail');
-    await refreshData();
+    await refreshData(true);
   }catch(e){toast('Errore: '+e.message,'err')}
 }
 
@@ -2395,7 +2398,7 @@ async function approvaInt(id){
     const nome=((USER?.Nome||'')+' '+(USER?.Cognome||'')).trim();
     try{await apiCall('createNotifica',{data:{Tipo:'approvazione_intervento',Oggetto:'✅ Intervento approvato',Testo:nome+' ha approvato il tuo intervento per '+getName(DATA.clienti,p.ClienteID)+' del '+fmtDate(p.Data),DestinatarioID:p.TecnicoID,Priorita:'alta'}},'POST')}catch(e){}
     try{await apiCall('sendChatMessage',{canale_id:'CH_ADMIN',testo:'✅ APPROVATO intervento '+id+' per '+getName(DATA.clienti,p.ClienteID)+' ('+fmtDate(p.Data)+') — approvato da '+nome,userId:USER?.ID},'POST')}catch(e){}
-    toast('Intervento approvato!','ok');await refreshData();
+    toast('Intervento approvato!','ok');await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 
@@ -2408,7 +2411,7 @@ async function rifiutaInt(id){
     const nome=((USER?.Nome||'')+' '+(USER?.Cognome||'')).trim();
     try{await apiCall('createNotifica',{data:{Tipo:'rifiuto_intervento',Oggetto:'❌ Intervento rifiutato',Testo:nome+' ha rifiutato il tuo intervento per '+getName(DATA.clienti,p.ClienteID)+'. Motivo: '+(motivo||'non specificato'),DestinatarioID:p.TecnicoID,Priorita:'alta'}},'POST')}catch(e){}
     try{await apiCall('sendChatMessage',{canale_id:'CH_ADMIN',testo:'❌ RIFIUTATO intervento '+id+' per '+getName(DATA.clienti,p.ClienteID)+' — da '+nome+(motivo?'\nMotivo: '+motivo:''),userId:USER?.ID},'POST')}catch(e){}
-    toast('Intervento rifiutato','warn');await refreshData();
+    toast('Intervento rifiutato','warn');await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 
@@ -2446,7 +2449,7 @@ function nextOrdAction(o){
 }
 
 async function advanceOrdine(id,stato){
-  try{await apiCall('updateOrdineStato',{id,stato},'POST');toast('Ordine aggiornato','ok');await refreshData()}catch(e){toast(e.message,'err')}
+  try{await apiCall('updateOrdineStato',{id,stato},'POST');toast('Ordine aggiornato','ok');await refreshData(true)}catch(e){toast(e.message,'err')}
 }
 
 
@@ -2517,8 +2520,8 @@ function renderNotifiche(){
     <td>${n.Stato==='inviata'?`<button class="btn btn-ok btn-xs" onclick="markNotifica('${n.ID}','presa_in_carico')">✅</button>`:''}</td>
   </tr>`).join(''):'<tr><td colspan="7" class="empty"><p>Nessuna notifica</p></td></tr>';
 }
-async function markNotifica(id,azione){try{await apiCall('markNotifica',{id,azione},'POST');toast('Notifica aggiornata','ok');await refreshData()}catch(e){toast(e.message,'err')}}
-async function markAllRead(){try{await apiCall('markAllRead',{},'POST');toast('Tutte lette','ok');await refreshData()}catch(e){toast(e.message,'err')}}
+async function markNotifica(id,azione){try{await apiCall('markNotifica',{id,azione},'POST');toast('Notifica aggiornata','ok');await refreshData(true)}catch(e){toast(e.message,'err')}}
+async function markAllRead(){try{await apiCall('markAllRead',{},'POST');toast('Tutte lette','ok');await refreshData(true)}catch(e){toast(e.message,'err')}}
 
 // ============ RICHIESTE ============
 function renderRichieste(){
@@ -2532,7 +2535,7 @@ function renderRichieste(){
     <td>${r.Stato==='in_attesa'?`<button class="btn btn-ok btn-xs" onclick="approveRich('${r.ID}','approvata')">✅</button><button class="btn btn-err btn-xs" onclick="approveRich('${r.ID}','rifiutata')" style="margin-left:4px">❌</button>`:''}</td>
   </tr>`).join(''):'<tr><td colspan="6" class="empty"><p>Nessuna richiesta</p></td></tr>';
 }
-async function approveRich(id,stato){try{await apiCall('updateRichiesta',{id,stato},'POST');toast('Richiesta '+stato,'ok');await refreshData()}catch(e){toast(e.message,'err')}}
+async function approveRich(id,stato){try{await apiCall('updateRichiesta',{id,stato},'POST');toast('Richiesta '+stato,'ok');await refreshData(true)}catch(e){toast(e.message,'err')}}
 function openNewRichiesta(){
   const tecOpts=(DATA.utenti||[]).filter(u=>!u.Obsoleto).map(u=>`<option value="${u.ID}">${u.Nome} ${u.Cognome||''}</option>`).join('');
   const html=`<div style="display:flex;flex-direction:column;gap:12px;padding:8px">
@@ -2550,7 +2553,7 @@ async function submitRichiesta(){
   if(!motivo.trim()){toast('Inserisci un motivo','err');return}
   try{
     await apiCall('createRichiesta',{tipo,tecnicoId:tecnico,motivo},'POST');
-    toast('Richiesta creata!','ok');closeModal('modalDetail');await refreshData();
+    toast('Richiesta creata!','ok');closeModal('modalDetail');await refreshData(true);
   }catch(e){toast('Errore: '+e.message,'err')}
 }
 
@@ -3142,7 +3145,7 @@ function renderPagellini(){
   </tr>`).join(''):'<tr><td colspan="7" class="empty"><p>Nessun pagellino</p></td></tr>';
 }
 function pagTab(f,btn){pagFilter=f;document.querySelectorAll('#secPagellini .tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');renderPagellini()}
-async function approvePagellino(id){try{await apiCall('approvaPagellino',{id},'POST');toast('Pagellino approvato','ok');await refreshData()}catch(e){toast(e.message,'err')}}
+async function approvePagellino(id){try{await apiCall('approvaPagellino',{id},'POST');toast('Pagellino approvato','ok');await refreshData(true)}catch(e){toast(e.message,'err')}}
 function addPagVoce(){
   const div=document.createElement('div');div.className='pag-voce';div.style='display:grid;grid-template-columns:2fr 1fr 80px 60px;gap:8px;align-items:end;margin-bottom:8px';
   div.innerHTML=`<div class="field mb-sm"><input type="text" class="pv-voce" placeholder="Es: Comunicazione cliente"></div><div class="field mb-sm"><select class="pv-cat"><option value="tecnica">Tecnica</option><option value="soft_skill">Soft Skill</option><option value="operativa">Operativa</option></select></div><div class="field mb-sm"><input type="number" class="pv-voto" min="1" max="10" value="6"></div><div class="field mb-sm"><input type="number" class="pv-peso" min="1" max="5" value="1"></div>`;
@@ -3258,9 +3261,9 @@ async function openChat(canaleId,nome){
   $('chatInput').style.display='block';
   loadChatCanali();// refresh sidebar highlight
   await loadChatMessages();
-  // Polling ogni 5s
+  // Polling ogni 5s — skip se tab nascosta o fuori dalla sezione chat
   if(CHAT_POLL)clearInterval(CHAT_POLL);
-  CHAT_POLL=setInterval(loadChatMessages,5000);
+  CHAT_POLL=setInterval(()=>{if(!document.hidden&&$('secChat')?.classList.contains('active'))loadChatMessages()},5000);
 }
 
 async function loadChatMessages(){
@@ -3987,7 +3990,7 @@ async function saveUtente(){
       toast('Utente creato!','ok');
     }
     closeModal('modalUtente');EDITING.utente=null;
-    await refreshData();populateSelects();
+    await refreshData(true);populateSelects();
   }catch(e){toast(e.message,'err')}
 }
 
@@ -4032,7 +4035,7 @@ async function saveCliente(){
       toast('Cliente creato!','ok');
     }
     closeModal('modalCliente');EDITING.cliente=null;
-    await refreshData();populateSelects();
+    await refreshData(true);populateSelects();
   }catch(e){toast(e.message,'err')}
 }
 
@@ -4057,7 +4060,7 @@ async function saveMacchina(){
       toast('Macchina creata!','ok');
     }
     closeModal('modalMacchina');EDITING.macchina=null;
-    await refreshData();populateSelects();
+    await refreshData(true);populateSelects();
   }catch(e){toast(e.message,'err')}
 }
 
@@ -4082,7 +4085,7 @@ async function saveAutomezzo(){
       toast('Automezzo creato!','ok');
     }
     closeModal('modalAutomezzo');EDITING.automezzo=null;
-    await refreshData();populateSelects();
+    await refreshData(true);populateSelects();
   }catch(e){toast(e.message,'err')}
 }
 
@@ -4090,26 +4093,26 @@ async function saveAutomezzo(){
 async function saveOrdine(){
   const data={Codice:$('moCodice').value,Descrizione:$('moDesc').value,Quantita:$('moQta').value,TecnicoID:$('moTecnico').value,ClienteID:$('moCliente').value,Note:$('moNote').value};
   if(!data.Codice){toast('Inserisci il codice ricambio','warn');return}
-  try{await apiCall('createOrdine',{data},'POST');toast('Ordine creato!','ok');closeModal('modalOrdine');await refreshData()}catch(e){toast(e.message,'err')}
+  try{await apiCall('createOrdine',{data},'POST');toast('Ordine creato!','ok');closeModal('modalOrdine');await refreshData(true)}catch(e){toast(e.message,'err')}
 }
 
 async function saveRep(){
   const data={TecnicoID:$('mrTecnico').value,DataInizio:$('mrDal').value,DataFine:$('mrAl').value,Turno:$('mrTurno').value,Tipo:$('mrTipo').value,Note:$('mrNote').value};
   if(!data.TecnicoID||!data.DataInizio||!data.DataFine){toast('Compila tecnico e date','warn');return}
-  try{await apiCall('createReperibilita',{data},'POST');toast('Turno creato!','ok');closeModal('modalRep');await refreshData()}catch(e){toast(e.message,'err')}
+  try{await apiCall('createReperibilita',{data},'POST');toast('Turno creato!','ok');closeModal('modalRep');await refreshData(true)}catch(e){toast(e.message,'err')}
 }
 
 async function saveTrasf(){
   const data={TecniciIDs:[...($('mtTecnici').selectedOptions||[])].map(o=>o.value),ClienteID:$('mtCliente').value,DataInizio:$('mtDal').value,DataFine:$('mtAl').value,AutomezzoID:$('mtAutomezzo').value,Motivo:$('mtMotivo').value};
   if(!data.TecniciIDs.length||!data.ClienteID||!data.DataInizio){toast('Compila tecnici, cliente e data inizio','warn');return}
-  try{await apiCall('createTrasferta',{data},'POST');toast('Trasferta creata!','ok');closeModal('modalTrasf');await refreshData()}catch(e){toast(e.message,'err')}
+  try{await apiCall('createTrasferta',{data},'POST');toast('Trasferta creata!','ok');closeModal('modalTrasf');await refreshData(true)}catch(e){toast(e.message,'err')}
 }
 
 async function saveNotifica(){
   const destIds=[...($('mnDest').selectedOptions||[])].map(o=>o.value); 
   const data={destinatariIds:destIds,tipo:$('mnTipo').value,oggetto:$('mnOgg').value,messaggio:$('mnMsg').value};
   if(!destIds.length||!data.oggetto){toast('Seleziona destinatari e oggetto','warn');return}
-  try{await apiCall('createNotifica',data,'POST');toast('Notifica inviata!','ok');closeModal('modalNotifica');await refreshData()}catch(e){toast(e.message,'err')}
+  try{await apiCall('createNotifica',data,'POST');toast('Notifica inviata!','ok');closeModal('modalNotifica');await refreshData(true)}catch(e){toast(e.message,'err')}
 }
 
 async function savePagellino(){
@@ -4121,7 +4124,7 @@ async function savePagellino(){
   })).filter(v=>v.voce.trim());
   const data={tecnicoId:$('mgTecnico').value,periodo:$('mgPeriodo').value,dataRilevazione:$('mgData').value||today(),valutatoreId:USER?.ID,notaComplessiva:$('mgNota').value,voci};
   if(!data.tecnicoId||voci.length===0){toast('Seleziona tecnico e aggiungi almeno una voce','warn');return}
-  try{await apiCall('createPagellino',{data},'POST');toast('Pagellino creato!','ok');closeModal('modalPagellino');await refreshData()}catch(e){toast(e.message,'err')}
+  try{await apiCall('createPagellino',{data},'POST');toast('Pagellino creato!','ok');closeModal('modalPagellino');await refreshData(true)}catch(e){toast(e.message,'err')}
 }
 
 
@@ -4152,7 +4155,7 @@ async function savePiano(){
     };
     if(!data.Data||!data.TecnicoID||!data.ClienteID){toast('Compila Data, Tecnico e Cliente','warn');return}
     await apiCall('createPiano',{data},'POST');
-    toast('Intervento creato','ok');closeModal('modalPiano');await refreshData();
+    toast('Intervento creato','ok');closeModal('modalPiano');await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 
@@ -4186,7 +4189,7 @@ async function saveUrgenza(){
     const cliNome=getName(DATA.clienti,data.ClienteID);
     try{await apiCall('sendChatMessage',{canale_id:'CH_URGENZE',testo:'🚨 URGENZA ('+priNome+') creata da '+nome+'\n🏢 '+cliNome+'\n📅 Schedulata: '+fmtDate(dataInt)+' '+oraInt+'\n📝 '+data.Problema,userId:USER?.ID},'POST')}catch(e){}
 
-    toast('Urgenza creata + schedulata il '+fmtDate(dataInt),'ok');closeModal('modalUrgenza');await refreshData();
+    toast('Urgenza creata + schedulata il '+fmtDate(dataInt),'ok');closeModal('modalUrgenza');await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 
@@ -4249,7 +4252,7 @@ async function saveAssegna(){
     try{await apiCall('sendChatMessage',{canale_id:'CH_ADMIN',testo:'✅ URGENZA '+urgId+' assegnata a '+tecNome+' per '+cliNome+'\n📅 '+fmtDate(dataPrevista)+' '+oraPrevista+(interventoId?'\n📋 Intervento creato: '+interventoId:''),userId:USER?.ID},'POST')}catch(e){}
 
     toast('Urgenza assegnata'+(creaIntervento?' + intervento creato nel piano':'')+' a '+tecNome,'ok');
-    closeModal('modalAssegna');await refreshData();
+    closeModal('modalAssegna');await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 
@@ -4260,7 +4263,7 @@ async function saveOrdine(){
       ClienteID:$('moCliente').value,Note:$('moNote').value};
     if(!data.Codice){toast('Inserisci il codice ricambio','warn');return}
     await apiCall('createOrdine',{data},'POST');
-    toast('Ordine creato','ok');closeModal('modalOrdine');await refreshData();
+    toast('Ordine creato','ok');closeModal('modalOrdine');await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 
@@ -4271,7 +4274,7 @@ async function saveRep(){
       Note:$('mrNote').value};
     if(!data.TecnicoID||!data.DataInizio||!data.DataFine){toast('Compila Tecnico e Date','warn');return}
     await apiCall('createReperibilita',{data},'POST');
-    toast('Turno creato','ok');closeModal('modalRep');await refreshData();
+    toast('Turno creato','ok');closeModal('modalRep');await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 
@@ -4284,7 +4287,7 @@ async function saveTrasf(){
       Motivo:$('mtMotivo').value};
     if(!tecniciSel.length||!data.ClienteID||!data.DataInizio){toast('Compila Tecnici, Cliente e Data Inizio','warn');return}
     await apiCall('createTrasferta',{data},'POST');
-    toast('Trasferta creata','ok');closeModal('modalTrasf');await refreshData();
+    toast('Trasferta creata','ok');closeModal('modalTrasf');await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 
@@ -4295,7 +4298,7 @@ async function saveNotifica(){
       oggetto:$('mnOgg').value,messaggio:$('mnMsg').value};
     if(!destSel.length||!data.oggetto){toast('Seleziona destinatari e oggetto','warn');return}
     await apiCall('createNotifica',data,'POST');
-    toast('Notifica inviata a '+destSel.length+' destinatari','ok');closeModal('modalNotifica');await refreshData();
+    toast('Notifica inviata a '+destSel.length+' destinatari','ok');closeModal('modalNotifica');await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 
@@ -4315,7 +4318,7 @@ async function savePagellino(){
     if(!data.tecnicoId){toast('Seleziona un tecnico','warn');return}
     if(voci.length===0){toast('Aggiungi almeno una voce di valutazione','warn');return}
     await apiCall('createPagellino',{data},'POST');
-    toast('Pagellino creato','ok');closeModal('modalPagellino');await refreshData();
+    toast('Pagellino creato','ok');closeModal('modalPagellino');await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 
@@ -4327,7 +4330,7 @@ async function saveInstall(){
       TecniciIDs:tecniciSel,Note:$('miNote').value,Stato:'in_corso'};
     if(!data.ClienteID||!data.DataInizio){toast('Compila Cliente e Data Inizio','warn');return}
     await apiCall('createInstallazione',{data},'POST');
-    toast('Installazione creata!','ok');closeModal('modalInstall');await refreshData();
+    toast('Installazione creata!','ok');closeModal('modalInstall');await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 
@@ -4478,7 +4481,7 @@ async function confirmImportExcelPlan(){
     toast(`Piano importato: ${result.created} interventi creati`+(result.errors?.length?`, ${result.errors.length} errori`:''),'ok');
     $('excelImportPreview').style.display='none';
     EXCEL_PLAN_ROWS=[];
-    await refreshData();
+    await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 
@@ -4656,7 +4659,7 @@ async function applyAI(){
     const result=await apiCall('applyAIPlan',{piano:AI_PLAN},'POST');
     toast('Piano applicato: '+(result.created||0)+' interventi creati','ok');
     AI_PLAN=null;$('btnApplyAI').disabled=true;$('btnSubmitPlan').disabled=true;$('btnDownloadPlan').disabled=true;
-    await refreshData();
+    await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 
@@ -4991,7 +4994,7 @@ function renderOrdineWorkflow(statoCorrente){
 }
 
 async function updatePianoStato(id,stato){
-  try{await apiCall('updatePiano',{id,data:{Stato:stato},operatoreId:USER?.ID},'POST');toast('Stato aggiornato','ok');closeModal('modalDetail');await refreshData()}catch(e){toast(e.message,'err')}
+  try{await apiCall('updatePiano',{id,data:{Stato:stato},operatoreId:USER?.ID},'POST');toast('Stato aggiornato','ok');closeModal('modalDetail');await refreshData(true)}catch(e){toast(e.message,'err')}
 }
 
 // ============ FEATURE 29: CHECKLIST ============
@@ -5053,13 +5056,13 @@ async function saveChecklistTemplate(){
   if(!$('mclNome').value||!voci.length){toast('Nome e almeno 1 voce richiesti','err');return}
   try{
     await apiCall('createChecklistTemplate',{Nome:$('mclNome').value,TipoInterventoID:$('mclTipo').value,Voci:JSON.stringify(voci)},'POST');
-    toast('Template creato','ok');closeModal('modalChecklist');await refreshData();
+    toast('Template creato','ok');closeModal('modalChecklist');await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 
 async function deleteChecklistTpl(id){
   if(!confirm('Disattivare questo template?'))return;
-  try{await apiCall('deleteChecklistTemplate',{id},'POST');toast('Template disattivato','ok');await refreshData()}catch(e){toast(e.message,'err')}
+  try{await apiCall('deleteChecklistTemplate',{id},'POST');toast('Template disattivato','ok');await refreshData(true)}catch(e){toast(e.message,'err')}
 }
 
 // ============ FEATURE 30a: DOCUMENTI ============
@@ -5104,7 +5107,7 @@ async function saveDocumento(){
       fileUrl=up.data.fileUrl;fileId=up.data.fileId;mimeType=file.type;dimKB=Math.round(file.size/1024);
     }
     await apiCall('createDocumento',{Nome:$('mdNome').value,FileURL:fileUrl,FileID:fileId,MimeType:mimeType,DimensioneKB:dimKB,Categoria:$('mdCategoria').value,Descrizione:$('mdDescrizione').value,Tags:$('mdTags').value,Pubblico:$('mdPubblico').value},'POST');
-    toast('Documento salvato!','ok');closeModal('modalDocumento');$('mdFile').value='';$('mdFileLabel').textContent='';await refreshData();
+    toast('Documento salvato!','ok');closeModal('modalDocumento');$('mdFile').value='';$('mdFileLabel').textContent='';await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 // ============ FEATURE 30b: ALLEGATI ============
@@ -5126,13 +5129,13 @@ async function saveAllegato(){
   if(!$('maName').value||!$('maUrl').value){toast('Nome e URL richiesti','err');return}
   try{
     await apiCall('createAllegato',{Nome:$('maName').value,FileURL:$('maUrl').value,RiferimentoTipo:$('maRefTipo').value,RiferimentoID:$('maRefId').value,Note:$('maNote').value},'POST');
-    toast('Allegato aggiunto','ok');closeModal('modalAllegato');await refreshData();
+    toast('Allegato aggiunto','ok');closeModal('modalAllegato');await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 
 async function deleteAll(id){
   if(!confirm('Eliminare allegato?'))return;
-  try{await apiCall('deleteAllegato',{id},'POST');toast('Eliminato','ok');await refreshData()}catch(e){toast(e.message,'err')}
+  try{await apiCall('deleteAllegato',{id},'POST');toast('Eliminato','ok');await refreshData(true)}catch(e){toast(e.message,'err')}
 }
 
 // ============ FEATURE 31: EMAIL CONFIG ============
@@ -5517,7 +5520,7 @@ async function onPlannerDrop(e, tecnicoId, data){
       await apiCall('updateUrgenza', { id, TecnicoAssegnato: tecnicoId, DataPrevista: data }, 'POST');
       toast('Urgenza spostata a ' + data + ' → ' + getName(DATA.utenti||[],tecnicoId), 'ok');
     }
-    await refreshData();
+    await refreshData(true);
     renderPlanner();
   } catch(err){ toast(err.message, 'err') }
 }
@@ -5561,7 +5564,7 @@ async function deletePlannerItem(type, id){
       await apiCall('updateUrgenza', { id, Obsoleto: true }, 'POST');
       toast('Urgenza cancellata', 'ok');
     }
-    await refreshData();
+    await refreshData(true);
     renderPlanner();
     const el = document.getElementById('plannerDayDetail');
     if(el) el.innerHTML = '<p style="color:var(--gray)">Elemento cancellato. Clicca su un giorno per aggiornare.</p>';
@@ -5590,7 +5593,7 @@ async function geocodeAllClienti(){
     toast('Geocodifica in corso... attendere 30-60 secondi','warn');
     const r = await apiCall('geocodeAll',{},'POST');
     toast('Geocodificati: '+r.updated+' clienti. Falliti: '+(r.errors||0),'ok');
-    await refreshData();
+    await refreshData(true);
     if(MAP) updateMap();
   } catch(e){ toast('Errore geocodifica: '+e.message,'err') }
 }
