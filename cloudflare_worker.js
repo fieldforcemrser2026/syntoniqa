@@ -143,7 +143,7 @@ function getFields(body) {
   const result = {};
   for (const [k, v] of Object.entries(source)) {
     if (skip.has(k)) continue;
-    if (v === null || v === undefined || v === '') continue; // skip empty/null fields
+    if (v === undefined) continue; // skip undefined only — null/'' allowed to clear fields
     result[toSnake(k)] = v;
   }
   return result;
@@ -907,13 +907,18 @@ async function handlePost(action, body, env) {
     }
 
     case 'updateOrdineStato': {
-      const { id, stato, operatoreId, userId: _u2, ...rest } = body;
+      const { id, stato, operatoreId, userId: _u2 } = body;
       // Salva timestamp specifici per ogni stato
       const datePatch = {};
       if (stato === 'preso_in_carico') datePatch.data_presa_carico = new Date().toISOString();
       if (stato === 'ordinato') datePatch.data_ordine = new Date().toISOString();
       if (stato === 'arrivato') datePatch.data_arrivo = new Date().toISOString();
-      await sb(env, `ordini?id=eq.${id}`, 'PATCH', { stato, ...rest, ...datePatch, updated_at: new Date().toISOString() });
+      // Allowlist esplicita — no spread diretto di body
+      const ordPatch = { stato, ...datePatch, updated_at: new Date().toISOString() };
+      if (body.note !== undefined) ordPatch.note = body.note;
+      if (body.fornitore !== undefined) ordPatch.fornitore = body.fornitore;
+      if (body.numero_ordine !== undefined) ordPatch.numero_ordine = body.numero_ordine;
+      await sb(env, `ordini?id=eq.${id}`, 'PATCH', ordPatch);
       await wlog('ordine', id, `stato_${stato}`, operatoreId);
       // Notifica tecnico che ha richiesto l'ordine
       try {
@@ -1673,6 +1678,7 @@ Rispondi SOLO con JSON valido:
       // Import plan rows from parsed Excel data
       const { rows, operatoreId } = body;
       if (!rows || !rows.length) return err('rows richiesto');
+      if (rows.length > 500) return err('Massimo 500 righe per importazione. Dividi il file in più parti.');
       // Get tecnici for name→id mapping
       const tecnici = await sb(env, 'utenti', 'GET', null, '?attivo=eq.true&select=id,nome,cognome');
       const tecMap = {};
@@ -2860,6 +2866,7 @@ Rispondi SOLO con JSON valido:
     case 'importAnagraficaClienti': {
       const rows = body.rows || [];
       if (!rows.length) return err('rows richiesto (array)');
+      if (rows.length > 2000) return err('Massimo 2000 righe per importazione anagrafica.');
       const results = { inserted: 0, errors: [] };
       for (const row of rows) {
         const fields = {};
