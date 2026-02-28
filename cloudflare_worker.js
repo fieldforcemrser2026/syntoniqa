@@ -695,6 +695,53 @@ async function handlePost(action, body, env) {
       const result = await sb(env, 'urgenze', 'POST', row);
       await wlog('urgenza', id, 'created', body.operatoreId || body.userId);
       await sendTelegramNotification(env, 'nuova_urgenza', row);
+
+      // ---- SMART DISPATCHING: trova tecnici con slot varie/disponibili oggi ----
+      let smartSuggestion = null;
+      try {
+        const itFmt = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' });
+        const oggi = itFmt.format(new Date());
+        // Cerca interventi "varie" o "gestione urgenze" pianificati per oggi
+        const pianoOggi = await sb(env, 'piano', 'GET', null,
+          `?data=eq.${oggi}&stato=eq.pianificato&obsoleto=eq.false&select=id,tecnico_id,note,tipo_intervento_id`
+        ).catch(() => []);
+        const disponibili = pianoOggi.filter(p => {
+          const nota = ((p.note || '') + ' ' + (p.tipo_intervento_id || '')).toLowerCase();
+          return nota.includes('varie') || nota.includes('disponibil') || nota.includes('urgenz') || nota.includes('backup');
+        });
+
+        if (disponibili.length) {
+          // Arricchisci con nomi tecnici
+          const tecIds = [...new Set(disponibili.map(d => d.tecnico_id).filter(Boolean))];
+          const tecnici = tecIds.length ? await sb(env, 'utenti', 'GET', null,
+            `?id=in.(${tecIds.join(',')})&select=id,nome,cognome,base,telegram_chat_id`
+          ).catch(() => []) : [];
+          const tecMap = Object.fromEntries(tecnici.map(t => [t.id, t]));
+
+          // Trova il migliore: preferisci chi ha base vicina al cliente
+          const candidates = disponibili.map(d => {
+            const t = tecMap[d.tecnico_id] || {};
+            return { tecnicoId: d.tecnico_id, nome: `${t.nome || ''} ${t.cognome || ''}`.trim(), base: t.base, chatId: t.telegram_chat_id, pianoId: d.id };
+          }).filter(c => c.nome);
+
+          if (candidates.length) {
+            smartSuggestion = { tecnici_disponibili: candidates, urgenza_id: id };
+            // Notifica nel gruppo TG con suggerimento smart
+            const sugTxt = candidates.map(c => `• ${c.nome}${c.base ? ' (da ' + c.base + ')' : ''}`).join('\n');
+            const configRes2 = await sb(env, 'config', 'GET', null, '?chiave=eq.telegram_group_generale').catch(() => []);
+            const groupId = configRes2?.[0]?.valore;
+            if (groupId) {
+              await sendTelegram(env, groupId,
+                `💡 <b>SMART DISPATCH</b>\n` +
+                `Urgenza ${id}: ${(row.problema||'').substring(0,60)}\n\n` +
+                `Tecnici con slot VARIE oggi:\n${sugTxt}\n\n` +
+                `Usa <code>/assegna ${id} [tecnico]</code> per assegnare`
+              );
+            }
+          }
+        }
+      } catch(e) { console.error('Smart dispatch error:', e.message); }
+
       // Email admin per nuova urgenza
       const cliNomeUrg = await getEntityName(env, 'clienti', row.cliente_id).catch(()=>'');
       emailAdmins(env, `🚨 Nuova Urgenza ${id}`,
@@ -703,9 +750,10 @@ async function handlePost(action, body, env) {
         <p><strong>Cliente:</strong> ${cliNomeUrg}</p>
         <p><strong>Problema:</strong> ${(row.problema || '').substring(0, 200)}</p>
         <p><strong>SLA:</strong> ${slaScadenza ? slaScadenza.substring(0,16).replace('T',' ') : 'N/D'}</p>
+        ${smartSuggestion ? '<p><strong>💡 Tecnici disponibili oggi:</strong> ' + smartSuggestion.tecnici_disponibili.map(t=>t.nome).join(', ') + '</p>' : ''}
         <p style="margin-top:16px"><a href="https://fieldforcemrser2026.github.io/syntoniqa/admin_v1.html" style="background:#C30A14;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">Vai alla Dashboard</a></p>`
       ).catch(e=>console.error('[SYNC]',e.message));
-      return ok({ urgenza: pascalizeRecord(result[0]) });
+      return ok({ urgenza: pascalizeRecord(result[0]), smartDispatch: smartSuggestion });
     }
 
     case 'assignUrgenza': {
@@ -1491,13 +1539,143 @@ async function handlePost(action, body, env) {
       const vincoli = body.vincoli || {};
       const testo = vincoli.testo || '';
       const files = vincoli.files || [];
+      const ctx = vincoli.ctx || { vincoli: true, reperibilita: true, piano: true, urgenze: true, tagliandi: true };
+      const modalita = vincoli.modalita || 'mese';
+      const settimanaNum = parseInt(vincoli.settimana || '1', 10);
 
-      // Load data context (lean queries to avoid timeout)
-      const [allTecnici, allUrgenze, allClienti] = await Promise.all([
-        sb(env, 'utenti', 'GET', null, '?attivo=eq.true&obsoleto=eq.false&select=id,nome,cognome,base,ruolo').catch(()=>[]),
+      // Load data context + vincoli dinamici (lean queries to avoid timeout)
+      const meseTarget = vincoli.mese_target || '';
+      const repFilter = meseTarget ? `&data_inizio=lte.${meseTarget}-31&data_fine=gte.${meseTarget}-01` : '';
+      const [allTecnici, allUrgenze, allClienti, vincoliCfg, allRep, allAutomezzi, allMacchine, allAssets] = await Promise.all([
+        sb(env, 'utenti', 'GET', null, '?attivo=eq.true&obsoleto=eq.false&select=id,nome,cognome,base,ruolo,automezzo_id').catch(()=>[]),
         sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,schedulata)&order=data_segnalazione.desc&limit=20&select=id,problema,cliente_id,priorita_id').catch(()=>[]),
-        sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno,citta_fatturazione&limit=150').catch(()=>[])
+        sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno,citta_fatturazione&limit=150').catch(()=>[]),
+        sb(env, 'config', 'GET', null, '?chiave=eq.vincoli_categories&limit=1').catch(()=>[]),
+        sb(env, 'reperibilita', 'GET', null, `?obsoleto=eq.false${repFilter}&select=id,tecnico_id,data_inizio,data_fine,turno,tipo&order=data_inizio.asc&limit=100`).catch(()=>[]),
+        sb(env, 'automezzi', 'GET', null, '?obsoleto=eq.false&select=id,targa,modello,stato&limit=20').catch(()=>[]),
+        sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,nome,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&order=prossimo_tagliando.asc&limit=50').catch(()=>[]),
+        sb(env, 'anagrafica_assets', 'GET', null, '?prossimo_controllo=not.is.null&select=id,nome_asset,numero_serie,modello,gruppo_attrezzatura,codice_m3,nome_account,prossimo_controllo&order=prossimo_controllo.asc&limit=50').catch(()=>[])
       ]);
+
+      // Parse vincoli dinamici dalla config (only if ctx.vincoli)
+      let vincoliText = '';
+      if (ctx.vincoli && vincoliCfg.length) {
+        try {
+          const vc = JSON.parse(vincoliCfg[0].valore);
+          const cats = (vc.categories || []).filter(c => c.attiva !== false);
+          const oggi = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
+          const getName = (id) => { const u = allTecnici.find(t => t.id === id); return u ? `${u.nome} ${u.cognome}` : id; };
+          cats.forEach(cat => {
+            const regole = (cat.regole || []).filter(r => {
+              if (!r.testo) return false;
+              if (r.permanente) return true;
+              if (r.data_fine && r.data_fine < oggi) return false;
+              return true;
+            });
+            if (!regole.length) return;
+            vincoliText += `\n[${cat.icona || ''} ${cat.nome}]\n`;
+            regole.forEach(r => {
+              let line = `- ${r.testo}`;
+              if (r.soggetti?.length) line += ` (Soggetti: ${r.soggetti.map(getName).join(', ')})`;
+              if (r.riferimenti?.length) line += ` (Con: ${r.riferimenti.map(getName).join(', ')})`;
+              if (!r.permanente && (r.data_inizio || r.data_fine)) line += ` (${r.data_inizio ? 'Dal ' + r.data_inizio : ''}${r.data_fine ? ' Al ' + r.data_fine : ''})`;
+              line += r.priorita === 'alta' ? ' [PRIORITA ALTA]' : '';
+              vincoliText += line + '\n';
+            });
+          });
+        } catch {}
+      }
+
+      // Reperibilita context (only if ctx.reperibilita)
+      let repContext = '';
+      if (ctx.reperibilita && allRep.length) {
+        repContext = '\nREPERIBILITA ATTIVE:\n' + allRep.map(r => {
+          const tecName = allTecnici.find(t => t.id === r.tecnico_id);
+          return `- ${tecName ? tecName.nome + ' ' + tecName.cognome : r.tecnico_id}: ${r.turno || '24h'} (${r.tipo || 'rep'}) dal ${r.data_inizio} al ${r.data_fine}`;
+        }).join('\n');
+      }
+
+      // Piano esistente context (only if ctx.piano)
+      let pianoEsistente = '';
+      if (ctx.piano && vincoli.piano_esistente?.length) {
+        pianoEsistente = '\nPIANO GIA ESISTENTE (non duplicare, complementa):\n' +
+          vincoli.piano_esistente.slice(0, 30).map(p => `- ${p.data} ${p.tecnico}: ${p.cliente} (${p.note || ''})`).join('\n');
+      }
+
+      // Automezzi context
+      const autoList = allAutomezzi.map(a => `${a.id}(${a.targa||''},${a.stato||'attivo'})`).join('; ');
+
+      // Tagliandi/Service scaduti e in scadenza — prioritized list (only if ctx.tagliandi)
+      let tagliandiContext = '';
+      const oggi = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
+      const tagItems = [];
+      if (ctx.tagliandi) {
+      // From macchine table (prossimo_tagliando)
+      for (const m of allMacchine) {
+        if (!m.prossimo_tagliando) continue;
+        const cli = allClienti.find(c => c.codice_m3 === m.cliente_id) || {};
+        const ggDiff = Math.round((new Date(m.prossimo_tagliando) - new Date(oggi)) / 86400000);
+        tagItems.push({
+          tipo: 'tagliando',
+          macchina: `${m.nome||m.modello||m.tipo||'?'} (${m.id})`,
+          cliente: cli.nome_interno || cli.nome_account || m.cliente_id || '?',
+          clienteId: m.cliente_id || '',
+          data: m.prossimo_tagliando,
+          giorniScadenza: ggDiff,
+          urgenza: ggDiff < 0 ? 'SCADUTO' : ggDiff <= 7 ? 'URGENTE' : ggDiff <= 30 ? 'PROSSIMO' : 'PROGRAMMATO',
+          oreLavoro: m.ore_lavoro || null
+        });
+      }
+      // From anagrafica_assets table (prossimo_controllo)
+      for (const a of allAssets) {
+        if (!a.prossimo_controllo) continue;
+        const ggDiff = Math.round((new Date(a.prossimo_controllo) - new Date(oggi)) / 86400000);
+        tagItems.push({
+          tipo: 'controllo',
+          macchina: `${a.nome_asset||a.modello||a.gruppo_attrezzatura||'?'} (S/N:${a.numero_serie||'?'})`,
+          cliente: a.nome_account || '',
+          clienteId: a.codice_m3 || '',
+          data: a.prossimo_controllo,
+          giorniScadenza: ggDiff,
+          urgenza: ggDiff < 0 ? 'SCADUTO' : ggDiff <= 7 ? 'URGENTE' : ggDiff <= 30 ? 'PROSSIMO' : 'PROGRAMMATO'
+        });
+      }
+      // Sort by urgenza: scaduti first, then by date ascending
+      tagItems.sort((a, b) => a.giorniScadenza - b.giorniScadenza);
+      if (tagItems.length) {
+        const scaduti = tagItems.filter(t => t.giorniScadenza < 0);
+        const urgenti = tagItems.filter(t => t.giorniScadenza >= 0 && t.giorniScadenza <= 7);
+        const prossimi = tagItems.filter(t => t.giorniScadenza > 7 && t.giorniScadenza <= 30);
+        const programmati = tagItems.filter(t => t.giorniScadenza > 30);
+        const fmtItem = t => `- [${t.urgenza}] ${t.tipo.toUpperCase()} ${t.macchina} @ ${t.cliente}(${t.clienteId}) — data prevista: ${t.data} (${t.giorniScadenza < 0 ? Math.abs(t.giorniScadenza)+'gg SCADUTO' : t.giorniScadenza+'gg'})${t.oreLavoro ? ' ore:'+t.oreLavoro : ''}`;
+        tagliandiContext = '\nTAGLIANDI E SERVICE IN SCADENZA (pianifica PRIMA i piu urgenti):';
+        if (scaduti.length) tagliandiContext += '\n⚠️ SCADUTI:\n' + scaduti.slice(0,15).map(fmtItem).join('\n');
+        if (urgenti.length) tagliandiContext += '\n🔴 URGENTI (entro 7gg):\n' + urgenti.slice(0,10).map(fmtItem).join('\n');
+        if (prossimi.length) tagliandiContext += '\n🟡 PROSSIMI (entro 30gg):\n' + prossimi.slice(0,10).map(fmtItem).join('\n');
+        if (programmati.length) tagliandiContext += '\n🟢 PROGRAMMATI:\n' + programmati.slice(0,5).map(fmtItem).join('\n');
+      }
+      } // end if ctx.tagliandi
+
+      // Modalità: calcola periodo target
+      let periodoIstruzione = '';
+      if (meseTarget) {
+        const [yy, mm] = meseTarget.split('-').map(Number);
+        if (modalita === 'settimana') {
+          // Calcola date settimana N del mese
+          const firstDay = new Date(yy, mm - 1, 1);
+          const startOffset = (settimanaNum - 1) * 7;
+          const weekStart = new Date(yy, mm - 1, 1 + startOffset);
+          const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6);
+          const lastOfMonth = new Date(yy, mm, 0);
+          if (weekEnd > lastOfMonth) weekEnd.setTime(lastOfMonth.getTime());
+          const fmtD = d => d.toISOString().split('T')[0];
+          periodoIstruzione = `GENERA PIANO SOLO per la SETTIMANA ${settimanaNum} del mese: dal ${fmtD(weekStart)} al ${fmtD(weekEnd)}`;
+        } else if (modalita === 'vuoti') {
+          periodoIstruzione = `GENERA PIANO SOLO per i giorni SENZA interventi nel piano esistente. Non duplicare giorni gia coperti.`;
+        } else {
+          periodoIstruzione = `GENERA PIANO per TUTTO il mese ${meseTarget} (tutti i giorni lavorativi Lun-Sab)`;
+        }
+      }
 
       // File context (max 3000 chars)
       let fileContext = '';
@@ -1508,92 +1686,159 @@ async function handlePost(action, body, env) {
         }
       }
 
-      // Date
-      const isoOggi = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
+      // Date (oggi already defined above for tagliandi)
+      const isoOggi = oggi; // reuse
       const oggiIt = new Intl.DateTimeFormat('it-IT', { weekday:'long', year:'numeric', month:'long', day:'numeric', timeZone:'Europe/Rome' }).format(new Date());
 
       // Compact data
       const tecList = allTecnici.filter(t=>t.ruolo!=='admin').map(t => `${t.nome} ${t.cognome}(${t.id},${t.ruolo},${t.base||'?'})`).join('; ');
-      const urgList = allUrgenze.slice(0,15).map(u => `${u.id}:${(u.problema||'').substring(0,30)}|${u.cliente_id}|pri:${u.priorita_id}`).join('; ');
+      const urgList = ctx.urgenze ? allUrgenze.slice(0,15).map(u => `${u.id}:${(u.problema||'').substring(0,30)}|${u.cliente_id}|pri:${u.priorita_id}`).join('; ') : '';
       const cliList = allClienti.slice(0,80).map(c => `${c.codice_m3}:${c.nome_interno||c.nome_account||'?'}(${c.citta_fatturazione||''})`).join(', ');
 
-      const prompt = `PLANNER FSM MRS LELY CENTER — Robot mungitura Emilia Romagna
+      const prompt = `PLANNER FSM — Pianificazione intelligente interventi
 OGGI: ${oggiIt} (${isoOggi})
+${meseTarget ? 'MESE TARGET: ' + meseTarget : ''}
 
-=== VINCOLI UTENTE (OBBLIGATORI — violazione = errore grave) ===
+=== VINCOLI UTENTE (dal prompt) ===
 ${testo || 'Nessuno'}
 
-REGOLE FISSE TEAM:
-- Junior (Emanuele,Gino,Giuseppe) → SEMPRE affiancati a un senior (Jacopo,Anton,Giovanni)
-- Mirko ASSENTE fino al prossimo mese → NON assegnarlo MAI
-- Fabio lavora SOLO da solo
-- Fabrizio in apprendimento → ok in coppia
-- Se utente dice "X non può fare Y" → NON dare interventi tipo Y a X. MAI.
+${vincoliText ? vincoliText : '(Nessun vincolo configurato nel sistema)'}
 
-TECNICI: ${tecList}
+TECNICI DISPONIBILI: ${tecList}
+AUTOMEZZI: ${autoList || 'Nessuno'}
 URGENZE APERTE: ${urgList || 'Nessuna'}
 CLIENTI: ${cliList}
-${fileContext ? '\nFILE CARICATO (riferimento parziale — genera piano COMPLETO per TUTTI i giorni richiesti, non solo quelli nel file):\n' + fileContext : ''}
+${repContext}
+${pianoEsistente}
+${tagliandiContext}
+${fileContext ? '\nFILE ALLEGATI (riferimento — genera piano COMPLETO, non solo i giorni nel file):\n' + fileContext : ''}
 
 ISTRUZIONI GENERAZIONE:
-1. Genera piano per OGNI giorno lavorativo (lun-ven) del periodo richiesto dall'utente
-2. Se l'utente chiede "marzo" → genera TUTTI i giorni lav di marzo
-3. Se carica un Excel di 3 giorni ma chiede una settimana → genera 5 giorni
-4. Assegna 2-4 interventi/giorno per tecnico. Usa clienti REALI (codice_m3 sopra).
-5. Raggruppa per zona (stessa città/provincia nello stesso giorno)
-6. Urgenze aperte hanno priorità assoluta nei primi giorni
-7. Rispetta OGNI vincolo utente senza eccezioni
+${periodoIstruzione || '1. Genera piano per OGNI giorno lavorativo (lun-sab) del periodo richiesto'}
+2. Se chiesto un mese intero → genera TUTTI i giorni lavorativi
+3. Assegna 2-4 interventi/giorno per tecnico. Usa clienti REALI.
+4. Raggruppa per zona geografica (stessa citta nello stesso giorno)
+5. Urgenze aperte → priorita assoluta nei primi giorni
+6. Rispetta OGNI vincolo senza eccezioni — vincoli con priorita ALTA sono inviolabili
+7. Non duplicare interventi gia nel piano esistente
+8. Assegna automezzi coerenti con tecnico
+9. Rispetta turni reperibilita (chi e' reperibile ha carico ridotto)
+10. Tagliandi/service scaduti o in scadenza → pianifica PRIMA quelli piu urgenti
 
 Rispondi SOLO JSON:
-{"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|service|urgenza|installazione","oraInizio":"HH:MM","durataOre":N,"note":"..."}],"warnings":["..."]}`;
+{"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|service|urgenza|installazione|ispezione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"..."}],"warnings":["..."]}`;
 
-      // Workers AI with model fallback chain
-      let aiRes;
+      // ─── AI Call with week-by-week chunking for full months ───
       const models = ['@cf/meta/llama-3.1-70b-instruct', '@cf/meta/llama-3.1-8b-instruct'];
-      for (const model of models) {
-        try {
-          aiRes = await env.AI.run(model, {
-            messages: [
-              { role: 'system', content: 'Sei un pianificatore FSM. Rispondi SOLO JSON valido. Zero testo extra.' },
-              { role: 'user', content: prompt }
-            ],
-            max_tokens: 4096
-          });
-          if (aiRes && aiRes.response) break;
-        } catch (aiErr) {
-          if (model === models[models.length - 1]) {
-            return err(`Workers AI errore: ${aiErr.message || 'timeout'}. Riprova con prompt più breve.`);
+      const validIds = new Set(allTecnici.map(t => t.id));
+
+      // Helper: call AI with fallback chain
+      async function callAI(promptText) {
+        for (const model of models) {
+          try {
+            const res = await env.AI.run(model, {
+              messages: [
+                { role: 'system', content: 'Sei un pianificatore FSM. Rispondi SOLO JSON valido. Zero testo extra.' },
+                { role: 'user', content: promptText }
+              ],
+              max_tokens: 4096
+            });
+            if (res && res.response) return res.response;
+          } catch (aiErr) {
+            if (model === models[models.length - 1]) throw new Error(aiErr.message || 'timeout');
           }
+        }
+        return null;
+      }
+
+      // Helper: parse AI response JSON
+      function parseAIResponse(rawText) {
+        let clean = (rawText || '{}').replace(/```json\n?|\n?```/g, '').trim();
+        const js = clean.indexOf('{'), je = clean.lastIndexOf('}');
+        if (js >= 0 && je > js) clean = clean.substring(js, je + 1);
+        try { return JSON.parse(clean); } catch {
+          const m = rawText.match(/\{[\s\S]*\}/);
+          if (m) { try { return JSON.parse(m[0]); } catch {} }
+          return null;
         }
       }
 
-      if (!aiRes || !aiRes.response) return err('Workers AI non ha generato risposta. Riprova.');
+      // Helper: validate and fix tecnicoId
+      function postProcess(piano) {
+        return (piano || []).map(p => {
+          if (p.tecnicoId && !validIds.has(p.tecnicoId)) {
+            const match = allTecnici.find(t => (t.nome + ' ' + t.cognome).toLowerCase().includes((p.tecnico||'').split(' ')[0].toLowerCase()));
+            if (match) { p.tecnicoId = match.id; p.tecnico = match.nome + ' ' + match.cognome; }
+          }
+          return p;
+        }).filter(p => p.tecnicoId && validIds.has(p.tecnicoId));
+      }
 
-      const rawText = aiRes.response || '{}';
-      // Aggressive JSON extraction
-      let cleanText = rawText.replace(/```json\n?|\n?```/g, '').trim();
-      const jsonStart = cleanText.indexOf('{');
-      const jsonEnd = cleanText.lastIndexOf('}');
-      if (jsonStart >= 0 && jsonEnd > jsonStart) cleanText = cleanText.substring(jsonStart, jsonEnd + 1);
-
-      try {
-        const result = JSON.parse(cleanText);
-        // Post-process: validate tecnicoId exists
-        const validIds = new Set(allTecnici.map(t => t.id));
-        if (result.piano && Array.isArray(result.piano)) {
-          result.piano = result.piano.map(p => {
-            if (p.tecnicoId && !validIds.has(p.tecnicoId)) {
-              const match = allTecnici.find(t => (t.nome + ' ' + t.cognome).toLowerCase().includes((p.tecnico||'').split(' ')[0].toLowerCase()));
-              if (match) { p.tecnicoId = match.id; p.tecnico = match.nome + ' ' + match.cognome; }
-            }
-            return p;
-          }).filter(p => p.tecnicoId && validIds.has(p.tecnicoId));
+      // Determine if chunking is needed (full month = 4-5 weeks)
+      const needsChunking = modalita === 'mese' && meseTarget;
+      if (needsChunking) {
+        // Split month into weeks
+        const [yy, mm] = meseTarget.split('-').map(Number);
+        const weeks = [];
+        let d = new Date(yy, mm - 1, 1);
+        const lastDay = new Date(yy, mm, 0).getDate();
+        let weekNum = 1;
+        while (d.getDate() <= lastDay && d.getMonth() === mm - 1) {
+          const weekStart = new Date(d);
+          const weekEnd = new Date(d);
+          weekEnd.setDate(weekEnd.getDate() + 6);
+          if (weekEnd.getMonth() !== mm - 1) weekEnd.setDate(lastDay);
+          if (weekEnd.getMonth() !== mm - 1) { weekEnd.setMonth(mm - 1); weekEnd.setDate(lastDay); }
+          const fmtD = dt => dt.toISOString().split('T')[0];
+          weeks.push({ num: weekNum, start: fmtD(weekStart), end: fmtD(weekEnd) });
+          d.setDate(d.getDate() + 7);
+          weekNum++;
         }
+
+        const allPiano = [];
+        const allWarnings = [];
+        let allSummary = '';
+        let prevWeekSummary = '';
+
+        for (const week of weeks) {
+          const weekPrompt = prompt
+            .replace(periodoIstruzione, `GENERA PIANO per SETTIMANA ${week.num}: dal ${week.start} al ${week.end}`)
+            + (prevWeekSummary ? `\n\nSETTIMANE PRECEDENTI GIA GENERATE:\n${prevWeekSummary}` : '');
+
+          try {
+            const raw = await callAI(weekPrompt);
+            if (!raw) { allWarnings.push(`Settimana ${week.num}: nessuna risposta AI`); continue; }
+            const parsed = parseAIResponse(raw);
+            if (!parsed) { allWarnings.push(`Settimana ${week.num}: risposta non parsabile`); continue; }
+            const weekPiano = postProcess(parsed.piano);
+            allPiano.push(...weekPiano);
+            if (parsed.warnings) allWarnings.push(...parsed.warnings);
+            if (parsed.summary) allSummary += (allSummary ? ' | ' : '') + `S${week.num}: ${parsed.summary}`;
+            // Build context for next weeks
+            prevWeekSummary += weekPiano.slice(0, 10).map(p => `${p.data} ${p.tecnico}: ${p.cliente}`).join('; ') + '\n';
+          } catch (e) {
+            allWarnings.push(`Settimana ${week.num}: errore ${e.message}`);
+          }
+        }
+
+        return ok({
+          summary: allSummary || `Piano ${meseTarget} generato in ${weeks.length} chunk settimanali`,
+          piano: allPiano,
+          warnings: allWarnings.length ? allWarnings : undefined,
+          chunks: weeks.length
+        });
+      }
+
+      // Single call (settimana or vuoti mode, or no meseTarget)
+      try {
+        const rawText = await callAI(prompt);
+        if (!rawText) return err('Workers AI non ha generato risposta. Riprova.');
+        const result = parseAIResponse(rawText);
+        if (!result) return ok({ summary: 'Errore formato', piano: [], warnings: ['Risposta AI non parsabile. Riprova.'], raw: rawText.substring(0, 1500) });
+        result.piano = postProcess(result.piano);
         return ok(result);
       } catch (e) {
-        const m = rawText.match(/\{[\s\S]*\}/);
-        if (m) { try { return ok(JSON.parse(m[0])); } catch {} }
-        return ok({ summary: 'Errore formato', piano: [], warnings: ['Risposta AI non parsabile. Riprova.'], raw: rawText.substring(0, 1500) });
+        return err(`Workers AI errore: ${e.message}. Riprova con prompt più breve.`);
       }
     }
 
@@ -1602,23 +1847,43 @@ Rispondi SOLO JSON:
       const { image_base64, urgenza_id, contesto } = body;
       if (!image_base64) return err('Immagine mancante (campo image_base64 richiesto)');
 
-      // 1. Chiamata Vision AI (LLaVA)
+      // 0. Carica catalogo parti per contesto
+      let partiContext = '';
+      try {
+        let partsFilter = '?select=codice,nome,descrizione,gruppo,modello_macchina&attivo=eq.true&limit=50';
+        const machHint = (contesto || '').match(/astronaut|vector|juno|discovery|calm|grazeway|cosmix/i)?.[0];
+        if (machHint) partsFilter += `&modello_macchina=ilike.*${machHint.toUpperCase()}*`;
+        const parti = await sb(env, 'tagliandi', 'GET', null, partsFilter).catch(() => []);
+        if (parti.length) {
+          partiContext = '\n\nCATALOGO RICAMBI LELY DISPONIBILI (suggerisci il codice se riconosci il pezzo):';
+          for (const p of parti.slice(0, 40)) {
+            partiContext += `\n• ${p.codice || '?'} — ${(p.nome || p.descrizione || '').substring(0, 60)}`;
+          }
+        }
+      } catch { /* ignore */ }
+
+      // 1. Chiamata Vision AI (LLaVA) con catalogo
       let visionRes;
       try {
         visionRes = await env.AI.run('@cf/llava-hf/llava-1.5-7b-hf', {
           image: [...Uint8Array.from(atob(image_base64), c => c.charCodeAt(0))],
           prompt: `Sei un tecnico esperto di macchine agricole Lely (robot mungitura Astronaut, alimentatori Vector, spingivacca Juno, Discovery).
 Analizza questa foto di un guasto. Contesto macchina: ${contesto || 'non specificato'}
+${partiContext}
+
 Rispondi SOLO con JSON valido:
 {
   "diagnosi": "descrizione del problema identificato",
   "gravita": "alta|media|bassa",
   "ricambio_suggerito": "nome del pezzo di ricambio necessario",
-  "codice_ricambio": "codice Lely se riconoscibile, altrimenti null",
+  "codice_ricambio": "codice Lely dal catalogo sopra se riconoscibile, altrimenti null",
+  "componente_identificato": "nome componente visibile nella foto",
+  "danno_visibile": "tipo di danno: usura, rottura, corrosione, etc",
   "azione_consigliata": "cosa fare subito",
+  "urgenza_intervento": true,
   "confidence": 0.0
 }`,
-          max_tokens: 512
+          max_tokens: 768
         });
       } catch (e) {
         return err(`Errore Vision AI: ${e.message}`);
@@ -1635,14 +1900,40 @@ Rispondi SOLO con JSON valido:
           gravita: 'media',
           ricambio_suggerito: null,
           codice_ricambio: null,
+          componente_identificato: null,
+          danno_visibile: null,
           azione_consigliata: 'Verificare manualmente',
+          urgenza_intervento: false,
           confidence: 0.3
         };
       }
 
-      // 3. Se urgenza_id fornito, aggiorna note
+      // 3. Post-process: verifica codice ricambio nel catalogo reale
+      if (analisi.codice_ricambio || analisi.ricambio_suggerito) {
+        const searchTerm = analisi.codice_ricambio || analisi.ricambio_suggerito;
+        const codeMatch = (searchTerm || '').match(/\d+\.\d{4}\.\d{4}\.\d+/);
+        let catalogMatch = null;
+        if (codeMatch) {
+          const exact = await sb(env, 'tagliandi', 'GET', null, `?codice=eq.${codeMatch[0]}&attivo=eq.true&limit=1`).catch(() => []);
+          if (exact.length) catalogMatch = exact[0];
+        }
+        if (!catalogMatch && analisi.ricambio_suggerito) {
+          const terms = analisi.ricambio_suggerito.toLowerCase().split(/[\s,;]+/).filter(t => t.length > 3);
+          for (const term of terms.slice(0, 2)) {
+            const found = await sb(env, 'tagliandi', 'GET', null, `?or=(nome.ilike.*${term}*,descrizione.ilike.*${term}*)&attivo=eq.true&limit=1`).catch(() => []);
+            if (found.length) { catalogMatch = found[0]; break; }
+          }
+        }
+        if (catalogMatch) {
+          analisi.codice_ricambio_verificato = catalogMatch.codice;
+          analisi.ricambio_nome_catalogo = catalogMatch.nome || catalogMatch.descrizione;
+          analisi.ricambio_gruppo = catalogMatch.gruppo;
+        }
+      }
+
+      // 4. Se urgenza_id fornito, aggiorna note con analisi completa
       if (urgenza_id) {
-        const nota = `[AI Vision] ${analisi.diagnosi} | Gravità: ${analisi.gravita} | Ricambio: ${analisi.ricambio_suggerito || 'N/A'}`;
+        const nota = `[AI Vision] ${analisi.diagnosi} | Gravità: ${analisi.gravita} | Componente: ${analisi.componente_identificato || 'N/A'} | Ricambio: ${analisi.codice_ricambio_verificato || analisi.ricambio_suggerito || 'N/A'} | Danno: ${analisi.danno_visibile || 'N/A'}`;
         await sb(env, `urgenze?id=eq.${urgenza_id}`, 'PATCH', {
           note_ai: nota,
           ai_confidence: analisi.confidence
@@ -1653,25 +1944,101 @@ Rispondi SOLO con JSON valido:
     }
 
     case 'applyAIPlan': {
-      const { piano, operatoreId } = body;
-      const created = [];
-      for (const item of piano) {
-        const id = 'INT_AI_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
-        await sb(env, 'piano', 'POST', {
-          id, tecnico_id: item.tecnicoId, data: item.data, ora_inizio: item.oraInizio,
-          urgenza_id: item.urgenzaId, stato: 'pianificato', origine: 'ai',
-          created_at: new Date().toISOString(), updated_at: new Date().toISOString()
-        });
-        if (item.urgenzaId) {
-          await sb(env, `urgenze?id=eq.${item.urgenzaId}`, 'PATCH', {
-            stato: 'assegnata', tecnico_assegnato: item.tecnicoId,
-            data_assegnazione: new Date().toISOString()
-          });
-        }
-        created.push(id);
-        await wlog('piano', id, 'ai_created', operatoreId, item.motivazione);
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const pianoAI = body.piano?.piano || body.piano || [];
+      const forceOverwrite = body.force_overwrite === true;
+      const operatoreId = body.operatore_id || body.userId || 'admin';
+      if (!Array.isArray(pianoAI) || !pianoAI.length) return err('Piano vuoto, nulla da applicare');
+
+      // 1. Check for conflicts (existing interventions same tecnico+data)
+      const dates = [...new Set(pianoAI.map(p => p.data).filter(Boolean))];
+      const tecIds = [...new Set(pianoAI.map(p => p.tecnicoId).filter(Boolean))];
+      let existing = [];
+      if (dates.length && tecIds.length) {
+        const dateMin = dates.sort()[0];
+        const dateMax = dates.sort().reverse()[0];
+        existing = await sb(env, 'piano', 'GET', null,
+          `?data=gte.${dateMin}&data=lte.${dateMax}&stato=neq.annullato&obsoleto=eq.false&select=id,tecnico_id,data,cliente_id,note&limit=500`
+        ).catch(() => []);
       }
-      return ok({ created, count: created.length });
+
+      // Build conflict map: tecnico+data → existing items
+      const conflictMap = {};
+      for (const ex of existing) {
+        const key = `${ex.tecnico_id}|${ex.data}`;
+        if (!conflictMap[key]) conflictMap[key] = [];
+        conflictMap[key].push(ex);
+      }
+
+      const conflicts = [];
+      const toCreate = [];
+      for (const item of pianoAI) {
+        const key = `${item.tecnicoId}|${item.data}`;
+        if (conflictMap[key] && conflictMap[key].length > 0) {
+          conflicts.push({
+            nuovo: { data: item.data, tecnico: item.tecnico, cliente: item.cliente, tipo: item.tipo },
+            esistenti: conflictMap[key].map(e => ({ id: e.id, cliente_id: e.cliente_id, note: (e.note || '').substring(0, 50) }))
+          });
+          if (!forceOverwrite) continue; // Skip conflicts unless forced
+          // Overwrite: annulla existing
+          for (const e of conflictMap[key]) {
+            await sb(env, `piano?id=eq.${e.id}`, 'PATCH', {
+              stato: 'annullato', note: (e.note || '') + ' [Sovrascritto da AI]', updated_at: new Date().toISOString()
+            }).catch(() => {});
+          }
+        }
+        toCreate.push(item);
+      }
+
+      // If there are conflicts and not forcing, return them for user confirmation
+      if (conflicts.length && !forceOverwrite) {
+        return ok({
+          has_conflicts: true,
+          conflicts_count: conflicts.length,
+          conflicts: conflicts.slice(0, 20),
+          skipped: conflicts.length,
+          message: `${conflicts.length} conflitti trovati (stesso tecnico+data). Invia force_overwrite:true per sovrascrivere.`
+        });
+      }
+
+      // 2. Create new interventions
+      const created = [], errors = [];
+      const now = new Date().toISOString();
+      for (const item of toCreate) {
+        try {
+          const id = 'INT_AI_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+          const noteParts = [item.tipo || '', item.note || ''].filter(Boolean);
+          await sb(env, 'piano', 'POST', {
+            id,
+            tecnico_id: item.tecnicoId,
+            cliente_id: item.clienteId || null,
+            data: item.data,
+            ora_inizio: item.oraInizio || null,
+            durata_ore: item.durataOre || null,
+            tipo_intervento: item.tipo || 'service',
+            automezzo_id: item.furgone || null,
+            stato: 'pianificato',
+            origine: 'ai',
+            note: noteParts.join(' — '),
+            obsoleto: false,
+            tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
+            created_at: now,
+            updated_at: now
+          });
+          created.push(id);
+          await wlog('piano', id, 'ai_plan_applied', operatoreId, `${item.tecnico} @ ${item.cliente}`);
+        } catch (e) {
+          errors.push({ item: `${item.data} ${item.tecnico}`, err: e.message });
+        }
+      }
+
+      return ok({
+        created: created.length,
+        overwritten: forceOverwrite ? conflicts.length : 0,
+        errors: errors.length ? errors : undefined,
+        ids: created
+      });
     }
 
     case 'importExcelPlan': {
@@ -1966,6 +2333,69 @@ Rispondi SOLO con JSON valido:
           }).sort((a, b) => (typeof b[2] === 'number' ? b[2] : 9999) - (typeof a[2] === 'number' ? a[2] : 9999));
           break;
         }
+        case 'daily_team': {
+          // Report giornaliero team — Apple-style premium
+          const giorno = dateFrom;
+          result.titolo = `Report Team — ${giorno}`;
+          result.colonne = ['Tecnico', 'Ruolo', 'Interventi', 'Completati', 'Urgenze', 'Ordini', 'Rep.', 'Score'];
+          const allTecPiano = piano.filter(p => p.data === giorno);
+          const allTecUrg = urgenze.filter(u => (u.data_segnalazione || '').startsWith(giorno));
+          const ordini = await sb(env, 'ordini', 'GET', null, `?data_richiesta=gte.${giorno}T00:00:00&data_richiesta=lte.${giorno}T23:59:59&obsoleto=eq.false`).catch(() => []);
+          const allRep = await sb(env, 'reperibilita', 'GET', null, `?data_inizio=lte.${giorno}&data_fine=gte.${giorno}&obsoleto=eq.false`).catch(() => []);
+          const repMap = Object.fromEntries(allRep.map(r => [r.tecnico_id, r.tipo || '✓']));
+
+          const tecActiveTday = [...new Set([
+            ...allTecPiano.map(p => p.tecnico_id),
+            ...allTecUrg.map(u => u.tecnico_assegnato)
+          ].filter(Boolean))];
+
+          // Include all active technicians even without interventions
+          const allActiveTec = utenti.filter(u => u.ruolo && u.ruolo !== 'admin');
+          const finalTecIds = [...new Set([...tecActiveTday, ...allActiveTec.map(u => u.id)])];
+
+          result.righe = finalTecIds.map(tid => {
+            const pTec = allTecPiano.filter(p => p.tecnico_id === tid);
+            const uTec = allTecUrg.filter(u => u.tecnico_assegnato === tid);
+            const oTec = ordini.filter(o => o.tecnico_id === tid);
+            const compTec = pTec.filter(p => p.stato === 'completato').length;
+            const compRate = pTec.length > 0 ? Math.round(compTec / pTec.length * 100) : 0;
+            const urgDone = uTec.filter(u => u.stato === 'risolta' || u.stato === 'chiusa').length;
+            const score = pTec.length > 0 ? Math.round((compRate * 0.6) + (uTec.length > 0 ? urgDone / uTec.length * 100 * 0.4 : 40)) : 0;
+            const u = utenti.find(x => x.id === tid);
+            return [
+              tecName(tid), u?.ruolo || '—',
+              pTec.length, compTec, uTec.length, oTec.length,
+              repMap[tid] || '—', score
+            ];
+          }).sort((a, b) => b[7] - a[7]);
+
+          // Add summary row
+          const totI = result.righe.reduce((s, r) => s + r[2], 0);
+          const totC = result.righe.reduce((s, r) => s + r[3], 0);
+          const totU = result.righe.reduce((s, r) => s + r[4], 0);
+          const totO = result.righe.reduce((s, r) => s + r[5], 0);
+          const avgScore = result.righe.length > 0 ? Math.round(result.righe.reduce((s, r) => s + r[7], 0) / result.righe.length) : 0;
+          result.summary = { totale_interventi: totI, completati: totC, urgenze: totU, ordini: totO, score_medio: avgScore };
+          break;
+        }
+        case 'tagliandi_scadenza': {
+          result.titolo = `Tagliandi/Service in Scadenza`;
+          result.colonne = ['Macchina', 'Modello', 'Cliente', 'Prossimo Tagliando', 'Giorni', 'Urgenza'];
+          const macchine = await sb(env, 'macchine', 'GET', null, '?prossimo_tagliando=not.is.null&obsoleto=eq.false&order=prossimo_tagliando.asc&limit=50').catch(() => []);
+          const assets = await sb(env, 'anagrafica_assets', 'GET', null, '?prossimo_controllo=not.is.null&order=prossimo_controllo.asc&limit=50').catch(() => []);
+          const todayTag = new Date().toISOString().split('T')[0];
+          const items = [
+            ...macchine.map(m => ({ nome: m.nome || m.id, modello: m.modello || m.tipo || '—', cliente: getName(clienti, m.cliente_id), data: m.prossimo_tagliando })),
+            ...assets.map(a => ({ nome: a.nome_asset || a.id, modello: a.modello || a.gruppo_attrezzatura || '—', cliente: a.nome_account || a.codice_m3 || '—', data: a.prossimo_controllo }))
+          ].sort((a, b) => (a.data || '9999').localeCompare(b.data || '9999'));
+
+          result.righe = items.map(it => {
+            const days = Math.round((new Date(it.data) - new Date(todayTag)) / 86400000);
+            const urgLvl = days < 0 ? '🔴 SCADUTO' : days <= 7 ? '🟠 URGENTE' : days <= 30 ? '🟡 PROSSIMO' : '🟢 OK';
+            return [it.nome, it.modello, it.cliente, it.data, days, urgLvl];
+          });
+          break;
+        }
         default:
           return err('Tipo report non supportato: ' + tipo);
       }
@@ -2000,13 +2430,45 @@ Rispondi SOLO con JSON valido:
 
     case 'saveConfig':
     case 'updateConfig': {
-      const { config } = body;
+      const config = body.config || body.data;
+      if (!config || typeof config !== 'object') return err('config richiesto (oggetto chiave/valore)');
       for (const [chiave, valore] of Object.entries(config)) {
         await sb(env, 'config', 'POST', { chiave, valore }).catch(async () => {
           await sb(env, `config?chiave=eq.${chiave}`, 'PATCH', { valore });
         });
       }
       return ok();
+    }
+
+    // ─── VINCOLI PIANIFICAZIONE (dinamici, white-label) ───────────────
+    case 'saveVincoliCategories': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const payload = body.vincoli || body.data;
+      if (!payload) return err('vincoli richiesti');
+      const valStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
+      // Upsert: POST con fallback a PATCH
+      await sb(env, 'config', 'POST', {
+        chiave: 'vincoli_categories',
+        valore: valStr,
+        tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
+      }).catch(async () => {
+        await sb(env, `config?chiave=eq.vincoli_categories`, 'PATCH', { valore: valStr });
+      });
+      await wlog('config', 'vincoli_categories', 'vincoli_saved', body.operatore_id || body.userId || 'system');
+      return ok({ saved: true, timestamp: new Date().toISOString() });
+    }
+
+    case 'getVincoliCategories': {
+      const rows = await sb(env, 'config', 'GET', null,
+        `?chiave=eq.vincoli_categories&limit=1`);
+      if (!rows || !rows.length) return ok({ categories: [], meta: {} });
+      try {
+        const parsed = JSON.parse(rows[0].valore);
+        return ok(parsed);
+      } catch {
+        return ok({ categories: [], meta: {}, raw: rows[0].valore });
+      }
     }
 
     case 'backupNow': {
@@ -2193,12 +2655,64 @@ Rispondi SOLO con JSON valido:
         }).then(r=>r.json()).catch(()=>null);
       }
 
+      // ---- Helper: carica catalogo parti Lely dal DB per contesto AI ----
+      async function loadPartsCatalog(env, macchina) {
+        try {
+          // Carica parti più comuni dal catalogo tagliandi
+          let filter = '?select=codice,nome,descrizione,gruppo,modello_macchina&attivo=eq.true&limit=60';
+          // Se sappiamo la macchina, filtriamo per modello
+          if (macchina) {
+            const m = macchina.toLowerCase();
+            const modelMap = { astronaut: 'ASTRONAUT', vector: 'VECTOR', juno: 'JUNO', discovery: 'DISCOVERY', calm: 'CALM', grazeway: 'GRAZEWAY', cosmix: 'COSMIX' };
+            const model = Object.entries(modelMap).find(([k]) => m.includes(k));
+            if (model) filter += `&modello_macchina=ilike.*${model[1]}*`;
+          }
+          const parti = await sb(env, 'tagliandi', 'GET', null, filter).catch(() => []);
+          if (!parti.length) return '';
+          const grouped = {};
+          for (const p of parti) {
+            const g = p.gruppo || 'Generale';
+            if (!grouped[g]) grouped[g] = [];
+            if (grouped[g].length < 8) grouped[g].push(`${p.codice || '?'} — ${(p.nome || p.descrizione || '').substring(0, 50)}`);
+          }
+          let txt = '\nCATALOGO RICAMBI LELY (usa questi codici se riconosci il pezzo):';
+          for (const [g, items] of Object.entries(grouped)) {
+            txt += `\n[${g}]: ${items.join(' | ')}`;
+          }
+          return txt;
+        } catch { return ''; }
+      }
+
+      // ---- Helper: match fuzzy ricambio nel catalogo ----
+      async function matchPartInCatalog(env, descrizione) {
+        if (!descrizione) return null;
+        const terms = descrizione.toLowerCase().split(/[\s,;]+/).filter(t => t.length > 3);
+        if (!terms.length) return null;
+        // Prova ricerca esatta per codice
+        const codeMatch = descrizione.match(/\d+\.\d{4}\.\d{4}\.\d+/);
+        if (codeMatch) {
+          const exact = await sb(env, 'tagliandi', 'GET', null, `?codice=eq.${codeMatch[0]}&attivo=eq.true&limit=1`).catch(() => []);
+          if (exact.length) return exact[0];
+        }
+        // Ricerca fuzzy per termini chiave
+        for (const term of terms.slice(0, 3)) {
+          const found = await sb(env, 'tagliandi', 'GET', null, `?or=(nome.ilike.*${term}*,descrizione.ilike.*${term}*)&attivo=eq.true&limit=3`).catch(() => []);
+          if (found.length) return found[0];
+        }
+        return null;
+      }
+
       // ---- Helper: AI parse message with Workers AI (Llama + LLaVA) ----
       async function aiParseMessage(text, mediaUrl, mediaType) {
         if (!env.AI) return null;
         // Get clients list for context — usa nome_interno come chiave primaria
         const clienti = await sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno&limit=300').catch(()=>[]);
         const clientiList = clienti.map(c => `${c.nome_interno || c.nome_account} → codice_m3: ${c.codice_m3}`).join('\n');
+
+        // Carica catalogo parti per dare contesto AI (se foto, prioritizza)
+        const isPhoto = mediaUrl && mediaType === 'photo';
+        const macchinaHint = (text || '').match(/astronaut|vector|juno|discovery|calm|grazeway|cosmix/i)?.[0] || null;
+        const partiCatalogo = isPhoto ? await loadPartsCatalog(env, macchinaHint) : '';
 
         const systemPrompt = `Sei l'assistente AI di Syntoniqa, il sistema FSM di MRS Lely Center.
 Analizza il messaggio e determina il tipo di azione da creare.
@@ -2213,6 +2727,8 @@ TIPI DI AZIONE:
 4. "nota" - Informazione generica, aggiornamento stato, nessuna azione specifica
 
 CODICI RICAMBI LELY: formato X.XXXX.XXXX.X (es. 9.1189.0283.0)
+${partiCatalogo}
+${isPhoto ? '\nIMPORTANTE: Analizza la foto attentamente. Identifica il componente, eventuali danni, usura, rotture. Suggerisci il codice ricambio dal catalogo sopra se riconoscibile.' : ''}
 
 Rispondi SOLO con JSON valido:
 {
@@ -2224,22 +2740,44 @@ Rispondi SOLO con JSON valido:
   "robot_id": "numero robot (101-108) o null",
   "priorita": "alta|media|bassa",
   "ricambi": [{"codice":"X.XXXX.XXXX.X","quantita":1,"descrizione":"..."}] o [],
+  "danno_visibile": "descrizione danno visibile nella foto o null",
+  "componente_identificato": "nome del componente identificato nella foto o null",
   "note": "eventuali note aggiuntive"
 }`;
 
         // If there's a photo, use LLaVA Vision model
-        if (mediaUrl && mediaType === 'photo') {
+        if (isPhoto) {
           try {
             const imgRes = await fetch(mediaUrl);
             const imgBuf = await imgRes.arrayBuffer();
             const imgBytes = [...new Uint8Array(imgBuf)];
             const visionRes = await env.AI.run('@cf/llava-hf/llava-1.5-7b-hf', {
               image: imgBytes,
-              prompt: systemPrompt + '\n\nMESSAGGIO UTENTE: ' + (text || 'Analizza questa foto di un guasto/macchina agricola Lely.'),
-              max_tokens: 512
+              prompt: systemPrompt + '\n\nMESSAGGIO UTENTE: ' + (text || 'Analizza questa foto di un guasto/macchina agricola Lely. Identifica il componente danneggiato e suggerisci il ricambio.'),
+              max_tokens: 768
             });
             const raw = (visionRes.description || visionRes.response || '').replace(/```json\n?|\n?```/g, '').trim();
-            try { return JSON.parse(raw); } catch { console.error('Vision parse error, raw:', raw); /* fall through to text model */ }
+            try {
+              const parsed = JSON.parse(raw);
+              // Post-process: match ricambi suggeriti con catalogo reale
+              if (parsed.ricambi?.length) {
+                for (let i = 0; i < parsed.ricambi.length; i++) {
+                  const r = parsed.ricambi[i];
+                  const match = await matchPartInCatalog(env, r.codice || r.descrizione);
+                  if (match) {
+                    parsed.ricambi[i] = { codice: match.codice, quantita: r.quantita || 1, descrizione: match.nome || match.descrizione, _verificato: true };
+                  }
+                }
+              }
+              // Se AI ha suggerito componente ma no ricambi, prova match
+              if (parsed.componente_identificato && (!parsed.ricambi || !parsed.ricambi.length)) {
+                const match = await matchPartInCatalog(env, parsed.componente_identificato);
+                if (match) {
+                  parsed.ricambi = [{ codice: match.codice, quantita: 1, descrizione: match.nome || match.descrizione, _verificato: true }];
+                }
+              }
+              return parsed;
+            } catch { console.error('Vision parse error, raw:', raw); /* fall through to text model */ }
           } catch(e) { console.error('Vision AI error:', e.message); /* fall through to text model */ }
         }
 
@@ -2253,7 +2791,17 @@ Rispondi SOLO con JSON valido:
             max_tokens: 1024
           });
           const raw = (aiRes.response || '').replace(/```json\n?|\n?```/g, '').trim();
-          try { return JSON.parse(raw); } catch { console.error('AI parse error, raw:', raw); return null; }
+          try {
+            const parsed = JSON.parse(raw);
+            // Post-process: match ricambi con catalogo
+            if (parsed.ricambi?.length) {
+              for (let i = 0; i < parsed.ricambi.length; i++) {
+                const match = await matchPartInCatalog(env, parsed.ricambi[i].codice || parsed.ricambi[i].descrizione);
+                if (match) parsed.ricambi[i] = { codice: match.codice, quantita: parsed.ricambi[i].quantita || 1, descrizione: match.nome || match.descrizione, _verificato: true };
+              }
+            }
+            return parsed;
+          } catch { console.error('AI parse error, raw:', raw); return null; }
         } catch (aiErr) {
           // Fallback a modello più piccolo
           try {
@@ -2295,10 +2843,10 @@ Rispondi SOLO con JSON valido:
       // ---- SLASH COMMANDS ----
       switch (cmd) {
         case '/start':
-          reply = `👋 Benvenuto in *Syntoniqa MRS*!\n\n📤 Puoi inviarmi:\n• Testo con problemi/ordini\n• 📷 Foto di guasti o ricambi\n• 📄 Documenti (PDF, Excel)\n• 🎤 Audio/Video\n\n🤖 L'AI analizzerà tutto e creerà le azioni giuste!\n\nInvia /help per i comandi.`;
+          reply = `👋 *Benvenuto in Syntoniqa MRS!*\n\n🤖 Il tuo assistente intelligente per il Field Service.\n\n📤 Puoi inviarmi:\n• ✍️ Testo con problemi/ordini\n• 📷 Foto di guasti → AI identifica pezzo\n• 📄 Documenti (PDF, Excel)\n• 🎤 Audio/Video\n\n⚡ L'AI analizza tutto e crea urgenze, ordini, interventi!\n\nInvia /help per tutti i comandi.`;
           break;
         case '/help':
-          reply = `📋 *Comandi Syntoniqa:*\n\n🚨 *Urgenze:*\n/stato - Urgenze aperte\n/vado - Lista urgenze, /vado N per prendere\n/incorso - Segna in corso\n/risolto [note] - Chiudi urgenza\n\n📅 *Interventi:*\n/oggi - I tuoi interventi oggi\n/settimana - Piano settimanale\n\n📦 *Ordini:*\n/ordine [cod] [qt] [cliente] - Ordine ricambio\n/servepezz [desc] - Ricambio generico\n\n📤 *Upload:*\nInvia foto, PDF, Excel, audio → l'AI analizza e crea azioni automaticamente!\n\n💡 Puoi anche scrivere testo libero, es: "Bondioli 102 fermo, errore laser"`;
+          reply = `📋 *Comandi Syntoniqa:*\n\n🚨 *Urgenze:*\n/stato — Urgenze aperte\n/vado — Lista urgenze, /vado N per prendere\n/incorso — Segna in corso\n/risolto [note] — Chiudi urgenza\n/assegna [N] [tecnico] — Assegna urgenza\n\n📅 *Piano:*\n/oggi — I tuoi interventi oggi\n/settimana — Piano settimanale\n/pianifica [data] [cliente] [tipo] — Crea intervento\n/disponibile — Segnati disponibile per urgenze\n\n📦 *Ordini:*\n/ordine [cod] [qt] [cliente] — Ordine ricambio\n/servepezz [desc] — Ricambio generico\n\n🔍 *Ricerca:*\n/catalogo [testo] — Cerca ricambio nel catalogo Lely\n/tagliando [cliente] — Prossimi tagliandi\n/dove — Posizione tecnici oggi\n\n📊 *Report:*\n/report — Il tuo report giornaliero\n/kpi — KPI personali\n\n📤 *Upload:*\nInvia foto, PDF, Excel → AI analizza!\n\n💡 Testo libero: "Bondioli 102 fermo, errore laser"`;
           break;
         case '/stato': {
           const urg = await sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,in_corso)&order=data_segnalazione.desc&limit=10');
@@ -2375,6 +2923,300 @@ Rispondi SOLO con JSON valido:
           reply = `📦 Ordine ricambio *${spId}* creato:\n_${desc2}_`;
           break;
         }
+
+        // ═══════════════════════════════════════════════════════
+        // ═══ NUOVI COMANDI SUPER-POTENTI ══════════════════════
+        // ═══════════════════════════════════════════════════════
+
+        case '/pianifica': {
+          // /pianifica domani Bondioli service
+          // /pianifica 2026-03-05 Rossi tagliando
+          // /pianifica lunedi Palladini ispezione nota qui
+          const dateArg = (parts[1] || '').toLowerCase();
+          const clienteArg = parts[2] || '';
+          const tipoArg = (parts[3] || 'service').toLowerCase();
+          const noteArg = parts.slice(4).join(' ');
+          if (!dateArg || !clienteArg) {
+            reply = `📅 *Pianifica intervento:*\n\n\`/pianifica [data] [cliente] [tipo] [note]\`\n\nEsempi:\n• \`/pianifica domani Bondioli service\`\n• \`/pianifica 2026-03-05 Rossi tagliando\`\n• \`/pianifica lunedi Palladini ispezione\`\n\nTipi: service, tagliando, installazione, ispezione, urgenza`;
+            break;
+          }
+          // Parse data
+          let targetDate;
+          const nowD = new Date();
+          if (dateArg === 'domani' || dateArg === 'tomorrow') { targetDate = new Date(nowD); targetDate.setDate(targetDate.getDate() + 1); }
+          else if (dateArg === 'dopodomani') { targetDate = new Date(nowD); targetDate.setDate(targetDate.getDate() + 2); }
+          else if (['lunedi','lunedì','monday'].includes(dateArg)) { targetDate = new Date(nowD); const d = targetDate.getDay(); targetDate.setDate(targetDate.getDate() + ((1 - d + 7) % 7 || 7)); }
+          else if (['martedi','martedì','tuesday'].includes(dateArg)) { targetDate = new Date(nowD); const d = targetDate.getDay(); targetDate.setDate(targetDate.getDate() + ((2 - d + 7) % 7 || 7)); }
+          else if (['mercoledi','mercoledì','wednesday'].includes(dateArg)) { targetDate = new Date(nowD); const d = targetDate.getDay(); targetDate.setDate(targetDate.getDate() + ((3 - d + 7) % 7 || 7)); }
+          else if (['giovedi','giovedì','thursday'].includes(dateArg)) { targetDate = new Date(nowD); const d = targetDate.getDay(); targetDate.setDate(targetDate.getDate() + ((4 - d + 7) % 7 || 7)); }
+          else if (['venerdi','venerdì','friday'].includes(dateArg)) { targetDate = new Date(nowD); const d = targetDate.getDay(); targetDate.setDate(targetDate.getDate() + ((5 - d + 7) % 7 || 7)); }
+          else if (['sabato','saturday'].includes(dateArg)) { targetDate = new Date(nowD); const d = targetDate.getDay(); targetDate.setDate(targetDate.getDate() + ((6 - d + 7) % 7 || 7)); }
+          else { targetDate = new Date(dateArg); }
+          if (isNaN(targetDate)) { reply = '❌ Data non valida. Usa: domani, lunedi, 2026-03-05, etc.'; break; }
+          const dataStr = targetDate.toISOString().split('T')[0];
+          // Match cliente
+          const cliSearch = clienteArg.toLowerCase();
+          const allCli = await sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_interno,nome_account&limit=300').catch(()=>[]);
+          const matchCli = allCli.find(c => (c.nome_interno||'').toLowerCase().includes(cliSearch) || (c.nome_account||'').toLowerCase().includes(cliSearch));
+          const pId = 'INT_TG_' + Date.now();
+          const pTid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+          await sb(env, 'piano', 'POST', {
+            id: pId, tenant_id: pTid, tecnico_id: utente.id, cliente_id: matchCli?.codice_m3 || null,
+            data: dataStr, stato: 'pianificato', tipo_intervento: tipoArg, origine: 'telegram',
+            note: `${matchCli?.nome_interno || clienteArg} — ${tipoArg}${noteArg ? ' — ' + noteArg : ''}`,
+            obsoleto: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+          });
+          const giorni = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+          reply = `📅 *Intervento pianificato!*\n\n📋 ID: \`${pId}\`\n📆 ${giorni[targetDate.getDay()]} ${dataStr}\n🏢 ${matchCli?.nome_interno || clienteArg}\n🔧 ${tipoArg}\n👤 ${utente.nome} ${utente.cognome}${noteArg ? '\n📝 ' + noteArg : ''}`;
+          break;
+        }
+
+        case '/assegna': {
+          // /assegna 2 Giovanni — assegna urgenza #2 a Giovanni
+          // /assegna URG_xxx Giovanni
+          const urgArg = parts[1] || '';
+          const tecArg = parts.slice(2).join(' ') || '';
+          if (!urgArg) {
+            reply = `🎯 *Assegna urgenza:*\n\n\`/assegna [N o ID] [tecnico]\`\n\nEsempi:\n• \`/assegna 1 Giovanni\` (urgenza #1 dalla lista)\n• \`/assegna URG_TG_xxx Anton\`\n\nPrima usa /stato per vedere le urgenze.`;
+            break;
+          }
+          // Check admin/caposquadra
+          if (!['admin','caposquadra'].includes(utente.ruolo)) {
+            reply = '❌ Solo admin e caposquadra possono assegnare urgenze.';
+            break;
+          }
+          // Find urgenza
+          let urgToAssign = null;
+          const urgNum = parseInt(urgArg);
+          if (!isNaN(urgNum) && urgNum > 0) {
+            const urgL = await sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata)&order=priorita.asc,data_segnalazione.asc&limit=10');
+            if (urgNum <= urgL.length) urgToAssign = urgL[urgNum - 1];
+          } else {
+            const urgById = await sb(env, 'urgenze', 'GET', null, `?id=eq.${urgArg}`).catch(()=>[]);
+            urgToAssign = urgById[0] || null;
+          }
+          if (!urgToAssign) { reply = '❌ Urgenza non trovata. Usa /stato per la lista.'; break; }
+          // Find tecnico
+          const tecSearch = tecArg.toLowerCase();
+          const allTec = await sb(env, 'utenti', 'GET', null, '?attivo=eq.true&select=id,nome,cognome,ruolo').catch(()=>[]);
+          const matchTec = allTec.find(t => (t.nome||'').toLowerCase().includes(tecSearch) || (t.cognome||'').toLowerCase().includes(tecSearch));
+          if (!matchTec) { reply = `❌ Tecnico "${tecArg}" non trovato. Disponibili: ${allTec.filter(t=>t.ruolo!=='admin').map(t=>t.nome).join(', ')}`; break; }
+          await sb(env, `urgenze?id=eq.${urgToAssign.id}`, 'PATCH', {
+            stato: 'assegnata', tecnico_assegnato: matchTec.id,
+            data_assegnazione: new Date().toISOString()
+          });
+          reply = `🎯 *Urgenza assegnata!*\n\n🚨 ${urgToAssign.id}\n📝 ${(urgToAssign.problema||'').substring(0,60)}\n👤 → *${matchTec.nome} ${matchTec.cognome}*`;
+          // Notify the assigned technician
+          if (matchTec.telegram_chat_id) {
+            await sendTelegram(env, matchTec.telegram_chat_id, `🚨 *Urgenza assegnata a te!*\n\nID: \`${urgToAssign.id}\`\nProblema: ${urgToAssign.problema}\n\nUsa /incorso quando inizi.`);
+          }
+          break;
+        }
+
+        case '/disponibile': {
+          // Segna il tecnico come disponibile per urgenze oggi
+          const oggi2 = new Date().toISOString().split('T')[0];
+          const dispTipo = (parts[1] || 'urgenze').toLowerCase();
+          const dispId = 'INT_DISP_' + Date.now();
+          const dispTid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+          await sb(env, 'piano', 'POST', {
+            id: dispId, tenant_id: dispTid, tecnico_id: utente.id,
+            data: oggi2, stato: 'pianificato', tipo_intervento: 'varie',
+            note: `DISPONIBILE ${dispTipo.toUpperCase()} — slot libero per urgenze entranti`,
+            origine: 'telegram', obsoleto: false,
+            created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+          });
+          reply = `✅ *Sei disponibile per ${dispTipo} oggi!*\n\n📅 ${oggi2}\n👤 ${utente.nome} ${utente.cognome}\n🔔 Riceverai notifica se arriva un'urgenza.\n\nUsa /vado per prenderne una.`;
+          break;
+        }
+
+        case '/dove': {
+          // Dove sono tutti i tecnici oggi
+          const oggiDove = new Date().toISOString().split('T')[0];
+          const allT = await sb(env, 'utenti', 'GET', null, '?attivo=eq.true&ruolo=neq.admin&select=id,nome,cognome,ruolo,base').catch(()=>[]);
+          const oggiPiano = await sb(env, 'piano', 'GET', null, `?data=eq.${oggiDove}&obsoleto=eq.false&select=tecnico_id,cliente_id,stato,note,tipo_intervento`).catch(()=>[]);
+          const oggiUrg = await sb(env, 'urgenze', 'GET', null, `?stato=in.(assegnata,in_corso)&select=tecnico_assegnato,problema,stato,cliente_id`).catch(()=>[]);
+          const cliCache = await sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_interno&limit=300').catch(()=>[]);
+          const cliName = id => (cliCache.find(c=>c.codice_m3===id)||{}).nome_interno || id || '?';
+          let doveText = `📍 *Posizione tecnici — ${oggiDove}*\n`;
+          for (const t of allT) {
+            const interventi = oggiPiano.filter(p => p.tecnico_id === t.id);
+            const urgAtt = oggiUrg.find(u => u.tecnico_assegnato === t.id);
+            let status = '';
+            if (urgAtt) {
+              status = urgAtt.stato === 'in_corso' ? `🔴 IN CORSO: ${(urgAtt.problema||'').substring(0,30)} @${cliName(urgAtt.cliente_id)}` : `🟡 Urgenza assegnata: ${cliName(urgAtt.cliente_id)}`;
+            } else if (interventi.length) {
+              const isVarie = interventi.some(p => (p.tipo_intervento||'').includes('varie') || (p.note||'').includes('DISPONIBILE'));
+              const clienti = interventi.filter(p => p.cliente_id).map(p => cliName(p.cliente_id));
+              status = isVarie ? '🟢 Disponibile urgenze' : `📋 ${clienti.join(', ') || interventi[0]?.note?.substring(0,30) || '?'}`;
+            } else {
+              status = '⚪ Nessun intervento programmato';
+            }
+            const ruoloIco = t.ruolo === 'caposquadra' ? '👑' : t.ruolo?.includes('senior') ? '⭐' : '👤';
+            doveText += `\n${ruoloIco} *${t.nome} ${(t.cognome||'').charAt(0)}.*  ${status}`;
+          }
+          reply = doveText;
+          break;
+        }
+
+        case '/catalogo': {
+          // Cerca nel catalogo parti Lely
+          const searchTerm = parts.slice(1).join(' ').trim();
+          if (!searchTerm) {
+            reply = `🔍 *Catalogo Ricambi Lely*\n\n\`/catalogo [ricerca]\`\n\nEsempi:\n• \`/catalogo laser\`\n• \`/catalogo tilt sensor\`\n• \`/catalogo 9.1189\`\n• \`/catalogo milk pump\``;
+            break;
+          }
+          // Search in anagrafica_assets and item catalog (tagliandi table)
+          const results = await sb(env, 'tagliandi', 'GET', null, `?or=(nome.ilike.*${searchTerm}*,descrizione.ilike.*${searchTerm}*,codice.ilike.*${searchTerm}*)&limit=8`).catch(()=>[]);
+          if (!results.length) {
+            // Fallback: try broader search
+            const results2 = await sb(env, 'tagliandi', 'GET', null, `?descrizione=ilike.*${searchTerm.split(' ')[0]}*&limit=5`).catch(()=>[]);
+            if (results2.length) {
+              reply = `🔍 Risultati parziali per "${searchTerm}":\n\n` + results2.map(r => `• \`${r.codice||r.id}\` — ${(r.nome||r.descrizione||'').substring(0,50)}`).join('\n');
+            } else {
+              reply = `❌ Nessun risultato per "${searchTerm}". Prova con un termine diverso.`;
+            }
+          } else {
+            reply = `🔍 *Catalogo Lely — "${searchTerm}":*\n\n` + results.map(r => `📦 \`${r.codice||r.id}\`\n   ${(r.nome||r.descrizione||'').substring(0,60)}`).join('\n\n');
+          }
+          break;
+        }
+
+        case '/tagliando': {
+          // Prossimi tagliandi per un cliente
+          const cliTagArg = parts.slice(1).join(' ').trim();
+          if (!cliTagArg) {
+            reply = `🔧 *Prossimi Tagliandi*\n\n\`/tagliando [cliente]\` — Mostra tagliandi in scadenza\n\`/tagliando tutti\` — Top 10 più urgenti\n\nEs: \`/tagliando Bondioli\``;
+            break;
+          }
+          let macFilter = '?obsoleto=eq.false&prossimo_tagliando=not.is.null&order=prossimo_tagliando.asc&limit=15';
+          if (cliTagArg.toLowerCase() !== 'tutti') {
+            const cliMatch = await sb(env, 'anagrafica_clienti', 'GET', null, `?nome_interno=ilike.*${cliTagArg}*&select=codice_m3,nome_interno&limit=5`).catch(()=>[]);
+            if (cliMatch.length) {
+              macFilter += `&cliente_id=eq.${cliMatch[0].codice_m3}`;
+            }
+          }
+          const macchine = await sb(env, 'macchine', 'GET', null, `${macFilter}&select=id,nome,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando`).catch(()=>[]);
+          if (!macchine.length) { reply = '✅ Nessun tagliando in scadenza' + (cliTagArg.toLowerCase() !== 'tutti' ? ` per "${cliTagArg}"` : ''); break; }
+          const oggiTag = new Date().toISOString().split('T')[0];
+          reply = `🔧 *Tagliandi in scadenza${cliTagArg.toLowerCase() !== 'tutti' ? ' — ' + cliTagArg : ''}:*\n\n`;
+          for (const m of macchine.slice(0, 10)) {
+            const gg = Math.round((new Date(m.prossimo_tagliando) - new Date(oggiTag)) / 86400000);
+            const urgIco = gg < 0 ? '🔴' : gg <= 7 ? '🟠' : gg <= 30 ? '🟡' : '🟢';
+            reply += `${urgIco} *${m.nome || m.modello || m.tipo || 'Robot'}* (${m.id})\n   📅 ${m.prossimo_tagliando} (${gg < 0 ? Math.abs(gg) + 'gg SCADUTO' : gg + 'gg'})\n`;
+          }
+          break;
+        }
+
+        case '/report': {
+          // Report giornaliero premium — Apple-style con dettaglio avanzato
+          const itFmtRep = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' });
+          const oggiRep = itFmtRep.format(new Date());
+          const [oggiIntv, oggiUrgRep, oggiOrd, repToday] = await Promise.all([
+            sb(env, 'piano', 'GET', null, `?data=eq.${oggiRep}&tecnico_id=eq.${utente.id}&obsoleto=eq.false&select=id,cliente_id,note,stato,ora_inizio,tipo_intervento_id&order=ora_inizio.asc`).catch(()=>[]),
+            sb(env, 'urgenze', 'GET', null, `?tecnico_assegnato=eq.${utente.id}&data_segnalazione=gte.${oggiRep}T00:00:00&select=id,problema,stato,data_risoluzione,cliente_id`).catch(()=>[]),
+            sb(env, 'ordini', 'GET', null, `?tecnico_id=eq.${utente.id}&data_richiesta=gte.${oggiRep}T00:00:00&select=id,descrizione,stato`).catch(()=>[]),
+            sb(env, 'reperibilita', 'GET', null, `?tecnico_id=eq.${utente.id}&data_inizio=lte.${oggiRep}&data_fine=gte.${oggiRep}&obsoleto=eq.false&limit=1`).catch(()=>[])
+          ]);
+          const completati = oggiIntv.filter(p => p.stato === 'completato').length;
+          const inCorso = oggiIntv.filter(p => p.stato === 'in_corso').length;
+          const pian = oggiIntv.filter(p => p.stato === 'pianificato').length;
+          const tot = oggiIntv.length;
+          const perc = tot > 0 ? Math.round(completati / tot * 100) : 0;
+          const barFn = n => { const filled = Math.min(Math.round(n / 10), 10); return '▓'.repeat(filled) + '░'.repeat(10 - filled); };
+
+          reply = `┌─────────────────────────┐\n│  📊  *REPORT GIORNALIERO*  │\n└─────────────────────────┘\n\n`;
+          reply += `👤 *${utente.nome} ${utente.cognome || ''}*\n📅 ${oggiRep}${repToday.length ? '  •  📞 REP ' + (repToday[0].tipo || '') : ''}\n\n`;
+          reply += `── *Avanzamento* ──────────\n`;
+          reply += `${barFn(perc)}  *${perc}%*\n\n`;
+          reply += `📋 *Interventi:* ${tot}\n   ✅ Completati: *${completati}*\n   🔄 In corso: *${inCorso}*\n   📅 Da fare: *${pian}*\n\n`;
+
+          if (oggiIntv.length) {
+            reply += `── *Dettaglio* ───────────\n`;
+            for (const p of oggiIntv.slice(0, 8)) {
+              const ico = p.stato === 'completato' ? '✅' : p.stato === 'in_corso' ? '🔄' : '⏳';
+              reply += `${ico} \`${p.ora_inizio || '--:--'}\` ${(p.note || p.tipo_intervento_id || p.id).substring(0, 35)}\n`;
+            }
+            reply += '\n';
+          }
+
+          if (oggiUrgRep.length) {
+            reply += `── *Urgenze* ─────────────\n`;
+            reply += `🚨 ${oggiUrgRep.length} gestite\n`;
+            for (const u of oggiUrgRep.slice(0, 5)) {
+              const ico = (u.stato === 'risolta' || u.stato === 'chiusa') ? '✅' : '🔴';
+              reply += `   ${ico} ${(u.problema||'').substring(0, 35)}\n`;
+            }
+            reply += '\n';
+          }
+
+          if (oggiOrd.length) {
+            reply += `── *Ordini* ──────────────\n`;
+            reply += `📦 ${oggiOrd.length} richiesti\n`;
+            for (const o of oggiOrd.slice(0, 3)) reply += `   • ${(o.descrizione||'').substring(0, 35)}\n`;
+            reply += '\n';
+          }
+
+          reply += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+          reply += `_MRS Lely Center · Syntoniqa_`;
+          break;
+        }
+
+        case '/kpi': {
+          // KPI personali premium — 7 giorni con breakdown giornaliero
+          const oggi7 = new Date();
+          const settimanafa = new Date(oggi7);
+          settimanafa.setDate(settimanafa.getDate() - 7);
+          const da = settimanafa.toISOString().split('T')[0];
+          const a = oggi7.toISOString().split('T')[0];
+          const [intv7, urg7, ord7] = await Promise.all([
+            sb(env, 'piano', 'GET', null, `?tecnico_id=eq.${utente.id}&data=gte.${da}&data=lte.${a}&obsoleto=eq.false&select=id,stato,data`).catch(()=>[]),
+            sb(env, 'urgenze', 'GET', null, `?tecnico_assegnato=eq.${utente.id}&data_segnalazione=gte.${da}T00:00:00&select=id,stato,data_segnalazione,data_risoluzione`).catch(()=>[]),
+            sb(env, 'ordini', 'GET', null, `?tecnico_id=eq.${utente.id}&data_richiesta=gte.${da}T00:00:00&select=id,stato`).catch(()=>[])
+          ]);
+
+          const comp = intv7.filter(p => p.stato === 'completato').length;
+          const totIntv = intv7.length;
+          const urgRisolte = urg7.filter(u => u.stato === 'risolta' || u.stato === 'chiusa').length;
+          const compRate = totIntv > 0 ? Math.round(comp / totIntv * 100) : 0;
+          const barFn2 = n => { const filled = Math.min(Math.round(n / 10), 10); return '▓'.repeat(filled) + '░'.repeat(10 - filled); };
+
+          // Grafico giornaliero (mini-sparkline per ogni giorno)
+          const dailyStats = {};
+          for (let d = new Date(settimanafa); d <= oggi7; d.setDate(d.getDate() + 1)) {
+            const ds = d.toISOString().split('T')[0];
+            const dayIntv = intv7.filter(p => p.data === ds);
+            const dayComp = dayIntv.filter(p => p.stato === 'completato').length;
+            dailyStats[ds] = { total: dayIntv.length, completed: dayComp };
+          }
+
+          reply = `┌─────────────────────────┐\n│  📊  *KPI SETTIMANALE*     │\n└─────────────────────────┘\n\n`;
+          reply += `👤 *${utente.nome} ${utente.cognome || ''}*\n📅 ${da} → ${a}\n\n`;
+          reply += `── *Performance* ─────────\n`;
+          reply += `📋 Interventi totali: *${totIntv}*\n`;
+          reply += `✅ Completamento: *${compRate}%*\n${barFn2(compRate)}\n\n`;
+          reply += `🚨 Urgenze gestite: *${urg7.length}* (${urgRisolte} risolte)\n`;
+          reply += `📦 Ordini: *${ord7.length}*\n\n`;
+
+          // Mini-chart giornaliero
+          reply += `── *Andamento* ───────────\n`;
+          const giorniIt = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+          for (const [ds, st] of Object.entries(dailyStats)) {
+            const dayName = giorniIt[new Date(ds + 'T12:00:00').getDay()];
+            const miniBar = '█'.repeat(Math.min(st.completed, 6)) + '░'.repeat(Math.min(st.total - st.completed, 4));
+            reply += `${dayName} ${ds.substring(8)}: ${miniBar} ${st.completed}/${st.total}\n`;
+          }
+
+          // Score complessivo
+          const score = Math.round((compRate * 0.6) + (urgRisolte / Math.max(urg7.length, 1) * 100 * 0.4));
+          const scoreEmoji = score >= 80 ? '🟢' : score >= 50 ? '🟡' : '🔴';
+          reply += `\n── *Score* ───────────────\n`;
+          reply += `${scoreEmoji} *${score}/100* — ${score >= 80 ? 'Eccellente!' : score >= 50 ? 'Buono' : 'Da migliorare'}\n\n`;
+          reply += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+          reply += `_MRS Lely Center · Syntoniqa_`;
+          break;
+        }
+
         default: {
           // ---- FREE TEXT + MEDIA: AI ANALYSIS ----
           if (text.length < 3 && !mediaUrl) { reply = '🤔 Messaggio troppo breve. Scrivi il problema o invia /help'; break; }
@@ -2471,7 +3313,37 @@ Rispondi SOLO con JSON valido:
             try {
               await sb(env, 'urgenze', 'POST', payload);
               actionReply = `🚨 *URGENZA CREATA*\nID: \`${payload.id}\`\nCliente: ${aiResult.cliente || '?'}\nProblema: ${aiResult.problema}\nMacchina: ${aiResult.macchina || '?'} ${aiResult.robot_id || ''}\nPriorità: ${aiResult.priorita}${mediaUrl ? '\n📎 Allegato salvato' : ''}`;
+              // Aggiungi info ricambi se AI ha identificato componenti dalla foto
+              if (aiResult.componente_identificato) actionReply += `\n\n🔍 *Componente identificato:* ${aiResult.componente_identificato}`;
+              if (aiResult.danno_visibile) actionReply += `\n⚠️ *Danno:* ${aiResult.danno_visibile}`;
+              if (aiResult.ricambi?.length) {
+                actionReply += '\n\n🔧 *Ricambi suggeriti:*';
+                for (const r of aiResult.ricambi) {
+                  actionReply += `\n• \`${r.codice}\` — ${r.descrizione || '?'} (x${r.quantita || 1})${r._verificato ? ' ✅' : ' ⚠️ _da verificare_'}`;
+                }
+              }
               await sendTelegramNotification(env, 'nuova_urgenza', payload);
+              // Smart dispatch: trova tecnici con slot varie oggi
+              try {
+                const itFmt2 = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' });
+                const oggiSD = itFmt2.format(new Date());
+                const pianoSD = await sb(env, 'piano', 'GET', null,
+                  `?data=eq.${oggiSD}&stato=eq.pianificato&obsoleto=eq.false&select=tecnico_id,note,tipo_intervento_id`
+                ).catch(() => []);
+                const dispSD = pianoSD.filter(p => {
+                  const n = ((p.note || '') + ' ' + (p.tipo_intervento_id || '')).toLowerCase();
+                  return n.includes('varie') || n.includes('disponibil') || n.includes('urgenz') || n.includes('backup');
+                });
+                if (dispSD.length) {
+                  const tecIdsSD = [...new Set(dispSD.map(d => d.tecnico_id).filter(Boolean))];
+                  const tecSD = tecIdsSD.length ? await sb(env, 'utenti', 'GET', null, `?id=in.(${tecIdsSD.join(',')})&select=id,nome,cognome`).catch(() => []) : [];
+                  if (tecSD.length) {
+                    actionReply += '\n\n💡 *Tecnici disponibili oggi:*';
+                    for (const t of tecSD) actionReply += `\n• ${t.nome} ${t.cognome || ''}`;
+                    actionReply += `\n\nUsa \`/assegna ${payload.id} [nome]\``;
+                  }
+                }
+              } catch { /* ignore smart dispatch errors */ }
             } catch(e) { actionReply = '❌ Errore creazione urgenza: ' + e.message; }
           } else if (aiResult.tipo === 'ordine') {
             const ricambiDesc = (aiResult.ricambi || []).map(r => `${r.codice} x${r.quantita}`).join(', ') || aiResult.problema;
@@ -2518,15 +3390,55 @@ Rispondi SOLO con JSON valido:
         try { await sendTelegram(env, chatId, reply); } catch(e) { console.error('TG send error:', e.message); }
       }
 
-      // ---- MIRROR Bot response → Chat Admin ----
+      // ---- SMART MIRROR: Auto-routing verso canali tematici ----
       if (reply) {
         try {
-          const urgKwBot = ['urgenza','fermo','guasto','errore','rotto','emergenza','allarme'];
-          const isUrgBot = urgKwBot.some(k => (text||'').toLowerCase().includes(k));
-          const botCanale = isUrgBot ? 'CH_URGENZE' : 'CH_GENERALE';
+          // Determina canale basato su AI result o keyword analysis
+          const msgLower = (text || '').toLowerCase();
+          const cmdUsed = cmd || '';
+          let botCanale = 'CH_GENERALE';
+
+          // Auto-routing intelligente: comando → canale
+          const routingMap = {
+            urgenza: 'CH_URGENZE',
+            ordine: 'CH_ORDINI',
+            intervento: 'CH_OPERATIVO',
+            nota: 'CH_GENERALE'
+          };
+
+          // 1. Se abbiamo un aiResult con tipo, usa quello
+          if (typeof aiResult !== 'undefined' && aiResult?.tipo) {
+            botCanale = routingMap[aiResult.tipo] || 'CH_GENERALE';
+          }
+          // 2. Altrimenti routing per comando
+          else if (['/ordine', '/servepezz', '/catalogo'].includes(cmdUsed)) botCanale = 'CH_ORDINI';
+          else if (['/pianifica', '/oggi', '/settimana', '/disponibile', '/report'].includes(cmdUsed)) botCanale = 'CH_OPERATIVO';
+          else if (['/vado', '/incorso', '/risolto', '/stato', '/assegna'].includes(cmdUsed)) botCanale = 'CH_URGENZE';
+          else if (['/tagliando'].includes(cmdUsed)) botCanale = 'CH_OPERATIVO';
+          // 3. Fallback keyword
+          else {
+            const urgKwBot = ['urgenza', 'fermo', 'guasto', 'errore', 'rotto', 'emergenza', 'allarme'];
+            const ordKwBot = ['ordine', 'ricambio', 'pezzo', 'servono', 'ordinare'];
+            const insKwBot = ['installazione', 'installare', 'montaggio', 'commissioning'];
+            if (urgKwBot.some(k => msgLower.includes(k))) botCanale = 'CH_URGENZE';
+            else if (ordKwBot.some(k => msgLower.includes(k))) botCanale = 'CH_ORDINI';
+            else if (insKwBot.some(k => msgLower.includes(k))) botCanale = 'CH_INSTALLAZIONI';
+          }
+
           const cleanReply = reply.replace(/\*/g, '').replace(/_/g, '');
           const ts = new Date(Date.now() + 1000).toISOString();
-          // Mirror in canale tematico
+          const tecLabel = utente ? `${utente.nome || ''} ${(utente.cognome || '').charAt(0)}.` : 'TG';
+
+          // Mirror messaggio originale utente nel canale tematico
+          const userMsgId = 'TG_USR_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+          if (text && text.length > 2) {
+            await sb(env, 'chat_messaggi', 'POST', {
+              id: userMsgId, canale_id: botCanale, mittente_id: utente?.id || 'TELEGRAM',
+              testo: `📱 [${tecLabel}] ${text.substring(0, 500)}${mediaUrl ? ' 📎' : ''}`, tipo: mediaType || 'testo', created_at: new Date().toISOString()
+            }).catch(() => {});
+          }
+
+          // Mirror risposta bot nel canale tematico
           const botMsgId = 'TG_BOT_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
           await sb(env, 'chat_messaggi', 'POST', {
             id: botMsgId, canale_id: botCanale, mittente_id: 'TELEGRAM',
@@ -2947,6 +3859,109 @@ Rispondi SOLO con JSON valido:
       await sb(env, 'anagrafica_clienti?obsoleto=eq.false', 'PATCH', { obsoleto: true, updated_at: now });
       await wlog('anagrafica', 'ALL', 'cleared_for_reimport', uid);
       return ok({ cleared: true, method: 'soft_delete' });
+    }
+
+    case 'searchParts': {
+      // Ricerca catalogo parti Lely da tagliandi + anagrafica_assets
+      const { search, modello, gruppo, limit: maxResults } = body;
+      if (!search && !modello && !gruppo) return err('Almeno uno tra search, modello, gruppo richiesto');
+      const lim = Math.min(parseInt(maxResults) || 20, 50);
+      let filter = '?attivo=eq.true';
+      const orConditions = [];
+      if (search) {
+        const s = search.trim();
+        orConditions.push(`nome.ilike.*${s}*`, `descrizione.ilike.*${s}*`, `codice.ilike.*${s}*`, `gruppo.ilike.*${s}*`);
+      }
+      if (orConditions.length) filter += `&or=(${orConditions.join(',')})`;
+      if (modello) filter += `&modello_macchina=ilike.*${modello}*`;
+      if (gruppo) filter += `&gruppo=ilike.*${gruppo}*`;
+      filter += `&order=nome.asc&limit=${lim}`;
+      const parts = await sb(env, 'tagliandi', 'GET', null, filter).catch(() => []);
+      return ok(parts.map(pascalizeRecord));
+    }
+
+    case 'generatePMSchedule': {
+      // Auto-scheduling PM basato su cicli manutenzione Lely
+      // Cicli: A1=bimestrale(60gg), B2=trimestrale(90gg), C3=semestrale(180gg), D8=annuale(365gg)
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const { mese_target, ciclo, cliente_id, dry_run } = body;
+      if (!mese_target) return err('mese_target richiesto (YYYY-MM)');
+
+      const cicliGiorni = { A1: 60, B2: 90, C3: 180, D8: 365 };
+      const cicliNomi = { A1: 'Bimestrale', B2: 'Trimestrale', C3: 'Semestrale', D8: 'Annuale' };
+
+      // Carica macchine con prossimo_tagliando
+      let macFilter = '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,nome,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&order=prossimo_tagliando.asc&limit=500';
+      if (cliente_id) macFilter += `&cliente_id=eq.${cliente_id}`;
+      const macchine = await sb(env, 'macchine', 'GET', null, macFilter).catch(() => []);
+
+      // Carica assets con prossimo_controllo
+      let assFilter = '?prossimo_controllo=not.is.null&select=id,nome_asset,numero_serie,modello,gruppo_attrezzatura,codice_m3,nome_account,prossimo_controllo,ciclo_pm&order=prossimo_controllo.asc&limit=500';
+      if (cliente_id) assFilter += `&codice_m3=eq.${cliente_id}`;
+      const assets = await sb(env, 'anagrafica_assets', 'GET', null, assFilter).catch(() => []);
+
+      const meseStart = mese_target + '-01';
+      const meseEndDate = new Date(parseInt(mese_target.split('-')[0]), parseInt(mese_target.split('-')[1]), 0);
+      const meseEnd = meseEndDate.toISOString().split('T')[0];
+
+      // Filtra per mese target e ciclo
+      const scheduled = [];
+      const allItems = [
+        ...macchine.map(m => ({
+          id: m.id, nome: m.nome || m.id, modello: m.modello || m.tipo,
+          cliente_id: m.cliente_id, prossimo: m.prossimo_tagliando,
+          ciclo: null, source: 'macchine'
+        })),
+        ...assets.map(a => ({
+          id: a.id, nome: a.nome_asset || a.numero_serie || a.id, modello: a.modello || a.gruppo_attrezzatura,
+          cliente_id: a.codice_m3, prossimo: a.prossimo_controllo,
+          ciclo: a.ciclo_pm || null, source: 'assets'
+        }))
+      ];
+
+      for (const item of allItems) {
+        if (!item.prossimo) continue;
+        // Filtra per ciclo se specificato
+        if (ciclo && item.ciclo && item.ciclo !== ciclo) continue;
+        // Filtra per mese target
+        if (item.prossimo < meseStart || item.prossimo > meseEnd) continue;
+        scheduled.push({
+          macchina_id: item.id,
+          macchina_nome: item.nome,
+          modello: item.modello,
+          cliente_id: item.cliente_id,
+          data_suggerita: item.prossimo,
+          ciclo: item.ciclo || '?',
+          ciclo_nome: cicliNomi[item.ciclo] || 'Service',
+          source: item.source
+        });
+      }
+
+      // Se non dry_run, crea gli interventi nel piano
+      if (!dry_run && scheduled.length) {
+        const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+        const now = new Date().toISOString();
+        let created = 0, errors = [];
+        for (const s of scheduled) {
+          try {
+            const intId = 'PM_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
+            await sb(env, 'piano', 'POST', {
+              id: intId, tenant_id: tid,
+              cliente_id: s.cliente_id, macchina_id: s.macchina_id,
+              data: s.data_suggerita, stato: 'pianificato',
+              tipo_intervento_id: 'TAGLIANDO',
+              note: `[PM Auto] ${s.ciclo_nome} — ${s.macchina_nome} (${s.modello || '?'})`,
+              obsoleto: false, created_at: now
+            });
+            created++;
+          } catch (e) { errors.push({ macchina: s.macchina_nome, err: e.message }); }
+        }
+        await wlog('pm_schedule', mese_target, 'generated', body.userId || 'admin', `${created} interventi creati`);
+        return ok({ scheduled, created, errors, mese: mese_target });
+      }
+
+      return ok({ scheduled, count: scheduled.length, mese: mese_target, dry_run: true });
     }
 
     default:

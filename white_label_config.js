@@ -51,7 +51,22 @@ window.SYNTONIQA_CONFIG = {
     kpi:           true,    // Dashboard KPI avanzata
     checklist:     true,    // Checklist interventi
     documenti:     true,    // Gestione documenti
+    piano_mensile: true,    // Piano mensile intelligente con vincoli dinamici
+    pm_scheduling: true,    // PM Scheduling automatico con cicli Lely
+    catalogo_parti: true,  // Catalogo ricambi Lely searchable
   },
+
+  // ─── VINCOLI TEMPLATES (suggerimenti categorie per nuovo tenant) ───
+  vincoli_templates: [
+    { nome: 'Regole Team',               icona: '👥', desc: 'Coppie, affiancamenti, esclusioni' },
+    { nome: 'Disponibilita e Ferie',     icona: '📅', desc: 'Ferie, malattia, permessi, formazione' },
+    { nome: 'Veicoli e Attrezzature',    icona: '🚐', desc: 'Assegnazione furgoni, rotazione, officina' },
+    { nome: 'Reperibilita e Turni',      icona: '📞', desc: 'Turni reperibilita, riposo post-notturna' },
+    { nome: 'Competenze',               icona: '🎓', desc: 'Certificazioni, specializzazioni per tipo macchina' },
+    { nome: 'Priorita e SLA',           icona: '⭐', desc: 'Clienti VIP, contratti SLA, urgenze' },
+    { nome: 'Carico Lavoro e Riposo',    icona: '⏱️', desc: 'Max ore/giorno, giorni consecutivi, riposo' },
+    { nome: 'Zone Geografiche',          icona: '📍', desc: 'Clustering per zona, basi tecnici, viaggi' },
+  ],
 
   // ─── PWA MANIFEST ───────────────────────────────────────────────
   pwa: {

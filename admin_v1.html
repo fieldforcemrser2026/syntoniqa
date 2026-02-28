@@ -297,6 +297,49 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 #mapAdmin{height:500px;border-radius:var(--radius);z-index:1}
 .map-controls{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
 
+/* ===== VINCOLI PIANO ===== */
+.vinc-category{background:var(--white);border:1px solid #E5E7EB;border-radius:var(--radius);margin-bottom:12px;overflow:hidden;transition:box-shadow .2s}
+.vinc-category:hover{box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.vinc-category.disabled{opacity:.5}
+.vinc-cat-head{display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;user-select:none;background:#F9FAFB;border-bottom:1px solid transparent;transition:background .15s}
+.vinc-cat-head:hover{background:#F3F4F6}
+.vinc-cat-head.open{border-bottom-color:#E5E7EB;background:#EEF2FF}
+.vinc-cat-head .vinc-arrow{font-size:.75rem;transition:transform .2s;color:var(--gray)}
+.vinc-cat-head.open .vinc-arrow{transform:rotate(90deg)}
+.vinc-cat-head .vinc-icona{font-size:1.125rem}
+.vinc-cat-head .vinc-nome{flex:1;font-size:.875rem;font-weight:600;color:var(--dark)}
+.vinc-cat-head .vinc-count{font-size:.6875rem;background:#E5E7EB;color:var(--gray);padding:2px 8px;border-radius:10px;font-weight:500}
+.vinc-cat-body{padding:0;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease}
+.vinc-cat-body.open{padding:12px 16px;max-height:2000px}
+.vinc-rule{background:#FAFAFA;border:1px solid #E5E7EB;border-radius:var(--radius-sm);padding:12px;margin-bottom:8px;position:relative}
+.vinc-rule:hover{border-color:#C7D2FE}
+.vinc-rule textarea{width:100%;border:1px solid #E5E7EB;border-radius:var(--radius-sm);padding:8px;font-family:var(--font);font-size:.8125rem;resize:vertical;min-height:40px;background:var(--white)}
+.vinc-rule textarea:focus{border-color:var(--c1);outline:none;box-shadow:0 0 0 3px rgba(0,201,167,.1)}
+.vinc-rule-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center}
+.vinc-rule-meta select,.vinc-rule-meta input{padding:4px 8px;border:1px solid #E5E7EB;border-radius:var(--radius-sm);font-size:.75rem;font-family:var(--font)}
+.vinc-rule .vinc-remove{position:absolute;top:8px;right:8px;background:none;border:none;cursor:pointer;color:#DC2626;font-size:.875rem;opacity:.4;transition:opacity .15s}
+.vinc-rule .vinc-remove:hover{opacity:1}
+.vinc-prio-alta{border-left:3px solid #DC2626}
+.vinc-prio-media{border-left:3px solid #F59E0B}
+.vinc-prio-bassa{border-left:3px solid #10B981}
+.vinc-templates{display:flex;gap:6px;flex-wrap:wrap;padding:12px 0}
+.vinc-templates button{padding:6px 12px;border:1px dashed #C7D2FE;border-radius:var(--radius-sm);background:#EEF2FF;color:#4338CA;font-size:.75rem;cursor:pointer;font-family:var(--font);transition:all .15s}
+.vinc-templates button:hover{background:#C7D2FE;border-style:solid}
+
+/* ===== PIANO MENSILE ===== */
+.month-grid{border-collapse:collapse;width:100%;table-layout:fixed}
+.month-grid th{padding:3px 2px;background:#F9FAFB;border:1px solid #E5E7EB;font-size:.6rem;font-weight:600;color:#6B7280;text-align:center;white-space:nowrap}
+.month-grid th.today{background:#FEF3C7;color:#92400E}
+.month-grid td{padding:2px;border:1px solid #E5E7EB;vertical-align:top;min-height:40px;font-size:.6rem;position:relative}
+.month-grid td.weekend{background:#F3F4F6}
+.month-grid td.ferie{background:#FEF9C3}
+.month-grid td.festivo{background:#FFF7ED}
+.month-cell-item{padding:2px 4px;margin-bottom:1px;border-radius:3px;font-size:.58rem;cursor:grab;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;line-height:1.3;border-left:2px solid}
+.month-cell-item:hover{opacity:.85;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.month-cell-rep{font-size:.5rem;background:#DBEAFE;color:#1E40AF;padding:1px 3px;border-radius:2px;display:inline-block;margin-bottom:1px}
+.month-tec-label{font-size:.6875rem;font-weight:600;padding:4px 8px;white-space:nowrap;background:#F9FAFB;border:1px solid #E5E7EB;position:sticky;left:0;z-index:2}
+.month-week-sep{background:#EEF2FF;font-size:.625rem;font-weight:600;color:#4338CA;text-align:center;padding:2px}
+
 /* ===== AI PLANNER ===== */
 .ai-box{background:linear-gradient(135deg,#1E1B4B,#312E81);color:var(--white);border-radius:var(--radius-lg);padding:24px;margin-bottom:16px}
 .ai-box h3{font-size:1rem;margin-bottom:4px}
@@ -443,12 +486,16 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <button class="nav-item" onclick="showSec('automezzi',this)"><span class="ico">🚐</span>Automezzi</button>
 <button class="nav-item" onclick="showSec('tecnici',this)"><span class="ico">👥</span>Tecnici</button>
 <div class="nav-label">Intelligence</div>
+<button class="nav-item" onclick="showSec('vincoli',this)"><span class="ico">📐</span>Vincoli Piano</button>
 <button class="nav-item" onclick="showSec('ai',this)"><span class="ico">🤖</span>AI Planner</button>
+<button class="nav-item" onclick="showSec('pianomensile',this)"><span class="ico">📅</span>Piano Mensile</button>
 <button class="nav-item" onclick="showSec('planner',this)"><span class="ico">📆</span>Planner Visuale</button>
 <button class="nav-item" onclick="showSec('mappa',this)"><span class="ico">🗺️</span>Mappa</button>
 <button class="nav-item" onclick="showSec('kpi',this)"><span class="ico">📈</span>KPI</button>
 <button class="nav-item" onclick="showSec('pagellini',this)"><span class="ico">🎯</span>Pagellini</button>
 <button class="nav-item" onclick="showSec('checklist',this)"><span class="ico">✅</span>Checklist</button>
+<button class="nav-item" onclick="showSec('pm',this)"><span class="ico">🔧</span>PM Scheduling</button>
+<button class="nav-item" onclick="showSec('catalogo',this)"><span class="ico">🔍</span>Catalogo Parti</button>
 <button class="nav-item" onclick="showSec('chat',this)"><span class="ico">💬</span>Chat Telegram<span class="badge" id="chatBadge" style="display:none">0</span></button>
 <div class="nav-label">Sistema</div>
 <button class="nav-item" onclick="showSec('sla',this)"><span class="ico">⏱️</span>SLA Monitor</button>
@@ -735,6 +782,57 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </section>
 
 
+<!-- ========== SEC: VINCOLI PIANO ========== -->
+<section class="sec" id="secVincoli">
+<div class="card mb">
+<div class="card-head">
+<h3>📐 Vincoli Pianificazione</h3>
+<div style="display:flex;gap:8px;align-items:center">
+<span id="vincoliCount" style="font-size:.75rem;color:var(--gray)"></span>
+<button class="btn btn-sm btn-outline" onclick="addVincoliCategory()">+ Nuova Categoria</button>
+<button class="btn btn-sm btn-ok" onclick="saveVincoliCategories()">💾 Salva Vincoli</button>
+</div>
+</div>
+<div class="card-body">
+<p style="font-size:.8125rem;color:var(--gray);margin-bottom:14px">Configura i vincoli che l'AI rispettera automaticamente nella generazione del piano. Categorie e regole sono completamente personalizzabili — crea, rinomina, riordina a piacere.</p>
+<div id="vincoliContainer"></div>
+<div style="border-top:1px solid #E5E7EB;padding-top:14px;margin-top:8px">
+<div style="font-size:.75rem;font-weight:600;color:var(--gray);margin-bottom:8px">Suggerimenti rapidi — clicca per creare una categoria:</div>
+<div class="vinc-templates" id="vincoliTemplates"></div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- ========== SEC: PIANO MENSILE ========== -->
+<section class="sec" id="secPianomensile">
+<div class="card mb">
+<div class="card-head">
+<h3>📅 Piano Mensile</h3>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+<button class="btn btn-sm btn-outline" onclick="monthNav(-1)">&#9664; Prec</button>
+<span id="monthTitle" style="font-size:.875rem;font-weight:600;padding:0 6px"></span>
+<button class="btn btn-sm btn-outline" onclick="monthNav(1)">Succ &#9654;</button>
+<button class="btn btn-sm" style="background:#6366F1;color:white" onclick="showSec('ai')">🤖 Genera con AI</button>
+<button class="btn btn-sm btn-ok" onclick="downloadMonthPlanXlsx()">📥 Export Excel</button>
+</div>
+</div>
+<div class="card-body">
+<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+<select id="monthFiltroTec" onchange="renderMonthPlan()" style="padding:5px 8px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti i tecnici</option></select>
+<label style="font-size:.75rem;display:flex;align-items:center;gap:4px"><input type="checkbox" id="monthShowRep" onchange="renderMonthPlan()" checked> Reperibilita</label>
+<label style="font-size:.75rem;display:flex;align-items:center;gap:4px"><input type="checkbox" id="monthShowFerie" onchange="renderMonthPlan()" checked> Ferie</label>
+<label style="font-size:.75rem;display:flex;align-items:center;gap:4px"><input type="checkbox" id="monthCompact" onchange="renderMonthPlan()"> Compatto</label>
+</div>
+<div style="overflow-x:auto"><div id="monthGrid" style="min-width:900px"></div></div>
+</div>
+</div>
+<div class="card">
+<div class="card-head"><h3>📋 Dettaglio Settimana</h3></div>
+<div class="card-body" id="monthWeekDetail"><p style="color:var(--gray)">Clicca su un'intestazione di settimana nella griglia per vederne il riepilogo dettagliato.</p></div>
+</div>
+</section>
+
 <!-- ========== SEC: AI PLANNER ========== -->
 <section class="sec" id="secAi">
 <div class="ai-box">
@@ -753,6 +851,50 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 <div id="excelImportPreview" style="display:none;margin-bottom:12px"></div>
 </div>
+
+<!-- ═══ CONTESTO GENERAZIONE ═══ -->
+<div style="background:rgba(99,102,241,.06);border:1.5px solid rgba(99,102,241,.2);border-radius:var(--radius);padding:16px;margin-bottom:16px">
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:1.1rem">⚙️</span><strong style="font-size:.9rem">Configurazione Generazione</strong></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px">
+
+<!-- Mese Target -->
+<div class="field">
+<label style="font-size:.8rem;font-weight:600;margin-bottom:4px;display:block">📅 Mese Target</label>
+<input type="month" id="aiMeseTarget" style="width:100%;padding:8px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.85rem;background:var(--white);color:var(--text)">
+</div>
+
+<!-- Modalità -->
+<div class="field">
+<label style="font-size:.8rem;font-weight:600;margin-bottom:4px;display:block">🎯 Modalità</label>
+<select id="aiModalita" style="width:100%;padding:8px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.85rem;background:var(--white);color:var(--text)">
+<option value="mese">Mese completo</option>
+<option value="settimana">Singola settimana</option>
+<option value="vuoti">Solo giorni vuoti</option>
+</select>
+</div>
+
+<!-- Settimana (visibile solo se modalità=settimana) -->
+<div class="field" id="aiSettimanaWrap" style="display:none">
+<label style="font-size:.8rem;font-weight:600;margin-bottom:4px;display:block">📆 Settimana</label>
+<select id="aiSettimana" style="width:100%;padding:8px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.85rem;background:var(--white);color:var(--text)">
+<option value="1">Settimana 1</option><option value="2">Settimana 2</option><option value="3">Settimana 3</option><option value="4">Settimana 4</option><option value="5">Settimana 5</option>
+</select>
+</div>
+</div>
+
+<!-- Contesto dati -->
+<div style="margin-top:14px">
+<label style="font-size:.8rem;font-weight:600;margin-bottom:6px;display:block">📦 Includi nel contesto AI:</label>
+<div style="display:flex;flex-wrap:wrap;gap:10px">
+<label class="field-check" style="font-size:.8rem;display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(255,255,255,.06);border-radius:var(--radius-sm);cursor:pointer"><input type="checkbox" id="aiCtxVincoli" checked> 📋 Vincoli configurati</label>
+<label class="field-check" style="font-size:.8rem;display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(255,255,255,.06);border-radius:var(--radius-sm);cursor:pointer"><input type="checkbox" id="aiCtxRep" checked> 📞 Reperibilità</label>
+<label class="field-check" style="font-size:.8rem;display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(255,255,255,.06);border-radius:var(--radius-sm);cursor:pointer"><input type="checkbox" id="aiCtxPiano" checked> 📅 Piano esistente</label>
+<label class="field-check" style="font-size:.8rem;display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(255,255,255,.06);border-radius:var(--radius-sm);cursor:pointer"><input type="checkbox" id="aiCtxUrgenze" checked> 🚨 Urgenze aperte</label>
+<label class="field-check" style="font-size:.8rem;display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(255,255,255,.06);border-radius:var(--radius-sm);cursor:pointer"><input type="checkbox" id="aiCtxTagliandi" checked> 🔧 Tagliandi/Service</label>
+</div>
+</div>
+</div>
+
 <div style="display:flex;gap:8px;flex-wrap:wrap">
 <button class="btn btn-lg" style="background:#6366F1;color:white" onclick="runAI()">🤖 Genera Piano</button>
 <button class="btn btn-lg" style="background:#22c55e;color:white" onclick="downloadAIPlanXlsx()" id="btnDownloadPlan" disabled>📥 Scarica Excel</button>
@@ -963,6 +1105,51 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 </section>
 
+<!-- ========== SEC: PM SCHEDULING ========== -->
+<section class="sec" id="secPm">
+<div class="card">
+<div class="card-head"><h3>🔧 PM Scheduling — Manutenzione Programmata</h3>
+<div class="btn-group">
+<button class="btn btn-sm" style="background:#6366F1;color:white" onclick="generatePMSchedule(true)">🔍 Anteprima</button>
+<button class="btn btn-primary btn-sm" onclick="generatePMSchedule(false)">⚡ Genera Interventi</button>
+</div></div>
+<div class="card-body">
+<div class="field-row" style="margin-bottom:16px;gap:12px;flex-wrap:wrap">
+<div class="field" style="max-width:180px"><label>Mese Target</label><input type="month" id="pmMeseTarget" class="inp"></div>
+<div class="field" style="max-width:180px"><label>Ciclo PM</label>
+<select id="pmCiclo" class="inp"><option value="">Tutti</option><option value="A1">A1 — Bimestrale (60gg)</option><option value="B2">B2 — Trimestrale (90gg)</option><option value="C3">C3 — Semestrale (180gg)</option><option value="D8">D8 — Annuale (365gg)</option></select></div>
+<div class="field" style="max-width:200px"><label>Cliente (opz.)</label>
+<select id="pmCliente" class="inp"><option value="">Tutti i clienti</option></select></div>
+</div>
+<div id="pmStatus" style="display:none;padding:12px;border-radius:var(--radius);margin-bottom:12px"></div>
+<div id="pmResults" style="overflow-x:auto"></div>
+</div>
+</div>
+<div class="card" style="margin-top:16px">
+<div class="card-head"><h3>📅 Tagliandi in Scadenza</h3></div>
+<div class="card-body"><div id="pmTagliandiScadenza" style="overflow-x:auto"></div></div>
+</div>
+</section>
+
+<!-- ========== SEC: CATALOGO PARTI ========== -->
+<section class="sec" id="secCatalogo">
+<div class="card">
+<div class="card-head"><h3>🔍 Catalogo Ricambi Lely</h3></div>
+<div class="card-body">
+<div class="field-row" style="margin-bottom:16px;gap:12px;flex-wrap:wrap">
+<div class="field" style="flex:2;min-width:200px"><label>Cerca (codice, nome, descrizione)</label>
+<input type="text" id="catSearch" class="inp" placeholder="Es: 9.1189.0283.0 oppure pompa latte" onkeyup="if(event.key==='Enter')searchCatalog()"></div>
+<div class="field" style="max-width:180px"><label>Modello Macchina</label>
+<select id="catModello" class="inp"><option value="">Tutti</option><option value="ASTRONAUT">Astronaut</option><option value="VECTOR">Vector</option><option value="JUNO">Juno</option><option value="DISCOVERY">Discovery</option><option value="CALM">Calm</option><option value="GRAZEWAY">Grazeway</option><option value="COSMIX">Cosmix</option></select></div>
+<div class="field" style="max-width:140px"><label>Gruppo</label><input type="text" id="catGruppo" class="inp" placeholder="Es: Pompe"></div>
+<button class="btn btn-primary btn-sm" onclick="searchCatalog()" style="align-self:flex-end;margin-bottom:4px">🔍 Cerca</button>
+</div>
+<div id="catStatus" style="display:none;padding:8px 12px;border-radius:var(--radius);margin-bottom:12px;font-size:.8rem"></div>
+<div id="catResults" style="overflow-x:auto"></div>
+</div>
+</div>
+</section>
+
 <!-- ========== SEC: ALLEGATI ========== -->
 <section class="sec" id="secAllegati">
 <div class="card">
@@ -991,6 +1178,8 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <option value="clienti_inattivi">Clienti Inattivi (>90gg)</option>
 <option value="kpi_mensile">KPI Mensile</option>
 <option value="performance_squadra">Performance per Squadra</option>
+<option value="daily_team">📊 Report Giornaliero Team</option>
+<option value="tagliandi_scadenza">🔧 Tagliandi in Scadenza</option>
 </select></div>
 <div class="field"><label>Da</label><input type="date" id="rptDa"></div>
 <div class="field"><label>A</label><input type="date" id="rptA"></div>
@@ -1692,17 +1881,20 @@ function showSec(id,btn){
   const sec=$('sec'+id.charAt(0).toUpperCase()+id.slice(1));
   if(sec)sec.classList.add('active');
   if(btn)btn.classList.add('active');
-  const titles={'dashboard':'📊 Dashboard','calendario':'📅 Calendario','piano':'📋 Interventi','urgenze':'🚨 Urgenze','ordini':'📦 Ordini','installazioni':'🏗️ Installazioni','reperibilita':'📞 Reperibilità','trasferte':'🧳 Trasferte','notifiche':'🔔 Notifiche','richieste':'📝 Richieste','clienti':'🏢 Clienti','macchine':'⚙️ Macchine','automezzi':'🚐 Automezzi','tecnici':'👥 Tecnici','ai':'🤖 AI Planner','planner':'📆 Planner Visuale','mappa':'🗺️ Mappa','kpi':'📈 KPI','pagellini':'🎯 Pagellini','checklist':'✅ Checklist','sla':'⏱️ SLA Monitor','documenti':'📁 Documenti','allegati':'📎 Allegati','report':'📊 Report Builder','auditlog':'📜 Audit Log','powerbi':'⚡ Power BI','emailconfig':'📧 Email','telegramconfig':'💬 Telegram','backup':'💾 Backup','chat':'💬 Chat Telegram','config':'🔧 Configurazione'};
+  const titles={'dashboard':'📊 Dashboard','calendario':'📅 Calendario','piano':'📋 Interventi','urgenze':'🚨 Urgenze','ordini':'📦 Ordini','installazioni':'🏗️ Installazioni','reperibilita':'📞 Reperibilità','trasferte':'🧳 Trasferte','notifiche':'🔔 Notifiche','richieste':'📝 Richieste','clienti':'🏢 Clienti','macchine':'⚙️ Macchine','automezzi':'🚐 Automezzi','tecnici':'👥 Tecnici','vincoli':'📐 Vincoli Piano','ai':'🤖 AI Planner','pianomensile':'📅 Piano Mensile','planner':'📆 Planner Visuale','mappa':'🗺️ Mappa','kpi':'📈 KPI','pagellini':'🎯 Pagellini','checklist':'✅ Checklist','pm':'🔧 PM Scheduling','catalogo':'🔍 Catalogo Parti','sla':'⏱️ SLA Monitor','documenti':'📁 Documenti','allegati':'📎 Allegati','report':'📊 Report Builder','auditlog':'📜 Audit Log','powerbi':'⚡ Power BI','emailconfig':'📧 Email','telegramconfig':'💬 Telegram','backup':'💾 Backup','chat':'💬 Chat Telegram','config':'🔧 Configurazione'};
   $('headerTitle').textContent=titles[id]||id;
   // Stop chat polling when navigating away from chat section
   if(id!=='chat'&&CHAT_POLL){clearInterval(CHAT_POLL);CHAT_POLL=null;}
   if(id==='mappa')setTimeout(()=>initMap(),100);
   if(id==='kpi')loadKPIWithCharts();
   if(id==='planner')setTimeout(()=>initPlanner(),100);
+  if(id==='vincoli')loadVincoliCategories();
+  if(id==='pianomensile')setTimeout(()=>initMonthPlan(),100);
   if(id==='ai'){renderApprovalQueue();renderTecnicoPlan()}
   if(id==='chat')loadChatCanali();
   if(id==='backup')loadBackupHistory();
   if(id==='anagrafica'){loadAnagClients()}
+  if(id==='pm')initPMSection();
   $('sidebar').classList.remove('open');$('sideOverlay').classList.remove('show');
 }
 
@@ -4722,6 +4914,20 @@ async function saveInstall(){
 }
 
 // ============ AI PLANNER ============
+// Init month selector to current month
+(function(){
+  const d=new Date();
+  const m=String(d.getMonth()+1).padStart(2,'0');
+  const el=document.getElementById('aiMeseTarget');
+  if(el)el.value=d.getFullYear()+'-'+m;
+  // Toggle settimana selector
+  const sel=document.getElementById('aiModalita');
+  if(sel)sel.addEventListener('change',function(){
+    const sw=document.getElementById('aiSettimanaWrap');
+    if(sw)sw.style.display=this.value==='settimana'?'block':'none';
+  });
+})();
+
 let AI_FILES=[];
 
 function handleAIFiles(fileList){
@@ -4869,7 +5075,40 @@ async function confirmImportExcelPlan(){
     const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action:'importExcelPlan',userId:USER?.ID||'',rows:EXCEL_PLAN_ROWS}),signal:AbortSignal.timeout(120000)});
     const j=await r.json();if(!j.success)throw new Error(j.error||'Errore import');
     const result=j.data||j;
-    toast(`Piano importato: ${result.created} interventi creati`+(result.errors?.length?`, ${result.errors.length} errori`:''),'ok');
+
+    // Sync reperibilita from Excel (extract rep data + sync to DB)
+    let repSynced = 0;
+    const repRows = EXCEL_PLAN_ROWS.filter(r => r.reperibilita && r.reperibilita.trim());
+    if(repRows.length) {
+      // Group by tecnico+period → detect reperibilita spans
+      const repMap = {};
+      for(const row of repRows){
+        const key = row.tecnico_nome + '|' + row.reperibilita;
+        if(!repMap[key]) repMap[key] = { tec: row.tecnico_nome, rep: row.reperibilita, dates: [] };
+        repMap[key].dates.push(row.data);
+      }
+      // Create/update reperibilita entries
+      for(const entry of Object.values(repMap)){
+        const dates = entry.dates.sort();
+        if(!dates.length) continue;
+        try{
+          await apiCall('createReperibilita',{
+            tecnico_nome: entry.tec,
+            turno: entry.rep.includes('18') || entry.rep.includes('nott') ? 'notturno' : '24h',
+            tipo: entry.rep,
+            data_inizio: dates[0],
+            data_fine: dates[dates.length-1],
+            origine: 'excel_sync'
+          },'POST');
+          repSynced++;
+        }catch(e){ /* skip sync errors silently */ }
+      }
+    }
+
+    let msg = `Piano importato: ${result.created} interventi creati`;
+    if(repSynced) msg += `, ${repSynced} reperibilita sincronizzate`;
+    if(result.errors?.length) msg += `, ${result.errors.length} errori`;
+    toast(msg,'ok');
     $('excelImportPreview').style.display='none';
     EXCEL_PLAN_ROWS=[];
     await refreshData(true);
@@ -4890,8 +5129,37 @@ async function runAI(){
   }
 
   try{
-    // Direct fetch con timeout 90s (apiCall ha 30s hardcoded — insufficiente per Workers AI)
-    const _aiResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:{testo:prompt,files:filesData}}),signal:AbortSignal.timeout(90000)});
+    // Collect context flags
+    const meseTarget=$('aiMeseTarget')?.value||'';
+    const modalita=$('aiModalita')?.value||'mese';
+    const settimana=$('aiSettimana')?.value||'1';
+    const ctxFlags={
+      vincoli:$('aiCtxVincoli')?.checked!==false,
+      reperibilita:$('aiCtxRep')?.checked!==false,
+      piano:$('aiCtxPiano')?.checked!==false,
+      urgenze:$('aiCtxUrgenze')?.checked!==false,
+      tagliandi:$('aiCtxTagliandi')?.checked!==false
+    };
+    // Pre-load piano esistente for the target month
+    let pianoEsistente=[];
+    if(ctxFlags.piano&&meseTarget&&DATA.piano){
+      pianoEsistente=DATA.piano.filter(p=>{
+        const d=(p.Data||'').split('T')[0];
+        return d.startsWith(meseTarget)&&p.Stato!=='annullato';
+      }).map(p=>{
+        const u=(DATA.utenti||[]).find(u=>u.ID===p.TecnicoID)||{};
+        const c=(DATA.clienti||[]).find(c=>c.ID===p.ClienteID)||{};
+        return {
+          data:(p.Data||'').split('T')[0],
+          tecnico:((u.Nome||'')+(u.Cognome?' '+u.Cognome:'')).trim()||p.TecnicoID||'?',
+          tecnicoId:p.TecnicoID,
+          cliente:c.Nome||p.ClienteID||'',
+          note:p.Note||p.TipoIntervento||''
+        };
+      });
+    }
+    // Direct fetch con timeout 120s (apiCall ha 30s hardcoded — insufficiente per Workers AI)
+    const _aiResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:{testo:prompt,files:filesData,mese_target:meseTarget,modalita,settimana,ctx:ctxFlags,piano_esistente:pianoEsistente}}),signal:AbortSignal.timeout(120000)});
     const _aiJson=await _aiResp.json();
     if(!_aiJson.success)throw new Error(_aiJson.error||'Errore AI');
     const result=_aiJson.data||_aiJson;
@@ -4973,6 +5241,11 @@ async function runAI(){
     if(result.raw){
       html+=`<details style="margin-top:12px"><summary style="font-size:.75rem;color:var(--gray);cursor:pointer">Mostra risposta grezza</summary><pre style="font-size:.7rem;overflow-x:auto;padding:8px;background:var(--gray5);border-radius:var(--radius-sm);margin-top:4px">${result.raw}</pre></details>`;
     }
+    // Quick action: view in monthly calendar
+    html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:12px;border-top:1px solid var(--gray4)">
+      <button class="btn btn-sm" style="background:#3B82F6;color:white" onclick="showAIPlanInCalendar()">📅 Mostra nel Calendario Mensile</button>
+      ${result.chunks?`<span style="font-size:.75rem;color:var(--gray);align-self:center">Generato in ${result.chunks} chunk settimanali</span>`:''}
+    </div>`;
     $('aiResult').innerHTML=html;
     $('btnApplyAI').disabled=false;
     $('btnSubmitPlan').disabled=false;
@@ -4984,6 +5257,48 @@ async function runAI(){
     </div>`;
     toast(e.message,'err');
   }
+}
+
+function clearAIPreview(){
+  if(DATA.piano) DATA.piano=DATA.piano.filter(p=>!p._aiPreview);
+  window._AI_PREVIEW_ITEMS=[];
+  renderMonthPlan();
+  toast('Anteprima AI rimossa','info');
+}
+
+function showAIPlanInCalendar(){
+  if(!AI_PLAN||!AI_PLAN.piano||!AI_PLAN.piano.length){toast('Nessun piano da mostrare','warn');return}
+  // Set MONTH_DATE to the first date in the plan
+  const firstDate=AI_PLAN.piano[0].data;
+  if(firstDate){
+    const parts=firstDate.split('-');
+    MONTH_DATE=new Date(parseInt(parts[0]),parseInt(parts[1])-1,1);
+  }
+  // Temporarily merge AI plan with DATA.piano for visualization
+  // Store originals
+  if(!window._AI_PREVIEW_ITEMS)window._AI_PREVIEW_ITEMS=[];
+  // Clear previous preview
+  if(DATA.piano)DATA.piano=DATA.piano.filter(p=>!p._aiPreview);
+  // Add preview items
+  const previews=AI_PLAN.piano.map(p=>({
+    ID:'AI_PRV_'+Math.random().toString(36).slice(2,8),
+    TecnicoID:p.tecnicoId,
+    ClienteID:p.clienteId||'',
+    Data:p.data,
+    OraInizio:p.oraInizio||'08:00',
+    DurataOre:p.durataOre||2,
+    TipoIntervento:p.tipo||'service',
+    Note:p.note||p.cliente||'',
+    Stato:'pianificato',
+    Origine:'ai_preview',
+    Obsoleto:false,
+    _aiPreview:true
+  }));
+  window._AI_PREVIEW_ITEMS=previews;
+  if(!DATA.piano)DATA.piano=[];
+  DATA.piano.push(...previews);
+  showSec('pianomensile');
+  toast(`${previews.length} interventi AI visualizzati nel calendario (anteprima)`,'ok');
 }
 
 async function downloadAIPlanXlsx(){
@@ -5048,19 +5363,45 @@ async function downloadAIPlanXlsx(){
   toast('Piano Excel scaricato!','ok');
 }
 
-async function applyAI(){
+async function applyAI(forceOverwrite){
   if(!AI_PLAN){toast('Genera prima un piano','warn');return}
   toast('Applicazione piano in corso...','warn');
   try{
-    // Direct fetch con timeout 60s (apiCall ha 30s hardcoded)
+    const payload={action:'applyAIPlan',userId:USER?.ID||'',piano:AI_PLAN};
+    if(forceOverwrite)payload.force_overwrite=true;
     const _applyResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},
-      body:JSON.stringify({action:'applyAIPlan',userId:USER?.ID||'',piano:AI_PLAN}),signal:AbortSignal.timeout(60000)});
+      body:JSON.stringify(payload),signal:AbortSignal.timeout(120000)});
     const _applyJson=await _applyResp.json();
     if(!_applyJson.success)throw new Error(_applyJson.error||'Errore apply');
     const result=_applyJson.data||_applyJson;
-    toast('✅ Piano applicato: '+(result.created||0)+' interventi creati','ok');
+
+    // Handle conflicts
+    if(result.has_conflicts){
+      const conflDiv=$('aiResult');
+      let html=`<div style="background:rgba(245,158,11,.1);border:1.5px solid rgba(245,158,11,.4);border-radius:var(--radius);padding:20px;margin-top:16px">
+        <h4 style="margin:0 0 12px;color:#F59E0B">⚠️ ${result.conflicts_count} Conflitti Trovati</h4>
+        <p style="font-size:.85rem;margin-bottom:12px;color:var(--gray)">Interventi esistenti nello stesso giorno per lo stesso tecnico. Scegli come procedere:</p>
+        <div style="max-height:300px;overflow-y:auto;margin-bottom:16px">
+        <table class="tbl" style="font-size:.8rem"><thead><tr><th>Data</th><th>Tecnico</th><th>Nuovo</th><th>Esistente</th></tr></thead><tbody>`;
+      for(const c of result.conflicts.slice(0,15)){
+        html+=`<tr><td>${c.nuovo.data}</td><td>${c.nuovo.tecnico}</td><td>${c.nuovo.cliente} (${c.nuovo.tipo})</td><td>${c.esistenti.map(e=>'<span style="color:var(--gray)">'+e.id+': '+(e.note||e.cliente_id||'—').substring(0,30)+'</span>').join('<br>')}</td></tr>`;
+      }
+      html+=`</tbody></table></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-lg" style="background:#EF4444;color:white" onclick="applyAI(true)">🔄 Sovrascrivi Tutto (${result.conflicts_count} conflitti)</button>
+          <button class="btn btn-lg btn-ghost" onclick="toast('Applicazione annullata','info')">❌ Annulla</button>
+        </div>
+      </div>`;
+      conflDiv.innerHTML+=html;
+      toast(`${result.conflicts_count} conflitti — scegli azione`,'warn');
+      return;
+    }
+
+    toast(`✅ Piano applicato: ${result.created||0} interventi creati`+(result.overwritten?`, ${result.overwritten} sovrascritti`:''),'ok');
     AI_PLAN=null;$('btnApplyAI').disabled=true;$('btnSubmitPlan').disabled=true;$('btnDownloadPlan').disabled=true;
     await refreshData(true);
+    // Refresh monthly view if visible
+    if(typeof renderMonthPlan==='function')setTimeout(()=>renderMonthPlan(),500);
   }catch(e){toast(e.message,'err')}
 }
 
@@ -5595,6 +5936,114 @@ function printReport(){
   w.print();
 }
 
+// ============ PM SCHEDULING ============
+function initPMSection(){
+  // Set default month to next month
+  const d=new Date(); d.setMonth(d.getMonth()+1);
+  const el=$('pmMeseTarget'); if(el)el.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  // Populate client dropdown
+  const sel=$('pmCliente');
+  if(sel){
+    const opts=(DATA.clienti||[]).map(c=>`<option value="${c.ID}">${c.Nome||c.ID}</option>`).join('');
+    sel.innerHTML='<option value="">Tutti i clienti</option>'+opts;
+  }
+  renderPMTagliandi();
+}
+async function generatePMSchedule(dryRun){
+  const mese=$('pmMeseTarget')?.value;
+  if(!mese){toast('Seleziona mese target','err');return}
+  const ciclo=$('pmCiclo')?.value||'';
+  const clienteId=$('pmCliente')?.value||'';
+  const status=$('pmStatus');
+  status.style.display='block';
+  status.style.background='rgba(99,102,241,.08)';
+  status.innerHTML='⏳ '+(dryRun?'Calcolando anteprima...':'Generando interventi PM...');
+  try{
+    const r=await apiCall('generatePMSchedule',{mese_target:mese,ciclo:ciclo||undefined,cliente_id:clienteId||undefined,dry_run:dryRun,userId:USER?.ID},'POST');
+    const items=r.scheduled||[];
+    if(!items.length){
+      status.innerHTML='ℹ️ Nessun tagliando/service in scadenza nel mese '+mese;
+      status.style.background='rgba(234,179,8,.1)';
+      $('pmResults').innerHTML='';return;
+    }
+    if(dryRun){
+      status.innerHTML=`🔍 <b>${items.length}</b> interventi PM da generare per ${mese}`;
+      status.style.background='rgba(99,102,241,.08)';
+    } else {
+      status.innerHTML=`✅ <b>${r.created||0}</b> interventi PM creati per ${mese}${r.errors?.length?' ('+r.errors.length+' errori)':''}`;
+      status.style.background='rgba(34,197,94,.1)';
+      if(r.errors?.length) console.warn('PM errors:',r.errors);
+      await refreshData();
+    }
+    // Render table
+    let html='<table class="data-table"><thead><tr><th>Macchina</th><th>Modello</th><th>Cliente</th><th>Data Suggerita</th><th>Ciclo</th></tr></thead><tbody>';
+    items.forEach(it=>{
+      const cliName=it.cliente_id?((DATA.clienti||[]).find(c=>c.ID===it.cliente_id)||{}).Nome||it.cliente_id:'—';
+      html+=`<tr><td>${it.macchina_nome}</td><td>${it.modello||'—'}</td><td>${cliName}</td><td>${it.data_suggerita}</td><td><span style="padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:600;background:${it.ciclo==='A1'?'#DBEAFE':it.ciclo==='B2'?'#D1FAE5':it.ciclo==='C3'?'#FEF3C7':'#FEE2E2'};color:${it.ciclo==='A1'?'#1E40AF':it.ciclo==='B2'?'#065F46':it.ciclo==='C3'?'#92400E':'#991B1B'}">${it.ciclo||'?'} ${it.ciclo_nome||''}</span></td></tr>`;
+    });
+    html+='</tbody></table>';
+    $('pmResults').innerHTML=html;
+  }catch(e){
+    status.innerHTML='❌ Errore: '+e.message;
+    status.style.background='rgba(220,38,38,.1)';
+  }
+}
+async function renderPMTagliandi(){
+  try{
+    const r=await apiCall('generateReport',{tipo:'tagliandi_scadenza',filtri:{dataInizio:new Date().toISOString().split('T')[0]},userId:USER?.ID},'POST');
+    if(!r?.righe?.length){$('pmTagliandiScadenza').innerHTML='<p style="color:var(--gray);font-size:.8rem">Nessun tagliando in scadenza</p>';return}
+    let html='<table class="data-table"><thead><tr>';
+    (r.colonne||[]).forEach(c=>{html+='<th>'+c+'</th>'});
+    html+='</tr></thead><tbody>';
+    r.righe.forEach(row=>{
+      const isUrgent=(row[5]||'').includes('SCADUTO')||(row[5]||'').includes('URGENTE');
+      html+=`<tr style="${isUrgent?'background:rgba(220,38,38,.04)':''}">`;
+      row.forEach((cell,i)=>{html+='<td>'+(i===5?'<b>'+cell+'</b>':cell)+'</td>'});
+      html+='</tr>';
+    });
+    html+='</tbody></table>';
+    $('pmTagliandiScadenza').innerHTML=html;
+  }catch(e){$('pmTagliandiScadenza').innerHTML='<p style="color:var(--danger);font-size:.8rem">Errore: '+e.message+'</p>'}
+}
+
+// ============ CATALOGO PARTI ============
+async function searchCatalog(){
+  const search=$('catSearch')?.value?.trim()||'';
+  const modello=$('catModello')?.value||'';
+  const gruppo=$('catGruppo')?.value?.trim()||'';
+  if(!search&&!modello&&!gruppo){toast('Inserisci almeno un criterio di ricerca','err');return}
+  const status=$('catStatus');
+  status.style.display='block';
+  status.style.background='rgba(99,102,241,.08)';
+  status.innerHTML='🔍 Cercando nel catalogo...';
+  try{
+    const r=await apiCall('searchParts',{search:search||undefined,modello:modello||undefined,gruppo:gruppo||undefined,limit:30,userId:USER?.ID},'POST');
+    const items=Array.isArray(r)?r:[];
+    if(!items.length){
+      status.innerHTML='ℹ️ Nessun risultato trovato';
+      status.style.background='rgba(234,179,8,.1)';
+      $('catResults').innerHTML='';return;
+    }
+    status.innerHTML=`✅ <b>${items.length}</b> parti trovate`;
+    status.style.background='rgba(34,197,94,.08)';
+    let html='<table class="data-table"><thead><tr><th>Codice</th><th>Nome</th><th>Descrizione</th><th>Gruppo</th><th>Modello</th></tr></thead><tbody>';
+    items.forEach(p=>{
+      html+=`<tr>
+        <td><code style="background:#F1F5F9;padding:2px 6px;border-radius:4px;font-size:.75rem">${p.Codice||'—'}</code></td>
+        <td style="font-weight:500">${p.Nome||'—'}</td>
+        <td style="font-size:.8rem;color:var(--gray)">${(p.Descrizione||'').substring(0,80)}</td>
+        <td><span style="padding:2px 8px;border-radius:12px;font-size:.7rem;background:#EEF2FF;color:#4338CA">${p.Gruppo||'—'}</span></td>
+        <td style="font-size:.8rem">${p.ModelloMacchina||'—'}</td>
+      </tr>`;
+    });
+    html+='</tbody></table>';
+    $('catResults').innerHTML=html;
+  }catch(e){
+    status.innerHTML='❌ Errore: '+e.message;
+    status.style.background='rgba(220,38,38,.1)';
+  }
+}
+
 // ============ FEATURE 33: TELEGRAM CONFIG ============
 function renderTelegramConfig(){
   const config=DATA.config||{};
@@ -5748,6 +6197,431 @@ async function runBackupNow(){
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){document.querySelectorAll('.modal-overlay.show').forEach(m=>m.classList.remove('show'))}
 });
+
+
+// ============ VINCOLI PIANIFICAZIONE (dinamici, white-label) ============
+let VINCOLI_CAT = { categories: [], meta: {} };
+
+async function loadVincoliCategories(){
+  try {
+    const r = await apiCall('getVincoliCategories', {}, 'POST');
+    VINCOLI_CAT = r || { categories: [], meta: {} };
+    if (!VINCOLI_CAT.categories) VINCOLI_CAT.categories = [];
+  } catch { VINCOLI_CAT = { categories: [], meta: {} }; }
+  renderVincoliUI();
+  renderVincoliTemplates();
+}
+
+function renderVincoliTemplates(){
+  const cfg = window.SYNTONIQA_CONFIG?.vincoli_templates || [];
+  const existing = VINCOLI_CAT.categories.map(c => c.nome.toLowerCase());
+  const el = $('vincoliTemplates');
+  if(!el) return;
+  el.innerHTML = cfg.filter(t => !existing.includes(t.nome.toLowerCase()))
+    .map(t => `<button onclick="addVincoliCategory('${t.nome}','${t.icona}')">${t.icona} ${t.nome}</button>`).join('');
+  if(!el.innerHTML) el.innerHTML = '<span style="font-size:.75rem;color:var(--gray)">Tutte le categorie suggerite sono gia state create.</span>';
+}
+
+function renderVincoliUI(){
+  const el = $('vincoliContainer');
+  if(!el) return;
+  const cats = VINCOLI_CAT.categories || [];
+  let totalRules = 0;
+  cats.forEach(c => { totalRules += (c.regole || []).length; });
+  const countEl = $('vincoliCount');
+  if(countEl) countEl.textContent = `${cats.length} categorie · ${totalRules} regole`;
+
+  if(!cats.length){
+    el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--gray)"><p style="font-size:1.5rem;margin-bottom:8px">📐</p><p>Nessun vincolo configurato.</p><p style="font-size:.75rem">Usa i suggerimenti rapidi qui sotto o crea una nuova categoria.</p></div>';
+    return;
+  }
+  const tecOptions = (DATA.utenti||[]).filter(u=>!u.Obsoleto).map(u=>`<option value="${u.ID}">${u.Nome||''} ${u.Cognome||''}</option>`).join('');
+  el.innerHTML = cats.map((cat, ci) => {
+    const isOpen = cat._open !== false;
+    const regoleHtml = (cat.regole||[]).map((r, ri) => `
+      <div class="vinc-rule vinc-prio-${r.priorita||'media'}" data-cat="${ci}" data-rule="${ri}">
+        <button class="vinc-remove" onclick="removeVincoliRule(${ci},${ri})" title="Rimuovi regola">✕</button>
+        <textarea onchange="vincoliRuleChanged(${ci},${ri},'testo',this.value)" placeholder="Descrivi la regola in linguaggio naturale...">${r.testo||''}</textarea>
+        <div class="vinc-rule-meta">
+          <select multiple title="Soggetti (tecnici/risorse coinvolti)" onchange="vincoliRuleMultiChanged(${ci},${ri},'soggetti',this)" style="min-width:150px;min-height:28px">
+            <option value="" disabled>Soggetti...</option>
+            ${tecOptions.replace(new RegExp(`value="(${(r.soggetti||[]).join('|')})"`, 'g'), (m) => m + ' selected')}
+          </select>
+          <select multiple title="Riferimenti (con chi/cosa)" onchange="vincoliRuleMultiChanged(${ci},${ri},'riferimenti',this)" style="min-width:150px;min-height:28px">
+            <option value="" disabled>Riferimenti...</option>
+            ${tecOptions.replace(new RegExp(`value="(${(r.riferimenti||[]).join('|')})"`, 'g'), (m) => m + ' selected')}
+          </select>
+          <label style="font-size:.7rem;display:flex;align-items:center;gap:3px" title="Regola sempre attiva">
+            <input type="checkbox" ${r.permanente?'checked':''} onchange="vincoliRuleChanged(${ci},${ri},'permanente',this.checked)"> Permanente
+          </label>
+          ${!r.permanente ? `<input type="date" value="${r.data_inizio||''}" onchange="vincoliRuleChanged(${ci},${ri},'data_inizio',this.value)" title="Dal" placeholder="Dal">
+          <input type="date" value="${r.data_fine||''}" onchange="vincoliRuleChanged(${ci},${ri},'data_fine',this.value)" title="Al" placeholder="Al">` : ''}
+          <select onchange="vincoliRuleChanged(${ci},${ri},'priorita',this.value)" title="Priorita">
+            <option value="alta" ${r.priorita==='alta'?'selected':''}>Alta</option>
+            <option value="media" ${r.priorita==='media'||!r.priorita?'selected':''}>Media</option>
+            <option value="bassa" ${r.priorita==='bassa'?'selected':''}>Bassa</option>
+          </select>
+          <select onchange="vincoliRuleChanged(${ci},${ri},'tipo_regola',this.value)" title="Tipo">
+            <option value="vincolo" ${r.tipo_regola==='vincolo'||!r.tipo_regola?'selected':''}>Vincolo</option>
+            <option value="preferenza" ${r.tipo_regola==='preferenza'?'selected':''}>Preferenza</option>
+            <option value="nota" ${r.tipo_regola==='nota'?'selected':''}>Nota</option>
+          </select>
+        </div>
+      </div>`).join('');
+
+    return `<div class="vinc-category ${!cat.attiva?'disabled':''}" data-cat="${ci}">
+      <div class="vinc-cat-head ${isOpen?'open':''}" onclick="toggleVincoliCategory(${ci})">
+        <span class="vinc-arrow">&#9654;</span>
+        <span class="vinc-icona" onclick="event.stopPropagation();editVincoliIcon(${ci})" title="Clicca per cambiare icona" style="cursor:pointer">${cat.icona||'📌'}</span>
+        <span class="vinc-nome" ondblclick="event.stopPropagation();editVincoliName(${ci})" title="Doppio click per rinominare">${cat.nome||'Categoria'}</span>
+        <span class="vinc-count">${(cat.regole||[]).length} regole</span>
+        <label style="font-size:.7rem;display:flex;align-items:center;gap:3px" onclick="event.stopPropagation()">
+          <input type="checkbox" ${cat.attiva!==false?'checked':''} onchange="toggleVincoliActive(${ci},this.checked)"> Attiva
+        </label>
+        <button class="btn btn-xs btn-ghost" onclick="event.stopPropagation();removeVincoliCategory(${ci})" title="Elimina categoria" style="color:#DC2626">🗑️</button>
+      </div>
+      <div class="vinc-cat-body ${isOpen?'open':''}">
+        ${regoleHtml || '<p style="font-size:.8125rem;color:var(--gray);padding:8px 0">Nessuna regola. Clicca per aggiungerne una.</p>'}
+        <button class="btn btn-xs btn-outline" onclick="addVincoliRule(${ci})" style="margin-top:4px">+ Aggiungi regola</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function addVincoliCategory(nome, icona){
+  const cat = {
+    id: 'cat_' + Date.now(),
+    nome: nome || 'Nuova Categoria',
+    icona: icona || '📌',
+    ordine: VINCOLI_CAT.categories.length + 1,
+    attiva: true,
+    _open: true,
+    regole: []
+  };
+  VINCOLI_CAT.categories.push(cat);
+  renderVincoliUI();
+  renderVincoliTemplates();
+}
+
+function removeVincoliCategory(ci){
+  const cat = VINCOLI_CAT.categories[ci];
+  if(!confirm(`Eliminare la categoria "${cat.nome}" e tutte le sue ${(cat.regole||[]).length} regole?`)) return;
+  VINCOLI_CAT.categories.splice(ci, 1);
+  renderVincoliUI();
+  renderVincoliTemplates();
+}
+
+function toggleVincoliCategory(ci){
+  const cat = VINCOLI_CAT.categories[ci];
+  cat._open = cat._open === false ? true : false;
+  renderVincoliUI();
+}
+
+function toggleVincoliActive(ci, val){
+  VINCOLI_CAT.categories[ci].attiva = val;
+  renderVincoliUI();
+}
+
+function editVincoliName(ci){
+  const cat = VINCOLI_CAT.categories[ci];
+  const nome = prompt('Nome categoria:', cat.nome);
+  if(nome && nome.trim()) { cat.nome = nome.trim(); renderVincoliUI(); }
+}
+
+function editVincoliIcon(ci){
+  const icons = ['👥','📅','🚐','📞','🎓','⭐','⏱️','📍','🔧','🏗️','📋','🚨','💼','🏖️','🔑','📊','🛡️','⚡','🎯','📌'];
+  const cat = VINCOLI_CAT.categories[ci];
+  const choice = prompt('Scegli un\'icona:\n' + icons.join(' ') + '\n\nOppure incolla qualsiasi emoji:', cat.icona);
+  if(choice && choice.trim()) { cat.icona = choice.trim(); renderVincoliUI(); }
+}
+
+function addVincoliRule(ci){
+  const cat = VINCOLI_CAT.categories[ci];
+  if(!cat.regole) cat.regole = [];
+  cat.regole.push({
+    id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+    testo: '', soggetti: [], riferimenti: [],
+    data_inizio: null, data_fine: null,
+    permanente: true, priorita: 'media', tipo_regola: 'vincolo'
+  });
+  cat._open = true;
+  renderVincoliUI();
+}
+
+function removeVincoliRule(ci, ri){
+  VINCOLI_CAT.categories[ci].regole.splice(ri, 1);
+  renderVincoliUI();
+}
+
+function vincoliRuleChanged(ci, ri, field, val){
+  VINCOLI_CAT.categories[ci].regole[ri][field] = val;
+  if(field === 'permanente') renderVincoliUI(); // toggling date fields
+}
+
+function vincoliRuleMultiChanged(ci, ri, field, sel){
+  VINCOLI_CAT.categories[ci].regole[ri][field] = Array.from(sel.selectedOptions).map(o=>o.value).filter(Boolean);
+}
+
+async function saveVincoliCategories(){
+  try {
+    // Clean internal state before saving
+    const toSave = JSON.parse(JSON.stringify(VINCOLI_CAT));
+    toSave.categories.forEach(c => { delete c._open; });
+    toSave.meta = { ultimo_aggiornamento: new Date().toISOString(), aggiornato_da: USER?.ID || 'admin', versione: (toSave.meta?.versione || 0) + 1 };
+    await fetch(API_URL, { method:'POST', headers:{'Content-Type':'application/json','X-Token':API_TOKEN},
+      body: JSON.stringify({ action:'saveVincoliCategories', userId:USER?.ID||'', vincoli: toSave })
+    });
+    toast('Vincoli salvati con successo!', 'ok');
+  } catch(e) { toast('Errore salvataggio vincoli: ' + e.message, 'err'); }
+}
+
+function buildVincoliPromptText(){
+  const cats = (VINCOLI_CAT.categories || []).filter(c => c.attiva !== false);
+  if(!cats.length) return '';
+  const oggi = today();
+  const getName_ = (id) => { const u = (DATA.utenti||[]).find(u=>u.ID===id); return u ? (u.Nome||'')+ ' '+(u.Cognome||'') : id; };
+  let text = '=== VINCOLI CONFIGURATI (OBBLIGATORI) ===\n';
+  cats.forEach(cat => {
+    const regoleAttive = (cat.regole||[]).filter(r => {
+      if(!r.testo) return false;
+      if(r.permanente) return true;
+      if(r.data_fine && r.data_fine < oggi) return false;
+      if(r.data_inizio && r.data_inizio > oggi) return false;
+      return true;
+    });
+    if(!regoleAttive.length) return;
+    text += `\n[${cat.icona||''} ${cat.nome}]\n`;
+    regoleAttive.forEach(r => {
+      let line = `- ${r.testo}`;
+      if(r.soggetti?.length) line += ` (Soggetti: ${r.soggetti.map(getName_).join(', ')})`;
+      if(r.riferimenti?.length) line += ` (Con: ${r.riferimenti.map(getName_).join(', ')})`;
+      if(!r.permanente && (r.data_inizio || r.data_fine)) line += ` (${r.data_inizio?'Dal '+r.data_inizio:''}${r.data_fine?' Al '+r.data_fine:''})`;
+      line += r.tipo_regola === 'vincolo' ? ' [VINCOLO]' : r.tipo_regola === 'preferenza' ? ' [PREFERENZA]' : ' [NOTA]';
+      if(r.priorita === 'alta') line += ' ⚠️ALTA';
+      text += line + '\n';
+    });
+  });
+  return text;
+}
+
+
+// ============ PIANO MENSILE ============
+let MONTH_DATE = new Date();
+MONTH_DATE.setDate(1);
+let MONTH_DRAGGING = null;
+
+function initMonthPlan(){
+  const sel = $('monthFiltroTec');
+  if(sel && sel.options.length <= 1){
+    (DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Ruolo!=='admin').forEach(u=>{
+      const o=document.createElement('option'); o.value=u.ID; o.textContent=(u.Nome||'')+' '+(u.Cognome||''); sel.appendChild(o);
+    });
+  }
+  renderMonthPlan();
+}
+
+function monthNav(dir){ MONTH_DATE.setMonth(MONTH_DATE.getMonth()+dir); renderMonthPlan(); }
+
+function renderMonthPlan(){
+  const grid = $('monthGrid');
+  if(!grid) return;
+  const y=MONTH_DATE.getFullYear(), m=MONTH_DATE.getMonth();
+  const mNames=['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+  const dNames=['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+  const titleEl=$('monthTitle');
+  if(titleEl) titleEl.textContent=mNames[m]+' '+y;
+
+  const filtTec = $('monthFiltroTec')?.value || '';
+  const showRep = $('monthShowRep')?.checked !== false;
+  const showFerie = $('monthShowFerie')?.checked !== false;
+  const compact = $('monthCompact')?.checked;
+
+  // Calcola giorni del mese (Lun-Sab, no Dom)
+  const daysInMonth = new Date(y, m+1, 0).getDate();
+  const days = [];
+  for(let d=1; d<=daysInMonth; d++){
+    const dt = new Date(y, m, d);
+    if(dt.getDay() !== 0) days.push({ num: d, dow: dt.getDay(), ds: dt.toISOString().split('T')[0], dayName: dNames[dt.getDay()] });
+  }
+
+  // Tecnici
+  let tecnici = (DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Ruolo!=='admin');
+  if(filtTec) tecnici = tecnici.filter(t=>t.ID===filtTec);
+  tecnici.sort((a,b)=>(a.Ruolo==='caposquadra'?0:a.Ruolo?.includes('senior')?1:2)-(b.Ruolo==='caposquadra'?0:b.Ruolo?.includes('senior')?1:2));
+
+  // Piano items
+  const piano = (DATA.piano||[]).filter(p=>!p.Obsoleto&&p.Data&&p.Data.startsWith(y+'-'+String(m+1).padStart(2,'0')));
+
+  // Reperibilita
+  const reps = showRep ? (DATA.reperibilita||[]).filter(r=>!r.Obsoleto) : [];
+
+  // Vincoli ferie (from vincoli_categories)
+  const ferieCat = (VINCOLI_CAT.categories||[]).find(c=>c.attiva!==false&&(c.nome||'').toLowerCase().includes('ferie'));
+  const ferieRules = ferieCat ? (ferieCat.regole||[]).filter(r=>r.data_inizio&&r.data_fine) : [];
+
+  // Stato colori
+  const statoCol={'pianificato':'#6366F1','in_corso':'#2563EB','completato':'#10B981','annullato':'#EF4444','da_rivedere':'#F59E0B'};
+
+  // Settimana ISO
+  const getWeekNum = (ds) => { const d=new Date(ds); d.setDate(d.getDate()+4-(d.getDay()||7)); return Math.ceil((((d-new Date(d.getFullYear(),0,1))/86400000)+1)/7); };
+
+  // Render griglia
+  let html = '<table class="month-grid"><thead><tr><th style="width:90px;position:sticky;left:0;z-index:3">Tecnico</th>';
+  let lastWeek = 0;
+  days.forEach(d => {
+    const week = getWeekNum(d.ds);
+    const isToday = d.ds === today();
+    const isSat = d.dow === 6;
+    html += `<th class="${isToday?'today':''}" style="${isSat?'border-right:2px solid #6366F1':''}" title="${d.dayName} ${d.num}/${m+1}/${y}">${d.dayName.charAt(0)}${d.num}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  // Separatori settimana
+  tecnici.forEach((tec, ti) => {
+    const tecName = (tec.Nome||'')+' '+(tec.Cognome||'').charAt(0)+'.';
+    const ruoloBadge = tec.Ruolo==='caposquadra'?'👑':tec.Ruolo?.includes('senior')?'⭐':'';
+    html += `<tr><td class="month-tec-label" title="${tec.Nome} ${tec.Cognome} — ${tec.Ruolo||''}">${ruoloBadge}${tecName}</td>`;
+
+    days.forEach(d => {
+      const isSat = d.dow === 6;
+      const dayItems = piano.filter(p=>p.Data===d.ds&&(p.TecnicoID===tec.ID||(p.TecniciIDs||'').includes(tec.ID)));
+
+      // Check ferie
+      const isFerie = showFerie && ferieRules.some(r=>r.soggetti?.includes(tec.ID)&&r.data_inizio<=d.ds&&r.data_fine>=d.ds);
+
+      // Check reperibilita
+      const rep = reps.find(r=>r.TecnicoID===tec.ID&&r.DataInizio<=d.ds&&r.DataFine>=d.ds);
+
+      let cellClass = isSat ? 'weekend' : isFerie ? 'ferie' : '';
+      html += `<td class="${cellClass}" style="${isSat?'border-right:2px solid #6366F1':''}" ondragover="event.preventDefault()" ondrop="onMonthDrop(event,'${tec.ID}','${d.ds}')">`;
+
+      // Rep badge
+      if(rep) html += `<div class="month-cell-rep" title="Reperibilita: ${rep.Turno||'24h'}">${rep.Turno==='notturno'?'🌙':'📞'}${(rep.Tipo||'').substring(0,3)}</div>`;
+
+      // Ferie marker
+      if(isFerie) html += `<div style="font-size:.55rem;color:#92400E;text-align:center">🏖️</div>`;
+
+      // Interventi
+      dayItems.forEach(p => {
+        const isPreview = p._aiPreview || (p.Origine||'')=='ai_preview';
+        const col = isPreview ? '#8B5CF6' : (statoCol[p.Stato] || '#6B7280');
+        const clienteName = isPreview ? (p.Note||p.ClienteID||'AI') : getName(DATA.clienti||[], p.ClienteID);
+        const tipoIco = isPreview ? '🤖' : (p.TipoIntervento||p.TipoInterventoID||'').includes('install')?'🏗️':(p.TipoIntervento||p.TipoInterventoID||'').includes('tagliando')?'🔧':(p.TipoIntervento||'').includes('urgenza')?'🚨':'📋';
+        const label = compact ? (clienteName||'').substring(0,8) : `${p.OraInizio||''} ${(clienteName||'').substring(0,12)}`;
+        const previewStyle = isPreview ? 'border-style:dashed;opacity:.85;' : '';
+        html += `<div class="month-cell-item" draggable="${!isPreview}" ${!isPreview?`ondragstart="onMonthDragStart(event,'piano','${p.ID}')" onclick="showDetail('piano','${p.ID}')"`:''}style="background:${col}15;border-left-color:${col};color:${col};${previewStyle}" title="${clienteName||''} — ${p.Note||''}${isPreview?' [Anteprima AI]':''}">${tipoIco} ${label}</div>`;
+      });
+
+      html += '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+
+  // Legenda
+  html += '<div style="margin-top:10px;padding:10px 14px;background:#F8FAFC;border-radius:6px;border:1px solid #E2E8F0;display:flex;gap:14px;flex-wrap:wrap;font-size:.7rem">';
+  Object.entries(statoCol).forEach(([k,v]) => { html += `<span><span style="display:inline-block;width:10px;height:10px;background:${v};border-radius:2px;vertical-align:middle"></span> ${k.replace('_',' ')}</span>`; });
+  const hasPreview = piano.some(p=>p._aiPreview);
+  html += ' · <span>📞 Reperibilita</span> · <span>🏖️ Ferie</span>';
+  if(hasPreview) html += ' · <span style="border-left:2px dashed #8B5CF6;padding-left:4px">🤖 Anteprima AI</span> · <button class="btn btn-xs" style="background:#EF4444;color:white;font-size:.65rem" onclick="clearAIPreview()">✕ Rimuovi Anteprima</button>';
+  html += ' · <span>Drag & drop per spostare</span></div>';
+
+  grid.innerHTML = html;
+}
+
+function onMonthDragStart(e, type, id){ MONTH_DRAGGING = {type, id}; e.dataTransfer.setData('text/plain', id); }
+
+async function onMonthDrop(e, tecnicoId, data){
+  e.preventDefault();
+  if(!MONTH_DRAGGING) return;
+  const {type, id} = MONTH_DRAGGING;
+  MONTH_DRAGGING = null;
+  try {
+    if(type==='piano') await apiCall('updatePiano',{id,data:{TecnicoID:tecnicoId,Data:data}},'POST');
+    toast('Intervento spostato','ok');
+    await refreshData(true);
+    renderMonthPlan();
+  } catch(e){ toast(e.message,'err'); }
+}
+
+function showMonthWeek(weekStart){
+  const detail = $('monthWeekDetail');
+  if(!detail) return;
+  const y=MONTH_DATE.getFullYear(), m=MONTH_DATE.getMonth();
+  const weekDays = [];
+  for(let i=0;i<6;i++){
+    const d=new Date(weekStart); d.setDate(d.getDate()+i);
+    if(d.getMonth()===m && d.getDay()!==0) weekDays.push(d.toISOString().split('T')[0]);
+  }
+  const piano = (DATA.piano||[]).filter(p=>!p.Obsoleto&&weekDays.includes(p.Data));
+  let html = `<h4 style="margin-bottom:8px">Settimana dal ${weekDays[0]||''}</h4>`;
+  if(!piano.length){ html += '<p style="color:var(--gray)">Nessun intervento in questa settimana.</p>'; }
+  else {
+    weekDays.forEach(ds => {
+      const items = piano.filter(p=>p.Data===ds);
+      if(!items.length) return;
+      const dObj = new Date(ds);
+      const dayName = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][dObj.getDay()];
+      html += `<div style="font-weight:600;margin:8px 0 4px;font-size:.8125rem">${dayName} ${dObj.getDate()}/${dObj.getMonth()+1}</div>`;
+      items.sort((a,b)=>(a.OraInizio||'').localeCompare(b.OraInizio||''));
+      items.forEach(p => {
+        const tec = getName(DATA.utenti||[], p.TecnicoID);
+        const cli = getName(DATA.clienti||[], p.ClienteID);
+        html += `<div style="padding:4px 8px;border-left:3px solid #6366F1;margin-bottom:3px;background:#F8FAFC;border-radius:0 4px 4px 0;font-size:.8125rem;cursor:pointer" onclick="showDetail('piano','${p.ID}')">
+          <strong>${p.OraInizio||'—'}</strong> ${tec} → ${cli} <span style="color:var(--gray)">(${p.Stato||''})</span>
+        </div>`;
+      });
+    });
+  }
+  detail.innerHTML = html;
+}
+
+async function downloadMonthPlanXlsx(){
+  try {
+    if(!window.XLSX){
+      toast('Caricamento SheetJS...','info');
+      await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s)});
+    }
+    const y=MONTH_DATE.getFullYear(), m=MONTH_DATE.getMonth();
+    const mNames=['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+    const dNames=['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+    const piano = (DATA.piano||[]).filter(p=>!p.Obsoleto&&p.Data&&p.Data.startsWith(y+'-'+String(m+1).padStart(2,'0')));
+    piano.sort((a,b)=>(a.Data||'').localeCompare(b.Data||'')||(a.OraInizio||'').localeCompare(b.OraInizio||''));
+
+    const rows = [['','Programmazione mensile \u2013 '+mNames[m]+' '+y],['']];
+    let lastWeek='';
+    const daysInMonth = new Date(y, m+1, 0).getDate();
+    for(let d=1;d<=daysInMonth;d++){
+      const dt=new Date(y,m,d);
+      if(dt.getDay()===0) continue;
+      const ds=dt.toISOString().split('T')[0];
+      const weekNum=Math.ceil(d/7);
+      const weekLabel='SETTIMANA '+(Math.ceil((d+new Date(y,m,1).getDay()-1)/7));
+      if(weekLabel!==lastWeek){rows.push([weekLabel]);lastWeek=weekLabel;}
+      const dayLabel=dNames[dt.getDay()];
+      rows.push([dayLabel,ds,dNames[dt.getDay()].substring(0,3).toUpperCase()]);
+      rows.push(['furg.','tecnico','reper.','attivita','note']);
+      const dayItems=piano.filter(p=>p.Data===ds);
+      const tecnici=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Ruolo!=='admin');
+      tecnici.forEach(tec=>{
+        const items=dayItems.filter(p=>p.TecnicoID===tec.ID);
+        const rep=(DATA.reperibilita||[]).find(r=>!r.Obsoleto&&r.TecnicoID===tec.ID&&r.DataInizio<=ds&&r.DataFine>=ds);
+        const furgone=tec.AutomezzoID||'';
+        const repLabel=rep?rep.Turno||rep.Tipo||'REP':'';
+        const attivita=items.map(p=>getName(DATA.clienti||[],p.ClienteID)).join(', ')||'';
+        const note=items.map(p=>p.Note||'').filter(Boolean).join('; ')||'';
+        if(items.length||rep) rows.push([furgone,`${tec.Nome||''} ${(tec.Cognome||'').charAt(0)}.`,repLabel,attivita,note]);
+      });
+      rows.push(['']);
+    }
+    const wb=XLSX.utils.book_new();
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=[{wch:12},{wch:18},{wch:14},{wch:30},{wch:25}];
+    XLSX.utils.book_append_sheet(wb,ws,mNames[m]+' '+y);
+    XLSX.writeFile(wb,'Piano_'+mNames[m]+'_'+y+'.xlsx');
+    toast('Excel esportato!','ok');
+  } catch(e){ toast('Errore export: '+e.message,'err'); }
+}
 
 
 // ============ PLANNER VISUALE ============

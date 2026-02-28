@@ -398,6 +398,7 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <div class="menu-item" onclick="goPage('mappa')"><span class="ico">🗺️</span><span class="lbl">Mappa Giro</span></div>
 <div class="menu-item" onclick="goPage('calendario')"><span class="ico">📅</span><span class="lbl">Calendario</span></div>
 <div class="menu-item" onclick="goPage('kpi')"><span class="ico">📊</span><span class="lbl">Le mie KPI</span></div>
+<div class="menu-item" onclick="goPage('catalogomob')"><span class="ico">🔍</span><span class="lbl">Catalogo Parti</span></div>
 <div class="menu-item" onclick="goPage('profilo')"><span class="ico">👤</span><span class="lbl">Profilo</span></div>
 </div>
 </div>
@@ -531,6 +532,20 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 </div>
 </div>
 <div style="padding:16px"><button class="btn btn-outline btn-block" onclick="logout()">🚪 Esci</button></div>
+</div>
+
+<!-- PAGE: CATALOGO PARTI MOBILE -->
+<div class="page" id="pgCatalogomob">
+<div class="card"><div class="card-head"><h3>🔍 Catalogo Ricambi</h3></div>
+<div class="card-body">
+<div class="field" style="margin-bottom:8px"><input type="text" id="catMobSearch" placeholder="🔍 Codice, nome o descrizione..." style="width:100%;padding:10px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius);font-size:.85rem" onkeyup="if(event.key==='Enter')searchCatalogMob()"></div>
+<div style="display:flex;gap:8px;margin-bottom:12px">
+<select id="catMobModello" style="flex:1;padding:8px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem">
+<option value="">Tutti modelli</option><option value="ASTRONAUT">Astronaut</option><option value="VECTOR">Vector</option><option value="JUNO">Juno</option><option value="DISCOVERY">Discovery</option></select>
+<button class="btn btn-primary btn-sm" onclick="searchCatalogMob()">🔍</button>
+</div>
+<div id="catMobResults"></div>
+</div></div>
 </div>
 
 <!-- PAGE: LE MIE KPI -->
@@ -2550,6 +2565,35 @@ async function togglePush(){
 }
 
 // ============ KPI DASHBOARD TECNICO ============
+// ============ CATALOGO PARTI MOBILE ============
+async function searchCatalogMob(){
+  const search=$('catMobSearch')?.value?.trim()||'';
+  const modello=$('catMobModello')?.value||'';
+  if(!search&&!modello){toast('Inserisci un termine di ricerca');return}
+  const el=$('catMobResults');
+  el.innerHTML='<div style="text-align:center;padding:20px;color:var(--gray)">🔍 Cercando...</div>';
+  try{
+    const r=await apiCall('searchParts',{search:search||undefined,modello:modello||undefined,limit:15,userId:USER?.ID},'POST');
+    const items=Array.isArray(r)?r:[];
+    if(!items.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--gray)">Nessun risultato</div>';return}
+    let html='';
+    items.forEach(p=>{
+      html+=`<div style="padding:12px;border-bottom:1px solid var(--gray2)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <code style="background:#EEF2FF;color:#4338CA;padding:3px 8px;border-radius:6px;font-size:.75rem;font-weight:600">${p.Codice||'—'}</code>
+          <span style="font-size:.65rem;color:var(--gray);background:var(--gray1);padding:2px 6px;border-radius:8px">${p.ModelloMacchina||'—'}</span>
+        </div>
+        <div style="font-weight:500;margin-top:4px;font-size:.85rem">${p.Nome||'—'}</div>
+        ${p.Descrizione?'<div style="font-size:.75rem;color:var(--gray);margin-top:2px">'+p.Descrizione.substring(0,80)+'</div>':''}
+        ${p.Gruppo?'<span style="display:inline-block;margin-top:4px;padding:2px 8px;border-radius:10px;font-size:.65rem;background:#F0FDF4;color:#15803D">'+p.Gruppo+'</span>':''}
+      </div>`;
+    });
+    el.innerHTML=html;
+  }catch(e){
+    el.innerHTML='<div style="text-align:center;padding:20px;color:var(--err)">❌ '+e.message+'</div>';
+  }
+}
+
 function renderKpi(){
   if(!USER||!DATA) return;
   const days=parseInt($('kpiPeriodo')?.value||'7');
