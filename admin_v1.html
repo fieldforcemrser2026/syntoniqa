@@ -3041,9 +3041,17 @@ async function updateMap(){
   }
   // Risolvi coordinate clienti (da campo Lat/Lng, poi anagrafica, poi geocoding città)
   async function getClientCoords(cli){
+    // DATA.clienti usa Lat/Lng (non Latitudine/Longitudine)
+    if(cli.Lat&&cli.Lng)return[parseFloat(cli.Lat),parseFloat(cli.Lng)];
     if(cli.Latitudine&&cli.Longitudine)return[parseFloat(cli.Latitudine),parseFloat(cli.Longitudine)];
-    const anag=(ANAG_CLIENTI||[]).find(a=>a.CodiceM3===cli.ID||a.NomeInterno===cli.Nome);
+    // Match anagrafica: prima per CodiceM3, poi per nome
+    const anag=(ANAG_CLIENTI||[]).find(a=>
+      (cli.CodiceM3&&a.CodiceM3===cli.CodiceM3)||
+      a.NomeInterno===cli.Nome||
+      a.NomeAccount===cli.Nome
+    );
     if(anag){const c=await getAnagCoords(anag);if(c)return c}
+    // Fallback geocoding sulla città del cliente
     const citta=cli.Citta||cli.Indirizzo||'';
     if(citta){const coords=await geocodeCity(citta);if(coords)return coords}
     return null;
