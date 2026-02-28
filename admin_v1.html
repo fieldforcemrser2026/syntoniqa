@@ -3078,13 +3078,20 @@ async function updateMap(){
     return;
   }
 
-  // ──── MODALITÀ INTERVENTI PER GIORNO ────
+  // ──── MODALITÀ INTERVENTI PER GIORNO (o tutti se filtTec+tutti_clienti) ────
   let targetDate=today();
   if(filtGiorno==='domani'){const d=new Date();d.setDate(d.getDate()+1);targetDate=d.toISOString().split('T')[0]}
 
   let piano=(DATA.piano||[]).filter(p=>!p.Obsoleto);
-  if(filtGiorno!=='settimana')piano=piano.filter(p=>p.Data===targetDate);
-  else{const d=new Date();const end=new Date();end.setDate(end.getDate()+7);piano=piano.filter(p=>p.Data>=d.toISOString().split('T')[0]&&p.Data<=end.toISOString().split('T')[0])}
+  // "tutti_clienti" con tecnico selezionato → mostra TUTTI gli interventi del tecnico (no filtro data)
+  if(filtGiorno==='tutti_clienti'){
+    // nessun filtro data — mostra tutto
+  } else if(filtGiorno==='settimana'){
+    const d=new Date();const end=new Date();end.setDate(end.getDate()+7);
+    piano=piano.filter(p=>p.Data>=d.toISOString().split('T')[0]&&p.Data<=end.toISOString().split('T')[0])
+  } else {
+    piano=piano.filter(p=>p.Data===targetDate);
+  }
   if(filtTec)piano=piano.filter(p=>p.TecnicoID===filtTec||(p.TecniciIDs||'').includes(filtTec));
 
   const clientiIds=[...new Set(piano.map(p=>p.ClienteID))];
