@@ -3047,17 +3047,22 @@ function fillMapTecSelect(){fillMapTecPanel();}
 
 // Routing su strade reali via OSRM (open source, gratuito)
 // Usa endpoint /trip per ottimizzare l'ordine di visita (TSP)
+const _osrmCache={}; // cache OSRM per-waypoint fingerprint (evita ricalcoli su cambio filtro)
 async function fetchOSRMRoute(waypoints){
   if(!waypoints||waypoints.length<2)return null;
-  // OSRM vuole lng,lat
+  // Cache key: fingerprint delle coordinate (4 decimali = ~10m precision)
+  const cacheKey=waypoints.map(w=>w.lat.toFixed(4)+','+w.lng.toFixed(4)).join('|');
+  if(_osrmCache[cacheKey])return _osrmCache[cacheKey];
   const coords=waypoints.map(w=>`${w.lng},${w.lat}`).join(';');
   try{
     const url=`https://router.project-osrm.org/trip/v1/driving/${coords}?roundtrip=false&source=first&destination=last&overview=full&geometries=geojson`;
-    const r=await fetch(url,{signal:AbortSignal.timeout(8000)});
+    const r=await fetch(url,{signal:AbortSignal.timeout(12000)});
     if(!r.ok)return null;
     const json=await r.json();
     if(json.code==='Ok'&&json.trips?.[0]){
-      return {geometry:json.trips[0].geometry,distance:json.trips[0].distance,duration:json.trips[0].duration};
+      const res={geometry:json.trips[0].geometry,distance:json.trips[0].distance,duration:json.trips[0].duration};
+      _osrmCache[cacheKey]=res; // salva in cache
+      return res;
     }
   }catch(e){console.warn('[OSRM]',e.message)}
   return null;
@@ -3080,6 +3085,7 @@ async function updateMap(){
   const stale=()=>_myId!==_mapUpdateId;
   MARKERS.forEach(m=>MAP.removeLayer(m));MARKERS=[];
   MAP_WAYPOINTS=[]; // reset rich waypoints per slider
+  MAP._ffTecRoutes=[]; // reset per-tech routes per animazione multi-furgone
   stopTruckAnimation();
   MAP._ffRouteCoords=[];
   _setGiroBtn(false);
@@ -3104,7 +3110,7 @@ async function updateMap(){
     return null;
   }
 
-  // ── build OSRM route, salva in MAP._ffRouteCoords, ritorna {km,min} ──
+  // ── build OSRM route, salva in MAP._ffRouteCoords, ritorna {km,min,routeCoords} ──
   async function _buildRoute(pts,color,label){
     if(pts.length<2)return null;
     const osrm=await fetchOSRMRoute(pts.map(p=>({lat:p[0],lng:p[1]})));
@@ -3117,83 +3123,101 @@ async function updateMap(){
       const linea=L.polyline(rc,{color,weight:5,opacity:.9}).addTo(MAP);
       linea.bindPopup(`<span style="border-left:3px solid ${color};padding-left:8px"><b>${label}</b><br>📍 ${pts.length} tappe · 🛣️ <b>${km} km</b> · ⏱️ ~<b>${min} min</b></span>`);
       MARKERS.push(linea);
-      return{km,min,pts:pts.length};
+      linea.redraw(); // forza Leaflet a ridisegnare subito senza aspettare zoom/pan
+      return{km,min,pts:pts.length,routeCoords:rc};
     }else{
       MAP._ffRouteCoords=[...(MAP._ffRouteCoords||[]),...pts];
       const linea=L.polyline(pts,{color,weight:3,opacity:.6,dashArray:'6,6'}).addTo(MAP);
       MARKERS.push(linea);
-      return{km:null,min:null,pts:pts.length};
+      linea.redraw();
+      return{km:null,min:null,pts:pts.length,routeCoords:pts};
     }
   }
 
   // ─────────────────────────────────────────────────────────────
-  // MODALITÀ 1: "Tutti i clienti" — pin di tutti i clienti
-  //   + per ogni tecnico selezionato, sovrappone il suo percorso
+  // MODALITÀ 1: "Tutti i clienti"
+  //   A) Nessun tecnico: mostra solo clienti già geocodificati (veloce)
+  //   B) Tecnici selezionati: SOLO i loro pin numerati + percorsi (niente sfondo grigio)
   // ─────────────────────────────────────────────────────────────
   if(filtGiorno==='tutti_clienti'){
     const hasTecFlt=filtTecArr.length>0;
-    let placed=0;
-    for(const anag of ANAG_CLIENTI||[]){
-      if(stale())return;
-      const coords=await getAnagCoords(anag);if(!coords)continue;
-      const[lat,lng]=coords;
-      const nome=anag.NomeAccount||anag.NomeInterno||anag.CodiceM3;
-      const nMac=(anag._assetCounts||{})._total||0;
-      const bg=hasTecFlt?'#9CA3AF':'#C30A14';
-      const sz=hasTecFlt?18:22;
-      const icon=L.divIcon({className:'',html:`<div style="background:${bg};color:white;width:${sz}px;height:${sz}px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.25)">${nMac||'·'}</div>`,iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]});
-      const m=L.marker([lat,lng],{icon}).addTo(MAP);
-      m.bindPopup(`<strong>${nome}</strong><br>${anag.CittaFatturazione||''}<br>Macchine: ${nMac}`);
-      MARKERS.push(m);placed++;
-    }
-    if(stale())return;
 
-    const legendaParts=[];
-    if(hasTecFlt){
-      // Percorso per ogni tecnico selezionato con colore dedicato
-      for(const tid of filtTecArr){
+    if(!hasTecFlt){
+      // ── A: panoramica clienti (solo pre-geocodificati, nessuna API = istantaneo) ──
+      let placed=0;
+      for(const anag of ANAG_CLIENTI||[]){
+        if(!anag.Lat||!anag.Lng)continue; // salta quelli senza coordinate
         if(stale())return;
-        const tecColor=getTecColor(tid);
-        const tecNome=getName(DATA.utenti||[],tid);
-        let techPiano=(DATA.piano||[]).filter(p=>!p.Obsoleto&&(p.TecnicoID===tid||(p.TecniciIDs||'').includes(tid)));
-        techPiano.sort((a,b)=>((a.Data||'')+(a.OraInizio||'')).localeCompare((b.Data||'')+(b.OraInizio||'')));
-        const techPts=[];
-        for(let i=0;i<techPiano.length;i++){
-          if(stale())return;
-          const p=techPiano[i];
-          const cli=(DATA.clienti||[]).find(c=>c.ID===p.ClienteID);if(!cli)continue;
-          const coords=await getClientCoords(cli);if(stale())return;if(!coords)continue;
-          const[lat,lng]=coords;
-          techPts.push([lat,lng]);
-          const tipo=getName(DATA.tipiIntervento||[],p.TipoInterventoID)||'';
-          const note=p.Note||p.Descrizione||'';
-          const anagC=(ANAG_CLIENTI||[]).find(a=>(cli.CodiceM3&&a.CodiceM3===cli.CodiceM3)||a.NomeInterno===cli.Nome);
-          MAP_WAYPOINTS.push({lat,lng,name:cli.Nome||cli.ID,data:p.Data,ora:p.OraInizio||'',tipo,tecnico:tecNome,note,color:tecColor,stepNum:i+1,tecId:tid});
-          const icon2=L.divIcon({className:'',html:`<div style="background:${tecColor};color:white;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.35);border:2px solid white">${i+1}</div>`,iconSize:[26,26],iconAnchor:[13,13]});
-          const m2=L.marker([lat,lng],{icon:icon2,zIndexOffset:500}).addTo(MAP);
-          m2.bindPopup(`<span style="border-left:3px solid ${tecColor};padding-left:8px"><strong>${i+1}. ${cli.Nome||cli.ID}</strong><br>${anagC?.CittaFatturazione||cli.Citta||''}<br>📅 ${fmtDate(p.Data)} ${p.OraInizio||''}<br>🔧 ${tipo}<br>👤 ${tecNome}${note?'<br>💬 <em>'+note+'</em>':''}</span>`);
-          MARKERS.push(m2);
-        }
-        if(stale())return;
-        let infoExtra='';
-        if(techPts.length>1&&showRoute){
-          const r=await _buildRoute(techPts,tecColor,tecNome);
-          if(stale())return;
-          if(r?.km)infoExtra=` · 🛣️ <b>${r.km}km</b> ~<b>${r.min}min</b>`;
-        }
-        if(techPts.length>0)
-          legendaParts.push(`<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:${tecColor}22;border:1px solid ${tecColor};border-radius:12px"><span style="width:10px;height:10px;border-radius:50%;background:${tecColor};display:inline-block"></span>👤 ${tecNome} — ${techPiano.length} int.${infoExtra}</span>`);
+        const[lat,lng]=[parseFloat(anag.Lat),parseFloat(anag.Lng)];
+        const nome=anag.NomeAccount||anag.NomeInterno||anag.CodiceM3;
+        const nMac=(anag._assetCounts||{})._total||0;
+        const icon=L.divIcon({className:'',html:`<div style="background:#C30A14;color:white;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.25)">${nMac||'·'}</div>`,iconSize:[22,22],iconAnchor:[11,11]});
+        const m=L.marker([lat,lng],{icon}).addTo(MAP);
+        m.bindPopup(`<strong>${nome}</strong><br>${anag.CittaFatturazione||''}<br>Macchine: ${nMac}`);
+        MARKERS.push(m);placed++;
       }
-      if(MAP_WAYPOINTS.length>0){MAP._ffWaypoints=MAP_WAYPOINTS;_setGiroBtn((MAP._ffRouteCoords||[]).length>1)}
+      if(stale())return;
+      $('mapLegenda').innerHTML='';_updateMapSlider([]);_setGiroBtn(false);
+      const allPts=MARKERS.filter(m=>m.getLatLng).map(m=>[m.getLatLng().lat,m.getLatLng().lng]);
+      if(allPts.length>1)MAP.fitBounds(allPts,{padding:[40,40]});
+      else if(allPts.length===1)MAP.setView(allPts[0],12);
+      $('mapInfo').innerHTML=`🏠 ${placed} clienti geocodificati · seleziona un tecnico per vedere i percorsi`;
+      return;
+    }
+
+    // ── B: tecnici selezionati → SOLO i loro pin + percorsi (zero pin grigi) ──
+    const legendaParts=[];
+    for(const tid of filtTecArr){
+      if(stale())return;
+      const tecColor=getTecColor(tid);
+      const tecNome=getName(DATA.utenti||[],tid);
+      let techPiano=(DATA.piano||[]).filter(p=>!p.Obsoleto&&(p.TecnicoID===tid||(p.TecniciIDs||'').includes(tid)));
+      techPiano.sort((a,b)=>((a.Data||'')+(a.OraInizio||'')).localeCompare((b.Data||'')+(b.OraInizio||'')));
+      const techPts=[];const techWp=[];
+      for(let i=0;i<techPiano.length;i++){
+        if(stale())return;
+        const p=techPiano[i];
+        const cli=(DATA.clienti||[]).find(c=>c.ID===p.ClienteID);if(!cli)continue;
+        const coords=await getClientCoords(cli);if(stale())return;if(!coords)continue;
+        const[lat,lng]=coords;
+        techPts.push([lat,lng]);
+        const tipo=getName(DATA.tipiIntervento||[],p.TipoInterventoID)||'';
+        const note=p.Note||p.Descrizione||'';
+        const anagC=(ANAG_CLIENTI||[]).find(a=>(cli.CodiceM3&&a.CodiceM3===cli.CodiceM3)||a.NomeInterno===cli.Nome);
+        const wp={lat,lng,name:cli.Nome||cli.ID,data:p.Data,ora:p.OraInizio||'',tipo,tecnico:tecNome,note,color:tecColor,stepNum:i+1,tecId:tid};
+        MAP_WAYPOINTS.push(wp);techWp.push(wp);
+        const icon2=L.divIcon({className:'',html:`<div style="background:${tecColor};color:white;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.35);border:2px solid white">${i+1}</div>`,iconSize:[26,26],iconAnchor:[13,13]});
+        const m2=L.marker([lat,lng],{icon:icon2,zIndexOffset:500}).addTo(MAP);
+        m2.bindPopup(`<span style="border-left:3px solid ${tecColor};padding-left:8px"><strong>${i+1}. ${cli.Nome||cli.ID}</strong><br>${anagC?.CittaFatturazione||cli.Citta||''}<br>📅 ${fmtDate(p.Data)} ${p.OraInizio||''}<br>🔧 ${tipo}<br>👤 ${tecNome}${note?'<br>💬 <em>'+note+'</em>':''}</span>`);
+        MARKERS.push(m2);
+      }
+      if(stale())return;
+      let infoExtra='';
+      if(techPts.length>1&&showRoute){
+        const r=await _buildRoute(techPts,tecColor,tecNome);
+        if(stale())return;
+        if(r){
+          if(r.km)infoExtra=` · 🛣️ <b>${r.km}km</b> ~<b>${r.min}min</b>`;
+          MAP._ffTecRoutes.push({tecId:tid,tecNome,color:tecColor,coords:r.routeCoords,waypoints:techWp});
+        }
+      }else if(techPts.length>0){
+        MAP._ffTecRoutes.push({tecId:tid,tecNome,color:tecColor,coords:techPts,waypoints:techWp});
+      }
+      if(techPts.length>0)
+        legendaParts.push(`<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:${tecColor}22;border:1px solid ${tecColor};border-radius:12px"><span style="width:10px;height:10px;border-radius:50%;background:${tecColor};display:inline-block"></span>👤 ${tecNome} — ${techPiano.length} int.${infoExtra}</span>`);
+      else
+        legendaParts.push(`<span style="padding:4px 10px;background:#FEE2E2;border:1px solid #EF4444;border-radius:12px;font-size:.8rem">⚠️ ${tecNome} — nessun intervento nel piano</span>`);
     }
     if(stale())return;
+    MAP._ffWaypoints=MAP_WAYPOINTS;
+    _setGiroBtn(MAP._ffTecRoutes.some(r=>r.coords.length>1));
     $('mapLegenda').innerHTML=legendaParts.join('');
     _updateMapSlider(MAP_WAYPOINTS);
     const allPts=MARKERS.filter(m=>m.getLatLng).map(m=>[m.getLatLng().lat,m.getLatLng().lng]);
     if(allPts.length>1)MAP.fitBounds(allPts,{padding:[40,40]});
     else if(allPts.length===1)MAP.setView(allPts[0],12);
-    const tecNomiSel=filtTecArr.length>0?filtTecArr.map(t=>getName(DATA.utenti||[],t).split(' ')[0]).join(', '):'';
-    $('mapInfo').innerHTML=`🏠 ${placed} clienti su mappa${tecNomiSel?' · 🚐 '+tecNomiSel:''}`;
+    const tecNomiSel=filtTecArr.map(t=>getName(DATA.utenti||[],t).split(' ')[0]).join(', ');
+    $('mapInfo').innerHTML=`🚐 ${tecNomiSel} — ${MAP_WAYPOINTS.length} interventi totali`;
     return;
   }
 
@@ -3238,10 +3262,16 @@ async function updateMap(){
       m.bindPopup(`<span style="border-left:3px solid ${color};padding-left:8px"><strong>${i+1}. ${cli.Nome||cli.ID}</strong><br>${anagC?.CittaFatturazione||cli.Citta||''}<br>📅 ${fmtDate(p.Data)} ${p.OraInizio||''}<br>🔧 ${tipo}<br>👤 ${tecNome}${note?'<br>💬 <em>'+note+'</em>':''}</span>`);
       MARKERS.push(m);
     }
+    const tecWpForRoute=MAP_WAYPOINTS.filter(w=>w.tecId===tid);
     if(showRoute&&pts.length>1){
       const r=await _buildRoute(pts,color,tecNome);
       if(stale())return;
-      if(r)routeSummary.push(`${tecNome.split(' ')[0]}: ${r.km??'?'}km ~${r.min??'?'}min`);
+      if(r){
+        routeSummary.push(`${tecNome.split(' ')[0]}: ${r.km??'?'}km ~${r.min??'?'}min`);
+        MAP._ffTecRoutes.push({tecId:tid,tecNome,color,coords:r.routeCoords,waypoints:tecWpForRoute});
+      }
+    }else if(pts.length>0){
+      MAP._ffTecRoutes.push({tecId:tid,tecNome,color,coords:pts,waypoints:tecWpForRoute});
     }
   }
 
@@ -3349,66 +3379,76 @@ function mapSliderMove(idx){
   if(MAP)MAP.setView([wp.lat,wp.lng],14,{animate:true,duration:0.4});
 }
 
-// ──── ANIMAZIONE GIRO VISITA ────
-let TRUCK_MARKER=null,TRUCK_ANIM=null;
+// ──── ANIMAZIONE GIRO VISITA (multi-furgone: uno per tecnico) ────
+let TRUCK_MARKERS={},TRUCK_ANIMS={};
 
 function _setGiroBtn(hasRoute){
-  const btn=$('btnGiroVisita');if(!btn||TRUCK_ANIM)return;
+  const btn=$('btnGiroVisita');if(!btn)return;
+  if(Object.keys(TRUCK_ANIMS).length>0)return; // animazione in corso: non modificare
   btn.style.opacity=hasRoute?'1':'0.5';
-  btn.title=hasRoute
-    ?'Avvia animazione furgone lungo il percorso'
-    :'Nessun percorso disponibile — seleziona un tecnico con interventi nel periodo scelto';
+  btn.title=hasRoute?'Avvia animazione furgone lungo il percorso':'Nessun percorso — seleziona un tecnico con interventi';
 }
 
 function stopTruckAnimation(){
-  if(TRUCK_ANIM){clearInterval(TRUCK_ANIM);TRUCK_ANIM=null}
-  if(TRUCK_MARKER&&MAP){try{MAP.removeLayer(TRUCK_MARKER)}catch(e){}TRUCK_MARKER=null}
+  Object.keys(TRUCK_ANIMS).forEach(k=>{clearInterval(TRUCK_ANIMS[k])});TRUCK_ANIMS={};
+  Object.keys(TRUCK_MARKERS).forEach(k=>{try{MAP&&MAP.removeLayer(TRUCK_MARKERS[k])}catch(e){}});TRUCK_MARKERS={};
   const btn=$('btnGiroVisita');
   if(btn){btn.innerHTML='🚐 Avvia Giro';btn.style.background='#F59E0B';btn.onclick=startGiroVisita}
 }
 
 function startGiroVisita(){
   if(!MAP){toast('Apri prima la sezione Mappa','warn');return}
-  const routeCoords=MAP._ffRouteCoords||[];
-  const wp=MAP._ffWaypoints||[];
-  const pts=routeCoords.length>1 ? routeCoords : wp.length>1 ? wp.map(w=>[w.lat,w.lng]) : [];
-  if(pts.length<2){
-    const _sel=_getSelectedTecnici();
-    const _fg=$('mapFiltroGiorno')?.value||'tutti_clienti';
-    const _pl={oggi:'oggi',domani:'domani',settimana:'questa settimana',tutti_clienti:'(tutti i periodi)'}[_fg]||_fg;
-    if(_sel.length===0)toast('Seleziona prima almeno un tecnico dal filtro 👥','warn');
-    else if(_fg==='tutti_clienti')toast(`I tecnici selezionati non hanno interventi nel database 📋`,'warn');
-    else toast(`Nessun percorso ${_pl} — prova 📆 Settimana o 🏠 Tutti i clienti`, 'warn');
-    return;
-  }
+  const routes=(MAP._ffTecRoutes||[]).filter(r=>r.coords&&r.coords.length>1);
+  if(!routes.length){toast('Seleziona prima un tecnico con interventi nel periodo scelto','warn');return}
   stopTruckAnimation();
-  const truckIcon=L.divIcon({className:'',
-    html:'<div style="font-size:1.5rem;filter:drop-shadow(0 2px 5px rgba(0,0,0,.5));transform:translate(-50%,-50%)">🚐</div>',
-    iconSize:[30,30],iconAnchor:[15,15]});
-  TRUCK_MARKER=L.marker(pts[0],{icon:truckIcon,zIndexOffset:2000}).addTo(MAP);
-  MAP.setView(pts[0],12,{animate:true,duration:0.8});
-  let step=0;
-  const total=pts.length;
-  const msStep=Math.max(25,Math.round(30000/total));
-  const wpCount=MAP_WAYPOINTS.length||0;
   const btn=$('btnGiroVisita');
   if(btn){btn.innerHTML='⏹ Stop Giro';btn.style.background='#EF4444';btn.onclick=stopTruckAnimation}
-  TRUCK_ANIM=setInterval(()=>{
+  // Centra la mappa sulla prima tappa del primo tecnico
+  MAP.setView(routes[0].coords[0],12,{animate:true,duration:0.8});
+  // Lancia un furgone separato per ogni tecnico (simultaneamente)
+  routes.forEach(route=>_startSingleTruckAnim(route));
+  toast(`🚐 Giro avviato per ${routes.length} tecnico${routes.length>1?'i':''}`,'ok');
+}
+
+function _startSingleTruckAnim(route){
+  const{tecId,tecNome,color,coords:pts}=route;
+  const truckHtml=`<div style="position:relative;display:inline-block;font-size:1.4rem;filter:drop-shadow(0 2px 4px rgba(0,0,0,.4));transform:translate(-50%,-50%)">🚐<span style="position:absolute;top:-2px;right:-4px;width:9px;height:9px;border-radius:50%;background:${color};border:1.5px solid white;display:block"></span></div>`;
+  const truckIcon=L.divIcon({className:'',html:truckHtml,iconSize:[36,36],iconAnchor:[18,18]});
+  const marker=L.marker(pts[0],{icon:truckIcon,zIndexOffset:2000}).addTo(MAP);
+  TRUCK_MARKERS[tecId]=marker;
+  const total=pts.length;
+  const msStep=Math.max(25,Math.round(30000/total));
+  let step=0;
+  TRUCK_ANIMS[tecId]=setInterval(()=>{
     step++;
-    if(step>=total){stopTruckAnimation();toast('🏁 Giro visita completato!','ok');return;}
-    TRUCK_MARKER.setLatLng(pts[step]);
-    if(step%60===0)MAP.panTo(pts[step],{animate:true,duration:0.4,easeLinearity:0.3});
-    const pct=Math.round((step/total)*100);
-    $('mapInfo').innerHTML=`🚐 Giro in corso: <strong>${pct}%</strong> · step ${step}/${total}`;
-    // Aggiorna slider in sync con l'animazione
-    if(wpCount>0){
-      const sl=$('mapWpSlider');const cnt=$('mapSliderCount');
-      const wpIdx=Math.min(wpCount-1,Math.floor((step/total)*wpCount));
-      if(sl)sl.value=wpIdx;
-      if(cnt)cnt.textContent=`${wpIdx+1}/${wpCount}`;
+    if(step>=total){
+      clearInterval(TRUCK_ANIMS[tecId]);delete TRUCK_ANIMS[tecId];
+      try{MAP.removeLayer(TRUCK_MARKERS[tecId])}catch(e){}delete TRUCK_MARKERS[tecId];
+      if(Object.keys(TRUCK_ANIMS).length===0){
+        const btn=$('btnGiroVisita');
+        if(btn){btn.innerHTML='🚐 Avvia Giro';btn.style.background='#F59E0B';btn.onclick=startGiroVisita}
+        toast('🏁 Giro visita completato!','ok');
+      }
+      return;
     }
+    marker.setLatLng(pts[step]);
+    if(step%80===0)MAP.panTo(pts[step],{animate:true,duration:0.4,easeLinearity:0.3});
+    // Aggiorna slider per il tecnico principale (primo in lista)
+    const primaryTecId=(MAP._ffTecRoutes||[])[0]?.tecId;
+    if(tecId===primaryTecId&&MAP_WAYPOINTS.length>0){
+      const tecWpCount=MAP_WAYPOINTS.filter(w=>w.tecId===tecId).length||1;
+      const wpIdx=Math.min(MAP_WAYPOINTS.length-1,Math.floor((step/total)*tecWpCount));
+      const sl=$('mapWpSlider');const cnt=$('mapSliderCount');
+      if(sl)sl.value=wpIdx;if(cnt)cnt.textContent=`${wpIdx+1}/${MAP_WAYPOINTS.length}`;
+    }
+    // Info barra: percentuale per ogni furgone attivo
+    const pct=Math.round((step/total)*100);
+    const running=Object.entries(TRUCK_MARKERS).map(([id])=>{
+      const r=(MAP._ffTecRoutes||[]).find(x=>x.tecId===id);
+      return r?`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${r.color};vertical-align:middle;margin-right:3px"></span>${r.tecNome.split(' ')[0]}`:id;
+    }).join(' · ');
+    $('mapInfo').innerHTML=`🚐 Giro in corso: <b>${pct}%</b>${running?' · '+running:''}`;
   },msStep);
-  toast('🚐 Giro visita avviato!','ok');
 }
 
 // ============ KPI ============
