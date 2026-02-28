@@ -3047,11 +3047,15 @@ async function initMap(){
   await updateMap();
 }
 
+let _mapUpdateId=0; // anti-race: ogni chiamata ha un ID univoco
 async function updateMap(){
   if(!MAP)return;
+  const _myId=++_mapUpdateId; // se un'altra chiamata arriva, _mapUpdateId cambierà e questa si ferma
+  const stale=()=>_myId!==_mapUpdateId;
   MARKERS.forEach(m=>MAP.removeLayer(m));MARKERS=[];
   stopTruckAnimation(); // ferma animazione precedente se in corso
   MAP._ffRouteCoords=[];// reset coords animazione
+  _setGiroBtn(false); // disabilita Avvia Giro finché il percorso non è pronto
   const filtTec=$('mapFiltroTec')?.value||'';
   const filtGiorno=$('mapFiltroGiorno')?.value||'tutti_clienti';
   const showRoute=$('mapPercorso')?.checked||false;
@@ -3088,6 +3092,7 @@ async function updateMap(){
     const anagList=ANAG_CLIENTI||[];
     let placed=0,total=anagList.length;
     for(const anag of anagList){
+      if(stale())return; // un nuovo updateMap() è partito — abort
       const coords=await getAnagCoords(anag);
       if(!coords)continue;
       const [lat,lng]=coords;
@@ -3103,6 +3108,7 @@ async function updateMap(){
       waypoints.push({lat,lng,name:nome});
       placed++;
     }
+    if(stale())return;
     const allPts=MARKERS.filter(m=>m.getLatLng).map(m=>[m.getLatLng().lat,m.getLatLng().lng]);
     if(allPts.length>1)MAP.fitBounds(allPts,{padding:[40,40]});
     else if(allPts.length===1)MAP.setView(allPts[0],12);
@@ -3141,10 +3147,12 @@ async function updateMap(){
     const pts=[];
 
     for(let i=0;i<items.length;i++){
+      if(stale())return; // filtro cambiato — abort
       const p=items[i];
       const cli=(DATA.clienti||[]).find(c=>c.ID===p.ClienteID);
       if(!cli)continue;
       const coords=await getClientCoords(cli);
+      if(stale())return;
       if(!coords)continue;
       const [lat,lng]=coords;
       pts.push([lat,lng]);
@@ -3160,6 +3168,7 @@ async function updateMap(){
     if(showRoute&&pts.length>1){
       // Routing su strade reali con OSRM
       const osrmRoute=await fetchOSRMRoute(pts.map(p=>({lat:p[0],lng:p[1]})));
+      if(stale())return;
       if(osrmRoute&&osrmRoute.geometry){
         // GeoJSON coordinates sono [lng, lat] — inverti per Leaflet
         const routeCoords=osrmRoute.geometry.coordinates.map(c=>[c[1],c[0]]);
@@ -3181,10 +3190,10 @@ async function updateMap(){
     }
   }
 
+  if(stale())return;
   const allPts=MARKERS.filter(m=>m.getLatLng).map(m=>[m.getLatLng().lat,m.getLatLng().lng]);
   if(allPts.length>1)MAP.fitBounds(allPts,{padding:[40,40]});
   else if(allPts.length===1)MAP.setView(allPts[0],12);
-  else $('mapInfo').innerHTML='⚠️ Nessun intervento trovato. Prova "Tutti i clienti" o "Settimana".';
 
   // Legenda multi-tecnico
   const legendaEl=$('mapLegenda');
@@ -3198,8 +3207,21 @@ async function updateMap(){
     }).join('');
   }
   const routeText=routeSummary.length>0?' 🛣️ '+routeSummary.join(' | '):'';
-  $('mapInfo').innerHTML=`${piano.length} interventi · ${clientiIds.length} clienti · ${allPts.length} su mappa · ${Object.keys(tecGroup).length} tecnici${routeText}`;
+
+  if(allPts.length===0){
+    // Messaggio chiaro: perché non c'è nulla
+    const tecNome=filtTec?getName(DATA.utenti||[],filtTec):'';
+    const periodoLabel={oggi:'oggi',domani:'domani',settimana:'questa settimana',tutti_clienti:'in tutti i periodi'}[filtGiorno]||filtGiorno;
+    const suggerisci=filtGiorno==='oggi'||filtGiorno==='domani'?' — prova 📆 <strong>Settimana</strong> o 🏠 <strong>Tutti i clienti</strong>':'';
+    $('mapInfo').innerHTML=`⚠️ Nessun intervento trovato${tecNome?' per <strong>'+tecNome+'</strong>':''}${filtGiorno!=='tutti_clienti'?' <strong>'+periodoLabel+'</strong>':''}${suggerisci}`;
+    $('mapLegenda').innerHTML='';
+  } else {
+    $('mapInfo').innerHTML=`${piano.length} interventi · ${clientiIds.length} clienti · ${allPts.length} su mappa · ${Object.keys(tecGroup).length} tecnici${routeText}`;
+  }
+
   MAP._ffWaypoints=waypoints;
+  // Abilita/disabilita pulsante Avvia Giro in base alla disponibilità del percorso
+  _setGiroBtn((MAP._ffRouteCoords||[]).length>1);
 }
 
 function openGoogleMaps(){
@@ -3216,6 +3238,14 @@ function openGoogleMaps(){
 // ──── ANIMAZIONE GIRO VISITA ────
 let TRUCK_MARKER=null,TRUCK_ANIM=null;
 
+function _setGiroBtn(hasRoute){
+  const btn=$('btnGiroVisita');if(!btn||TRUCK_ANIM)return;
+  btn.style.opacity=hasRoute?'1':'0.5';
+  btn.title=hasRoute
+    ?'Avvia animazione furgone lungo il percorso'
+    :'Nessun percorso disponibile — seleziona un tecnico con interventi nel periodo scelto';
+}
+
 function stopTruckAnimation(){
   if(TRUCK_ANIM){clearInterval(TRUCK_ANIM);TRUCK_ANIM=null}
   if(TRUCK_MARKER&&MAP){try{MAP.removeLayer(TRUCK_MARKER)}catch(e){}TRUCK_MARKER=null}
@@ -3230,7 +3260,14 @@ function startGiroVisita(){
   // Usa route OSRM se disponibile, altrimenti waypoints
   const pts=routeCoords.length>1 ? routeCoords : wp.length>1 ? wp.map(w=>[w.lat,w.lng]) : [];
   if(pts.length<2){
-    toast('Prima seleziona un tecnico e un periodo per generare il percorso 🗺️','warn');return;
+    const _ft=$('mapFiltroTec')?.value||'';
+    const _fg=$('mapFiltroGiorno')?.value||'tutti_clienti';
+    const _tn=_ft?getName(DATA.utenti||[],_ft):'';
+    const _pl={oggi:'oggi',domani:'domani',settimana:'questa settimana',tutti_clienti:'(tutti i periodi)'}[_fg]||_fg;
+    if(!_ft)toast('Seleziona prima un tecnico dal filtro','warn');
+    else if(_fg==='tutti_clienti')toast(`${_tn} non ha interventi nel database 📋`,'warn');
+    else toast(`${_tn} non ha interventi ${_pl} — prova "Settimana" o "Tutti i clienti"`, 'warn');
+    return;
   }
   stopTruckAnimation();
   const truckIcon=L.divIcon({className:'',
