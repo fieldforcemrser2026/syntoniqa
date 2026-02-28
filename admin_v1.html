@@ -804,9 +804,10 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 <div class="card-body">
 <div class="map-controls">
-<select id="mapFiltroTec" onchange="updateMap()" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem"><option value="">Tutti i tecnici</option></select>
+<select id="mapFiltroTec" onchange="updateMap()" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem"><option value="">👥 Tutti i tecnici</option></select>
 <select id="mapFiltroGiorno" onchange="updateMap()" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem"><option value="tutti_clienti">🏠 Tutti i clienti</option><option value="oggi">📋 Oggi</option><option value="domani">📅 Domani</option><option value="settimana">📆 Settimana</option></select>
-<label class="field-check" style="font-size:.8125rem"><input type="checkbox" id="mapPercorso" onchange="updateMap()" checked> Mostra percorso</label>
+<label class="field-check" style="font-size:.8125rem"><input type="checkbox" id="mapPercorso" onchange="updateMap()" checked> Percorso</label>
+<button id="btnGiroVisita" class="btn btn-sm" style="background:#F59E0B;color:white;font-weight:600" onclick="startGiroVisita()" title="Anima il furgone lungo il percorso (seleziona prima un tecnico e un giorno)">🚐 Avvia Giro</button>
 <button class="btn btn-sm btn-ok" onclick="openGoogleMaps()">📍 Google Maps</button>
 </div>
 <div id="mapLegenda" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;font-size:.75rem"></div>
@@ -2548,15 +2549,37 @@ function renderTrasferte(){
 // ============ NOTIFICHE ============
 function renderNotifiche(){
   const items=(DATA.notifiche||[]).filter(n=>!n.Obsoleto).sort((a,b)=>(b.DataInvio||'').localeCompare(a.DataInvio||''));
-  $('tblNotifiche').innerHTML=items.length?items.map(n=>`<tr style="${n.Stato==='inviata'&&(n.DestinatarioID===USER?.ID||(n.DestinatariIDs||'').includes(USER?.ID))?'background:#FEF3C7':''}">
+  $('tblNotifiche').innerHTML=items.length?items.map(n=>{
+    const isNew=n.Stato==='inviata'&&(n.DestinatarioID===USER?.ID||(n.DestinatariIDs||'').includes(USER?.ID));
+    const tipo=(n.Tipo||'messaggio');
+    const rifId=n.RiferimentoID||n.UrgenzaID||n.InterventoID||'';
+    return`<tr style="${isNew?'background:#FEF3C7;font-weight:600':''}">
     <td>${getName(DATA.utenti||[],n.MittenteID)}</td>
-    <td><span class="tag tag-info">${n.Tipo||'messaggio'}</span></td>
-    <td><strong>${n.Oggetto||'—'}</strong><br><span style="font-size:.75rem;color:var(--gray)">${(n.Testo||'').substring(0,60)}${(n.Testo||'').length>60?'...':''}</span></td>
+    <td><span class="tag tag-info">${tipo}</span></td>
+    <td style="max-width:220px;cursor:pointer" onclick="gotoNotificaTarget('${tipo}','${rifId}')">
+      <strong>${n.Oggetto||'—'}</strong><br>
+      <span style="font-size:.75rem;color:var(--gray);font-weight:400">${(n.Testo||'').substring(0,70)}${(n.Testo||'').length>70?'...':''}</span>
+    </td>
     <td>${getName(DATA.utenti||[],n.DestinatarioID)}</td>
     <td>${statusTag(n.Stato)}</td>
     <td>${fmtDateTime(n.DataInvio)}</td>
-    <td>${n.Stato==='inviata'?`<button class="btn btn-ok btn-xs" onclick="markNotifica('${n.ID}','presa_in_carico')">✅</button>`:''}</td>
-  </tr>`).join(''):'<tr><td colspan="7" class="empty"><p>Nessuna notifica</p></td></tr>';
+    <td style="white-space:nowrap">
+      ${isNew?`<button class="btn btn-ok btn-xs" onclick="markNotifica('${n.ID}','presa_in_carico')">✅ Presa in carico</button>`:''}
+      <button class="btn btn-ghost btn-xs" onclick="gotoNotificaTarget('${tipo}','${rifId}')" title="Vai alla sezione correlata">Vai ▸</button>
+    </td>
+  </tr>`}).join(''):'<tr><td colspan="7" class="empty"><p>Nessuna notifica</p></td></tr>';
+}
+function gotoNotificaTarget(tipo,rifId){
+  const map={urgenza:'urgenze',urgenze:'urgenze',sla:'urgenze',
+    intervento:'piano',piano:'piano',reminder:'piano',completamento:'piano',
+    ordine:'ordini',ordini:'ordini',
+    approvazione:'ai',piano_approvato:'ai',
+    richiesta:'richieste',ferie:'richieste',permesso:'richieste',
+    chat:'chat',messaggio:'chat'};
+  const sec=map[tipo]||map[(tipo||'').split('_')[0]]||'notifiche';
+  showSec(sec);
+  if(rifId&&(tipo.includes('urgenz')))setTimeout(()=>showDetail('urgenza',rifId),400);
+  else if(rifId&&(tipo.includes('intervento')||tipo.includes('piano')||tipo==='reminder'))setTimeout(()=>showDetail('piano',rifId),400);
 }
 async function markNotifica(id,azione){try{await apiCall('markNotifica',{id,azione},'POST');toast('Notifica aggiornata','ok');await refreshData(true)}catch(e){toast(e.message,'err')}}
 async function markAllRead(){try{await apiCall('markAllRead',{},'POST');toast('Tutte lette','ok');await refreshData(true)}catch(e){toast(e.message,'err')}}
@@ -2607,7 +2630,7 @@ function renderClienti(){
     <td>${c.Indirizzo||'—'}</td>
     <td>${c.Telefono?`<a href="tel:${c.Telefono}">${c.Telefono}</a>`:'—'}</td>
     <td>${c.Contratto||'—'}</td>
-    <td>${c.Latitudine&&c.Longitudine?'<span class="tag tag-ok">📍</span>':'<span class="tag tag-gray">—</span>'}</td>
+    <td>${(c.Lat||c.Latitudine)&&(c.Lng||c.Longitudine)?'<span class="tag tag-ok">📍</span>':'<span class="tag tag-gray">—</span>'}</td>
     <td><button class="btn btn-ghost btn-xs" onclick="editCliente('${c.ID}')">✏️</button><button class="btn btn-ghost btn-xs" onclick="showDetail('cliente','${c.ID}')">👁️</button></td>
   </tr>`).join(''):'<tr><td colspan="8" class="empty"><p>Nessun cliente trovato</p></td></tr>';
 }
@@ -2934,8 +2957,8 @@ function showCalDay(ds){
   const filtTec=$('calFiltroTec')?.value||'';
   let items=(DATA.piano||[]).filter(p=>!p.Obsoleto&&p.Data===ds);
   if(filtTec)items=items.filter(p=>p.TecnicoID===filtTec||(p.TecniciIDs||'').includes(filtTec));
-  $('calDetail').innerHTML=items.length?`<h4 style="margin-bottom:8px">${fmtDate(ds)} — ${items.length} interventi</h4>`+items.map(p=>`<div style="padding:8px 12px;border-left:3px solid ${getColor(DATA.tipiIntervento||[],p.TipoInterventoID)};margin-bottom:6px;background:var(--gray5);border-radius:0 var(--radius-sm) var(--radius-sm) 0">
-    <strong>${p.OraInizio||'—'}</strong> ${getName(DATA.utenti||[],p.TecnicoID)} → ${getName(DATA.clienti||[],p.ClienteID)} · ${getName(DATA.tipiIntervento||[],p.TipoInterventoID)} ${statusTag(p.Stato)}
+  $('calDetail').innerHTML=items.length?`<h4 style="margin-bottom:8px">${fmtDate(ds)} — ${items.length} interventi</h4>`+items.map(p=>`<div onclick="showDetail('piano','${p.ID}')" style="padding:8px 12px;border-left:3px solid ${getColor(DATA.tipiIntervento||[],p.TipoInterventoID)};margin-bottom:6px;background:var(--gray5);border-radius:0 var(--radius-sm) var(--radius-sm) 0;cursor:pointer;transition:background .15s" onmouseover="this.style.background='var(--gray4)'" onmouseout="this.style.background='var(--gray5)'">
+    <strong>${p.OraInizio||'—'}</strong> ${getName(DATA.utenti||[],p.TecnicoID)} → ${getName(DATA.clienti||[],p.ClienteID)} · ${getName(DATA.tipiIntervento||[],p.TipoInterventoID)} ${statusTag(p.Stato)} <span style="font-size:.7rem;color:var(--c1);float:right">✏️ modifica</span>
   </div>`).join(''):`<p style="color:var(--gray)">Nessun intervento per ${fmtDate(ds)}</p>`;
 }
 
@@ -3027,6 +3050,8 @@ async function initMap(){
 async function updateMap(){
   if(!MAP)return;
   MARKERS.forEach(m=>MAP.removeLayer(m));MARKERS=[];
+  stopTruckAnimation(); // ferma animazione precedente se in corso
+  MAP._ffRouteCoords=[];// reset coords animazione
   const filtTec=$('mapFiltroTec')?.value||'';
   const filtGiorno=$('mapFiltroGiorno')?.value||'tutti_clienti';
   const showRoute=$('mapPercorso')?.checked||false;
@@ -3138,6 +3163,7 @@ async function updateMap(){
       if(osrmRoute&&osrmRoute.geometry){
         // GeoJSON coordinates sono [lng, lat] — inverti per Leaflet
         const routeCoords=osrmRoute.geometry.coordinates.map(c=>[c[1],c[0]]);
+        MAP._ffRouteCoords=[...(MAP._ffRouteCoords||[]),...routeCoords]; // salva per animazione
         const km=Math.round((osrmRoute.distance||0)/1000);
         const min=Math.round((osrmRoute.duration||0)/60);
         const tecName=getName(DATA.utenti||[],tid)||tid;
@@ -3147,6 +3173,7 @@ async function updateMap(){
         routeSummary.push(`${tecName.split(' ')[0]}: ${km}km ~${min}min`);
       }else{
         // Fallback linea dritta se OSRM non risponde
+        MAP._ffRouteCoords=[...(MAP._ffRouteCoords||[]),...pts]; // salva pts per animazione fallback
         const linea=L.polyline(pts,{color,weight:3,opacity:.7,dashArray:'8,8'}).addTo(MAP);
         MARKERS.push(linea);
         routeSummary.push(getName(DATA.utenti||[],tid).split(' ')[0]+': (routing non disponibile)');
@@ -3184,6 +3211,53 @@ function openGoogleMaps(){
   if(middle)url+=`&waypoints=${middle}`;
   url+='&travelmode=driving';
   window.open(url,'_blank');
+}
+
+// ──── ANIMAZIONE GIRO VISITA ────
+let TRUCK_MARKER=null,TRUCK_ANIM=null;
+
+function stopTruckAnimation(){
+  if(TRUCK_ANIM){clearInterval(TRUCK_ANIM);TRUCK_ANIM=null}
+  if(TRUCK_MARKER&&MAP){try{MAP.removeLayer(TRUCK_MARKER)}catch(e){}TRUCK_MARKER=null}
+  const btn=$('btnGiroVisita');
+  if(btn){btn.innerHTML='🚐 Avvia Giro';btn.style.background='#F59E0B';btn.onclick=startGiroVisita}
+}
+
+function startGiroVisita(){
+  if(!MAP){toast('Apri prima la sezione Mappa','warn');return}
+  const routeCoords=MAP._ffRouteCoords||[];
+  const wp=MAP._ffWaypoints||[];
+  // Usa route OSRM se disponibile, altrimenti waypoints
+  const pts=routeCoords.length>1 ? routeCoords : wp.length>1 ? wp.map(w=>[w.lat,w.lng]) : [];
+  if(pts.length<2){
+    toast('Prima seleziona un tecnico e un periodo per generare il percorso 🗺️','warn');return;
+  }
+  stopTruckAnimation();
+  const truckIcon=L.divIcon({className:'',
+    html:'<div style="font-size:1.5rem;filter:drop-shadow(0 2px 5px rgba(0,0,0,.5));transform:translate(-50%,-50%)">🚐</div>',
+    iconSize:[30,30],iconAnchor:[15,15]});
+  TRUCK_MARKER=L.marker(pts[0],{icon:truckIcon,zIndexOffset:2000}).addTo(MAP);
+  MAP.setView(pts[0],12,{animate:true,duration:0.8});
+  let step=0;
+  const total=pts.length;
+  // Velocità: ~30 secondi per tutto il percorso
+  const msStep=Math.max(25,Math.round(30000/total));
+  const btn=$('btnGiroVisita');
+  if(btn){btn.innerHTML='⏹ Stop Giro';btn.style.background='#EF4444';btn.onclick=stopTruckAnimation}
+  TRUCK_ANIM=setInterval(()=>{
+    step++;
+    if(step>=total){
+      stopTruckAnimation();
+      toast('🏁 Giro visita completato!','ok');
+      return;
+    }
+    TRUCK_MARKER.setLatLng(pts[step]);
+    // Pan graduale ogni 60 step
+    if(step%60===0)MAP.panTo(pts[step],{animate:true,duration:0.4,easeLinearity:0.3});
+    const pct=Math.round((step/total)*100);
+    $('mapInfo').innerHTML=`🚐 Giro in corso: <strong>${pct}%</strong> · tappa ${step}/${total}`;
+  },msStep);
+  toast('🚐 Giro visita avviato!','ok');
 }
 
 // ============ KPI ============
@@ -4785,9 +4859,15 @@ async function downloadAIPlanXlsx(){
 
 async function applyAI(){
   if(!AI_PLAN){toast('Genera prima un piano','warn');return}
+  toast('Applicazione piano in corso...','warn');
   try{
-    const result=await apiCall('applyAIPlan',{piano:AI_PLAN},'POST');
-    toast('Piano applicato: '+(result.created||0)+' interventi creati','ok');
+    // Direct fetch con timeout 60s (apiCall ha 30s hardcoded)
+    const _applyResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},
+      body:JSON.stringify({action:'applyAIPlan',userId:USER?.ID||'',piano:AI_PLAN}),signal:AbortSignal.timeout(60000)});
+    const _applyJson=await _applyResp.json();
+    if(!_applyJson.success)throw new Error(_applyJson.error||'Errore apply');
+    const result=_applyJson.data||_applyJson;
+    toast('✅ Piano applicato: '+(result.created||0)+' interventi creati','ok');
     AI_PLAN=null;$('btnApplyAI').disabled=true;$('btnSubmitPlan').disabled=true;$('btnDownloadPlan').disabled=true;
     await refreshData(true);
   }catch(e){toast(e.message,'err')}
