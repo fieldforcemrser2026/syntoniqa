@@ -584,12 +584,13 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 </div>
 <div class="card-body">
-<div class="wf-steps mb">
-<span class="wf-step" id="wfOrd1">📝 Richiesto</span><span class="wf-arrow">→</span>
-<span class="wf-step" id="wfOrd2">👋 Preso in Carico</span><span class="wf-arrow">→</span>
-<span class="wf-step" id="wfOrd3">📦 Ordinato</span><span class="wf-arrow">→</span>
-<span class="wf-step" id="wfOrd4">🚚 In Arrivo</span><span class="wf-arrow">→</span>
-<span class="wf-step" id="wfOrd5">✅ Arrivato</span>
+<div class="wf-steps mb" style="gap:6px">
+<span class="wf-step" id="wfOrd1" onclick="filterOrdByStato('richiesto')" title="Filtra Richiesti" style="cursor:pointer">📝 Richiesto</span><span class="wf-arrow">→</span>
+<span class="wf-step" id="wfOrd2" onclick="filterOrdByStato('preso_in_carico')" title="Filtra Presi in Carico" style="cursor:pointer">👋 Preso in Carico</span><span class="wf-arrow">→</span>
+<span class="wf-step" id="wfOrd3" onclick="filterOrdByStato('ordinato')" title="Filtra Ordinati" style="cursor:pointer">📦 Ordinato</span><span class="wf-arrow">→</span>
+<span class="wf-step" id="wfOrd4" onclick="filterOrdByStato('in_arrivo')" title="Filtra In Arrivo" style="cursor:pointer">🚚 In Arrivo</span><span class="wf-arrow">→</span>
+<span class="wf-step" id="wfOrd5" onclick="filterOrdByStato('arrivato')" title="Filtra Arrivati" style="cursor:pointer">✅ Arrivato</span>
+<span style="font-size:.7rem;color:var(--gray);margin-left:4px">← clicca per filtrare</span>
 </div>
 </div>
 <div class="card-body np" style="max-height:500px;overflow-y:auto">
@@ -1198,9 +1199,23 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 <div id="adminChatAllegatoPreview" style="display:none;padding:6px 12px;border-top:1px solid #E5E7EB;background:var(--gray5)"></div>
 <div id="chatInput" style="padding:12px;border-top:1px solid #E5E7EB;display:none">
+<!-- Legenda comandi bot -->
+<div id="chatCmdHelp" style="display:none;margin-bottom:8px;background:var(--gray5);border:1px solid var(--gray3);border-radius:var(--radius-sm);padding:10px 12px;font-size:.75rem;line-height:1.7">
+  <div style="font-weight:600;margin-bottom:4px;color:var(--c1)">💬 Comandi disponibili</div>
+  <div><code style="background:var(--gray4);padding:1px 5px;border-radius:3px">/stato</code> → riepilogo urgenze aperte</div>
+  <div><code style="background:var(--gray4);padding:1px 5px;border-radius:3px">/vado</code> → lista urgenze da prendere in carico</div>
+  <div><code style="background:var(--gray4);padding:1px 5px;border-radius:3px">/vado 2</code> → assegna a te l'urgenza #2 dall'elenco</div>
+  <div><code style="background:var(--gray4);padding:1px 5px;border-radius:3px">/incorso</code> → segna urgenza attiva come "in corso"</div>
+  <div><code style="background:var(--gray4);padding:1px 5px;border-radius:3px">/risolto [note]</code> → chiudi urgenza con note opzionali</div>
+  <div><code style="background:var(--gray4);padding:1px 5px;border-radius:3px">/ordine COD QT CLI</code> → crea ordine ricambio</div>
+  <div><code style="background:var(--gray4);padding:1px 5px;border-radius:3px">/oggi</code> → interventi del giorno</div>
+  <div><code style="background:var(--gray4);padding:1px 5px;border-radius:3px">/settimana</code> → piano settimanale</div>
+  <div style="margin-top:6px;color:var(--gray)">💡 <em>Oppure scrivi testo libero / allega una foto — l'AI analizzerà e suggerirà un'azione</em></div>
+</div>
 <form onsubmit="sendChat(event)" style="display:flex;gap:8px;align-items:center">
 <label style="cursor:pointer;font-size:1.2rem;padding:0 4px;display:flex;align-items:center" title="Allega foto/file">📎<input type="file" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" style="display:none" onchange="adminChatAllegatoChange(this)"></label>
-<input type="text" id="chatText" placeholder="Scrivi un messaggio..." style="flex:1;padding:10px 14px;border:1.5px solid var(--gray3);border-radius:20px;font-size:.8125rem;font-family:var(--font)" autocomplete="off">
+<input type="text" id="chatText" placeholder="Scrivi un messaggio o un comando (/stato, /vado...)" style="flex:1;padding:10px 14px;border:1.5px solid var(--gray3);border-radius:20px;font-size:.8125rem;font-family:var(--font)" autocomplete="off">
+<button type="button" onclick="const h=$('chatCmdHelp');h.style.display=h.style.display==='none'?'block':'none'" title="Comandi disponibili" style="background:var(--gray4);border:none;border-radius:50%;width:34px;height:34px;font-size:.9rem;cursor:pointer;flex-shrink:0">❓</button>
 <button type="submit" class="btn btn-primary" style="border-radius:20px;padding:10px 18px">📤</button>
 </form>
 </div>
@@ -1233,7 +1248,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="field"><label>Ora Inizio</label><input type="time" id="mpOra" value="08:00"></div>
 </div>
 <div class="field-row-3">
-<div class="field"><label>Tecnico Principale</label><select id="mpTecnico"></select></div>
+<div class="field"><label>Tecnico Principale</label><select id="mpTecnico" onchange="syncTecAgg()"></select></div>
 <div class="field"><label>Tecnici Aggiuntivi</label><select id="mpTecnici" multiple style="min-height:60px"></select></div>
 <div class="field"><label>Automezzo</label><select id="mpAutomezzo"></select></div>
 </div>
@@ -1332,7 +1347,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="field"><label>Data Fine</label><input type="date" id="mrAl"></div>
 </div>
 <div class="field-row">
-<div class="field"><label>Turno</label><select id="mrTurno"><option value="24h">24h</option><option value="notturno">Notturno (20-08)</option><option value="festivo">Festivo</option><option value="custom">Custom</option></select></div>
+<div class="field"><label>Turno</label><select id="mrTurno"><option value="24h">24h</option><option value="notturno">Notturno (18-08)</option><option value="festivo">Festivo</option><option value="custom">Custom</option></select></div>
 <div class="field"><label>Tipo</label><select id="mrTipo"><option value="reperibilita">Reperibilità</option><option value="guardia">Guardia attiva</option></select></div>
 </div>
 <div class="field"><label>Note</label><textarea id="mrNote" rows="2"></textarea></div>
@@ -1824,20 +1839,22 @@ function populateSelects(){
   const fillMulti=(id,items,fmt)=>{const s=$(id);if(!s)return;s.innerHTML='';items.forEach(i=>{const o=document.createElement('option');o.value=i.ID;o.textContent=fmt(i);s.appendChild(o)})};
   const tecFmt=t=>(t.Nome||'')+' '+(t.Cognome||'');
   const cliFmt=c=>c.Nome||c.ID;
+  // FURG_1→F1, FURG_2→F2; altri: usa Nome o Targa
+  const autoFmt=f=>{const m=(f.ID||'').match(/FURG_(\d+)/i);return m?'F'+m[1]:(f.Nome||f.Targa||f.Descrizione||f.ID)};
 
   // Piano
-  fillSel('mpTecnico',tecs,tecFmt);fillMulti('mpTecnici',tecs,tecFmt);fillSel('mpAutomezzo',automezziList,f=>f.ID+' — '+(f.Targa||f.Descrizione||''));
+  fillSel('mpTecnico',tecs,tecFmt);fillMulti('mpTecnici',tecs,tecFmt);fillSel('mpAutomezzo',automezziList,autoFmt);
   fillSel('mpCliente',clis,cliFmt);fillSel('mpTipo',tipi,t=>t.Nome);fillSel('mpPriorita',pris,p=>p.Nome);
   // Urgenza
   fillSel('muCliente',clis,cliFmt);fillSel('muPriorita',pris,p=>p.Nome);
   // Assegna
-  fillSel('maTecnico',tecs,tecFmt);fillSel('maAutomezzo',automezziList,f=>f.ID+' — '+(f.Targa||''));
+  fillSel('maTecnico',tecs,tecFmt);fillSel('maAutomezzo',automezziList,autoFmt);
   // Ordine
   fillSel('moTecnico',tecs,tecFmt);fillSel('moCliente',clis,cliFmt);
   // Rep
   fillSel('mrTecnico',tecs,tecFmt);
   // Trasferta
-  fillMulti('mtTecnici',tecs,tecFmt);fillSel('mtCliente',clis,cliFmt);fillSel('mtAutomezzo',automezziList,f=>f.ID+' — '+(f.Targa||''));
+  fillMulti('mtTecnici',tecs,tecFmt);fillSel('mtCliente',clis,cliFmt);fillSel('mtAutomezzo',automezziList,autoFmt);
   // Notifica
   const allUsers=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Attivo);
   fillMulti('mnDest',allUsers,tecFmt);
@@ -1846,7 +1863,7 @@ function populateSelects(){
   // Installazione
   fillSel('miCliente',clis,cliFmt);fillMulti('miTecnici',tecs,tecFmt);
   // Nuovo Utente
-  fillSel('nuSquadra',squadreList,s=>s.Nome||s.ID);fillSel('nuAutomezzo',automezziList,f=>f.Targa||f.Descrizione||f.ID);
+  fillSel('nuSquadra',squadreList,s=>s.Nome||s.ID);fillSel('nuAutomezzo',automezziList,autoFmt);
   // Nuovo Cliente (no additional selects needed)
   // Nuova Macchina
   fillSel('nmCliente',clis,cliFmt);
@@ -1855,6 +1872,16 @@ function populateSelects(){
   // Filtri
   fillSel('filtPianoTec',tecs,tecFmt);fillSel('calFiltroTec',tecs,tecFmt);fillSel('mapFiltroTec',tecs,tecFmt);fillSel('kpiTecnico',tecs,tecFmt);
   // filtMacchCli will be populated by renderMacchine from anagrafica
+}
+
+// Sincronizza Tecnici Aggiuntivi: disabilita il tecnico già scelto come principale
+function syncTecAgg(){
+  const mainId=$('mpTecnico')?.value||'';
+  const multi=$('mpTecnici');if(!multi)return;
+  Array.from(multi.options).forEach(o=>{
+    o.disabled=(mainId&&o.value===mainId);
+    if(o.disabled&&o.selected){o.selected=false}
+  });
 }
 
 // After anagrafica loads, repopulate modal client selectors with anagrafica data
@@ -1870,6 +1897,13 @@ function loadMacchineCliente(prefix){
   const cliId=cliSel?cliSel.value:'';
   const s=$(prefix+'Macchina');if(!s)return;
   s.innerHTML='<option value="">— Seleziona Macchina —</option>';
+
+  // Per installazioni usa SEMPRE DATA.macchine (FK richiede MAC_xxx, non serial number)
+  if(prefix==='mi'){
+    const maccs=(DATA.macchine||[]).filter(m=>!m.Obsoleto&&(!cliId||m.ClienteID===cliId));
+    maccs.forEach(m=>{const o=document.createElement('option');o.value=m.ID;o.textContent=(m.Tipo||'Macchina')+' '+(m.Modello||'')+(m.Seriale?' (SN: '+m.Seriale+')':'');s.appendChild(o)});
+    return;
+  }
 
   // First try anagrafica assets (primary data source)
   if(cliId&&ANAG_CLIENTI.length){
@@ -2441,6 +2475,9 @@ function renderOrdini(){
   </tr>`).join(''):'<tr><td colspan="9" class="empty"><p>Nessun ordine</p></td></tr>';
 }
 
+// Filtro ordini cliccando sulle icone di stato (toggle)
+function filterOrdByStato(s){const el=$('filtOrdStato');if(!el)return;el.value=(el.value===s)?'':s;renderOrdini()}
+
 function nextOrdAction(o){
   const next={'richiesto':'preso_in_carico','preso_in_carico':'ordinato','ordinato':'in_arrivo','in_arrivo':'arrivato'};
   const labels={'preso_in_carico':'👋 Prendi in Carico','ordinato':'📦 Ordinato','in_arrivo':'🚚 In Arrivo','arrivato':'✅ Arrivato'};
@@ -2476,7 +2513,7 @@ function renderInstallazioni(){
 function renderReperibilita(){
   const d=today();
   let items=(DATA.reperibilita||[]).filter(r=>!r.Obsoleto);
-  if(repFilter==='attivi')items=items.filter(r=>r.Stato==='attiva'&&r.DataFine>=d);
+  if(repFilter==='attivi')items=items.filter(r=>(r.Stato==='attiva'||!r.Stato)&&r.DataFine>=d);
   items.sort((a,b)=>(b.DataInizio||'').localeCompare(a.DataInizio||''));
   $('tblRep').innerHTML=items.length?items.map(r=>`<tr>
     <td>${getName(DATA.utenti||[],r.TecnicoID)}</td>
@@ -3012,8 +3049,9 @@ async function updateMap(){
     return null;
   }
 
-  // ──── MODALITÀ "TUTTI I CLIENTI" ────
-  if(filtGiorno==='tutti_clienti'){
+  // ──── MODALITÀ "TUTTI I CLIENTI" (solo se nessun tecnico filtrato) ────
+  // Se filtTec è attivo mostra gli interventi di quel tecnico (giro visita con routing)
+  if(filtGiorno==='tutti_clienti'&&!filtTec){
     const anagList=ANAG_CLIENTI||[];
     let placed=0,total=anagList.length;
     for(const anag of anagList){
@@ -4166,7 +4204,7 @@ async function saveOrdine(){
 }
 
 async function saveRep(){
-  const data={TecnicoID:$('mrTecnico').value,DataInizio:$('mrDal').value,DataFine:$('mrAl').value,Turno:$('mrTurno').value,Tipo:$('mrTipo').value,Note:$('mrNote').value};
+  const data={TecnicoID:$('mrTecnico').value,DataInizio:$('mrDal').value,DataFine:$('mrAl').value,Turno:$('mrTurno').value,Tipo:$('mrTipo').value,Note:$('mrNote').value,Stato:'attiva'};
   if(!data.TecnicoID||!data.DataInizio||!data.DataFine){toast('Compila tecnico e date','warn');return}
   try{await apiCall('createReperibilita',{data},'POST');toast('Turno creato!','ok');closeModal('modalRep');await refreshData(true)}catch(e){toast(e.message,'err')}
 }
@@ -4546,7 +4584,11 @@ async function importPlanFromExcel(file){
 async function confirmImportExcelPlan(){
   if(!EXCEL_PLAN_ROWS.length){toast('Nessun dato da importare','warn');return}
   try{
-    const result=await apiCall('importExcelPlan',{rows:EXCEL_PLAN_ROWS},'POST');
+    toast(`Importazione ${EXCEL_PLAN_ROWS.length} righe in corso...`,'warn');
+    // Timeout esteso (120s) per importazioni grandi
+    const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action:'importExcelPlan',userId:USER?.ID||'',rows:EXCEL_PLAN_ROWS}),signal:AbortSignal.timeout(120000)});
+    const j=await r.json();if(!j.success)throw new Error(j.error||'Errore import');
+    const result=j.data||j;
     toast(`Piano importato: ${result.created} interventi creati`+(result.errors?.length?`, ${result.errors.length} errori`:''),'ok');
     $('excelImportPreview').style.display='none';
     EXCEL_PLAN_ROWS=[];
@@ -4568,7 +4610,11 @@ async function runAI(){
   }
 
   try{
-    const result=await apiCall('generateAIPlan',{vincoli:{testo:prompt, files:filesData}},'POST');
+    // Direct fetch con timeout 90s (apiCall ha 30s hardcoded — insufficiente per Workers AI)
+    const _aiResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:{testo:prompt,files:filesData}}),signal:AbortSignal.timeout(90000)});
+    const _aiJson=await _aiResp.json();
+    if(!_aiJson.success)throw new Error(_aiJson.error||'Errore AI');
+    const result=_aiJson.data||_aiJson;
     AI_PLAN=result;
     if(!result||typeof result!=='object'||(!result.piano&&!result.summary)){
       $('aiResult').innerHTML='<div style="padding:16px;background:rgba(239,68,68,.1);border:1px solid var(--err);border-radius:var(--radius)"><strong>❌ Errore</strong><br>Workers AI non ha generato un piano. Riprova con un prompt più specifico.</div>';
@@ -5647,8 +5693,12 @@ async function runAIPlanner(){
   const tecnici = (DATA.utenti||[]).filter(u=>!u.Obsoleto&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
   const prompt = 'Genera piano ottimizzato settimana '+week[0]+' - '+week[6]+'. Tecnici: '+tecnici.map(t=>t.Nome).join(', ')+'. Urgenze aperte: '+urgenze.length+' ('+urgenze.filter(u=>u.Priorita==='CRITICA').length+' CRITICHE). Rispetta SLA, ottimizza geo, distribuisci carico.';
   try {
-    toast('AI sta generando il piano...','warn');
-    const result = await apiCall('generateAIPlan',{vincoli:{testo:prompt}},'POST');
+    toast('AI sta generando il piano... (può richiedere 30-60 sec)','warn');
+    // Usa fetch diretto con timeout esteso (90s) — apiCall ha solo 30s
+    const aiResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:{testo:prompt}}),signal:AbortSignal.timeout(90000)});
+    const aiJson=await aiResp.json();
+    if(!aiJson.success)throw new Error(aiJson.error||'Errore AI');
+    const result=aiJson.data||aiJson;
     AI_PLAN = result;
     const el = document.getElementById('aiResult');
     if(el){ el.style.display='block'; el.innerHTML='<h4>Piano AI generato dal Planner Visuale</h4><p style="font-size:.8125rem;color:var(--gray)">Settimana '+week[0]+' — '+week[6]+' · '+tecnici.length+' tecnici · '+(result.piano?.length||0)+' interventi</p><pre style="white-space:pre-wrap;font-size:.75rem;max-height:400px;overflow-y:auto">'+JSON.stringify(result,null,2)+'</pre>'; }
