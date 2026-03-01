@@ -1706,7 +1706,11 @@ async function handlePost(action, body, env) {
       const oggiIt = new Intl.DateTimeFormat('it-IT', { weekday:'long', year:'numeric', month:'long', day:'numeric', timeZone:'Europe/Rome' }).format(new Date());
 
       // Compact data — budget-aware: riduce clienti se ci sono file allegati (i file contengono info clienti)
-      const tecList = allTecnici.filter(t=>t.ruolo!=='admin').map(t => `${t.nome} ${t.cognome}(${t.id},${t.ruolo},${t.base||'?'})`).join('; ');
+      const tecList = allTecnici.filter(t=>t.ruolo!=='admin').map(t => {
+        const furg = t.automezzo_id ? allAutomezzi.find(a=>a.id===t.automezzo_id) : null;
+        const furgLabel = furg ? furg.id : (t.automezzo_id || 'nessuno');
+        return `${t.nome} ${t.cognome}(${t.id},${t.ruolo},base:${t.base||'?'},furgone:${furgLabel})`;
+      }).join('; ');
       const urgList = ctx.urgenze ? allUrgenze.slice(0,20).map(u => `${u.id}:${(u.problema||'').substring(0,40)}|${u.cliente_id}|pri:${u.priorita_id}`).join('; ') : '';
       const cliList = allClienti.slice(0,100).map(c => `${c.codice_m3}:${c.nome_interno||c.nome_account||'?'}(${c.citta_fatturazione||''})`).join(', ');
 
@@ -1730,24 +1734,29 @@ ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}
 
 ISTRUZIONI GENERAZIONE:
 ${periodoIstruzione || 'Genera piano per OGNI giorno lavorativo (lun-sab)'}
-- OGNI tecnico attivo (${nTecAttivi}): 2-3 interventi AL GIORNO (08:00-17:00) = MINIMO ${nTecAttivi*2} righe/giorno.
-- Almeno 1 TAGLIANDO per tecnico al giorno.
-- Affiancamento: se un vincolo dice che un junior DEVE affiancare un senior, genera DUE righe (senior+junior) con STESSO cliente, data, ora.
-- Tecnici assenti da vincoli: NON inserirli nel piano.
-- Reperibilita: chi e reperibile ha max 1 intervento/giorno.
-- Raggruppa per zona geografica (stessa citta per lo stesso tecnico nello stesso giorno).
-- Urgenze → primi giorni. Tagliandi scaduti → priorita.
-- Usa SOLO clienti dalla lista con il loro codice_m3.
+- SOLO giorni lun-sab. MAI domenica.
+- TUTTI i ${nTecAttivi} tecnici attivi devono avere interventi OGNI giorno (08:00-17:00) = MINIMO ${nTecAttivi} righe/giorno.
+- Durata: un tagliando puo richiedere 4-8 ore (anche giornata intera). Urgenze 1-3h. Se tagliando=giornata intera, 1 solo intervento per quel tecnico.
+- "tagliando" e "service" sono sinonimi = manutenzione macchina. Nelle note scrivi il MODELLO macchina (es: "Astronaut A5", "Vector 70").
+- Affiancamento junior: se vincolo dice "affianca senior", genera DUE righe separate (una senior + una junior) con STESSO cliente/data/ora/furgone.
+- Tecnici assenti da vincoli: NON inserirli.
+- Usa il FURGONE indicato tra parentesi nel tecnico (es: "furgone:FURG_1"). Junior affiancato usa furgone del senior.
+- Raggruppa per zona (stessa citta per stesso tecnico nello stesso giorno).
+- Urgenze → primi giorni. Tagliandi scaduti → massima priorita.
+- Usa SOLO clienti dalla lista con codice_m3 corretto.
 
-JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|service|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"max15char"}],"warnings":["..."]}`;
+JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina"}],"warnings":["..."]}`;
 
       // ─── AI Call — Gemini 2.0 Flash (primary) con fallback Workers AI ───
       const validIds = new Set(allTecnici.map(t => t.id));
-      const sysPrompt = 'Sei un pianificatore FSM per Lely Center. Rispondi SOLO con JSON valido, nessun testo prima o dopo. Note max 15 caratteri. Formato: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome cognome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|service|urgenza|installazione|ispezione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"breve"}],"warnings":["..."]}';
+      const sysPrompt = 'Sei un pianificatore FSM per Lely Center (manutenzione robot mungitura). Rispondi SOLO JSON valido. Note=modello macchina. tipo=tagliando o urgenza. Formato: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome cognome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina"}],"warnings":["..."]}';
 
       // Helper: costruisce prompt compatto per Workers AI (rimuove file e comprime dati)
       function buildCompactPrompt() {
-        const cTec = allTecnici.filter(t=>t.ruolo!=='admin').map(t=>`${t.nome} ${t.cognome}(${t.id},${t.base||'?'},${t.automezzo_id||'?'})`).join('; ');
+        const cTec = allTecnici.filter(t=>t.ruolo!=='admin').map(t=>{
+          const f = t.automezzo_id ? allAutomezzi.find(a=>a.id===t.automezzo_id) : null;
+          return `${t.nome} ${t.cognome}(${t.id},${t.ruolo},base:${t.base||'?'},furgone:${f?f.id:(t.automezzo_id||'?')})`;
+        }).join('; ');
         const cUrg = ctx.urgenze ? allUrgenze.slice(0,8).map(u=>`${u.id}:${(u.problema||'').substring(0,25)}|${u.cliente_id}`).join('; ') : '';
         const cCli = allClienti.slice(0,40).map(c=>`${c.codice_m3}:${c.nome_interno||c.nome_account||'?'}`).join(', ');
         return `PIANO FSM ${meseTarget||''}
@@ -1761,11 +1770,16 @@ CLIENTI: ${cCli}
 ${tagliandiContext ? tagliandiContext.substring(0,500) : ''}
 
 ${periodoIstruzione || 'Genera piano mese intero'}
-- OGNI tecnico: 2-3 interventi AL GIORNO (08:00-17:00). Min ${nTecAttivi*2} righe/giorno.
-- Almeno 1 tagliando/tecnico/giorno. Affiancamento junior+senior = DUE righe stesso cliente/ora.
-- Tecnici assenti da vincoli: NON inserirli. Usa SOLO clienti dalla lista.
+- SOLO lun-sab, MAI domenica.
+- TUTTI i tecnici attivi: almeno 1 intervento AL GIORNO.
+- Tagliando=4-8h (anche giornata intera). Urgenza=1-3h.
+- Affiancamento junior+senior = DUE righe: stesso cliente/data/ora/furgone.
+- Tecnici assenti da vincoli: NON inserirli.
+- note = modello macchina (es: Astronaut A5, Vector 70).
+- Usa furgone indicato nel tecnico.
+- Usa SOLO clienti dalla lista con codice_m3.
 
-JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice","tipo":"tagliando|service|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"max15"}],"warnings":[]}`;
+JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina"}],"warnings":[]}`;
       }
 
       async function callAI(promptText) {
@@ -1795,7 +1809,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId
         // FALLBACK: Workers AI con prompt COMPATTO (file rimossi, dati compressi)
         if (env.AI) {
           const compactPrompt = buildCompactPrompt();
-          const aiPromise = env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+          const aiPromise = env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
             messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: compactPrompt }],
             max_tokens: 4096
           });
@@ -2847,7 +2861,7 @@ Rispondi SOLO con JSON valido:
         } catch (aiErr) {
           // Fallback a modello più piccolo
           try {
-            const aiRes = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+            const aiRes = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
               messages: [
                 { role: 'system', content: 'Rispondi SOLO con JSON valido, nessun testo extra.' },
                 { role: 'user', content: systemPrompt + '\n\nMESSAGGIO UTENTE: ' + text }
