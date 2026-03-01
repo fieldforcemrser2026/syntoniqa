@@ -1728,17 +1728,18 @@ ${pianoEsistente}
 ${tagliandiContext}
 ${fileContext ? '\nFILE ALLEGATI (riferimento — genera piano COMPLETO, non solo i giorni nel file):\n' + fileContext : ''}
 
-ISTRUZIONI GENERAZIONE:
+ISTRUZIONI GENERAZIONE (SEGUI ALLA LETTERA):
 ${periodoIstruzione || '1. Genera piano per OGNI giorno lavorativo (lun-sab) del periodo richiesto'}
-2. Se chiesto un mese intero → genera TUTTI i giorni lavorativi
-3. Assegna 2-4 interventi/giorno per tecnico. Usa clienti REALI.
-4. Raggruppa per zona geografica (stessa citta nello stesso giorno)
+2. OGNI TECNICO deve avere 2-4 interventi AL GIORNO. Giornata 8h: 08:00-17:00.
+   ESEMPIO per 1 giorno con 6 tecnici = MINIMO 12 righe nel piano (2 per tecnico).
+3. Mese intero = TUTTI i giorni lun-sab × TUTTI i tecnici attivi = 150-250+ righe totali
+4. Raggruppa per zona geografica (stessa citta nello stesso giorno per tecnico)
 5. Urgenze aperte → priorita assoluta nei primi giorni
-6. Rispetta OGNI vincolo senza eccezioni — vincoli con priorita ALTA sono inviolabili
+6. Rispetta OGNI vincolo senza eccezioni
 7. Non duplicare interventi gia nel piano esistente
 8. Assegna automezzi coerenti con tecnico
-9. Rispetta turni reperibilita (chi e' reperibile ha carico ridotto)
-10. Tagliandi/service scaduti o in scadenza → pianifica PRIMA quelli piu urgenti
+9. Tagliandi/service scaduti → pianifica PRIMA quelli piu urgenti
+10. Usa SOLO clienti REALI dalla lista fornita, con codice_m3 corretto
 
 Rispondi SOLO JSON:
 {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|service|urgenza|installazione|ispezione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"..."}],"warnings":["..."]}`;
@@ -1747,79 +1748,63 @@ Rispondi SOLO JSON:
       const validIds = new Set(allTecnici.map(t => t.id));
       const sysPrompt = 'Sei un pianificatore FSM per Lely Center. Rispondi SOLO con JSON valido, nessun testo prima o dopo. Note max 15 caratteri. Formato: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome cognome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|service|urgenza|installazione|ispezione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"breve"}],"warnings":["..."]}';
 
-      async function callAI(promptText) {
-        // Helper: singola chiamata Gemini
-        async function geminiCall(text) {
-          const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`,
-            { method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                system_instruction: { parts: [{ text: sysPrompt }] },
-                contents: [{ parts: [{ text }] }],
-                generationConfig: { maxOutputTokens: 16384, temperature: 0.3, responseMimeType: 'application/json' }
-              })
-            }
-          );
-          return res;
-        }
+      // Helper: costruisce prompt compatto per Workers AI (rimuove file e comprime dati)
+      function buildCompactPrompt() {
+        const cTec = allTecnici.filter(t=>t.ruolo!=='admin').map(t=>`${t.nome} ${t.cognome}(${t.id},${t.base||'?'},${t.automezzo_id||'?'})`).join('; ');
+        const cUrg = ctx.urgenze ? allUrgenze.slice(0,8).map(u=>`${u.id}:${(u.problema||'').substring(0,25)}|${u.cliente_id}`).join('; ') : '';
+        const cCli = allClienti.slice(0,40).map(c=>`${c.codice_m3}:${c.nome_interno||c.nome_account||'?'}`).join(', ');
+        return `PIANO FSM ${meseTarget||''}
+TECNICI: ${cTec}
+${cUrg ? 'URGENZE: '+cUrg : ''}
+CLIENTI: ${cCli}
+${vincoliText ? vincoliText.substring(0,800) : ''}
+${tagliandiContext ? tagliandiContext.substring(0,600) : ''}
 
-        // PRIMARY: Gemini 2.0 Flash con retry su 429
+REGOLE:
+- OGNI tecnico: 2-3 interventi AL GIORNO (giornata 8h: 08:00-17:00)
+- Giorni lun-sab. Minimo 10 righe/giorno se 5+ tecnici
+- Usa SOLO clienti dalla lista con codice_m3
+${periodoIstruzione || 'Genera piano mese intero'}
+
+JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice","tipo":"tagliando|service|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"max15"}],"warnings":[]}`;
+      }
+
+      async function callAI(promptText) {
+        // PRIMARY: Gemini 2.0 Flash (1 tentativo + 1 retry su 429)
         if (env.GEMINI_KEY) {
-          let lastErr = null;
-          for (let attempt = 0; attempt < 3; attempt++) {
-            if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 4000)); // 4s, 8s delay
+          for (let attempt = 0; attempt < 2; attempt++) {
+            if (attempt > 0) await new Promise(r => setTimeout(r, 3000));
             try {
-              const geminiRes = await geminiCall(promptText);
-              if (geminiRes.status === 429) {
-                lastErr = 'Gemini rate limit (429) — retry ' + (attempt + 1);
-                continue; // retry after delay
-              }
-              if (!geminiRes.ok) {
-                const errBody = await geminiRes.text().catch(() => '');
-                lastErr = `Gemini HTTP ${geminiRes.status}: ${errBody.substring(0, 200)}`;
-                break; // non-429 errors: don't retry
-              }
+              const geminiRes = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`,
+                { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    system_instruction: { parts: [{ text: sysPrompt }] },
+                    contents: [{ parts: [{ text: promptText }] }],
+                    generationConfig: { maxOutputTokens: 16384, temperature: 0.3, responseMimeType: 'application/json' }
+                  })
+                }
+              );
+              if (geminiRes.status === 429) continue;
+              if (!geminiRes.ok) break;
               const gd = await geminiRes.json();
-              if (gd.error) { lastErr = `Gemini: ${gd.error.message || 'errore'}`; break; }
               const text = gd.candidates?.[0]?.content?.parts?.[0]?.text;
               if (text) return text;
-              lastErr = `Gemini no output: ${gd.candidates?.[0]?.finishReason || 'no_candidates'}`;
-              break;
-            } catch (e) { lastErr = `Gemini fetch: ${e.message}`; break; }
+            } catch (e) { break; }
           }
-          // Gemini fallita → Workers AI con prompt COMPATTO (max ~5000 chars)
-          if (env.AI) {
-            const shortPrompt = promptText.length > 5000
-              ? promptText.substring(0, 2000) + '\n...[DATI TRONCATI per limiti modello]...\n' + promptText.substring(promptText.length - 2500)
-              : promptText;
-            try {
-              const aiPromise = env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
-                messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: shortPrompt }],
-                max_tokens: 4096
-              });
-              const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 60000));
-              const res = await Promise.race([aiPromise, timeout]);
-              if (res?.response) return res.response;
-            } catch (fallbackErr) {
-              // Workers AI also failed
-            }
-          }
-          throw new Error(lastErr || 'AI non disponibile');
         }
-        // Solo Workers AI (no Gemini key)
+        // FALLBACK: Workers AI con prompt COMPATTO (file rimossi, dati compressi)
         if (env.AI) {
-          const shortPrompt = promptText.length > 5000
-            ? promptText.substring(0, 2000) + '\n...[TRONCATO]...\n' + promptText.substring(promptText.length - 2500)
-            : promptText;
+          const compactPrompt = buildCompactPrompt();
           const aiPromise = env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
-            messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: shortPrompt }],
+            messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: compactPrompt }],
             max_tokens: 4096
           });
-          const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 60000));
+          const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 55000));
           const res = await Promise.race([aiPromise, timeout]);
-          return res?.response || null;
+          if (res?.response) return res.response;
         }
-        throw new Error('Nessun AI configurato. Serve GEMINI_KEY o AI binding.');
+        throw new Error('Gemini quota esaurita e Workers AI non disponibile. Attendi qualche minuto e riprova.');
       }
 
       // Parser robusto — gestisce JSON troncati (risposta tagliata a max_tokens)
