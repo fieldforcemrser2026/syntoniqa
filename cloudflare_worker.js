@@ -97,6 +97,14 @@ function ok(data = {}) {
   return json({ success: true, data });
 }
 
+// ============ PostgREST SANITIZER (CRIT-01: prevent filter injection) ============
+
+function sanitizePgFilter(input) {
+  if (!input || typeof input !== 'string') return '';
+  // Remove PostgREST special chars that could break filter syntax
+  return input.replace(/[*.,=|:()&!<>;\[\]{}\\/"'`%]/g, '').trim().slice(0, 100);
+}
+
 // ============ FIX CRIT-02: PascalCase ↔ snake_case TRANSFORM ============
 
 function toPascal(key) {
@@ -196,7 +204,7 @@ async function sb(env, table, method = 'GET', body = null, params = '', extraHea
     throw new Error(`Supabase ${method} ${table}: ${res.status} ${text}`);
   }
   const text = await res.text();
-  if (!text) return null;
+  if (!text) return method === 'GET' ? [] : null;
   try { return JSON.parse(text); } catch { return text; }
 }
 
@@ -338,7 +346,7 @@ async function handleGet(action, url, env) {
       ] = await Promise.all([
         sb(env, 'utenti',             'GET', null, '?select=*&obsoleto=eq.false&order=cognome'),
         sb(env, 'clienti',            'GET', null, '?select=*&obsoleto=eq.false&order=nome'),
-        sb(env, 'macchine',           'GET', null, '?select=*&obsoleto=eq.false&limit=2000'),
+        sb(env, 'macchine',           'GET', null, '?select=*&obsoleto=eq.false&limit=1000'),
         sb(env, 'piano',              'GET', null, `?select=*&obsoleto=eq.false&order=data.desc&limit=500${tecFilter}`),
         sb(env, 'urgenze',            'GET', null, `?select=*&obsoleto=eq.false&order=data_segnalazione.desc&limit=200${tecFilterUrg}`),
         sb(env, 'ordini',             'GET', null, `?select=*&obsoleto=eq.false&order=data_richiesta.desc&limit=300${tecFilter}`),
@@ -867,6 +875,11 @@ async function handlePost(action, body, env) {
     case 'resolveUrgenza': {
       const { id } = body;
       if (!id) return err('id urgenza richiesto');
+      // Valida transizione stato
+      const urgCurrent = await sb(env, 'urgenze', 'GET', null, `?id=eq.${id}&select=stato`).catch(() => []);
+      if (!urgCurrent?.[0]) return err('Urgenza non trovata', 404);
+      const stateErr = validateTransition(VALID_URGENZA_TRANSITIONS, urgCurrent[0].stato, 'risolta', 'urgenza');
+      if (stateErr) return err(stateErr);
       const noteRisoluzione = body.noteRisoluzione || body.note_risoluzione || body.note || '';
       await sb(env, `urgenze?id=eq.${id}`, 'PATCH', {
         stato: 'risolta',
@@ -1029,8 +1042,8 @@ async function handlePost(action, body, env) {
       const newAutoId = updates.automezzo_id;
       if (newAutoId) {
         // Leggi vecchio automezzo assegnato a questo utente
-        const [oldUser] = await sb(env, 'utenti', 'GET', null, `?id=eq.${id}&select=automezzo_id`);
-        const oldAutoId = oldUser?.automezzo_id;
+        const oldUserArr = await sb(env, 'utenti', 'GET', null, `?id=eq.${id}&select=automezzo_id`).catch(() => []);
+        const oldAutoId = oldUserArr?.[0]?.automezzo_id;
         // Rimuovi assegnazione dal vecchio automezzo (se diverso)
         if (oldAutoId && oldAutoId !== newAutoId) {
           await sb(env, `automezzi?id=eq.${oldAutoId}`, 'PATCH', { assegnatario_id: null }).catch(() => {});
@@ -1117,8 +1130,8 @@ async function handlePost(action, body, env) {
       const newAssId = updates.assegnatario_id;
       if (newAssId) {
         // Leggi vecchio assegnatario di questo automezzo
-        const [oldAuto] = await sb(env, 'automezzi', 'GET', null, `?id=eq.${id}&select=assegnatario_id`);
-        const oldAssId = oldAuto?.assegnatario_id;
+        const oldAutoArr = await sb(env, 'automezzi', 'GET', null, `?id=eq.${id}&select=assegnatario_id`).catch(() => []);
+        const oldAssId = oldAutoArr?.[0]?.assegnatario_id;
         // Rimuovi automezzo dal vecchio assegnatario (se diverso)
         if (oldAssId && oldAssId !== newAssId) {
           await sb(env, `utenti?id=eq.${oldAssId}`, 'PATCH', { automezzo_id: null, updated_at: new Date().toISOString() }).catch(() => {});
@@ -1852,7 +1865,7 @@ Rispondi SOLO JSON:
       try {
         let partsFilter = '?select=codice,nome,descrizione,gruppo,modello_macchina&attivo=eq.true&limit=50';
         const machHint = (contesto || '').match(/astronaut|vector|juno|discovery|calm|grazeway|cosmix/i)?.[0];
-        if (machHint) partsFilter += `&modello_macchina=ilike.*${machHint.toUpperCase()}*`;
+        if (machHint) partsFilter += `&modello_macchina=ilike.*${sanitizePgFilter(machHint.toUpperCase())}*`;
         const parti = await sb(env, 'tagliandi', 'GET', null, partsFilter).catch(() => []);
         if (parti.length) {
           partiContext = '\n\nCATALOGO RICAMBI LELY DISPONIBILI (suggerisci il codice se riconosci il pezzo):';
@@ -1920,7 +1933,9 @@ Rispondi SOLO con JSON valido:
         if (!catalogMatch && analisi.ricambio_suggerito) {
           const terms = analisi.ricambio_suggerito.toLowerCase().split(/[\s,;]+/).filter(t => t.length > 3);
           for (const term of terms.slice(0, 2)) {
-            const found = await sb(env, 'tagliandi', 'GET', null, `?or=(nome.ilike.*${term}*,descrizione.ilike.*${term}*)&attivo=eq.true&limit=1`).catch(() => []);
+            const safeTerm = sanitizePgFilter(term);
+            if (!safeTerm) continue;
+            const found = await sb(env, 'tagliandi', 'GET', null, `?or=(nome.ilike.*${safeTerm}*,descrizione.ilike.*${safeTerm}*)&attivo=eq.true&limit=1`).catch(() => []);
             if (found.length) { catalogMatch = found[0]; break; }
           }
         }
@@ -2520,8 +2535,9 @@ Rispondi SOLO con JSON valido:
       const { tecnico1_id, tecnico2_id, data, note_swap } = body;
       if (!tecnico1_id || !tecnico2_id || !data) return err('Serve tecnico1_id, tecnico2_id, data');
       // Get current assignments
-      const [t1] = await sb(env, 'utenti', 'GET', null, `?id=eq.${tecnico1_id}&select=id,nome,automezzo_id`);
-      const [t2] = await sb(env, 'utenti', 'GET', null, `?id=eq.${tecnico2_id}&select=id,nome,automezzo_id`);
+      const t1arr = await sb(env, 'utenti', 'GET', null, `?id=eq.${tecnico1_id}&select=id,nome,automezzo_id`).catch(() => []);
+      const t2arr = await sb(env, 'utenti', 'GET', null, `?id=eq.${tecnico2_id}&select=id,nome,automezzo_id`).catch(() => []);
+      const t1 = t1arr?.[0], t2 = t2arr?.[0];
       if (!t1 || !t2) return err('Tecnici non trovati');
       // Update piano entries for that date to swap furgoni
       await sb(env, `piano?data=eq.${data}&tecnico_id=eq.${tecnico1_id}&obsoleto=eq.false`, 'PATCH', { automezzo_id: t2.automezzo_id });
@@ -2551,8 +2567,10 @@ Rispondi SOLO con JSON valido:
       // Search clienti by nome_interno or nome_account (for autocomplete)
       const { q } = body;
       if (!q || q.length < 2) return err('Minimo 2 caratteri');
+      const sq = sanitizePgFilter(q);
+      if (!sq) return err('Ricerca non valida');
       const results = await sb(env, 'anagrafica_clienti', 'GET', null,
-        `?or=(nome_interno.ilike.*${q}*,nome_account.ilike.*${q}*)&select=codice_m3,nome_account,nome_interno&limit=20`);
+        `?or=(nome_interno.ilike.*${sq}*,nome_account.ilike.*${sq}*)&select=codice_m3,nome_account,nome_interno&limit=20`);
       return ok(results.map(pascalizeRecord));
     }
 
@@ -2665,7 +2683,7 @@ Rispondi SOLO con JSON valido:
             const m = macchina.toLowerCase();
             const modelMap = { astronaut: 'ASTRONAUT', vector: 'VECTOR', juno: 'JUNO', discovery: 'DISCOVERY', calm: 'CALM', grazeway: 'GRAZEWAY', cosmix: 'COSMIX' };
             const model = Object.entries(modelMap).find(([k]) => m.includes(k));
-            if (model) filter += `&modello_macchina=ilike.*${model[1]}*`;
+            if (model) filter += `&modello_macchina=ilike.*${sanitizePgFilter(model[1])}*`;
           }
           const parti = await sb(env, 'tagliandi', 'GET', null, filter).catch(() => []);
           if (!parti.length) return '';
@@ -2696,7 +2714,9 @@ Rispondi SOLO con JSON valido:
         }
         // Ricerca fuzzy per termini chiave
         for (const term of terms.slice(0, 3)) {
-          const found = await sb(env, 'tagliandi', 'GET', null, `?or=(nome.ilike.*${term}*,descrizione.ilike.*${term}*)&attivo=eq.true&limit=3`).catch(() => []);
+          const safeTerm = sanitizePgFilter(term);
+          if (!safeTerm) continue;
+          const found = await sb(env, 'tagliandi', 'GET', null, `?or=(nome.ilike.*${safeTerm}*,descrizione.ilike.*${safeTerm}*)&attivo=eq.true&limit=3`).catch(() => []);
           if (found.length) return found[0];
         }
         return null;
@@ -3067,10 +3087,13 @@ Rispondi SOLO con JSON valido:
             break;
           }
           // Search in anagrafica_assets and item catalog (tagliandi table)
-          const results = await sb(env, 'tagliandi', 'GET', null, `?or=(nome.ilike.*${searchTerm}*,descrizione.ilike.*${searchTerm}*,codice.ilike.*${searchTerm}*)&limit=8`).catch(()=>[]);
+          const safeTerm = sanitizePgFilter(searchTerm);
+          if (!safeTerm) { reply = '❌ Termine di ricerca non valido'; break; }
+          const results = await sb(env, 'tagliandi', 'GET', null, `?or=(nome.ilike.*${safeTerm}*,descrizione.ilike.*${safeTerm}*,codice.ilike.*${safeTerm}*)&limit=8`).catch(()=>[]);
           if (!results.length) {
             // Fallback: try broader search
-            const results2 = await sb(env, 'tagliandi', 'GET', null, `?descrizione=ilike.*${searchTerm.split(' ')[0]}*&limit=5`).catch(()=>[]);
+            const fallbackTerm = sanitizePgFilter(searchTerm.split(' ')[0]);
+            const results2 = fallbackTerm ? await sb(env, 'tagliandi', 'GET', null, `?descrizione=ilike.*${fallbackTerm}*&limit=5`).catch(()=>[]) : [];
             if (results2.length) {
               reply = `🔍 Risultati parziali per "${searchTerm}":\n\n` + results2.map(r => `• \`${r.codice||r.id}\` — ${(r.nome||r.descrizione||'').substring(0,50)}`).join('\n');
             } else {
@@ -3091,7 +3114,8 @@ Rispondi SOLO con JSON valido:
           }
           let macFilter = '?obsoleto=eq.false&prossimo_tagliando=not.is.null&order=prossimo_tagliando.asc&limit=15';
           if (cliTagArg.toLowerCase() !== 'tutti') {
-            const cliMatch = await sb(env, 'anagrafica_clienti', 'GET', null, `?nome_interno=ilike.*${cliTagArg}*&select=codice_m3,nome_interno&limit=5`).catch(()=>[]);
+            const safeCliArg = sanitizePgFilter(cliTagArg);
+            const cliMatch = safeCliArg ? await sb(env, 'anagrafica_clienti', 'GET', null, `?nome_interno=ilike.*${safeCliArg}*&select=codice_m3,nome_interno&limit=5`).catch(()=>[]) : [];
             if (cliMatch.length) {
               macFilter += `&cliente_id=eq.${cliMatch[0].codice_m3}`;
             }
@@ -3734,7 +3758,7 @@ Rispondi SOLO con JSON valido:
     // ============ ANAGRAFICA (Clienti + Assets) ============
 
     case 'getAnagraficaClienti': {
-      const search = body.search || '';
+      const search = sanitizePgFilter(body.search || '');
       let url = 'anagrafica_clienti?select=*&order=nome_account.asc&limit=500';
       if (search) url += `&or=(nome_account.ilike.*${search}*,nome_interno.ilike.*${search}*,codice_m3.ilike.*${search}*,citta_fatturazione.ilike.*${search}*)`;
       const data = await sb(env, url, 'GET');
@@ -3756,9 +3780,10 @@ Rispondi SOLO con JSON valido:
       const { codice_m3, search, all } = body;
       let base = 'anagrafica_assets?select=*&order=gruppo_attrezzatura.asc,nome_asset.asc';
       if (codice_m3) base += `&codice_m3=eq.${codice_m3}`;
-      if (search && search.trim()) base += `&or=(nome_asset.ilike.*${search}*,numero_serie.ilike.*${search}*,modello.ilike.*${search}*,nome_account.ilike.*${search}*)`;
+      const safeSearch = sanitizePgFilter(search || '');
+      if (safeSearch) base += `&or=(nome_asset.ilike.*${safeSearch}*,numero_serie.ilike.*${safeSearch}*,modello.ilike.*${safeSearch}*,nome_account.ilike.*${safeSearch}*)`;
       if (!all) {
-        const data = await sb(env, base + '&limit=2000', 'GET');
+        const data = await sb(env, base + '&limit=1000', 'GET');
         return ok(data.map(pascalizeRecord));
       }
       // Paginate: Supabase PostgREST caps at 1000 rows per request
@@ -3869,12 +3894,14 @@ Rispondi SOLO con JSON valido:
       let filter = '?attivo=eq.true';
       const orConditions = [];
       if (search) {
-        const s = search.trim();
-        orConditions.push(`nome.ilike.*${s}*`, `descrizione.ilike.*${s}*`, `codice.ilike.*${s}*`, `gruppo.ilike.*${s}*`);
+        const s = sanitizePgFilter(search);
+        if (s) orConditions.push(`nome.ilike.*${s}*`, `descrizione.ilike.*${s}*`, `codice.ilike.*${s}*`, `gruppo.ilike.*${s}*`);
       }
       if (orConditions.length) filter += `&or=(${orConditions.join(',')})`;
-      if (modello) filter += `&modello_macchina=ilike.*${modello}*`;
-      if (gruppo) filter += `&gruppo=ilike.*${gruppo}*`;
+      const safeModello = sanitizePgFilter(modello || '');
+      if (safeModello) filter += `&modello_macchina=ilike.*${safeModello}*`;
+      const safeGruppo = sanitizePgFilter(gruppo || '');
+      if (safeGruppo) filter += `&gruppo=ilike.*${safeGruppo}*`;
       filter += `&order=nome.asc&limit=${lim}`;
       const parts = await sb(env, 'tagliandi', 'GET', null, filter).catch(() => []);
       return ok(parts.map(pascalizeRecord));

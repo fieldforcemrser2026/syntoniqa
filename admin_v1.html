@@ -1861,6 +1861,7 @@ let calDate=new Date(), repFilter='attivi', pagFilter='bozze';
 
 // ============ HELPERS ============
 const $=id=>document.getElementById(id);
+const esc=s=>{if(!s)return'';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;};
 const today=()=>new Date().toISOString().split('T')[0];
 const fmtDate=d=>{if(!d)return '—';const p=String(d).substring(0,10).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:'—'};
 const fmtDateTime=d=>{if(!d)return '—';try{return new Date(d).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}catch{return '—'}};
@@ -2030,7 +2031,8 @@ function enterApp(){
   renderAll();
   loadAnagClients().then(()=>{renderMacchine();populateModalClientsFromAnag()}).catch(()=>{});
   // Auto-refresh dashboard ogni 5 min (silenzioso, senza overlay)
-  setInterval(()=>{refreshData(true)},300000);
+  if(window._autoRefreshTimer) clearInterval(window._autoRefreshTimer);
+  window._autoRefreshTimer = setInterval(()=>{refreshData(true)},300000);
 }
 
 // ============ POPULATE SELECTS ============
@@ -2563,19 +2565,19 @@ async function runAIVision(urgId){
     r.style.display='block';
     const gravColor=res.gravita==='alta'?'#DC2626':res.gravita==='media'?'#F59E0B':'#10B981';
     r.innerHTML=`<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px">
-      <div style="font-weight:600;margin-bottom:6px">🔍 Diagnosi: ${res.diagnosi||'N/D'}</div>
-      <div style="margin-bottom:4px"><strong>Gravità:</strong> <span style="background:${gravColor}20;color:${gravColor};padding:2px 8px;border-radius:4px;font-weight:600">${(res.gravita||'?').toUpperCase()}</span></div>
-      ${res.ricambio_suggerito?`<div style="margin-bottom:4px"><strong>Ricambio:</strong> ${res.ricambio_suggerito} ${res.codice_ricambio?'('+res.codice_ricambio+')':''}</div>`:''}
-      ${res.azione_consigliata?`<div style="margin-bottom:4px"><strong>Azione:</strong> ${res.azione_consigliata}</div>`:''}
+      <div style="font-weight:600;margin-bottom:6px">🔍 Diagnosi: ${esc(res.diagnosi||'N/D')}</div>
+      <div style="margin-bottom:4px"><strong>Gravità:</strong> <span style="background:${gravColor}20;color:${gravColor};padding:2px 8px;border-radius:4px;font-weight:600">${esc((res.gravita||'?').toUpperCase())}</span></div>
+      ${res.ricambio_suggerito?`<div style="margin-bottom:4px"><strong>Ricambio:</strong> ${esc(res.ricambio_suggerito)} ${res.codice_ricambio?'('+esc(res.codice_ricambio)+')':''}</div>`:''}
+      ${res.azione_consigliata?`<div style="margin-bottom:4px"><strong>Azione:</strong> ${esc(res.azione_consigliata)}</div>`:''}
       <div style="margin-bottom:8px"><strong>Confidenza:</strong> <div style="background:var(--border);border-radius:4px;height:8px;width:150px;display:inline-block;vertical-align:middle"><div style="background:${gravColor};height:100%;border-radius:4px;width:${Math.round((res.confidence||0)*100)}%"></div></div> ${Math.round((res.confidence||0)*100)}%</div>
-      ${res.ricambio_suggerito?`<button class="btn btn-outline btn-sm" onclick="prefillOrdineFromAI('${urgId}','${(res.ricambio_suggerito||'').replace(/'/g,"\\'")}','${(res.codice_ricambio||'').replace(/'/g,"\\'")}')">📦 Ordina Ricambio</button>`:''}
+      ${res.ricambio_suggerito?`<button class="btn btn-outline btn-sm" onclick="prefillOrdineFromAI('${esc(urgId)}','${esc((res.ricambio_suggerito||'').replace(/'/g,"\\'"))}','${esc((res.codice_ricambio||'').replace(/'/g,"\\'"))}')">📦 Ordina Ricambio</button>`:''}
     </div>`;
     toast('Analisi AI completata!','ok');
     await refreshData(true);
   }catch(e){
     document.getElementById('aiVisionLoading_'+urgId).style.display='none';
     document.getElementById('aiVisionResult_'+urgId).style.display='block';
-    document.getElementById('aiVisionResult_'+urgId).innerHTML=`<div style="color:var(--err)">❌ Errore: ${e.message}</div>`;
+    document.getElementById('aiVisionResult_'+urgId).innerHTML=`<div style="color:var(--err)">❌ Errore: ${esc(e.message)}</div>`;
   }
 }
 function compressImage(file,maxSize,quality){
@@ -3563,10 +3565,10 @@ function mapSliderMove(idx){
   if(info){
     const badge=`<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${wp.color||'#888'};vertical-align:middle;margin-right:6px;flex-shrink:0"></span>`;
     const dataStr=wp.data?` &nbsp;📅 <b>${fmtDate(wp.data)}</b>${wp.ora?' '+wp.ora:''}`:'' ;
-    const tipoStr=wp.tipo?` &nbsp;🔧 ${wp.tipo}`:'';
-    const tecStr=wp.tecnico?` &nbsp;👤 ${wp.tecnico}`:'';
-    const noteStr=wp.note?`<br><span style="color:var(--gray);font-size:.8rem">💬 ${wp.note}</span>`:'';
-    info.innerHTML=`<div style="display:flex;align-items:flex-start;gap:4px">${badge}<div><b>${wp.stepNum||idx+1}. ${wp.name}</b>${dataStr}${tipoStr}${tecStr}${noteStr}</div></div>`;
+    const tipoStr=wp.tipo?` &nbsp;🔧 ${esc(wp.tipo)}`:'';
+    const tecStr=wp.tecnico?` &nbsp;👤 ${esc(wp.tecnico)}`:'';
+    const noteStr=wp.note?`<br><span style="color:var(--gray);font-size:.8rem">💬 ${esc(wp.note)}</span>`:'';
+    info.innerHTML=`<div style="display:flex;align-items:flex-start;gap:4px">${badge}<div><b>${wp.stepNum||idx+1}. ${esc(wp.name)}</b>${dataStr}${tipoStr}${tecStr}${noteStr}</div></div>`;
   }
   if(MAP)MAP.setView([wp.lat,wp.lng],14,{animate:true,duration:0.4});
 }
@@ -3844,7 +3846,7 @@ async function openChat(canaleId,nome){
   loadChatCanali();// refresh sidebar highlight
   await loadChatMessages();
   // Polling ogni 5s — skip se tab nascosta o fuori dalla sezione chat
-  if(CHAT_POLL)clearInterval(CHAT_POLL);
+  if(CHAT_POLL){clearInterval(CHAT_POLL);CHAT_POLL=null;}
   CHAT_POLL=setInterval(()=>{if(!document.hidden&&$('secChat')?.classList.contains('active'))loadChatMessages()},5000);
 }
 
@@ -4094,11 +4096,11 @@ function renderAnagClients(list){
     const geo=c.Lat?'📍':'';
     return `<tr class="anag-row" id="anagRow_${m3}" onclick="toggleAnagTree('${m3}')" style="cursor:pointer">
       <td><span class="anag-arrow" id="anagArrow_${m3}">▶</span></td>
-      <td><strong>${c.NomeAccount||'-'}</strong><br><small style="color:var(--muted)">${c.NomeInterno||''} ${geo}</small></td>
-      <td>${c.CittaFatturazione||''}</td>
-      <td>${c.ProvinciaFatturazione||''}</td>
-      <td><span class="badge ${c.StatoCliente==='Attivo'?'badge-ok':'badge-warn'}" style="font-size:.7rem">${c.StatoCliente||'-'}</span></td>
-      <td style="font-size:.8rem">${c.TitolareAccount||''}</td>
+      <td><strong>${esc(c.NomeAccount||'-')}</strong><br><small style="color:var(--muted)">${esc(c.NomeInterno||'')} ${geo}</small></td>
+      <td>${esc(c.CittaFatturazione||'')}</td>
+      <td>${esc(c.ProvinciaFatturazione||'')}</td>
+      <td><span class="badge ${c.StatoCliente==='Attivo'?'badge-ok':'badge-warn'}" style="font-size:.7rem">${esc(c.StatoCliente||'-')}</span></td>
+      <td style="font-size:.8rem">${esc(c.TitolareAccount||'')}</td>
       <td>${hi(ac.ROBOT,'ROBOT')}</td><td>${hi(ac.JUNO,'JUNO')}</td><td>${hi(ac.VECTOR,'VECTOR')}</td>
       <td>${hi(disc,'DISCOVERY')}</td><td>${hi(ac.CU,'CU')}</td><td>${hi(ac.COSMIX,'COSMIX')}</td>
       <td>${hi(ac.NAUTILUS,'NAUTILUS')}</td><td>${hi(altri,'CALM')}</td>
@@ -6218,7 +6220,7 @@ function renderVincoliTemplates(){
   const el = $('vincoliTemplates');
   if(!el) return;
   el.innerHTML = cfg.filter(t => !existing.includes(t.nome.toLowerCase()))
-    .map(t => `<button onclick="addVincoliCategory('${t.nome}','${t.icona}')">${t.icona} ${t.nome}</button>`).join('');
+    .map(t => `<button onclick="addVincoliCategory('${esc(t.nome)}','${esc(t.icona)}')">${esc(t.icona)} ${esc(t.nome)}</button>`).join('');
   if(!el.innerHTML) el.innerHTML = '<span style="font-size:.75rem;color:var(--gray)">Tutte le categorie suggerite sono gia state create.</span>';
 }
 

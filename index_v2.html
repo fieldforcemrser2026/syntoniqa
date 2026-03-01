@@ -849,6 +849,7 @@ function setLang(lang){ LANG = lang; localStorage.setItem('sq2_lang', lang); }
 
 // ============ HELPERS (coerenti con admin_v1) ============
 const $=id=>document.getElementById(id);
+const esc=s=>{if(!s)return'';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;};
 const today=()=>new Date().toISOString().split('T')[0];
 const fmtDate=d=>{if(!d)return'—';const p=String(d).substring(0,10).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:'—'};
 const fmtDateTime=d=>{if(!d)return'—';try{return new Date(d).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}catch{return'—'}};
@@ -1036,7 +1037,8 @@ function enterApp(){
   fillSelects();
   renderAll();
   // Auto-refresh silenzioso ogni 5 min (senza overlay)
-  setInterval(()=>{refreshData(true)},300000);
+  if(window._autoRefreshTimer) clearInterval(window._autoRefreshTimer);
+  window._autoRefreshTimer = setInterval(()=>{refreshData(true)},300000);
   // Init push notifications
   setTimeout(()=>PushMgr.init().catch(()=>{}),2000);
   // Init pull-to-refresh
