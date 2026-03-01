@@ -1750,40 +1750,42 @@ Rispondi SOLO JSON:
       async function callAI(promptText) {
         // PRIMARY: Gemini 2.0 Flash — fast, large context, reliable JSON
         if (env.GEMINI_KEY) {
-          try {
-            const geminiRes = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`,
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  system_instruction: { parts: [{ text: sysPrompt }] },
-                  contents: [{ parts: [{ text: promptText }] }],
-                  generationConfig: { maxOutputTokens: 16384, temperature: 0.3, responseMimeType: 'application/json' }
-                })
-              }
-            );
-            const gd = await geminiRes.json();
-            const text = gd.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (text) return text;
-          } catch (gemErr) {
-            // Gemini failed, try Workers AI fallback
+          const geminiRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                system_instruction: { parts: [{ text: sysPrompt }] },
+                contents: [{ parts: [{ text: promptText }] }],
+                generationConfig: { maxOutputTokens: 16384, temperature: 0.3, responseMimeType: 'application/json' }
+              })
+            }
+          );
+          if (!geminiRes.ok) {
+            const errBody = await geminiRes.text().catch(() => '');
+            throw new Error(`Gemini HTTP ${geminiRes.status}: ${errBody.substring(0, 200)}`);
           }
+          const gd = await geminiRes.json();
+          if (gd.error) throw new Error(`Gemini API: ${gd.error.message || JSON.stringify(gd.error).substring(0, 200)}`);
+          const text = gd.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!text) {
+            const blockReason = gd.candidates?.[0]?.finishReason || gd.promptFeedback?.blockReason || 'no_candidates';
+            throw new Error(`Gemini no output (${blockReason}). PromptFeedback: ${JSON.stringify(gd.promptFeedback || {}).substring(0, 150)}`);
+          }
+          return text;
         }
-        // FALLBACK: Workers AI Llama 3.1 8B
+        // FALLBACK: Workers AI Llama (solo se Gemini non configurato)
         if (env.AI) {
           const aiPromise = env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
-            messages: [
-              { role: 'system', content: sysPrompt },
-              { role: 'user', content: promptText }
-            ],
+            messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
             max_tokens: 8192
           });
           const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 90000));
           const res = await Promise.race([aiPromise, timeout]);
           return res?.response || null;
         }
-        return null;
+        throw new Error('Nessun AI engine configurato. Serve GEMINI_KEY o AI binding.');
       }
 
       // Parser robusto — gestisce JSON troncati (risposta tagliata a max_tokens)
@@ -1847,16 +1849,13 @@ Rispondi SOLO JSON:
       // Single AI call for ALL modes (mese/settimana/vuoti)
       try {
         const rawText = await callAI(prompt);
-        if (!rawText) return err('AI non ha generato risposta. Verifica GEMINI_KEY nelle env del worker e riprova.');
+        if (!rawText) return err('AI non ha generato risposta. Verifica GEMINI_KEY nelle env del worker.');
         const result = parseAIResponse(rawText);
         if (!result) return ok({ summary: 'Errore formato risposta', piano: [], warnings: ['Risposta AI non parsabile. Riprova.'], raw: rawText.substring(0, 1500) });
         result.piano = postProcess(result.piano);
         return ok(result);
       } catch (e) {
-        const msg = (e.message || '').includes('timeout') || (e.message || '').includes('abort')
-          ? 'Timeout AI. Riprova tra qualche secondo.'
-          : `Errore AI: ${e.message}`;
-        return err(msg);
+        return err(`Errore AI: ${e.message || 'sconosciuto'}`);
       }
     }
 
