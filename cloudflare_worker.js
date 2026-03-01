@@ -1688,7 +1688,7 @@ async function handlePost(action, body, env) {
         } else if (modalita === 'vuoti') {
           periodoIstruzione = `GENERA PIANO SOLO per i giorni SENZA interventi nel piano esistente. Non duplicare giorni gia coperti.`;
         } else {
-          periodoIstruzione = `GENERA PIANO per TUTTO il mese ${meseTarget} (tutti i giorni lavorativi Lun-Sab)`;
+          periodoIstruzione = `GENERA PIANO per TUTTO il mese ${meseTarget} (tutti i giorni lavorativi Lun-Ven). Sab/Dom solo reperibilita.`;
         }
       }
 
@@ -1733,9 +1733,9 @@ ${tagliandiContext}
 ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}
 
 ISTRUZIONI GENERAZIONE:
-${periodoIstruzione || 'Genera piano per OGNI giorno lavorativo (lun-sab)'}
-- SOLO giorni lun-sab. MAI domenica.
-- TUTTI i ${nTecAttivi} tecnici attivi devono avere interventi OGNI giorno (08:00-17:00) = MINIMO ${nTecAttivi} righe/giorno.
+${periodoIstruzione || 'Genera piano per OGNI giorno lavorativo (lun-ven)'}
+- Tagliandi/interventi SOLO lun-ven. SABATO e DOMENICA: niente tagliandi — solo il tecnico REPERIBILE per eventuali urgenze (se previsto dalla reperibilita).
+- Lun-ven: TUTTI i ${nTecAttivi} tecnici attivi devono avere interventi OGNI giorno (08:00-17:00) = MINIMO ${nTecAttivi} righe/giorno.
 - Durata: un tagliando puo richiedere 4-8 ore (anche giornata intera). Urgenze 1-3h. Se tagliando=giornata intera, 1 solo intervento per quel tecnico.
 - "tagliando" e "service" sono sinonimi = manutenzione macchina. Nelle note scrivi il MODELLO macchina (es: "Astronaut A5", "Vector 70").
 - Affiancamento junior: se vincolo dice "affianca senior", genera DUE righe separate (una senior + una junior) con STESSO cliente/data/ora/furgone.
@@ -1770,7 +1770,7 @@ CLIENTI: ${cCli}
 ${tagliandiContext ? tagliandiContext.substring(0,500) : ''}
 
 ${periodoIstruzione || 'Genera piano mese intero'}
-- SOLO lun-sab, MAI domenica.
+- SOLO lun-ven. Sab/Dom: solo reperibilita urgenze, no tagliandi.
 - TUTTI i tecnici attivi: almeno 1 intervento AL GIORNO.
 - Tagliando=4-8h (anche giornata intera). Urgenza=1-3h.
 - Affiancamento junior+senior = DUE righe: stesso cliente/data/ora/furgone.
