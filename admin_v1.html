@@ -4282,13 +4282,13 @@ function normAssetType(tipo){
   tipo=(tipo||'').toUpperCase();
   if(tipo.includes('ASTRONAUT')||tipo==='ROBOT')return 'ROBOT';
   if(tipo.includes('JUNO'))return 'JUNO';
-  if(tipo.includes('VECTOR'))return 'VECTOR';
+  if(tipo.includes('VECTOR'))return 'VECTOR'; // Include Vector PDB, Vector cranes, trolley, accessories
   if(tipo.includes('DISCOVERY')&&!tipo.includes('COLLECTOR'))return 'DISCOVERY';
   if(tipo.includes('COLLECTOR'))return 'COLLECTOR';
   if(tipo.includes('CENTRAL')||tipo==='CU')return 'CU';
   if(tipo.includes('CALM')||tipo.includes('ALLAT'))return 'CALM';
   if(tipo.includes('COMPRESS'))return 'COMPRESSORI';
-  if(tipo.includes('COSMIX'))return 'COSMIX';
+  if(tipo.includes('COSMIX')||tipo.includes('FEED STATION'))return 'COSMIX';
   if(tipo.includes('NAUTILUS'))return 'NAUTILUS';
   if(tipo.includes('LUNA'))return 'LUNA';
   if(tipo.includes('METEOR'))return 'METEOR';
@@ -4321,16 +4321,21 @@ async function loadAnagClients(){
         if(!byM3[m3])byM3[m3]=[];
         byM3[m3].push(a);
       });
-      // Compute _assetCounts per client — SOLO assets Attivi o Da installare
-      const VALID_ASSET_STATUS=['attivo','da installare','da_installare','installato','in uso'];
+      // Compute _assetCounts per client — SOLO assets con Status "Attivo" o "Venduto – da installare"
+      const VALID_ASSET_STATUS=['attivo','da installare','da_installare','venduto'];
       ANAG_CLIENTI.forEach(c=>{
         const m3=c.CodiceM3;
         const myAssets=byM3[m3]||[];
         ANAG_ASSETS_CACHE[m3]=myAssets;
-        // Filtra solo assets con status valido (attivi + da installare)
+        // Filtra: DEVE avere un Status valido (no null, no Disattivato/Ritirato/Sospeso)
+        // E deve essere un tipo prodotto reale (non Customer Item, Accessories, ecc.)
         const activeAssets=myAssets.filter(a=>{
           const s=(a.Status||'').toLowerCase().trim();
-          return !s||VALID_ASSET_STATUS.some(v=>s.includes(v));
+          if(!s)return false; // Nessuno status = non contare
+          if(!VALID_ASSET_STATUS.some(v=>s.includes(v)))return false; // Status non valido
+          // Solo tipi prodotto reali (quelli con foglio dedicato)
+          const tipo=normAssetType(a.GruppoAttrezzatura||a.TipoFoglio||'');
+          return tipo!=='ALTRI'; // Escludi Customer Item, Accessories, Whole Goods ecc.
         });
         const counts={_total:activeAssets.length,_totalAll:myAssets.length};
         activeAssets.forEach(a=>{
@@ -4641,7 +4646,7 @@ async function importAnagXlsx(file){
             DataInstallazione:r['Data di installazione']||null,
             DataCreazione:r['Data creazione']||null,
             DataUltimaModifica:r['Data ultima modifica']||null,
-            Status:r['Status']||'Attivo',TipoFoglio:'Assets',
+            Status:r['Status']||null,TipoFoglio:'Assets',
             Provincia:null,RhLh:null,Ind:null,Note:null,SalesAdvisor:null
           };
           assets.push(asset);
@@ -4672,11 +4677,11 @@ async function importAnagXlsx(file){
       // Each config: hr=header row (0-based), data starts at hr+1
       // Right-side table (extended): cc=client col, sc=serial col, dc=date col, mc=movex col, nc=note col, pc=provincia col, sa=sales advisor col, stc=status col, modc=model col
       const sheetCfgs={
-        ROBOT:  {hr:4,cc:0,mc:1,sc:9,dc:10,pc:11,sa:12,nc:14,modc:null,stc:null,rhlh:6,ind:7},
+        ROBOT:  {hr:4,cc:0,mc:1,sc:9,dc:10,pc:11,sa:12,nc:14,modc:null,stc:31,rhlh:6,ind:7},
         JUNO:   {hr:4,cc:1,mc:11,sc:3,dc:4,pc:6,sa:7,nc:9,modc:2,stc:12,rhlh:null,ind:null},
         VECTOR: {hr:4,cc:13,mc:23,sc:15,dc:16,pc:18,sa:19,nc:21,modc:14,stc:24,rhlh:null,ind:null},
         DISCOVERY:{hr:4,cc:13,mc:23,sc:15,dc:16,pc:18,sa:19,nc:21,modc:14,stc:24,rhlh:null,ind:null},
-        COLLECTOR:{hr:4,cc:16,mc:null,sc:18,dc:19,pc:21,sa:22,nc:null,modc:17,stc:null,rhlh:null,ind:null},
+        COLLECTOR:{hr:4,cc:16,mc:null,sc:18,dc:19,pc:21,sa:22,nc:null,modc:17,stc:27,rhlh:null,ind:null},
         CU:     {hr:4,cc:17,mc:27,sc:19,dc:20,pc:22,sa:23,nc:25,modc:18,stc:28,rhlh:null,ind:null},
         CALM:   {hr:4,cc:8,mc:18,sc:10,dc:11,pc:13,sa:14,nc:16,modc:9,stc:19,rhlh:null,ind:null},
         COMPRESSORI:{hr:4,cc:15,mc:25,sc:17,dc:18,pc:20,sa:21,nc:23,modc:16,stc:26,rhlh:null,ind:null},
@@ -4724,7 +4729,8 @@ async function importAnagXlsx(file){
             if(salesAdv&&!existing.SalesAdvisor)existing.SalesAdvisor=String(salesAdv);
             if(rhlh&&!existing.RhLh)existing.RhLh=String(rhlh);
             if(ind&&!existing.Ind)existing.Ind=String(ind);
-            if(status&&!existing.Status)existing.Status=String(status);
+            // Status dal foglio singolo SOVRASCRIVE sempre (più affidabile del foglio Assets generico)
+            if(status)existing.Status=String(status);
             if(!existing.TipoFoglio||existing.TipoFoglio==='Assets')existing.TipoFoglio=sname;
             if(!existing.GruppoAttrezzatura||existing.GruppoAttrezzatura==='Assets')existing.GruppoAttrezzatura=sname;
             enriched++;
