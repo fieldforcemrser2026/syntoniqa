@@ -152,6 +152,8 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes aiProgress{0%{width:10%;margin-left:0}50%{width:50%;margin-left:25%}100%{width:10%;margin-left:90%}}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5)}50%{box-shadow:0 0 0 8px rgba(239,68,68,0)}}
+.pm-row-detail{max-height:0;overflow:hidden;transition:max-height .3s ease}
+.pm-row-detail.open{max-height:600px}
 
 /* ===== FORM ELEMENTS ===== */
 .field{margin-bottom:16px}
@@ -724,6 +726,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <button class="btn btn-ok btn-sm" onclick="openNewCliente()">+ Nuovo Cliente</button>
 </div>
 </div>
+<div id="cliStats" style="padding:12px 16px;display:flex;gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--gray4)"></div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
 <table class="tbl"><thead><tr><th>Nome</th><th>Città</th><th>Prov</th><th>Indirizzo</th><th>Telefono</th><th>Contratto</th><th>📍</th><th></th></tr></thead><tbody id="tblClienti"></tbody></table>
 </div>
@@ -1113,26 +1116,28 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <!-- ========== SEC: PM SCHEDULING ========== -->
 <section class="sec" id="secPm">
 <div class="card">
-<div class="card-head"><h3>🔧 PM Scheduling — Manutenzione Programmata</h3>
+<div class="card-head"><h3>🔧 PM Scheduling</h3>
 <div class="btn-group">
-<button class="btn btn-sm" style="background:#6366F1;color:white" onclick="generatePMSchedule(true)">🔍 Anteprima</button>
-<button class="btn btn-primary btn-sm" onclick="generatePMSchedule(false)">⚡ Genera Interventi</button>
-</div></div>
+<button class="btn btn-sm" style="background:#6366F1;color:white" onclick="bulkGeneratePM()">⚡ Genera PM 3 mesi</button>
+<button class="btn btn-sm btn-outline" onclick="togglePMSettings()">⚙️ Cicli</button>
+</div>
+</div>
 <div class="card-body">
-<div class="field-row" style="margin-bottom:16px;gap:12px;flex-wrap:wrap">
-<div class="field" style="max-width:180px"><label>Mese Target</label><input type="month" id="pmMeseTarget" class="inp"></div>
-<div class="field" style="max-width:180px"><label>Ciclo PM</label>
-<select id="pmCiclo" class="inp"><option value="">Tutti</option><option value="A1">A1 — Bimestrale (60gg)</option><option value="B2">B2 — Trimestrale (90gg)</option><option value="C3">C3 — Semestrale (180gg)</option><option value="D8">D8 — Annuale (365gg)</option></select></div>
-<div class="field" style="max-width:200px"><label>Cliente (opz.)</label>
-<select id="pmCliente" class="inp"><option value="">Tutti i clienti</option></select></div>
+<!-- Status filter -->
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px" id="pmStatusBar"></div>
+<!-- Search + model filter -->
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+<input type="text" id="pmSearch" placeholder="🔍 Cerca cliente/macchina..." oninput="renderPMTable()" style="flex:1;min-width:200px;padding:8px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem">
+<select id="pmModelFilter" onchange="renderPMTable()" style="padding:8px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem"><option value="">Tutti i modelli</option></select>
 </div>
-<div id="pmStatus" style="display:none;padding:12px;border-radius:var(--radius);margin-bottom:12px"></div>
-<div id="pmResults" style="overflow-x:auto"></div>
+<!-- PM List -->
+<div id="pmListContainer"></div>
 </div>
 </div>
-<div class="card" style="margin-top:16px">
-<div class="card-head"><h3>📅 Tagliandi in Scadenza</h3></div>
-<div class="card-body"><div id="pmTagliandiScadenza" style="overflow-x:auto"></div></div>
+<!-- Cycle definitions (collapsible) -->
+<div class="card" style="margin-top:16px;display:none" id="pmSettingsCard">
+<div class="card-head"><h3>⚙️ Cicli Manutenzione</h3></div>
+<div class="card-body" id="pmCycleDefsContainer"></div>
 </div>
 </section>
 
@@ -1512,7 +1517,11 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="field"><label>Macchina</label><select id="muMacchina"></select></div>
 </div>
 <div class="field"><label>Problema</label><textarea id="muProblema" rows="3" placeholder="Descrivi il problema..."></textarea></div>
-<div class="field"><label>Priorità</label><select id="muPriorita"></select></div>
+<div class="field"><label>Priorità</label><select id="muPriorita" onchange="onUrgPrioChange()"></select></div>
+<div class="field-row">
+<div class="field"><label>Intervento previsto</label><input type="date" id="muDataPrev"><div id="muDataHint" style="font-size:.65rem;color:var(--gray);margin-top:2px"></div></div>
+<div class="field"><label>Durata (ore)</label><input type="number" id="muDurata" value="4" step="0.5" min="0.5" style="max-width:80px"></div>
+</div>
 <div class="field"><label>Note</label><textarea id="muNote" rows="2"></textarea></div>
 </div>
 <div class="modal-foot">
@@ -2296,6 +2305,10 @@ function renderDashboard(){
   const oggiComp=oggi.filter(p=>p.Stato==='completato').length;
   const oggiCorso=oggi.filter(p=>p.Stato==='in_corso').length;
   const pctOggi=oggi.length>0?Math.round(oggiComp/oggi.length*100):0;
+  const in30d=new Date(Date.now()+30*86400000).toISOString().split('T')[0];
+  const macConPM=(DATA.macchine||[]).filter(m=>!m.Obsoleto&&m.ProssimoTagliando);
+  const pmScad=macConPM.filter(m=>m.ProssimoTagliando<d).length;
+  const pmPross=macConPM.filter(m=>m.ProssimoTagliando>=d&&m.ProssimoTagliando<=in30d).length;
   $('kpiDash').innerHTML=`
     <div class="kpi blue"><div class="kpi-val">${oggi.length}</div><div class="kpi-lbl">📋 Interventi Oggi</div><div class="kpi-sub">${oggiComp}✅ ${oggiCorso}⚡ ${oggi.length-oggiComp-oggiCorso}⏳</div></div>
     <div class="kpi ${pctOggi>=80?'green':pctOggi>=50?'yellow':'red'}"><div class="kpi-val">${pctOggi}%</div><div class="kpi-lbl">📊 Completamento Oggi</div><div class="kpi-sub">${oggiComp}/${oggi.length} fatti</div></div>
@@ -2303,6 +2316,7 @@ function renderDashboard(){
     <div class="kpi yellow"><div class="kpi-val">${ord.filter(o=>o.Stato!=='arrivato').length}</div><div class="kpi-lbl">📦 Ordini in Attesa</div></div>
     <div class="kpi blue"><div class="kpi-val">${automezziAtt}/${automezziTot}</div><div class="kpi-lbl">🚐 Mezzi Attivi</div></div>
     <div class="kpi purple"><div class="kpi-val">${tecs}</div><div class="kpi-lbl">👥 Tecnici</div>${reps.length>0?`<div class="kpi-sub">📞 ${reps.length} in reperibilità</div>`:''}</div>
+    <div class="kpi ${pmScad>0?'red':pmPross>0?'yellow':'green'}"><div class="kpi-val">${pmScad}</div><div class="kpi-lbl">🔧 Tagliandi Scaduti</div>${pmPross>0?`<div class="kpi-sub">🟠 ${pmPross} prossimi 30gg</div>`:''}</div>
   `;
 
   // Tabella oggi
@@ -2365,6 +2379,8 @@ function renderDashboard(){
   if(ordOld.length)alerts.push({icon:'📦',txt:`${ordOld.length} ordini in attesa da >7 giorni`,color:'#EA580C',action:`showSec('ordini')`});
   const intNonPart=oggi.filter(p=>{const now=new Date();const h=now.getHours();const m=now.getMinutes();const nowT=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');return p.Stato==='pianificato'&&p.OraInizio&&p.OraInizio<nowT});
   if(intNonPart.length)alerts.push({icon:'⏰',txt:`${intNonPart.length} interventi di oggi non ancora iniziati (ora passata)`,color:'#DC2626',action:`showSec('piano')`});
+  if(pmScad>0)alerts.push({icon:'🔧',txt:`${pmScad} tagliand${pmScad>1?'i':'o'} scadut${pmScad>1?'i':'o'}!`,color:'#DC2626',action:`showSec('pm')`});
+  if(pmPross>5)alerts.push({icon:'🟡',txt:`${pmPross} tagliandi in scadenza nei prossimi 30 giorni`,color:'#D97706',action:`showSec('pm')`});
   const alertEl=$('dashAlerts');
   if(alerts.length){
     alertEl.style.display='';
@@ -2902,8 +2918,19 @@ async function submitRichiesta(){
 // ============ CLIENTI ============
 function renderClienti(){
   const q=($('srcClienti')?.value||'').toLowerCase();
-  let items=(DATA.clienti||[]).filter(c=>!c.Obsoleto);
-  if(q)items=items.filter(c=>(c.Nome||'').toLowerCase().includes(q)||(c.Citta||'').toLowerCase().includes(q));
+  let all=(DATA.clienti||[]).filter(c=>!c.Obsoleto);
+  // Stats
+  const geo=all.filter(c=>(c.Lat||c.Latitudine)&&(c.Lng||c.Longitudine)).length;
+  const provCounts={};all.forEach(c=>{const p=c.Prov||'—';provCounts[p]=(provCounts[p]||0)+1});
+  const topProv=Object.entries(provCounts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const statsEl=$('cliStats');
+  if(statsEl)statsEl.innerHTML=`
+    <div style="display:flex;align-items:center;gap:6px"><span style="font-size:1.5rem;font-weight:700">${all.length}</span><span style="font-size:.75rem;color:var(--gray)">Clienti totali</span></div>
+    <div style="display:flex;align-items:center;gap:6px"><span style="font-size:1.5rem;font-weight:700;color:var(--ok)">${geo}</span><span style="font-size:.75rem;color:var(--gray)">Geocodificati</span></div>
+    <div style="display:flex;align-items:center;gap:6px"><span style="font-size:1.5rem;font-weight:700;color:var(--warn)">${all.length-geo}</span><span style="font-size:.75rem;color:var(--gray)">Senza coordinate</span></div>
+    <div style="font-size:.75rem;color:var(--gray);display:flex;align-items:center;gap:4px">📍 Top: ${topProv.map(([p,n])=>`${p}(${n})`).join(', ')}</div>`;
+  let items=all;
+  if(q)items=items.filter(c=>(c.Nome||'').toLowerCase().includes(q)||(c.Citta||'').toLowerCase().includes(q)||(c.Prov||'').toLowerCase().includes(q));
   $('tblClienti').innerHTML=items.length?items.map(c=>`<tr>
     <td><strong>${c.Nome||'—'}</strong></td>
     <td>${c.Citta||'—'}</td>
@@ -2914,6 +2941,14 @@ function renderClienti(){
     <td>${(c.Lat||c.Latitudine)&&(c.Lng||c.Longitudine)?'<span class="tag tag-ok">📍</span>':'<span class="tag tag-gray">—</span>'}</td>
     <td><button class="btn btn-ghost btn-xs" onclick="editCliente('${c.ID}')">✏️</button><button class="btn btn-ghost btn-xs" onclick="showDetail('cliente','${c.ID}')">👁️</button></td>
   </tr>`).join(''):'<tr><td colspan="8" class="empty"><p>Nessun cliente trovato</p></td></tr>';
+  populateProductDropdowns();
+}
+function populateProductDropdowns(){
+  document.querySelectorAll('select[data-product-source]').forEach(sel=>{
+    if(sel.options.length>1)return;
+    const models=[...new Set((DATA.macchine||[]).map(m=>m.Modello).filter(Boolean))].sort();
+    models.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;sel.appendChild(o)});
+  });
 }
 
 // ============ MACCHINE ============
@@ -3191,7 +3226,7 @@ function renderTecnici(){
     <td>${t.Base||'—'}</td>
     <td>${t.Telefono?`<a href="tel:${t.Telefono}">${t.Telefono}</a>`:'—'}</td>
     <td>${t.Email||'—'}</td>
-    <td>${t.Attivo?'<span class="tag tag-ok">Attivo</span>':'<span class="tag tag-gray">Inattivo</span>'}</td>
+    <td><button onclick="toggleTecnicoAttivo('${t.ID}',${!t.Attivo})" class="badge" style="background:${t.Attivo&&t.Attivo!=='false'?'#D1FAE5':'#F3F4F6'};color:${t.Attivo&&t.Attivo!=='false'?'#065F46':'#6B7280'};border:none;cursor:pointer;padding:3px 10px;border-radius:10px;font-size:.7rem">${t.Attivo&&t.Attivo!=='false'?'✅ Attivo':'⬜ Inattivo'}</button></td>
     <td><button class="btn btn-ghost btn-xs" onclick="editUtente('${t.ID}')">✏️</button><label class="btn btn-outline" style="font-size:.75rem;padding:4px 8px;cursor:pointer;margin-left:2px">📷<input type="file" accept="image/*" style="display:none" onchange="uploadFotoTec('${t.ID}',this)"></label></td>
   </tr>`}).join('');
 }
@@ -3874,9 +3909,37 @@ function renderPowerBI(){
 function renderConfig(){
   const cfg=DATA.config||{};
   const keys=Object.keys(cfg);
-  $('configBody').innerHTML=keys.length?keys.map(k=>`<div class="field-row mb-sm">
-    <div class="field"><label>${k}</label><input type="text" class="cfg-input" data-key="${k}" value="${cfg[k]||''}"></div>
-  </div>`).join(''):'<p class="empty">Nessuna configurazione trovata</p>';
+  // Group by prefix
+  const categories={pm_:{label:'🔧 PM Scheduling',items:{}},sla_:{label:'⏱️ SLA',items:{}},telegram_:{label:'📱 Telegram',items:{}},email_:{label:'📧 Email',items:{}},general:{label:'⚙️ Generali',items:{}}};
+  keys.forEach(k=>{
+    const prefix=Object.keys(categories).find(p=>p!=='general'&&k.startsWith(p));
+    if(prefix)categories[prefix].items[k]=cfg[k];
+    else categories.general.items[k]=cfg[k];
+  });
+  let html='';
+  // Feature toggles from WL_CONFIG
+  if(typeof WL_CONFIG!=='undefined'&&WL_CONFIG.features){
+    html+=`<div style="margin-bottom:20px"><h4 style="margin-bottom:8px">🎛️ Feature Toggles</h4><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">`;
+    Object.entries(WL_CONFIG.features).forEach(([k,v])=>{
+      const color=v?'#10B981':'#9CA3AF';
+      html+=`<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:var(--radius-sm);background:${v?'#F0FDF4':'#F9FAFB'};font-size:.8125rem"><span style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0"></span>${k}</div>`;
+    });
+    html+=`</div></div>`;
+  }
+  // Config categories
+  Object.values(categories).forEach(cat=>{
+    const catKeys=Object.keys(cat.items);
+    if(!catKeys.length)return;
+    html+=`<div style="margin-bottom:16px"><h4 style="margin-bottom:8px;font-size:.875rem">${cat.label}</h4>`;
+    catKeys.forEach(k=>{
+      const val=cat.items[k]||'';
+      const isJson=val.startsWith('{')||val.startsWith('[');
+      html+=`<div class="field-row mb-sm"><div class="field"><label style="font-size:.75rem;font-family:var(--mono)">${k}</label>${isJson?`<textarea class="cfg-input" data-key="${k}" rows="3" style="width:100%;font-size:.75rem;font-family:var(--mono)">${val}</textarea>`:`<input type="text" class="cfg-input" data-key="${k}" value="${val}" style="font-size:.8125rem">`}</div></div>`;
+    });
+    html+=`</div>`;
+  });
+  if(!html)html='<p class="empty">Nessuna configurazione trovata</p>';
+  $('configBody').innerHTML=html;
 }
 function saveConfig(){
   const configObj={};
@@ -4794,6 +4857,18 @@ async function savePiano(){
   }catch(e){toast(e.message,'err')}
 }
 
+function onUrgPrioChange(){
+  const priId=$('muPriorita')?.value;if(!priId)return;
+  const pri=(DATA.priorita||[]).find(p=>p.ID===priId);
+  const liv=pri?.Livello||1;
+  const d=new Date();let hint='';
+  if(liv<=1){$('muDataPrev').value=today();$('muDurata').value='4';hint='⚡ Oggi, intervento immediato (4h)'}
+  else if(liv<=2){$('muDataPrev').value=today();$('muDurata').value='4';hint='🔴 Oggi (4h)'}
+  else if(liv<=3){d.setDate(d.getDate()+1);$('muDataPrev').value=d.toISOString().slice(0,10);$('muDurata').value='3';hint='🟠 Domani (3h)'}
+  else{d.setDate(d.getDate()+2);$('muDataPrev').value=d.toISOString().slice(0,10);$('muDurata').value='2';hint='🟡 Entro 2 giorni (2h)'}
+  if($('muDataHint'))$('muDataHint').innerHTML=hint;
+}
+
 async function saveUrgenza(){
   try{
     const data={ClienteID:$('muCliente').value,MacchinaID:$('muMacchina').value,
@@ -4807,15 +4882,13 @@ async function saveUrgenza(){
     const priObj=(DATA.priorita||[]).find(p=>p.ID===priId);
     const priLivello=priObj?.Livello||1;
     const priNome=priObj?.Nome||'Urgente';
-    let dataInt;const d=new Date();
-    if(priLivello<=2){dataInt=today()}
-    else if(priLivello===3){d.setDate(d.getDate()+1);dataInt=d.toISOString().slice(0,10)}
-    else{d.setDate(d.getDate()+2);dataInt=d.toISOString().slice(0,10)}
+    const dataInt=$('muDataPrev')?.value||today();
+    const durata=parseFloat($('muDurata')?.value)||4;
     const oraInt=priLivello<=2?new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit',hour12:false}):'08:00';
     try{
       await apiCall('createPiano',{data:{ClienteID:data.ClienteID,MacchinaID:data.MacchinaID||null,
-        PrioritaID:priId,Data:dataInt,OraInizio:oraInt,OraFine:calcOraFine(oraInt,priLivello<=2?4:2),
-        DurataOre:priLivello<=2?4:2,Note:'[URGENZA ADMIN]\n🚨 Priorità: '+priNome+'\n'+data.Problema,
+        PrioritaID:priId,Data:dataInt,OraInizio:oraInt,OraFine:calcOraFine(oraInt,durata),
+        DurataOre:durata,Note:'[URGENZA ADMIN]\n🚨 Priorità: '+priNome+'\n'+data.Problema,
         Stato:'pianificato'}},'POST');
     }catch(e){console.warn('Piano da urgenza:',e)}
 
@@ -4911,6 +4984,43 @@ async function saveRep(){
     await apiCall('createReperibilita',{data},'POST');
     toast('Turno creato','ok');closeModal('modalRep');await refreshData(true);
   }catch(e){toast(e.message,'err')}
+}
+async function editRep(id){
+  const r=(DATA.reperibilita||[]).find(x=>x.ID===id);if(!r)return;
+  $('mrTecnico').value=r.TecnicoID||'';$('mrDal').value=(r.DataInizio||'').split('T')[0];
+  $('mrAl').value=(r.DataFine||'').split('T')[0];$('mrTurno').value=r.Turno||'';
+  $('mrTipo').value=r.Tipo||'reperibilita';$('mrNote').value=r.Note||'';
+  openModal('modalRep');
+  // Override save to update instead of create
+  const saveBtn=document.querySelector('#modalRep .btn-primary');
+  if(saveBtn){saveBtn.onclick=async function(){
+    try{await apiCall('updateReperibilita',{id,TecnicoID:$('mrTecnico').value,DataInizio:$('mrDal').value,DataFine:$('mrAl').value,Turno:$('mrTurno').value,Tipo:$('mrTipo').value,Note:$('mrNote').value},'POST');
+    toast('Turno aggiornato','ok');closeModal('modalRep');await refreshData(true);saveBtn.onclick=()=>saveRep()}catch(e){toast(e.message,'err')}
+  }}
+}
+async function deleteRep(id){
+  if(!confirm('Eliminare questo turno di reperibilità?'))return;
+  try{await apiCall('deleteReperibilita',{id},'POST');toast('Turno eliminato','ok');await refreshData(true)}catch(e){toast(e.message,'err')}
+}
+async function editTrasf(id){
+  const t=(DATA.trasferte||[]).find(x=>x.ID===id);if(!t)return;
+  $('mtCliente').value=t.ClienteID||'';$('mtDal').value=(t.DataInizio||'').split('T')[0];
+  $('mtAl').value=(t.DataFine||'').split('T')[0];$('mtAutomezzo').value=t.AutomezzoID||'';
+  $('mtMotivo').value=t.Motivo||'';
+  openModal('modalTrasf');
+  const saveBtn=document.querySelector('#modalTrasf .btn-primary');
+  if(saveBtn){saveBtn.onclick=async function(){
+    try{const tecniciSel=Array.from($('mtTecnici').selectedOptions).map(o=>o.value);
+    await apiCall('updateTrasferta',{id,TecniciIDs:tecniciSel,TecnicoID:tecniciSel[0]||'',ClienteID:$('mtCliente').value,DataInizio:$('mtDal').value,DataFine:$('mtAl').value,AutomezzoID:$('mtAutomezzo').value,Motivo:$('mtMotivo').value},'POST');
+    toast('Trasferta aggiornata','ok');closeModal('modalTrasf');await refreshData(true);saveBtn.onclick=()=>saveTrasf()}catch(e){toast(e.message,'err')}
+  }}
+}
+async function deleteTrasf(id){
+  if(!confirm('Eliminare questa trasferta?'))return;
+  try{await apiCall('deleteTrasferta',{id},'POST');toast('Trasferta eliminata','ok');await refreshData(true)}catch(e){toast(e.message,'err')}
+}
+async function toggleTecnicoAttivo(id,newVal){
+  try{await apiCall('updateUser',{id,attivo:newVal,userId:USER?.ID},'POST');toast(newVal?'Tecnico attivato':'Tecnico disattivato','ok');await refreshData(true)}catch(e){toast(e.message,'err')}
 }
 
 async function saveTrasf(){
@@ -6015,74 +6125,180 @@ function printReport(){
 }
 
 // ============ PM SCHEDULING ============
-function initPMSection(){
-  // Set default month to next month
-  const d=new Date(); d.setMonth(d.getMonth()+1);
-  const el=$('pmMeseTarget'); if(el)el.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-  // Populate client dropdown
-  const sel=$('pmCliente');
-  if(sel){
-    const opts=(DATA.clienti||[]).map(c=>`<option value="${c.ID}">${c.Nome||c.ID}</option>`).join('');
-    sel.innerHTML='<option value="">Tutti i clienti</option>'+opts;
-  }
-  renderPMTagliandi();
-}
-async function generatePMSchedule(dryRun){
-  const mese=$('pmMeseTarget')?.value;
-  if(!mese){toast('Seleziona mese target','err');return}
-  const ciclo=$('pmCiclo')?.value||'';
-  const clienteId=$('pmCliente')?.value||'';
-  const status=$('pmStatus');
-  status.style.display='block';
-  status.style.background='rgba(99,102,241,.08)';
-  status.innerHTML='⏳ '+(dryRun?'Calcolando anteprima...':'Generando interventi PM...');
+let PM_DATA=[];
+let PM_FILTER='tutti';
+let PM_CYCLE_DEFS=[];
+let PM_OPEN_ROW=null;
+
+function initPMSection(){ loadPMList(); }
+
+async function loadPMList(){
   try{
-    const r=await apiCall('generatePMSchedule',{mese_target:mese,ciclo:ciclo||undefined,cliente_id:clienteId||undefined,dry_run:dryRun,userId:USER?.ID},'POST');
-    const items=r.scheduled||[];
-    if(!items.length){
-      status.innerHTML='ℹ️ Nessun tagliando/service in scadenza nel mese '+mese;
-      status.style.background='rgba(234,179,8,.1)';
-      $('pmResults').innerHTML='';return;
-    }
-    if(dryRun){
-      status.innerHTML=`🔍 <b>${items.length}</b> interventi PM da generare per ${mese}`;
-      status.style.background='rgba(99,102,241,.08)';
-    } else {
-      status.innerHTML=`✅ <b>${r.created||0}</b> interventi PM creati per ${mese}${r.errors?.length?' ('+r.errors.length+' errori)':''}`;
-      status.style.background='rgba(34,197,94,.1)';
-      if(r.errors?.length) console.warn('PM errors:',r.errors);
-      await refreshData();
-    }
-    // Render table
-    let html='<table class="data-table"><thead><tr><th>Macchina</th><th>Modello</th><th>Cliente</th><th>Data Suggerita</th><th>Ciclo</th></tr></thead><tbody>';
-    items.forEach(it=>{
-      const cliName=it.cliente_id?((DATA.clienti||[]).find(c=>c.ID===it.cliente_id)||{}).Nome||it.cliente_id:'—';
-      html+=`<tr><td>${it.macchina_nome}</td><td>${it.modello||'—'}</td><td>${cliName}</td><td>${it.data_suggerita}</td><td><span style="padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:600;background:${it.ciclo==='A1'?'#DBEAFE':it.ciclo==='B2'?'#D1FAE5':it.ciclo==='C3'?'#FEF3C7':'#FEE2E2'};color:${it.ciclo==='A1'?'#1E40AF':it.ciclo==='B2'?'#065F46':it.ciclo==='C3'?'#92400E':'#991B1B'}">${it.ciclo||'?'} ${it.ciclo_nome||''}</span></td></tr>`;
-    });
-    html+='</tbody></table>';
-    $('pmResults').innerHTML=html;
+    const r=await apiCall('getPMCalendar',{mese:'all',userId:USER?.ID},'POST');
+    PM_DATA=r.calendar||[];
+    PM_CYCLE_DEFS=r.cycle_definitions||PM_CYCLE_DEFS;
+    // Populate model filter
+    const models=[...new Set(PM_DATA.map(m=>m.modello).filter(Boolean))].sort();
+    const sel=$('pmModelFilter');
+    if(sel){sel.innerHTML='<option value="">Tutti i modelli</option>'+models.map(m=>'<option value="'+m+'">'+m+'</option>').join('')}
+    renderPMTable();
   }catch(e){
-    status.innerHTML='❌ Errore: '+e.message;
-    status.style.background='rgba(220,38,38,.1)';
+    $('pmListContainer').innerHTML='<p style="color:var(--err)">Errore caricamento PM: '+e.message+'</p>';
   }
 }
-async function renderPMTagliandi(){
-  $('pmTagliandiScadenza').innerHTML='<p style="color:var(--gray);font-size:.8rem">⏳ Caricamento tagliandi...</p>';
+
+function getPMStatus(dataStr){
+  if(!dataStr)return{label:'N/D',icon:'⚪',color:'#9CA3AF',bg:'#F3F4F6',days:null,cls:''};
+  const d=new Date(dataStr+'T00:00:00');const now=new Date();now.setHours(0,0,0,0);
+  const diff=Math.round((d-now)/(86400000));
+  if(diff<0)return{label:'Scaduto '+Math.abs(diff)+'gg',icon:'🔴',color:'#DC2626',bg:'#FEE2E2',days:diff,cls:'overdue'};
+  if(diff<=30)return{label:'Tra '+diff+'gg',icon:'🟠',color:'#D97706',bg:'#FEF3C7',days:diff,cls:'soon'};
+  if(diff<=90)return{label:'Tra '+diff+'gg',icon:'🔵',color:'#2563EB',bg:'#DBEAFE',days:diff,cls:'ok'};
+  return{label:'Tra '+diff+'gg',icon:'🟢',color:'#059669',bg:'#D1FAE5',days:diff,cls:'far'};
+}
+
+function getCicloColor(tipo){
+  const m={'A1':'#3B82F6','A3':'#3B82F6','A5':'#3B82F6','A7':'#3B82F6','B2':'#10B981','B6':'#10B981','C4':'#F59E0B','D8':'#EF4444'};
+  return m[tipo]||'#6B7280';
+}
+
+function renderPMTable(){
+  const search=($('pmSearch')?.value||'').toLowerCase();
+  const modelF=$('pmModelFilter')?.value||'';
+  let data=PM_DATA.filter(m=>{
+    if(modelF&&m.modello!==modelF)return false;
+    if(search){const hay=(m.cliente_nome+' '+m.macchina_nome+' '+(m.modello||'')+' '+(m.seriale||'')).toLowerCase();if(!hay.includes(search))return false}
+    if(PM_FILTER==='scaduti'){const s=getPMStatus(m.prossimo_tagliando);return s.days!==null&&s.days<0}
+    if(PM_FILTER==='prossimi'){const s=getPMStatus(m.prossimo_tagliando);return s.days!==null&&s.days>=0&&s.days<=30}
+    return true;
+  });
+  // Counts
+  const allData=PM_DATA;
+  const scadutiN=allData.filter(m=>{const s=getPMStatus(m.prossimo_tagliando);return s.days!==null&&s.days<0}).length;
+  const prossimiN=allData.filter(m=>{const s=getPMStatus(m.prossimo_tagliando);return s.days!==null&&s.days>=0&&s.days<=30}).length;
+  $('pmStatusBar').innerHTML=`
+    <button onclick="filterPM('scaduti')" style="padding:6px 16px;border-radius:20px;border:1.5px solid ${PM_FILTER==='scaduti'?'#DC2626':'var(--gray3)'};background:${PM_FILTER==='scaduti'?'#FEE2E2':'white'};color:${PM_FILTER==='scaduti'?'#DC2626':'var(--text)'};cursor:pointer;font-size:.8rem;font-weight:600">🔴 Scaduti (${scadutiN})</button>
+    <button onclick="filterPM('prossimi')" style="padding:6px 16px;border-radius:20px;border:1.5px solid ${PM_FILTER==='prossimi'?'#D97706':'var(--gray3)'};background:${PM_FILTER==='prossimi'?'#FEF3C7':'white'};color:${PM_FILTER==='prossimi'?'#D97706':'var(--text)'};cursor:pointer;font-size:.8rem;font-weight:600">🟠 Prossimi 30gg (${prossimiN})</button>
+    <button onclick="filterPM('tutti')" style="padding:6px 16px;border-radius:20px;border:1.5px solid ${PM_FILTER==='tutti'?'var(--c1)':'var(--gray3)'};background:${PM_FILTER==='tutti'?'rgba(0,155,131,.1)':'white'};color:${PM_FILTER==='tutti'?'var(--c1)':'var(--text)'};cursor:pointer;font-size:.8rem;font-weight:600">📋 Tutti (${allData.length})</button>`;
+  // Sort: scaduti first, then by date
+  data.sort((a,b)=>{const sa=getPMStatus(a.prossimo_tagliando);const sb=getPMStatus(b.prossimo_tagliando);return(sa.days||999)-(sb.days||999)});
+  if(!data.length){$('pmListContainer').innerHTML='<p style="color:var(--gray);text-align:center;padding:24px">Nessuna macchina trovata con i filtri selezionati</p>';return}
+  let html='<table class="tbl"><thead><tr><th></th><th>Cliente</th><th>Macchina</th><th>Modello</th><th>Prossimo</th><th>Ciclo</th><th>Azioni</th></tr></thead><tbody>';
+  data.forEach(m=>{
+    const st=getPMStatus(m.prossimo_tagliando);
+    const dataFmt=m.prossimo_tagliando?new Date(m.prossimo_tagliando+'T00:00:00').toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'numeric'}):'—';
+    const ciclo=m.posizione_corrente||'A1';
+    const isOpen=PM_OPEN_ROW===m.macchina_id;
+    html+=`<tr onclick="togglePMRow('${m.macchina_id}')" style="cursor:pointer;${st.cls==='overdue'?'background:#FEF2F2;':''}">
+      <td style="width:20px">${isOpen?'▼':'▶'}</td>
+      <td style="font-weight:500">${m.cliente_nome||'—'}</td>
+      <td>${m.macchina_nome||m.seriale||'—'}</td>
+      <td>${m.modello||'—'}</td>
+      <td><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:.75rem;font-weight:600;background:${st.bg};color:${st.color}">${st.icon} ${dataFmt}</span></td>
+      <td><span style="padding:2px 8px;border-radius:10px;font-size:.7rem;font-weight:600;background:${getCicloColor(ciclo)}22;color:${getCicloColor(ciclo)};border:1px solid ${getCicloColor(ciclo)}44">${ciclo}</span></td>
+      <td><button class="btn btn-outline btn-xs" onclick="event.stopPropagation();completePMAction('${m.macchina_id}')">✅ Completa</button></td>
+    </tr>`;
+    if(isOpen)html+='<tr><td colspan="7" style="padding:0;border:none"><div class="pm-row-detail open">'+renderPMExpanded(m)+'</div></td></tr>';
+  });
+  html+='</tbody></table>';
+  html+=`<div style="margin-top:8px;font-size:.75rem;color:var(--gray)">Mostrando ${data.length} di ${allData.length} macchine</div>`;
+  $('pmListContainer').innerHTML=html;
+}
+
+function filterPM(status){PM_FILTER=status;renderPMTable()}
+
+function togglePMRow(macchinaId){
+  PM_OPEN_ROW=PM_OPEN_ROW===macchinaId?null:macchinaId;
+  renderPMTable();
+}
+
+function renderPMExpanded(m){
+  const st=getPMStatus(m.prossimo_tagliando);
+  const seq=(m.ciclo_sequenza||'A1,B2,A3,C4,A5,B6,A7,D8').split(',');
+  const pos=m.posizione_corrente||'A1';
+  const seqHtml=seq.map(s=>`<span style="padding:2px 8px;border-radius:8px;font-size:.7rem;font-weight:600;${s===pos?'background:'+getCicloColor(s)+';color:white':'background:'+getCicloColor(s)+'15;color:'+getCicloColor(s)}">${s}</span>`).join(' → ');
+  const completati=(m.completati||[]).slice(0,8).map(c=>`<div style="font-size:.75rem;color:var(--gray)">✅ ${c.tipo} — ${c.data?new Date(c.data).toLocaleDateString('it-IT'):''} ${c.note?'('+c.note+')':''}</div>`).join('');
+  const prossimi=(m.prossimi||[]).slice(0,4).map(p=>`<div style="font-size:.75rem;color:var(--gray)">📅 ${p.tipo} — ${p.data?new Date(p.data).toLocaleDateString('it-IT'):''} (${p.stato||'previsto'})</div>`).join('');
+  return `<div style="padding:16px;background:var(--gray5);border-top:2px solid ${st.color}">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div style="font-size:.7rem;text-transform:uppercase;color:var(--gray);font-weight:600;margin-bottom:4px">Info Macchina</div>
+        <div style="font-size:.8125rem"><strong>Cliente:</strong> ${m.cliente_nome||'—'}</div>
+        <div style="font-size:.8125rem"><strong>Seriale:</strong> ${m.seriale||m.macchina_nome||'—'}</div>
+        <div style="font-size:.8125rem"><strong>Modello:</strong> ${m.modello||'—'}</div>
+        <div style="font-size:.8125rem"><strong>Ore:</strong> ${m.ore_macchina||'—'}</div>
+      </div>
+      <div>
+        <div style="font-size:.7rem;text-transform:uppercase;color:var(--gray);font-weight:600;margin-bottom:4px">Ciclo Manutenzione</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">${seqHtml}</div>
+        <div style="font-size:.75rem;color:var(--gray);margin-top:4px">Intervallo: ${m.intervallo_giorni||365} giorni</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--gray4)">
+      <div style="font-size:.7rem;text-transform:uppercase;color:var(--gray);font-weight:600;margin-bottom:6px">Prossimo Tagliando</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="date" id="pmDate_${m.macchina_id}" value="${m.prossimo_tagliando||''}" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem" onclick="event.stopPropagation()">
+        <input type="text" id="pmNote_${m.macchina_id}" value="${m.note||''}" placeholder="Note..." style="flex:1;padding:6px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem" onclick="event.stopPropagation()">
+        <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();savePMDate('${m.macchina_id}')">💾 Salva</button>
+      </div>
+    </div>
+    ${completati?'<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--gray4)"><div style="font-size:.7rem;text-transform:uppercase;color:var(--gray);font-weight:600;margin-bottom:4px">Storico Completati</div>'+completati+'</div>':''}
+    ${prossimi?'<div style="margin-top:8px"><div style="font-size:.7rem;text-transform:uppercase;color:var(--gray);font-weight:600;margin-bottom:4px">Prossimi Previsti</div>'+prossimi+'</div>':''}
+  </div>`;
+}
+
+async function savePMDate(macchinaId){
+  const data=$('pmDate_'+macchinaId)?.value;
+  const note=$('pmNote_'+macchinaId)?.value||'';
+  if(!data){toast('Seleziona una data','warn');return}
+  try{await apiCall('updatePMDate',{macchina_id:macchinaId,prossimo_tagliando:data,note,userId:USER?.ID},'POST');toast('Data aggiornata!','ok');await loadPMList()}catch(e){toast(e.message,'err')}
+}
+
+async function completePMAction(macchinaId){
+  const m=PM_DATA.find(x=>x.macchina_id===macchinaId);
+  if(!m){toast('Macchina non trovata','err');return}
+  if(!confirm('Completare il tagliando '+( m.posizione_corrente||'A1')+' per '+( m.macchina_nome||macchinaId)+'?'))return;
+  try{await apiCall('completePM',{macchina_id:macchinaId,userId:USER?.ID},'POST');toast('Tagliando completato! Ciclo avanzato.','ok');await loadPMList()}catch(e){toast(e.message,'err')}
+}
+
+async function bulkGeneratePM(){
+  if(!confirm('Generare PM per i prossimi 3 mesi?'))return;
+  try{const r=await apiCall('bulkGeneratePMCalendar',{months:3,userId:USER?.ID},'POST');toast('PM generati: '+(r.created||0)+' nuovi','ok');await loadPMList()}catch(e){toast(e.message,'err')}
+}
+
+function togglePMSettings(){
+  const card=$('pmSettingsCard');if(!card)return;
+  card.style.display=card.style.display==='none'?'':'none';
+  if(card.style.display!=='none')loadPMCycleDefs();
+}
+
+async function loadPMCycleDefs(){
   try{
-    const r=await apiCall('generateReport',{tipo:'tagliandi_scadenza',filtri:{dataInizio:new Date().toISOString().split('T')[0]},userId:USER?.ID},'POST');
-    if(!r?.righe?.length){$('pmTagliandiScadenza').innerHTML='<p style="color:var(--gray);font-size:.8rem">✅ Nessun tagliando in scadenza</p>';return}
-    let html='<table class="data-table"><thead><tr>';
-    (r.colonne||[]).forEach(c=>{html+='<th>'+c+'</th>'});
-    html+='</tr></thead><tbody>';
-    r.righe.forEach(row=>{
-      const isUrgent=(row[5]||'').includes('SCADUTO')||(row[5]||'').includes('URGENTE');
-      html+=`<tr style="${isUrgent?'background:rgba(220,38,38,.04)':''}">`;
-      row.forEach((cell,i)=>{html+='<td>'+(i===5?'<b>'+esc(cell)+'</b>':esc(cell))+'</td>'});
-      html+='</tr>';
-    });
-    html+='</tbody></table>';
-    $('pmTagliandiScadenza').innerHTML=html;
-  }catch(e){$('pmTagliandiScadenza').innerHTML='<p style="color:var(--danger);font-size:.8rem">❌ Errore: '+esc(e.message)+'</p>'}
+    if(!PM_CYCLE_DEFS.length){const r=await apiCall('getPMCalendar',{mese:'all',userId:USER?.ID},'POST');PM_CYCLE_DEFS=r.cycle_definitions||[]}
+    renderPMCycleDefs();
+  }catch(e){toast(e.message,'err')}
+}
+
+function renderPMCycleDefs(){
+  const el=$('pmCycleDefsContainer');if(!el)return;
+  if(!PM_CYCLE_DEFS.length){el.innerHTML='<p style="color:var(--gray)">Nessuna definizione ciclo trovata.</p>';return}
+  let html='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
+  PM_CYCLE_DEFS.forEach((c,i)=>{
+    html+=`<div style="padding:14px;border:1.5px solid var(--gray3);border-radius:var(--radius);background:white">
+      <div style="font-weight:600;margin-bottom:8px">${c.nome||c.tipo_macchina||'Ciclo '+(i+1)}</div>
+      <div class="field"><label style="font-size:.7rem">Tipo Macchina</label><input type="text" value="${c.tipo_macchina||''}" data-cyc="${i}" data-f="tipo_macchina" style="width:100%;font-size:.8rem;padding:4px 8px"></div>
+      <div class="field"><label style="font-size:.7rem">Intervallo (giorni)</label><input type="number" value="${c.intervallo_giorni||365}" data-cyc="${i}" data-f="intervallo_giorni" style="width:100%;font-size:.8rem;padding:4px 8px"></div>
+      <div class="field"><label style="font-size:.7rem">Sequenza</label><input type="text" value="${c.sequenza||'A1,B2,A3,C4,A5,B6,A7,D8'}" data-cyc="${i}" data-f="sequenza" style="width:100%;font-size:.8rem;padding:4px 8px"></div>
+    </div>`;
+  });
+  html+='</div><button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="savePMCycleDefs()">💾 Salva Cicli</button>';
+  el.innerHTML=html;
+}
+
+async function savePMCycleDefs(){
+  const inputs=document.querySelectorAll('[data-cyc]');
+  inputs.forEach(inp=>{const i=parseInt(inp.dataset.cyc);const f=inp.dataset.f;if(PM_CYCLE_DEFS[i])PM_CYCLE_DEFS[i][f]=inp.value});
+  try{await apiCall('savePMCycleDefinitions',{definitions:PM_CYCLE_DEFS,userId:USER?.ID},'POST');toast('Cicli salvati!','ok')}catch(e){toast(e.message,'err')}
 }
 
 // ============ CATALOGO PARTI ============
