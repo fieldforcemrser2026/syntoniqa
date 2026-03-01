@@ -368,8 +368,10 @@ async function handleGet(action, url, env) {
         sb(env, 'config',             'GET', null, '?select=chiave,valore'),
       ]);
       
-      // Rimuovi password_hash da utenti
-      const utentiSafe = utenti.map(u => { const {password_hash, ...rest} = u; return rest; });
+      // Rimuovi password_hash da utenti + merge livello da config
+      const lvConfig = config.find(c => c.chiave === 'utenti_livello');
+      const lvMap = lvConfig?.valore ? (()=>{ try { return JSON.parse(lvConfig.valore); } catch { return {}; } })() : {};
+      const utentiSafe = utenti.map(u => { const {password_hash, ...rest} = u; if (lvMap[u.id]) rest.livello = lvMap[u.id]; return rest; });
       
       // FIX CRIT-02: Converti snake_case → PascalCase per compatibilità frontend
       return ok(pascalizeArrays({
@@ -1016,7 +1018,17 @@ async function handlePost(action, body, env) {
       const hashed = await hashPassword(pwd);
       const row = { id, ...getFields(body), password_hash: hashed, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       delete row.password;
+      // Livello: salva in config (non colonna DB)
+      const _livello = row.livello; delete row.livello;
       const result = await sb(env, 'utenti', 'POST', row);
+      if (_livello) {
+        const lvRows = await sb(env, 'config', 'GET', null, `?chiave=eq.utenti_livello&limit=1`).catch(()=>[]);
+        const lvMap = lvRows?.[0]?.valore ? JSON.parse(lvRows[0].valore) : {};
+        lvMap[id] = _livello;
+        const lvVal = JSON.stringify(lvMap);
+        try { await sb(env, 'config', 'POST', { chiave: 'utenti_livello', valore: lvVal, tenant_id: TENANT }, ''); }
+        catch { await sb(env, `config?chiave=eq.utenti_livello`, 'PATCH', { valore: lvVal }, '').catch(()=>{}); }
+      }
       // SYNC: se ha automezzo_id, aggiorna assegnatario_id nell'automezzo
       if (row.automezzo_id) {
         await sb(env, `automezzi?id=eq.${row.automezzo_id}`, 'PATCH', { assegnatario_id: id }).catch(() => {});
@@ -1058,7 +1070,17 @@ async function handlePost(action, body, env) {
           await sb(env, `utenti?id=eq.${ou.id}`, 'PATCH', { automezzo_id: null, updated_at: new Date().toISOString() }).catch(() => {});
         }
       }
+      // Livello: salva in config (non colonna DB)
+      const _livello2 = updates.livello; delete updates.livello;
       await sb(env, `utenti?id=eq.${id}`, 'PATCH', updates);
+      if (_livello2 !== undefined) {
+        const lvRows2 = await sb(env, 'config', 'GET', null, `?chiave=eq.utenti_livello&limit=1`).catch(()=>[]);
+        const lvMap2 = lvRows2?.[0]?.valore ? JSON.parse(lvRows2[0].valore) : {};
+        if (_livello2) lvMap2[id] = _livello2; else delete lvMap2[id];
+        const lvVal2 = JSON.stringify(lvMap2);
+        try { await sb(env, 'config', 'POST', { chiave: 'utenti_livello', valore: lvVal2, tenant_id: TENANT }, ''); }
+        catch { await sb(env, `config?chiave=eq.utenti_livello`, 'PATCH', { valore: lvVal2 }, '').catch(()=>{}); }
+      }
       await wlog('utente', id, 'updated', body.operatoreId);
       return ok({ synced: !!newAutoId });
     }
@@ -2793,79 +2815,7 @@ Rispondi SOLO con JSON valido:
       return ok({ created: created.length, errors });
     }
 
-    // -------- WORKFLOW APPROVATIVO --------
-
-    case 'createApproval': {
-      const { id, piano, creato_da, ruolo_creatore, stato, data_creazione } = body;
-      // Store in config table as JSON (no separate table needed)
-      await sb(env, 'config', 'POST', {
-        chiave: `approval_${id}`,
-        valore: JSON.stringify({ id, piano, creato_da, ruolo_creatore, stato, data_creazione }),
-        tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
-      }, null, { 'Prefer': 'return=minimal,resolution=merge-duplicates' });
-      return ok({ id, stato });
-    }
-
-    case 'getApprovals': {
-      const filter = body.filter || '';
-      const configs = await sb(env, 'config', 'GET', null, `?chiave=like.approval_*&tenant_id=eq.${env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'}`);
-      let approvals = configs.map(c => {
-        try { return JSON.parse(c.valore); } catch { return null; }
-      }).filter(Boolean);
-      if (filter) approvals = approvals.filter(a => a.stato === filter);
-      approvals.sort((a, b) => (b.data_creazione || '').localeCompare(a.data_creazione || ''));
-      // Enrich with user names
-      const userIds = [...new Set(approvals.map(a => a.creato_da).concat(approvals.map(a => a.approvato_da)).filter(Boolean))];
-      if (userIds.length) {
-        const users = await sb(env, 'utenti', 'GET', null, `?id=in.(${userIds.join(',')})&select=id,nome,cognome`).catch(() => []);
-        const userMap = Object.fromEntries(users.map(u => [u.id, (u.nome || '') + ' ' + (u.cognome || '')]));
-        approvals.forEach(a => {
-          a.creato_da_nome = userMap[a.creato_da] || a.creato_da;
-          a.approvato_da_nome = userMap[a.approvato_da] || '';
-        });
-      }
-      return ok(approvals);
-    }
-
-    case 'getApproval': {
-      const cfg = await sb(env, 'config', 'GET', null, `?chiave=eq.approval_${body.id}&tenant_id=eq.${env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'}`);
-      if (!cfg.length) return err('Approvazione non trovata', 404);
-      try { return ok(JSON.parse(cfg[0].valore)); }
-      catch { return err('Dati approvazione corrotti', 500); }
-    }
-
-    case 'updateApproval': {
-      const { id, stato, approvato_da, note_approvazione, data_approvazione } = body;
-      const cfg = await sb(env, 'config', 'GET', null, `?chiave=eq.approval_${id}&tenant_id=eq.${env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'}`);
-      if (!cfg.length) return err('Approvazione non trovata', 404);
-      const approval = JSON.parse(cfg[0].valore);
-      approval.stato = stato;
-      approval.approvato_da = approvato_da;
-      approval.note_approvazione = note_approvazione;
-      approval.data_approvazione = data_approvazione;
-      await sb(env, `config?chiave=eq.approval_${id}&tenant_id=eq.${env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'}`, 'PATCH', {
-        valore: JSON.stringify(approval)
-      });
-      return ok(approval);
-    }
-
-    case 'notifyPlanApproved': {
-      const { approval_id } = body;
-      const cfg = await sb(env, 'config', 'GET', null, `?chiave=eq.approval_${approval_id}&tenant_id=eq.${env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'}`);
-      if (!cfg.length) return ok({ notified: 0 });
-      const approval = JSON.parse(cfg[0].valore);
-      if (approval.stato !== 'approvato') return ok({ notified: 0 });
-      // Notify all active technicians via Telegram
-      const tecnici = await sb(env, 'utenti', 'GET', null, '?attivo=eq.true&ruolo=in.(tecnico,caposquadra)&telegram_chat_id=not.is.null');
-      let notified = 0;
-      for (const tec of tecnici) {
-        if (tec.telegram_chat_id) {
-          await sendTelegram(env, tec.telegram_chat_id, `📋 *Piano approvato!*\nIl piano è stato approvato. Controlla i tuoi interventi su Syntoniqa.`);
-          notified++;
-        }
-      }
-      return ok({ notified });
-    }
+    // -------- WORKFLOW APPROVATIVO → spostato sotto dopo getVincoliCategories --------
 
     case 'geocodeAll': {
       // FIX B-V2-5: Geocoding Nominatim con retry, backoff esponenziale, error log
@@ -3183,8 +3133,6 @@ Rispondi SOLO con JSON valido:
 
     // ──────── APPROVAL WORKFLOW ─────────────────────────────────────
     case 'createApproval': {
-      // DEBUG: verifica che il case matchi
-      console.log('createApproval REACHED', JSON.stringify(Object.keys(body)));
       const adminErr2 = await requireAdmin(env, body);
       if (adminErr2) return err(adminErr2, 403);
       const aprId = body.id || ('APR_' + Date.now());
@@ -3213,7 +3161,7 @@ Rispondi SOLO con JSON valido:
 
     case 'getApprovals': {
       const rows = await sb(env, 'config', 'GET', null,
-        `?chiave=like.approval_APR_%25&order=created_at.desc&limit=50`);
+        `?chiave=like.approval_APR_%25&limit=50`);
       const filter = body.filter || '';
       let approvals = (rows || []).map(r => { try { return JSON.parse(r.valore); } catch { return null; } }).filter(Boolean);
       if (filter) approvals = approvals.filter(a => a.stato === filter);

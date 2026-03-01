@@ -5345,10 +5345,13 @@ async function runAI(){
       ${result.chunks?`<span style="font-size:.75rem;color:var(--gray);align-self:center">Generato in ${result.chunks} chunk settimanali</span>`:''}
     </div>`;
     $('aiResult').innerHTML=html;
-    $('btnApplyAI').disabled=false;
+    // Admin può applicare direttamente, caposquadra deve passare per approvazione
+    const _curUser = SESSION?.user||{};
+    const _isAdmin = _curUser.ruolo==='admin';
+    $('btnApplyAI').disabled=!_isAdmin; // Solo admin può applicare senza approvazione
     $('btnSubmitPlan').disabled=false;
     $('btnDownloadPlan').disabled=false;
-    toast(`Piano generato: ${piano.length} interventi, ${nGiorni} giorni`,'ok');
+    toast(`Piano generato: ${piano.length} interventi, ${nGiorni} giorni${_isAdmin?'':' — Invia per approvazione per attivarlo'}`,'ok');
   }catch(e){
     $('aiResult').innerHTML=`<div style="padding:16px;background:rgba(239,68,68,.1);border:1px solid var(--err);border-radius:var(--radius)">
       <strong>❌ Errore</strong><br>${e.message}<br><span style="font-size:.75rem;color:var(--gray)">Prova con un prompt più breve o riprova tra qualche secondo.</span>
@@ -5555,7 +5558,9 @@ async function renderApprovalQueue(){
     const canReview = currentUser.ruolo==='admin'||currentUser.ruolo==='caposquadra';
     tbody.innerHTML=approvals.map(a=>{
       const isOwn = a.creato_da===currentUser.id;
-      const canApprove = canReview && a.stato==='in_attesa';
+      // Admin può auto-approvare, caposquadra NO (serve approvazione admin)
+      const isSelfCapo = isOwn && currentUser.ruolo==='caposquadra';
+      const canApprove = canReview && a.stato==='in_attesa' && !isSelfCapo;
       const stCol={'in_attesa':'#F59E0B','approvato':'#10B981','rifiutato':'#EF4444'}[a.stato]||'#6B7280';
       return `<tr>
         <td><code style="font-size:.7rem">${a.id}</code></td>
@@ -5582,6 +5587,10 @@ async function approveOrReject(id,stato){
   const note=stato==='rifiutato'?prompt('Motivo del rifiuto:'):null;
   if(stato==='rifiutato'&&note===null)return;
   const currentUser=SESSION?.user||{};
+  // Caposquadra non può auto-approvare il proprio piano
+  if(stato==='approvato' && PENDING_APPROVAL && PENDING_APPROVAL.creato_da===currentUser.id && currentUser.ruolo==='caposquadra'){
+    toast('Non puoi approvare il tuo stesso piano — serve approvazione di un admin','warn');return;
+  }
   // Se il piano e' stato modificato con D&D nel calendario, salva le modifiche
   let updatedPiano = null;
   if(PENDING_APPROVAL && PENDING_APPROVAL.id === id) {
