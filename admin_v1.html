@@ -2805,7 +2805,7 @@ function renderReperibilita(){
     <td>${r.Tipo||'reperibilità'}</td>
     <td>${statusTag(r.Stato)}</td>
     <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.Note||'—'}</td>
-    <td></td>
+    <td><button class="btn btn-outline btn-xs" onclick="editRep('${r.ID}')">✏️</button> <button class="btn btn-outline btn-xs" style="color:var(--err)" onclick="deleteRep('${r.ID}')">🗑️</button></td>
   </tr>`).join(''):'<tr><td colspan="8" class="empty"><p>Nessun turno</p></td></tr>';
 }
 function repTab(f,btn){repFilter=f;document.querySelectorAll('#secReperibilita .tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');renderReperibilita()}
@@ -2823,7 +2823,7 @@ function renderTrasferte(){
       <td>${t.AutomezzoID||'—'}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.Motivo||'—'}</td>
       <td>${statusTag(t.Stato)}</td>
-      <td></td>
+      <td><button class="btn btn-outline btn-xs" onclick="editTrasf('${t.ID}')">✏️</button> <button class="btn btn-outline btn-xs" style="color:var(--err)" onclick="deleteTrasf('${t.ID}')">🗑️</button></td>
     </tr>`}).join(''):'<tr><td colspan="8" class="empty"><p>Nessuna trasferta</p></td></tr>';
 }
 
