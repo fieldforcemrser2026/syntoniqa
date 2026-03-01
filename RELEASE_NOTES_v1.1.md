@@ -250,15 +250,80 @@ Messaggio Telegram
 
 ---
 
+## Security Hardening
+
+### CRITICAL (5 fix)
+
+| ID | Vulnerabilità | Fix |
+|----|---------------|-----|
+| SEC-01 | PostgREST filter injection in 12 endpoint (ilike) | `sanitizePgFilter()` — strip special chars, max 100 chars |
+| SEC-02 | Null destructuring da `sb()` (crash su array vuoto) | Safe array access con `?.[0]` + `.catch(() => [])` |
+| SEC-03 | `sb()` GET ritorna `null` su body vuoto | Ritorna `[]` per GET, `null` solo per PATCH/POST |
+| SEC-04 | Supabase `limit=2000` supera max 1000 PostgREST | Cappato a `limit=1000` |
+| SEC-05 | `resolveUrgenza` skip validazione transizione stato | Aggiunto `validateTransition()` prima del PATCH |
+
+### HIGH (3 fix)
+
+| ID | Vulnerabilità | Fix |
+|----|---------------|-----|
+| SEC-06 | Auto-refresh `setInterval` mai cleared (memory leak) | `clearInterval` prima di re-set |
+| SEC-07 | Chat poll interval leak su navigazione | Null-safe clear con `CHAT_POLL=null` |
+| SEC-08 | XSS via `innerHTML` con dati utente | `esc()` helper + applicato a 10+ punti critici |
+
+### Funzione `sanitizePgFilter()`
+
+```javascript
+function sanitizePgFilter(input) {
+  if (!input || typeof input !== 'string') return '';
+  return input.replace(/[*.,=|:()&!<>;\[\]{}\\/"'` + "`" + `%]/g, '').trim().slice(0, 100);
+}
+```
+
+Applicato a: `searchClienti`, `searchParts`, `/catalogo`, `/tagliando`, `getAnagraficaClienti`, `getAnagraficaAssets`, `analyzeImage`, `loadPartsCatalog`, `matchPartInCatalog`.
+
+---
+
+## Performance & Scalabilità
+
+### Lazy Rendering (Admin)
+
+```
+PRIMA (renderAll):                    DOPO (lazy):
+┌────────────────────────┐           ┌────────────────────────┐
+│ Login → renderAll()    │           │ Login → renderDashboard│
+│ 20+ sezioni renderizzate│          │ Solo dashboard + badges│
+│ DOM pesante immediato   │          │ ~95% meno DOM iniziale │
+│ Tempo: ~800ms          │           │ Tempo: ~50ms           │
+└────────────────────────┘           └────────────────────────┘
+                                     showSec('urgenze')
+                                     → lazyRender('urgenze')
+                                     → renderUrgenze() [prima volta]
+                                     → cached [successive]
+```
+
+- `SEC_RENDERERS`: mappa sezione → funzione render
+- `_rendered Set`: cache sezioni già renderizzate
+- `lazyRender(secId)`: render on-demand con first-visit check
+- `renderAllForce()`: invalidate + re-render sezione attiva (per data refresh)
+
+### Lazy Rendering (Mobile)
+
+Identico pattern per `index_v2.html`:
+- `MOB_RENDERERS`: mappa pagina → funzione render
+- `mobLazy(pgId)`: render on-demand
+- `goPage()` → `mobLazy()` automatico
+
+---
+
 ## Metriche Codice
 
 | File | v1.0 | v1.1 | Delta |
 |------|------|------|-------|
-| `cloudflare_worker.js` | 3.042 | 4.391 | +1.349 |
-| `admin_v1.html` | 5.548 | 7.177 | +1.629 |
-| `index_v2.html` | 2.071 | 2.779 | +708 |
+| `cloudflare_worker.js` | 3.042 | 4.420 | +1.378 |
+| `admin_v1.html` | 5.548 | 7.265 | +1.717 |
+| `index_v2.html` | 2.071 | 2.810 | +739 |
 | `white_label_config.js` | 65 | 80 | +15 |
-| **Totale** | **10.726** | **14.427** | **+3.701** |
+| **Totale** | **10.726** | **14.575** | **+3.849** |
 
 ### Nuovi Endpoint Backend: 3
 
@@ -287,12 +352,13 @@ Catalogo Parti Mobile
 ```
 ┌──────────────────────┐     ┌──────────────────────────┐
 │  admin_v1.html       │────▶│  Cloudflare Worker        │
-│  (7177 righe)        │     │  cloudflare_worker.js     │
-│  35 sezioni, 17 mod. │     │  (4391 righe)             │
+│  (7265 righe)        │     │  cloudflare_worker.js     │
+│  35 sezioni (lazy)   │     │  (4420 righe)             │
+│  17 modali, esc()    │     │  sanitizePgFilter()       │
 ├──────────────────────┤     │                            │
-│  index_v2.html       │────▶│  8 GET + 92 POST handlers │
-│  (2779 righe)        │     │  2 cron jobs (*/15 min)   │
-│  18 pagine, bot chat │     │  Telegram Bot 2.0 (16 cmd)│
+│  index_v2.html       │────▶│  8 GET + 95 POST handlers │
+│  (2810 righe)        │     │  2 cron jobs (*/15 min)   │
+│  18 pagine (lazy)    │     │  Telegram Bot 2.0 (16 cmd)│
 └──────────────────────┘     └──────────┬───────────────┘
                                          │
                               ┌──────────▼───────────────┐
