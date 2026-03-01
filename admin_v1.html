@@ -1743,7 +1743,10 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="field"><label>Password</label><input type="password" id="nuPassword" placeholder="••••••••"></div>
 </div>
 <div class="field-row">
-<div class="field"><label>Ruolo</label><select id="nuRuolo"><option value="">Seleziona ruolo</option><option value="admin">Admin</option><option value="caposquadra">Caposquadra</option><option value="tecnico">Tecnico</option><option value="magazziniere">Magazziniere</option><option value="commerciale">Commerciale</option></select></div>
+<div class="field"><label>Ruolo</label><select id="nuRuolo" onchange="onRuoloChange()"><option value="">Seleziona ruolo</option><option value="admin">Admin</option><option value="caposquadra">Caposquadra</option><option value="tecnico">Tecnico</option><option value="magazziniere">Magazziniere</option><option value="commerciale">Commerciale</option></select></div>
+<div class="field"><label>Livello</label><select id="nuLivello"><option value="">— Seleziona livello —</option><option value="junior">Junior</option><option value="intermedio">Intermedio</option><option value="senior">Senior</option><option value="livello_1">Admin Livello 1</option><option value="livello_2">Admin Livello 2</option></select></div>
+</div>
+<div class="field-row">
 <div class="field"><label>Squadra</label><select id="nuSquadra"><option value="">Seleziona squadra</option></select></div>
 </div>
 <div class="field-row">
@@ -3161,7 +3164,7 @@ function renderTecnici(){
     return `<tr>
     <td>${foto}</td>
     <td><strong>${(t.Nome||'')+' '+(t.Cognome||'')}</strong></td>
-    <td><span class="tag ${t.Ruolo==='admin'?'tag-purple':t.Ruolo==='caposquadra'?'tag-info':'tag-gray'}">${t.Ruolo}</span></td>
+    <td><span class="tag ${t.Ruolo==='admin'?'tag-purple':t.Ruolo==='caposquadra'?'tag-info':'tag-gray'}">${t.Ruolo}</span>${t.Livello?` <span style="font-size:.65rem;color:var(--gray)">${t.Livello.replace('_',' ')}</span>`:''}</td>
     <td>${sq?sq.Nome:'—'}</td>
     <td>${t.AutomezzoID||'—'}</td>
     <td>${t.Base||'—'}</td>
@@ -4547,6 +4550,7 @@ function editUtente(id){
   $('nuNome').value=u.Nome||'';$('nuCognome').value=u.Cognome||'';
   $('nuUsername').value=u.Username||'';$('nuPassword').value='';
   $('nuRuolo').value=u.Ruolo||'tecnico';
+  $('nuLivello').value=u.Livello||'';onRuoloChange();
   $('nuSquadra').value=u.SquadraID||'';$('nuAutomezzo').value=u.AutomezzoID||'';
   $('nuBase').value=u.Base||'';$('nuTelefono').value=u.Telefono||'';$('nuEmail').value=u.Email||'';
   document.querySelector('#modalUtente .modal-head h2').textContent='✏️ Modifica Utente';
@@ -4586,7 +4590,21 @@ function editAutomezzo(id){
 }
 
 // ============ RESET MODAL ON NEW ============
-function openNewUtente(){EDITING.utente=null;['nuNome','nuCognome','nuUsername','nuPassword','nuBase','nuTelefono','nuEmail'].forEach(id=>{if($(id))$(id).value=''});$('nuRuolo').value='tecnico';$('nuSquadra').value='';$('nuAutomezzo').value='';$('resetPwdBox').style.display='none';document.querySelector('#modalUtente .modal-head h2').textContent='👤 Nuovo Utente';openModal('modalUtente')}
+function onRuoloChange(){
+  const r=$('nuRuolo').value;const lv=$('nuLivello');
+  // Mostra opzioni pertinenti
+  const opts=lv.querySelectorAll('option');
+  opts.forEach(o=>{
+    if(o.value==='')return;
+    if(r==='admin')o.style.display=['livello_1','livello_2'].includes(o.value)?'':'none';
+    else if(r==='tecnico')o.style.display=['junior','intermedio','senior'].includes(o.value)?'':'none';
+    else o.style.display='none';
+  });
+  if(r==='admin'&&!['livello_1','livello_2'].includes(lv.value))lv.value='livello_2';
+  if(r==='tecnico'&&!['junior','intermedio','senior'].includes(lv.value))lv.value='';
+  if(r!=='admin'&&r!=='tecnico')lv.value='';
+}
+function openNewUtente(){EDITING.utente=null;['nuNome','nuCognome','nuUsername','nuPassword','nuBase','nuTelefono','nuEmail'].forEach(id=>{if($(id))$(id).value=''});$('nuRuolo').value='tecnico';$('nuLivello').value='';onRuoloChange();$('nuSquadra').value='';$('nuAutomezzo').value='';$('resetPwdBox').style.display='none';document.querySelector('#modalUtente .modal-head h2').textContent='👤 Nuovo Utente';openModal('modalUtente')}
 function openNewCliente(){EDITING.cliente=null;['ncNome','ncCitta','ncProv','ncIndirizzo','ncCap','ncTelefono','ncEmail','ncContratto','ncNote'].forEach(id=>{if($(id))$(id).value=''});document.querySelector('#modalCliente .modal-head h2').textContent='🏢 Nuovo Cliente';openModal('modalCliente')}
 function openNewMacchina(){EDITING.macchina=null;['nmTipo','nmModello','nmSeriale','nmAnno','nmOre','nmUltimoTag','nmProssTag','nmGaranzia','nmNote'].forEach(id=>{if($(id))$(id).value=''});$('nmCliente').value='';document.querySelector('#modalMacchina .modal-head h2').textContent='⚙️ Nuova Macchina';openModal('modalMacchina')}
 function openNewAutomezzo(){EDITING.automezzo=null;['naTarga','naDesc','naAllestimento','naKm','naControllo','naNote'].forEach(id=>{if($(id))$(id).value=''});$('naStatus').value='disponibile';$('naAssegnatario').value='';document.querySelector('#modalAutomezzo .modal-head h2').textContent='🚐 Nuovo Automezzo';openModal('modalAutomezzo')}
@@ -4598,6 +4616,7 @@ async function saveUtente(){
     Cognome:$('nuCognome').value,
     Username:$('nuUsername').value,
     Ruolo:$('nuRuolo').value,
+    Livello:$('nuLivello').value||null,
     SquadraID:$('nuSquadra').value||null,
     AutomezzoID:$('nuAutomezzo').value||null,
     Base:$('nuBase').value||null,
@@ -5231,9 +5250,12 @@ async function runAI(){
         };
       });
     }
-    // Timeout: 300s per mese intero (5 chunk AI sequenziali), 120s per settimana singola
-    const _aiTimeout=modalita==='mese'?300000:120000;
-    const _aiResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:{testo:prompt,files:filesData,mese_target:meseTarget,modalita,settimana,ctx:ctxFlags,piano_esistente:pianoEsistente}}),signal:AbortSignal.timeout(_aiTimeout));
+    // ENGINE: Deterministic Scheduler (istantaneo, 0 API key necessarie)
+    // Fallback: AI (se prompt utente specifico richiede creatività)
+    const useSmartEngine=!prompt.trim(); // usa scheduler se nessun prompt custom
+    const _action=useSmartEngine?'generatePlanSmart':'generateAIPlan';
+    const _aiTimeout=useSmartEngine?30000:(modalita==='mese'?300000:120000);
+    const _aiResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action:_action,userId:USER?.ID||'',vincoli:{testo:prompt,files:filesData,mese_target:meseTarget,modalita,settimana,ctx:ctxFlags,piano_esistente:pianoEsistente}}),signal:AbortSignal.timeout(_aiTimeout)});
     const _aiJson=await _aiResp.json();
     if(!_aiJson.success)throw new Error(_aiJson.error||'Errore AI');
     const result=_aiJson.data||_aiJson;
@@ -5248,8 +5270,10 @@ async function runAI(){
     const nGiorni=[...new Set(piano.map(p=>p.data))].length;
     const nTecnici=[...new Set(piano.map(p=>p.tecnicoId||p.tecnico))].length;
     // Header con KPI
-    html+=`<div style="background:linear-gradient(135deg,#009B83,#00C9A7);color:white;border-radius:var(--radius-lg);padding:24px;margin-bottom:16px">
-      <h3 style="margin:0 0 4px;font-size:1.25rem">📋 Piano Generato con AI</h3>
+    const engineLabel=result.engine==='deterministic'?'⚡ Scheduler Deterministico':'🤖 AI';
+    const engineColor=result.engine==='deterministic'?'#009B83,#00C9A7':'#3B7EF7,#6366F1';
+    html+=`<div style="background:linear-gradient(135deg,${engineColor});color:white;border-radius:var(--radius-lg);padding:24px;margin-bottom:16px">
+      <h3 style="margin:0 0 4px;font-size:1.25rem">📋 Piano Generato — ${engineLabel}</h3>
       <p style="margin:0;opacity:.85;font-size:.85rem">${result.summary||''}</p>
       <div style="display:flex;gap:24px;margin-top:16px">
         <div><span style="font-size:1.75rem;font-weight:700">${piano.length}</span><br><span style="font-size:.75rem;opacity:.7">Interventi</span></div>
@@ -5480,13 +5504,28 @@ async function applyAI(forceOverwrite){
 }
 
 // ============ WORKFLOW APPROVATIVO ============
+// Stato globale approvazione
+let PENDING_APPROVAL = null; // { id, piano, stato, ... }
+
 async function submitAIPlanForApproval(){
   if(!AI_PLAN){toast('Genera prima un piano','warn');return}
   const currentUser=SESSION?.user||{};
+  // Raccogli il piano corrente (potrebbe essere stato modificato con D&D nel calendario)
+  const previewItems = (DATA.piano||[]).filter(p=>p._aiPreview);
+  let pianoToSend = AI_PLAN;
+  if(previewItems.length) {
+    // Sincronizza: il piano nel calendario (post-D&D) è la versione più aggiornata
+    pianoToSend = { ...AI_PLAN, piano: previewItems.map(p=>({
+      data:p.Data, tecnico:getName(DATA.utenti||[],p.TecnicoID), tecnicoId:p.TecnicoID,
+      cliente:p.Note||p.ClienteID||'', clienteId:p.ClienteID, tipo:p.TipoIntervento||'service',
+      oraInizio:p.OraInizio||'08:00', durataOre:p.DurataOre||2, note:p.Note||'', furgone:''
+    }))};
+  }
   try{
     const id='APR_'+Date.now();
+    const meseTarget = $('aiMese')?.value || '';
     await apiCall('createApproval',{
-      id, piano:AI_PLAN,
+      id, piano:pianoToSend, mese:meseTarget,
       creato_da:currentUser.id||'admin',
       ruolo_creatore:currentUser.ruolo||'admin',
       stato:'in_attesa',
@@ -5494,7 +5533,12 @@ async function submitAIPlanForApproval(){
     },'POST');
     toast('Piano inviato per approvazione!','ok');
     $('btnSubmitPlan').disabled=true;
+    $('btnApplyAI').disabled=true; // Lock apply finche' non approvato
     renderApprovalQueue();
+    // Notifica Telegram al gruppo
+    try { await apiCall('sendTelegramMsg',{chatId:'-5236723213',
+      text:`📋 *Nuovo Piano in Approvazione*\n\n👤 Inviato da: ${currentUser.nome||'Admin'}\n📅 Mese: ${meseTarget}\n📊 ${(pianoToSend.piano||[]).length} interventi\n\n_Apri Syntoniqa Admin per approvare/rifiutare_`
+    },'POST'); } catch(e){}
   }catch(e){toast(e.message,'err')}
 }
 
@@ -5507,19 +5551,28 @@ async function renderApprovalQueue(){
       tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--gray)">Nessun piano in iter approvativo</td></tr>';
       return;
     }
+    const currentUser=SESSION?.user||{};
+    const canReview = currentUser.ruolo==='admin'||currentUser.ruolo==='caposquadra';
     tbody.innerHTML=approvals.map(a=>{
-      const currentUser=SESSION?.user||{};
-      const canApprove=(currentUser.ruolo==='admin'||currentUser.ruolo==='caposquadra')&&a.stato==='in_attesa';
+      const isOwn = a.creato_da===currentUser.id;
+      const canApprove = canReview && a.stato==='in_attesa';
+      const stCol={'in_attesa':'#F59E0B','approvato':'#10B981','rifiutato':'#EF4444'}[a.stato]||'#6B7280';
       return `<tr>
-        <td><code>${a.id}</code></td>
+        <td><code style="font-size:.7rem">${a.id}</code></td>
         <td>${fmtDate(a.data_creazione)}</td>
-        <td>${a.creato_da_nome||a.creato_da||'?'}</td>
-        <td>${statusTag(a.stato)}</td>
+        <td>${a.creato_da_nome||a.creato_da||'?'}${isOwn?' <span style="font-size:.65rem;color:var(--c1)">(tu)</span>':''}</td>
+        <td><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:12px;font-size:.75rem;background:${stCol}18;color:${stCol};font-weight:600">${a.stato.replace('_',' ')}</span></td>
         <td>${a.approvato_da_nome||a.approvato_da||'—'}</td>
         <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${a.note_approvazione||'—'}</td>
-        <td>${canApprove?`<button class="btn btn-xs btn-ok" onclick="approveOrReject('${a.id}','approvato')">✅</button> <button class="btn btn-xs btn-err" onclick="approveOrReject('${a.id}','rifiutato')">❌</button>`:`<button class="btn btn-xs btn-ghost" onclick="viewApprovalPlan('${a.id}')">👁️</button>`}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-xs" style="background:#3B82F6;color:white" onclick="viewApprovalInCalendar('${a.id}')">📅 Vedi</button>
+          ${canApprove?`<button class="btn btn-xs btn-ok" onclick="approveOrReject('${a.id}','approvato')">✅</button> <button class="btn btn-xs btn-err" onclick="approveOrReject('${a.id}','rifiutato')">❌</button>`:''}
+        </td>
       </tr>`;
     }).join('');
+    // Se c'e' un piano in_attesa, blocca il bottone Applica
+    const hasPending = approvals.some(a=>a.stato==='in_attesa');
+    if(hasPending && $('btnApplyAI')) $('btnApplyAI').disabled=true;
   }catch(e){
     tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--gray)">Approvazioni non ancora configurate</td></tr>';
   }
@@ -5529,44 +5582,85 @@ async function approveOrReject(id,stato){
   const note=stato==='rifiutato'?prompt('Motivo del rifiuto:'):null;
   if(stato==='rifiutato'&&note===null)return;
   const currentUser=SESSION?.user||{};
+  // Se il piano e' stato modificato con D&D nel calendario, salva le modifiche
+  let updatedPiano = null;
+  if(PENDING_APPROVAL && PENDING_APPROVAL.id === id) {
+    const previewItems = (DATA.piano||[]).filter(p=>p._aiPreview);
+    if(previewItems.length) {
+      updatedPiano = previewItems.map(p=>({
+        data:p.Data, tecnico:getName(DATA.utenti||[],p.TecnicoID), tecnicoId:p.TecnicoID,
+        cliente:p.Note||p.ClienteID||'', clienteId:p.ClienteID, tipo:p.TipoIntervento||'service',
+        oraInizio:p.OraInizio||'08:00', durataOre:p.DurataOre||2, note:p.Note||'', furgone:''
+      }));
+    }
+  }
   try{
-    await apiCall('updateApproval',{
+    const payload = {
       id, stato,
       approvato_da:currentUser.id||'admin',
       note_approvazione:note||'',
       data_approvazione:new Date().toISOString()
-    },'POST');
-    toast(stato==='approvato'?'Piano approvato!':'Piano rifiutato','ok');
-    renderApprovalQueue();
-    // Se approvato, notifica tecnici via Telegram
-    if(stato==='approvato'){
+    };
+    // Se l'approvatore ha fatto modifiche D&D, salva il piano aggiornato
+    if(updatedPiano && PENDING_APPROVAL) {
+      payload.piano = { ...PENDING_APPROVAL, piano: updatedPiano };
+      payload.modifiche_approvatore = `Modificato da ${currentUser.nome||currentUser.id} prima di ${stato==='approvato'?'approvare':'rifiutare'}`;
+    }
+    await apiCall('updateApproval',payload,'POST');
+    toast(stato==='approvato'?'Piano approvato! Ora puoi applicarlo al sistema.':'Piano rifiutato — il creatore ricevera il feedback.','ok');
+    // Se approvato, abilita Applica e carica il piano nell'AI_PLAN
+    if(stato==='approvato') {
+      if(updatedPiano && PENDING_APPROVAL) AI_PLAN = { ...PENDING_APPROVAL, piano: updatedPiano };
+      else if(PENDING_APPROVAL) AI_PLAN = PENDING_APPROVAL;
+      if($('btnApplyAI')) $('btnApplyAI').disabled=false;
+      // Notifica Telegram
       try{ await apiCall('notifyPlanApproved',{approval_id:id},'POST'); }catch(e){}
+    }
+    PENDING_APPROVAL = null;
+    // Pulisci preview dal calendario
+    if(DATA.piano) DATA.piano = DATA.piano.filter(p=>!p._aiPreview);
+    renderApprovalQueue();
+    if(typeof renderMonthPlan==='function') renderMonthPlan();
+  }catch(e){toast(e.message,'err')}
+}
+
+async function viewApprovalInCalendar(id){
+  try{
+    const data=await apiCall('getApproval',{id},'POST');
+    if(!data) { toast('Approvazione non trovata','err'); return; }
+    PENDING_APPROVAL = data;
+    // Carica il piano nel calendario come preview
+    if(data.piano && Array.isArray(data.piano.piano)){
+      AI_PLAN = data.piano;
+      // Pulisci vecchi preview
+      if(DATA.piano) DATA.piano = DATA.piano.filter(p=>!p._aiPreview);
+      // Setta mese corretto
+      const firstDate = data.piano.piano[0]?.data;
+      if(firstDate){
+        const parts=firstDate.split('-');
+        MONTH_DATE=new Date(parseInt(parts[0]),parseInt(parts[1])-1,1);
+      }
+      // Aggiungi preview items (draggable!)
+      const previews = data.piano.piano.map(p=>({
+        ID:'AI_PRV_'+Math.random().toString(36).slice(2,8),
+        TecnicoID:p.tecnicoId, ClienteID:p.clienteId||'',
+        Data:p.data, OraInizio:p.oraInizio||'08:00', DurataOre:p.durataOre||2,
+        TipoIntervento:p.tipo||'service', Note:p.note||p.cliente||'',
+        Stato:'pianificato', Origine:'ai_preview', Obsoleto:false, _aiPreview:true
+      }));
+      if(!DATA.piano) DATA.piano=[];
+      DATA.piano.push(...previews);
+      // Vai alla sezione Piano Mensile
+      showSec('pianomensile');
+      toast(`📅 Piano #${id} caricato nel calendario (${previews.length} interventi) — Usa drag & drop per modificare, poi approva/rifiuta dalla sezione AI Planner`,'ok');
+    } else {
+      toast('Piano non contiene interventi strutturati','warn');
     }
   }catch(e){toast(e.message,'err')}
 }
 
-async function viewApprovalPlan(id){
-  try{
-    const data=await apiCall('getApproval',{id},'POST');
-    if(data&&data.piano){
-      AI_PLAN=data.piano;
-      // Scroll to AI result and show
-      $('aiResult').style.display='block';
-      if(typeof data.piano==='object'&&data.piano.piano){
-        let html='<h4>📋 Piano #'+id+'</h4>';
-        if(Array.isArray(data.piano.piano)){
-          html+='<table class="tbl" style="font-size:.8125rem"><thead><tr><th>Data</th><th>Tecnico</th><th>Cliente</th><th>Tipo</th></tr></thead><tbody>';
-          data.piano.piano.forEach(r=>{html+=`<tr><td>${r.data||''}</td><td>${r.tecnico||''}</td><td>${r.cliente||''}</td><td>${r.tipo||''}</td></tr>`;});
-          html+='</tbody></table>';
-        }
-        $('aiResult').innerHTML=html;
-      } else {
-        $('aiResult').textContent=JSON.stringify(data.piano,null,2);
-      }
-      $('btnApplyAI').disabled=data.stato!=='approvato';
-    }
-  }catch(e){toast(e.message,'err')}
-}
+// Retrocompatibilita
+async function viewApprovalPlan(id){ await viewApprovalInCalendar(id); }
 
 // ============ VISTA TECNICO: PIANO PERSONALE ============
 async function renderTecnicoPlan(){
@@ -6522,7 +6616,8 @@ function renderMonthPlan(){
   // Tecnici
   let tecnici = (DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Ruolo!=='admin');
   if(filtTec) tecnici = tecnici.filter(t=>t.ID===filtTec);
-  tecnici.sort((a,b)=>(a.Ruolo==='caposquadra'?0:a.Ruolo?.includes('senior')?1:2)-(b.Ruolo==='caposquadra'?0:b.Ruolo?.includes('senior')?1:2));
+  const sortPrio = t => t.Ruolo==='caposquadra'?0:(t.Livello||'')==='senior'?1:(t.Livello||'')==='intermedio'?2:(t.Livello||'')==='junior'?4:3;
+  tecnici.sort((a,b)=>sortPrio(a)-sortPrio(b));
 
   // Piano items
   const piano = (DATA.piano||[]).filter(p=>!p.Obsoleto&&p.Data&&p.Data.startsWith(y+'-'+String(m+1).padStart(2,'0')));
@@ -6554,8 +6649,9 @@ function renderMonthPlan(){
   // Separatori settimana
   tecnici.forEach((tec, ti) => {
     const tecName = (tec.Nome||'')+' '+(tec.Cognome||'').charAt(0)+'.';
-    const ruoloBadge = tec.Ruolo==='caposquadra'?'👑':tec.Ruolo?.includes('senior')?'⭐':'';
-    html += `<tr><td class="month-tec-label" title="${tec.Nome} ${tec.Cognome} — ${tec.Ruolo||''}">${ruoloBadge}${tecName}</td>`;
+    const livello = tec.Livello||'';
+    const ruoloBadge = tec.Ruolo==='caposquadra'?'👑':livello==='senior'?'⭐':livello==='junior'?'🔰':'';
+    html += `<tr><td class="month-tec-label" title="${tec.Nome} ${tec.Cognome} — ${tec.Ruolo||''} ${livello}">${ruoloBadge}${tecName}</td>`;
 
     days.forEach(d => {
       const isSat = d.dow === 6;
@@ -6584,7 +6680,8 @@ function renderMonthPlan(){
         const tipoIco = isPreview ? '🤖' : (p.TipoIntervento||p.TipoInterventoID||'').includes('install')?'🏗️':(p.TipoIntervento||p.TipoInterventoID||'').includes('tagliando')?'🔧':(p.TipoIntervento||'').includes('urgenza')?'🚨':'📋';
         const label = compact ? (clienteName||'').substring(0,8) : `${p.OraInizio||''} ${(clienteName||'').substring(0,12)}`;
         const previewStyle = isPreview ? 'border-style:dashed;opacity:.85;' : '';
-        html += `<div class="month-cell-item" draggable="${!isPreview}" ${!isPreview?`ondragstart="onMonthDragStart(event,'piano','${p.ID}')" onclick="showDetail('piano','${p.ID}')"`:''}style="background:${col}15;border-left-color:${col};color:${col};${previewStyle}" title="${clienteName||''} — ${p.Note||''}${isPreview?' [Anteprima AI]':''}">${tipoIco} ${label}</div>`;
+        const dragType = isPreview ? 'preview' : 'piano';
+        html += `<div class="month-cell-item" draggable="true" ondragstart="onMonthDragStart(event,'${dragType}','${p.ID}')" ${!isPreview?`onclick="showDetail('piano','${p.ID}')"`:''}style="background:${col}15;border-left-color:${col};color:${col};${previewStyle};cursor:grab" title="${clienteName||''} — ${p.Note||''}${isPreview?' [Anteprima AI — Drag per spostare]':''}">${tipoIco} ${label}</div>`;
       });
 
       html += '</td>';
@@ -6598,8 +6695,17 @@ function renderMonthPlan(){
   Object.entries(statoCol).forEach(([k,v]) => { html += `<span><span style="display:inline-block;width:10px;height:10px;background:${v};border-radius:2px;vertical-align:middle"></span> ${k.replace('_',' ')}</span>`; });
   const hasPreview = piano.some(p=>p._aiPreview);
   html += ' · <span>📞 Reperibilita</span> · <span>🏖️ Ferie</span>';
-  if(hasPreview) html += ' · <span style="border-left:2px dashed #8B5CF6;padding-left:4px">🤖 Anteprima AI</span> · <button class="btn btn-xs" style="background:#EF4444;color:white;font-size:.65rem" onclick="clearAIPreview()">✕ Rimuovi Anteprima</button>';
-  html += ' · <span>Drag & drop per spostare</span></div>';
+  if(hasPreview) {
+    html += ' · <span style="border-left:2px dashed #8B5CF6;padding-left:4px">🤖 Anteprima</span> · <button class="btn btn-xs" style="background:#EF4444;color:white;font-size:.65rem" onclick="clearAIPreview()">✕ Rimuovi</button>';
+    if(PENDING_APPROVAL && PENDING_APPROVAL.stato==='in_attesa') {
+      html += `</div><div style="margin-top:8px;padding:12px 16px;background:linear-gradient(135deg,#F59E0B18,#F59E0B08);border:1.5px solid #F59E0B40;border-radius:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span style="font-size:.85rem;font-weight:600;color:#F59E0B">📋 Piano #${PENDING_APPROVAL.id} in attesa di approvazione</span>
+        <span style="font-size:.75rem;color:var(--gray)">Usa drag & drop per modificare, poi:</span>
+        <button class="btn btn-xs btn-ok" onclick="approveOrReject('${PENDING_APPROVAL.id}','approvato')">✅ Approva</button>
+        <button class="btn btn-xs btn-err" onclick="approveOrReject('${PENDING_APPROVAL.id}','rifiutato')">❌ Rifiuta</button>`;
+    }
+  }
+  html += ' · <span style="cursor:grab">↕ Drag & drop per spostare</span></div>';
 
   grid.innerHTML = html;
 }
@@ -6612,9 +6718,25 @@ async function onMonthDrop(e, tecnicoId, data){
   const {type, id} = MONTH_DRAGGING;
   MONTH_DRAGGING = null;
   try {
-    if(type==='piano') await apiCall('updatePiano',{id,data:{TecnicoID:tecnicoId,Data:data}},'POST');
-    toast('Intervento spostato','ok');
-    await refreshData(true);
+    if(type==='piano') {
+      // Intervento reale nel DB → aggiorna via API
+      await apiCall('updatePiano',{id,data:{TecnicoID:tecnicoId,Data:data}},'POST');
+      toast('Intervento spostato','ok');
+      await refreshData(true);
+    } else if(type==='preview') {
+      // Intervento preview (AI/approvazione) → aggiorna solo in-memory
+      const item = (DATA.piano||[]).find(p=>p.ID===id);
+      if(item) {
+        item.TecnicoID = tecnicoId;
+        item.Data = data;
+        // Aggiorna nome tecnico nel Note se affiancamento
+        const tec = (DATA.utenti||[]).find(u=>u.ID===tecnicoId);
+        if(tec && !(item.Note||'').includes('Affiancamento')) {
+          // Solo note informative
+        }
+        toast('Anteprima spostata (non salvata — applica o approva per confermare)','info');
+      }
+    }
     renderMonthPlan();
   } catch(e){ toast(e.message,'err'); }
 }

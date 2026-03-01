@@ -1548,6 +1548,353 @@ async function handlePost(action, body, env) {
 
     // -------- INTELLIGENCE --------
 
+    case 'testAI': {
+      // Diagnostica: testa ogni engine AI e riporta quale funziona
+      const results = {};
+      const testPrompt = 'Rispondi SOLO con questo JSON: {"test":"ok","engine":"nome"}';
+      // Test Gemini
+      if (env.GEMINI_KEY) {
+        try {
+          const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`,
+            { method:'POST', headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ contents:[{parts:[{text:testPrompt}]}], generationConfig:{maxOutputTokens:100,temperature:0} }) });
+          results.gemini = { status: r.status, ok: r.ok };
+          if (r.ok) { const d = await r.json(); results.gemini.response = d.candidates?.[0]?.content?.parts?.[0]?.text?.substring(0,100); }
+          else { results.gemini.body = (await r.text().catch(()=>'')).substring(0,200); }
+        } catch(e) { results.gemini = { error: e.message }; }
+      } else { results.gemini = { configured: false }; }
+      // Test Cerebras
+      if (env.CEREBRAS_KEY) {
+        try {
+          const r = await fetch('https://api.cerebras.ai/v1/chat/completions',
+            { method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${env.CEREBRAS_KEY}`},
+              body: JSON.stringify({ model:'llama-3.3-70b', messages:[{role:'user',content:testPrompt}], max_tokens:100, temperature:0 }) });
+          results.cerebras = { status: r.status, ok: r.ok };
+          if (r.ok) { const d = await r.json(); results.cerebras.response = d.choices?.[0]?.message?.content?.substring(0,100); }
+          else { results.cerebras.body = (await r.text().catch(()=>'')).substring(0,200); }
+        } catch(e) { results.cerebras = { error: e.message }; }
+      } else { results.cerebras = { configured: false }; }
+      // Test Groq
+      if (env.GROQ_KEY) {
+        try {
+          const r = await fetch('https://api.groq.com/openai/v1/chat/completions',
+            { method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${env.GROQ_KEY}`},
+              body: JSON.stringify({ model:'llama-3.3-70b-versatile', messages:[{role:'user',content:testPrompt}], max_tokens:100, temperature:0 }) });
+          results.groq = { status: r.status, ok: r.ok };
+          if (r.ok) { const d = await r.json(); results.groq.response = d.choices?.[0]?.message?.content?.substring(0,100); }
+          else { results.groq.body = (await r.text().catch(()=>'')).substring(0,200); }
+        } catch(e) { results.groq = { error: e.message }; }
+      } else { results.groq = { configured: false }; }
+      // Test Workers AI
+      if (env.AI) {
+        try {
+          const aiP = env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+            { messages:[{role:'user',content:testPrompt}], max_tokens:100 });
+          const tmout = new Promise((_,rej) => setTimeout(()=>rej(new Error('timeout 10s')), 10000));
+          const res = await Promise.race([aiP, tmout]);
+          results.workersAI = { ok: true, response: res?.response?.substring(0,100) };
+        } catch(e) { results.workersAI = { error: e.message }; }
+      } else { results.workersAI = { configured: false }; }
+      return ok(results);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DETERMINISTIC SCHEDULER — genera piano mensile senza AI
+    // Algoritmo: constraint satisfaction + round-robin + clustering zone
+    // ═══════════════════════════════════════════════════════════════════
+    case 'generatePlanSmart': {
+      const vincoli = body.vincoli || {};
+      const meseTarget = vincoli.mese_target || '';
+      const modalita = vincoli.modalita || 'mese';
+      const settimanaNum = parseInt(vincoli.settimana || '1', 10);
+      if (!meseTarget) return err('mese_target obbligatorio (formato YYYY-MM)');
+
+      // ─── 1. LOAD DATA ───────────────────────────────────────────
+      const [yy, mm] = meseTarget.split('-').map(Number);
+      const repFilter = `&data_inizio=lte.${meseTarget}-31&data_fine=gte.${meseTarget}-01`;
+      const [allTecnici, allUrgenze, allClienti, vincoliCfg, allRep, allAutomezzi, allMacchine, allAssets, pianoExist] = await Promise.all([
+        sb(env, 'utenti', 'GET', null, '?attivo=eq.true&obsoleto=eq.false&select=id,nome,cognome,base,ruolo,automezzo_id').catch(()=>[]),
+        sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,schedulata)&order=priorita_id.asc&limit=20&select=id,problema,cliente_id,priorita_id,tecnico_id').catch(()=>[]),
+        sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno,citta_fatturazione&limit=200').catch(()=>[]),
+        sb(env, 'config', 'GET', null, '?chiave=eq.vincoli_categories&limit=1').catch(()=>[]),
+        sb(env, 'reperibilita', 'GET', null, `?obsoleto=eq.false${repFilter}&select=id,tecnico_id,data_inizio,data_fine,turno,tipo&order=data_inizio.asc&limit=100`).catch(()=>[]),
+        sb(env, 'automezzi', 'GET', null, '?obsoleto=eq.false&select=id,targa,modello,stato&limit=20').catch(()=>[]),
+        sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,nome,modello,tipo,cliente_id,prossimo_tagliando&order=prossimo_tagliando.asc&limit=80').catch(()=>[]),
+        sb(env, 'anagrafica_assets', 'GET', null, '?prossimo_controllo=not.is.null&select=id,nome_asset,modello,gruppo_attrezzatura,codice_m3,nome_account,prossimo_controllo&order=prossimo_controllo.asc&limit=80').catch(()=>[]),
+        sb(env, 'piano', 'GET', null, `?data=gte.${meseTarget}-01&data=lte.${meseTarget}-31&stato=in.(pianificato,in_corso)&obsoleto=eq.false&select=id,data,tecnico_id,cliente_id&limit=500`).catch(()=>[])
+      ]);
+
+      // ─── 2. PARSE VINCOLI ────────────────────────────────────────
+      const vincoliRules = { assenti: new Set(), affiancamenti: [], reperibilita: {}, custom: [] };
+      if (vincoliCfg.length) {
+        try {
+          const vc = JSON.parse(vincoliCfg[0].valore);
+          const oggiISO = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
+          for (const cat of (vc.categories || []).filter(c => c.attiva !== false)) {
+            for (const r of (cat.regole || [])) {
+              if (!r.testo) continue;
+              const attiva = r.permanente || !(r.data_fine && r.data_fine < oggiISO);
+              if (!attiva) continue;
+              const txt = (r.testo || '').toLowerCase();
+              if (txt.match(/assent|non disponibil|ferie|malattia|indisponibil/)) {
+                for (const id of (r.soggetti || [])) vincoliRules.assenti.add(id);
+              }
+              if (txt.match(/affianc|accompagn|coppia|deve lavorare con|junior.*senior/)) {
+                vincoliRules.affiancamenti.push({ junior: r.soggetti || [], senior: r.riferimenti || [] });
+              }
+              vincoliRules.custom.push({ testo: r.testo, soggetti: r.soggetti || [], priorita: r.priorita });
+            }
+          }
+        } catch {}
+      }
+
+      // Parse reperibilità per data
+      for (const rep of allRep) {
+        const start = new Date(rep.data_inizio);
+        const end = new Date(rep.data_fine);
+        const d = new Date(start);
+        while (d <= end) {
+          const iso = d.toISOString().split('T')[0];
+          if (!vincoliRules.reperibilita[iso]) vincoliRules.reperibilita[iso] = [];
+          vincoliRules.reperibilita[iso].push({ tecnicoId: rep.tecnico_id, turno: rep.turno, tipo: rep.tipo });
+          d.setDate(d.getDate() + 1);
+        }
+      }
+
+      // ─── 3. PREPARE ENTITIES ─────────────────────────────────────
+      const tecnici = allTecnici.filter(t => (t.ruolo||'').toLowerCase() !== 'admin' && !vincoliRules.assenti.has(t.id));
+
+      // Approccio semplice: TUTTI i tecnici lavorano ogni giorno
+      // Le coppie vengono SOLO dai vincoli affiancamento (soggetti+riferimenti)
+      // Se non ci sono vincoli strutturati, tutti lavorano da soli
+
+      // Coppie strutturate dai vincoli: soggetti → devono lavorare CON → riferimenti
+      const pairRules = vincoliRules.affiancamenti.filter(a => a.junior?.length && a.senior?.length);
+
+      // Client map by codice_m3
+      const clientMap = {};
+      allClienti.forEach(c => { clientMap[c.codice_m3] = c; });
+
+      // Build service backlog: macchine + assets needing service, sorted by urgency
+      const serviceBacklog = [];
+      const oggiDate = new Date();
+      for (const m of allMacchine) {
+        if (!m.prossimo_tagliando) continue;
+        const ggDiff = Math.round((new Date(m.prossimo_tagliando) - oggiDate) / 86400000);
+        const cli = allClienti.find(c => c.codice_m3 === m.cliente_id);
+        serviceBacklog.push({
+          tipo: 'tagliando', macchina: m.modello || m.tipo || m.nome || '?',
+          macchinaId: m.id, clienteId: m.cliente_id,
+          clienteNome: cli?.nome_interno || cli?.nome_account || m.cliente_id || '?',
+          citta: cli?.citta_fatturazione || '',
+          dataScadenza: m.prossimo_tagliando, giorniDiff: ggDiff,
+          priorita: ggDiff < 0 ? 0 : ggDiff <= 7 ? 1 : ggDiff <= 30 ? 2 : 3
+        });
+      }
+      for (const a of allAssets) {
+        if (!a.prossimo_controllo) continue;
+        const ggDiff = Math.round((new Date(a.prossimo_controllo) - oggiDate) / 86400000);
+        serviceBacklog.push({
+          tipo: 'controllo', macchina: a.modello || a.nome_asset || a.gruppo_attrezzatura || '?',
+          macchinaId: a.id, clienteId: a.codice_m3,
+          clienteNome: a.nome_account || a.codice_m3 || '?',
+          citta: '', dataScadenza: a.prossimo_controllo, giorniDiff: ggDiff,
+          priorita: ggDiff < 0 ? 0 : ggDiff <= 7 ? 1 : ggDiff <= 30 ? 2 : 3
+        });
+      }
+      serviceBacklog.sort((a, b) => a.priorita - b.priorita || a.giorniDiff - b.giorniDiff);
+
+      // Build generic client pool (for when backlog runs out)
+      const clientPool = allClienti.filter(c => c.codice_m3).map(c => ({
+        clienteId: c.codice_m3, clienteNome: c.nome_interno || c.nome_account || '?',
+        citta: c.citta_fatturazione || ''
+      }));
+
+      // ─── 4. CALCULATE WORK DAYS ──────────────────────────────────
+      const giorniNome = ['dom','lun','mar','mer','gio','ven','sab'];
+      function getWorkDaysSmart(startDate, endDate) {
+        const days = [];
+        const d = new Date(startDate);
+        while (d <= endDate) {
+          if (d.getDay() >= 1 && d.getDay() <= 5) days.push(d.toISOString().split('T')[0]);
+          d.setDate(d.getDate() + 1);
+        }
+        return days;
+      }
+
+      let workDays = [];
+      if (modalita === 'settimana') {
+        const startOffset = (settimanaNum - 1) * 7;
+        const ws = new Date(yy, mm - 1, 1 + startOffset);
+        const we = new Date(ws); we.setDate(we.getDate() + 6);
+        const lastD = new Date(yy, mm, 0);
+        if (we > lastD) we.setTime(lastD.getTime());
+        workDays = getWorkDaysSmart(ws, we);
+      } else {
+        workDays = getWorkDaysSmart(new Date(yy, mm - 1, 1), new Date(yy, mm, 0));
+      }
+
+      // For "vuoti" mode: filter out days already covered
+      if (modalita === 'vuoti' && pianoExist.length) {
+        const existingDays = new Set(pianoExist.map(p => p.data));
+        workDays = workDays.filter(d => !existingDays.has(d));
+      }
+
+      if (!workDays.length) return ok({ summary: 'Nessun giorno lavorativo nel periodo', piano: [], warnings: [] });
+
+      // ─── 5. DETERMINISTIC SCHEDULING ALGORITHM ────────────────────
+      const piano = [];
+      const warnings = [];
+      let backlogIdx = 0;  // pointer into serviceBacklog
+      let clientPoolIdx = 0; // pointer into clientPool (round-robin)
+      const seniorRotation = {}; // tecnicoId → next senior index
+      const tecAssignments = {}; // track assignments per tecnico per day
+
+      // Helper: get next service item
+      function getNextService(preferredCity) {
+        if (preferredCity) {
+          for (let i = backlogIdx; i < Math.min(backlogIdx + 20, serviceBacklog.length); i++) {
+            if (serviceBacklog[i].citta && serviceBacklog[i].citta.toLowerCase().includes(preferredCity.toLowerCase())) {
+              return serviceBacklog.splice(i, 1)[0];
+            }
+          }
+        }
+        if (backlogIdx < serviceBacklog.length) return serviceBacklog[backlogIdx++];
+        if (clientPool.length) {
+          const c = clientPool[clientPoolIdx % clientPool.length];
+          clientPoolIdx++;
+          return { tipo: 'tagliando', macchina: 'service', clienteId: c.clienteId, clienteNome: c.clienteNome, citta: c.citta };
+        }
+        return null;
+      }
+
+      function getFurgone(tec) { return tec.automezzo_id || ''; }
+
+      // ─── MAIN LOOP: per ogni giorno lavorativo ───
+      for (const day of workDays) {
+        tecAssignments[day] = new Set();
+        const repToday = vincoliRules.reperibilita[day] || [];
+        const onCallIds = new Set(repToday.map(r => r.tecnicoId));
+
+        // 1. URGENZE → primi 3 giorni del periodo
+        const dayIdx = workDays.indexOf(day);
+        if (dayIdx < 3 && allUrgenze.length) {
+          const urgPerDay = Math.ceil(allUrgenze.length / 3);
+          const urgSlice = allUrgenze.slice(dayIdx * urgPerDay, (dayIdx + 1) * urgPerDay);
+          for (const urg of urgSlice) {
+            let tecId = urg.tecnico_id;
+            if (!tecId || vincoliRules.assenti.has(tecId)) {
+              const available = tecnici.find(t => !tecAssignments[day].has(t.id) && !onCallIds.has(t.id));
+              if (available) tecId = available.id;
+            }
+            if (tecId) {
+              const tec = tecnici.find(t => t.id === tecId);
+              if (tec) {
+                const cli = allClienti.find(c => c.codice_m3 === urg.cliente_id);
+                piano.push({
+                  data: day, tecnico: `${tec.nome} ${tec.cognome}`, tecnicoId: tec.id,
+                  cliente: cli?.nome_interno || cli?.nome_account || urg.cliente_id || '?',
+                  clienteId: urg.cliente_id || '', tipo: 'urgenza',
+                  oraInizio: '08:00', durataOre: 2,
+                  furgone: getFurgone(tec), note: `URG: ${(urg.problema || '').substring(0, 50)}`
+                });
+                tecAssignments[day].add(tec.id);
+              }
+            }
+          }
+        }
+
+        // 2. COPPIE da vincoli strutturati (soggetto lavora CON riferimento)
+        for (const pair of pairRules) {
+          for (const jId of pair.junior) {
+            if (tecAssignments[day].has(jId) || onCallIds.has(jId)) continue;
+            const junior = tecnici.find(t => t.id === jId);
+            if (!junior) continue;
+            // Trova un riferimento disponibile
+            let partner = null;
+            for (const sId of pair.senior) {
+              if (!tecAssignments[day].has(sId) && !onCallIds.has(sId)) {
+                partner = tecnici.find(t => t.id === sId);
+                if (partner) break;
+              }
+            }
+            // Se nessun riferimento specifico, prova qualunque non-assegnato
+            if (!partner) {
+              partner = tecnici.find(t => t.id !== jId && !tecAssignments[day].has(t.id) && !onCallIds.has(t.id) && pair.senior.includes(t.id));
+            }
+            if (partner) {
+              const service = getNextService(junior.base || partner.base);
+              if (!service) continue;
+              piano.push({
+                data: day, tecnico: `${partner.nome} ${partner.cognome}`, tecnicoId: partner.id,
+                cliente: service.clienteNome, clienteId: service.clienteId, tipo: service.tipo || 'tagliando',
+                oraInizio: '08:00', durataOre: 6, furgone: getFurgone(partner), note: service.macchina || ''
+              });
+              piano.push({
+                data: day, tecnico: `${junior.nome} ${junior.cognome}`, tecnicoId: junior.id,
+                cliente: service.clienteNome, clienteId: service.clienteId, tipo: service.tipo || 'tagliando',
+                oraInizio: '08:00', durataOre: 6, furgone: getFurgone(partner),
+                note: `Affiancamento con ${partner.nome} — ${service.macchina || ''}`
+              });
+              tecAssignments[day].add(partner.id);
+              tecAssignments[day].add(junior.id);
+            }
+          }
+        }
+
+        // 3. TUTTI I RIMANENTI → assegnamento individuale
+        for (const tec of tecnici) {
+          if (tecAssignments[day].has(tec.id)) continue;
+          if (onCallIds.has(tec.id)) continue;
+
+          const service = getNextService(tec.base);
+          if (!service) continue;
+
+          piano.push({
+            data: day, tecnico: `${tec.nome} ${tec.cognome}`, tecnicoId: tec.id,
+            cliente: service.clienteNome, clienteId: service.clienteId, tipo: service.tipo || 'tagliando',
+            oraInizio: '08:00', durataOre: 7, furgone: getFurgone(tec), note: service.macchina || ''
+          });
+          tecAssignments[day].add(tec.id);
+        }
+
+        // 4. REPERIBILITA badge (informativo)
+        for (const rep of repToday) {
+          const tec = tecnici.find(t => t.id === rep.tecnicoId);
+          if (tec && !tecAssignments[day].has(tec.id)) {
+            piano.push({
+              data: day, tecnico: `${tec.nome} ${tec.cognome}`, tecnicoId: tec.id,
+              cliente: 'REPERIBILITA', clienteId: '', tipo: 'reperibilita',
+              oraInizio: rep.turno === '18-08' ? '18:00' : '00:00', durataOre: rep.turno === '24h' ? 24 : 14,
+              furgone: getFurgone(tec), note: `${rep.tipo || 'REP'} ${rep.turno || '24h'}`
+            });
+          }
+        }
+      }
+
+      // ─── 6. SUMMARY ───────────────────────────────────────────────
+      const giorni = [...new Set(piano.map(p => p.data))].sort();
+      const nTec = [...new Set(piano.map(p => p.tecnicoId))].length;
+      const nUrg = piano.filter(p => p.tipo === 'urgenza').length;
+      const nTag = piano.filter(p => p.tipo === 'tagliando' || p.tipo === 'controllo').length;
+      const nRep = piano.filter(p => p.tipo === 'reperibilita').length;
+
+      if (vincoliRules.assenti.size) {
+        warnings.push(`Tecnici esclusi (assenti): ${[...vincoliRules.assenti].join(', ')}`);
+      }
+      // Debug: composizione team
+      const ruoliDettaglio = tecnici.map(t => `${t.nome}=${t.ruolo||'?'}`).join(', ');
+      warnings.push(`Team: ${tecnici.length} tecnici attivi [${ruoliDettaglio}] | Coppie vincoli: ${pairRules.length}`);
+
+      return ok({
+        summary: `Piano ${meseTarget}: ${piano.length} interventi su ${giorni.length} giorni, ${nTec} tecnici — ${nUrg} urgenze, ${nTag} tagliandi, ${nRep} reperibilità`,
+        piano,
+        warnings,
+        engine: 'deterministic',
+        stats: { giorni: giorni.length, tecnici: nTec, urgenze: nUrg, tagliandi: nTag, reperibilita: nRep }
+      });
+    }
+
     case 'generateAIPlan': {
       if (!env.AI) return err('Workers AI non configurato. Aggiungi [ai] binding = "AI" in wrangler.toml e rideploya.');
 
@@ -1795,75 +2142,116 @@ ${periodoIstruzione || 'Genera piano mese intero'}
 JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina"}],"warnings":[]}`;
       }
 
+      // Engine cache: ricorda quale engine ha funzionato → skip cascade su chunk successivi
+      const engineState = { geminiDisabled: false, cerebrasDisabled: false, groqDisabled: false, lastWorking: null };
+
       async function callAI(promptText) {
         let lastError = '';
 
-        // ENGINE 1: Gemini 2.0 Flash (primario — migliore qualita, JSON nativo)
-        if (env.GEMINI_KEY) {
-          for (let attempt = 0; attempt < 2; attempt++) {
-            if (attempt > 0) await new Promise(r => setTimeout(r, 3000));
-            try {
-              const geminiRes = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`,
-                { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    system_instruction: { parts: [{ text: sysPrompt }] },
-                    contents: [{ parts: [{ text: promptText }] }],
-                    generationConfig: { maxOutputTokens: 16384, temperature: 0.3, responseMimeType: 'application/json' }
-                  })
-                }
-              );
-              if (geminiRes.status === 429) { lastError = 'Gemini 429'; continue; }
-              if (!geminiRes.ok) { lastError = `Gemini HTTP ${geminiRes.status}`; break; }
-              const gd = await geminiRes.json();
-              const text = gd.candidates?.[0]?.content?.parts?.[0]?.text;
-              if (text) return text;
-              lastError = 'Gemini: risposta vuota';
-            } catch (e) { lastError = `Gemini: ${e.message}`; break; }
-          }
+        // Se un engine ha già funzionato, provalo PRIMA (skip cascade)
+        if (engineState.lastWorking === 'gemini' && env.GEMINI_KEY && !engineState.geminiDisabled) {
+          const r = await tryGemini(promptText);
+          if (r) return r;
+        }
+        if (engineState.lastWorking === 'cerebras' && env.CEREBRAS_KEY && !engineState.cerebrasDisabled) {
+          const r = await tryCerebras(promptText);
+          if (r) return r;
+        }
+        if (engineState.lastWorking === 'groq' && env.GROQ_KEY && !engineState.groqDisabled) {
+          const r = await tryGroq(promptText);
+          if (r) return r;
         }
 
-        // ENGINE 2: Groq (Llama 3.3 70B — gratis, veloce, JSON nativo)
-        if (env.GROQ_KEY) {
-          try {
-            const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.GROQ_KEY}` },
-              body: JSON.stringify({
-                model: 'llama-3.3-70b-versatile',
-                messages: [
-                  { role: 'system', content: sysPrompt },
-                  { role: 'user', content: promptText }
-                ],
-                max_tokens: 16384,
-                temperature: 0.3,
-                response_format: { type: 'json_object' }
-              })
-            });
-            if (groqRes.ok) {
-              const gd = await groqRes.json();
-              const text = gd.choices?.[0]?.message?.content;
-              if (text) return text;
-            } else {
-              const errBody = await groqRes.text().catch(() => '');
-              lastError = `Groq HTTP ${groqRes.status}: ${errBody.substring(0, 100)}`;
-            }
-          } catch (e) { lastError = `Groq: ${e.message}`; }
+        // Cascade: prova tutti gli engine in ordine
+        // ENGINE 1: Gemini 2.0 Flash
+        if (env.GEMINI_KEY && !engineState.geminiDisabled) {
+          const r = await tryGemini(promptText);
+          if (r) { engineState.lastWorking = 'gemini'; return r; }
         }
-
-        // ENGINE 3: Workers AI Llama 3.3 70B (fallback — sempre disponibile, prompt compatto)
+        // ENGINE 2: Cerebras
+        if (env.CEREBRAS_KEY && !engineState.cerebrasDisabled) {
+          const r = await tryCerebras(promptText);
+          if (r) { engineState.lastWorking = 'cerebras'; return r; }
+        }
+        // ENGINE 3: Groq
+        if (env.GROQ_KEY && !engineState.groqDisabled) {
+          const r = await tryGroq(promptText);
+          if (r) { engineState.lastWorking = 'groq'; return r; }
+        }
+        // ENGINE 4: Workers AI (fallback)
         if (env.AI) {
           const compactPrompt = buildCompactPrompt();
-          const aiPromise = env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
-            messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: compactPrompt }],
-            max_tokens: 4096
-          });
-          const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 45000));
-          const res = await Promise.race([aiPromise, timeout]);
-          if (res?.response) return res.response;
-          lastError = 'Workers AI timeout/vuoto';
+          try {
+            const aiPromise = env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+              messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: compactPrompt }],
+              max_tokens: 4096
+            });
+            const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 30000));
+            const res = await Promise.race([aiPromise, timeout]);
+            if (res?.response) { engineState.lastWorking = 'workersai'; return res.response; }
+          } catch (e) { lastError = `Workers AI: ${e.message}`; }
         }
-        throw new Error(`AI non disponibile (${lastError}). Configura GEMINI_KEY o GROQ_KEY nelle env del worker.`);
+        throw new Error(`AI non disponibile (${lastError}). Configura GEMINI_KEY, CEREBRAS_KEY o GROQ_KEY.`);
+      }
+
+      async function tryGemini(promptText) {
+        try {
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                system_instruction: { parts: [{ text: sysPrompt }] },
+                contents: [{ parts: [{ text: promptText }] }],
+                generationConfig: { maxOutputTokens: 16384, temperature: 0.3, responseMimeType: 'application/json' }
+              })
+            }
+          );
+          if (res.status === 429) { engineState.geminiDisabled = true; return null; }
+          if (!res.ok) { engineState.geminiDisabled = true; return null; }
+          const gd = await res.json();
+          return gd.candidates?.[0]?.content?.parts?.[0]?.text || null;
+        } catch { engineState.geminiDisabled = true; return null; }
+      }
+
+      async function tryCerebras(promptText) {
+        try {
+          const res = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.CEREBRAS_KEY}` },
+            body: JSON.stringify({
+              model: 'llama-3.3-70b',
+              messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
+              max_tokens: 16384, temperature: 0.3,
+              response_format: { type: 'json_object' }
+            })
+          });
+          if (!res.ok) { if (res.status === 429) engineState.cerebrasDisabled = true; return null; }
+          const cd = await res.json();
+          return cd.choices?.[0]?.message?.content || null;
+        } catch { return null; }
+      }
+
+      async function tryGroq(promptText) {
+        try {
+          const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.GROQ_KEY}` },
+            body: JSON.stringify({
+              model: 'llama-3.3-70b-versatile',
+              messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
+              max_tokens: 16384, temperature: 0.3,
+              response_format: { type: 'json_object' }
+            })
+          });
+          if (!res.ok) {
+            const errBody = await res.text().catch(() => '');
+            engineState.lastError = `Groq ${res.status}: ${errBody.substring(0,200)}`;
+            if (res.status === 429) engineState.groqDisabled = true;
+            return null;
+          }
+          const gd = await res.json();
+          return gd.choices?.[0]?.message?.content || null;
+        } catch (e) { engineState.lastError = `Groq exception: ${e.message}`; return null; }
       }
 
       // Parser robusto — gestisce JSON troncati (risposta tagliata a max_tokens)
@@ -2013,16 +2401,14 @@ ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}`;
 
 JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome cognome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina"}],"warnings":["..."]}`;
 
-        // ── CHUNKING BISETTIMANALE: 2-3 chiamate AI per coprire il mese ──
+        // ── CHUNKING SETTIMANALE: max 5 giorni per chunk = output gestibile ──
         // Sempre chunking per meseTarget (mese/vuoti/settimana)
         if (meseTarget) {
           const [yy, mm] = meseTarget.split('-').map(Number);
 
-          // Calcola chunk: bisettimanali (2 settimane per chunk = 10 gg lavorativi)
-          // Così servono solo 2-3 chiamate AI, non 5 — molto più veloce
+          // Calcola chunk SETTIMANALI (max 5 gg lavorativi ciascuno)
           const chunks = [];
           if (modalita === 'settimana') {
-            // Settimana singola: un solo chunk
             const startOffset = (settimanaNum - 1) * 7;
             const weekStart = new Date(yy, mm - 1, 1 + startOffset);
             const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6);
@@ -2031,15 +2417,18 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome cognome","t
             const wd = getWorkDays(weekStart, weekEnd);
             if (wd.length) chunks.push({ workDays: wd, label: 'Sett ' + settimanaNum });
           } else {
-            // Mese intero o vuoti: 2 bisettimanali + eventuale resto
-            const monthStart = new Date(yy, mm - 1, 1);
+            // Mese intero o vuoti: 3 chunk da ~7-8 giorni lavorativi
+            // Decade 1: 1-10, Decade 2: 11-20, Decade 3: 21-fine
             const monthEnd = new Date(yy, mm, 0);
-            const mid1 = new Date(yy, mm - 1, 15);  // prima metà: 1-15
-            const mid2 = new Date(yy, mm - 1, 16);  // seconda metà: 16-fine
-            const wd1 = getWorkDays(monthStart, mid1);
-            const wd2 = getWorkDays(mid2, monthEnd);
-            if (wd1.length) chunks.push({ workDays: wd1, label: 'Prima metà mese' });
-            if (wd2.length) chunks.push({ workDays: wd2, label: 'Seconda metà mese' });
+            const splits = [
+              [new Date(yy, mm-1, 1),  new Date(yy, mm-1, 10)],
+              [new Date(yy, mm-1, 11), new Date(yy, mm-1, 20)],
+              [new Date(yy, mm-1, 21), monthEnd]
+            ];
+            splits.forEach((s, i) => {
+              const wd = getWorkDays(s[0], s[1]);
+              if (wd.length) chunks.push({ workDays: wd, label: 'Decade ' + (i+1) });
+            });
           }
 
           // Piano esistente context per modalità "vuoti"
@@ -2054,63 +2443,62 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome cognome","t
           const allWarnings = new Set();
           let chunksDone = 0;
 
-          // File allegati: comprimi per chunk (max 1500 char per non pesare)
-          const chunkFileCtx = fileContext ? fileContext.substring(0, 1500) : '';
+          // File allegati: comprimi per chunk (max 1000 char per non pesare)
+          const chunkFileCtx = fileContext ? fileContext.substring(0, 1000) : '';
+          // Clienti: comprimi per non esplodere il prompt
+          const cliListShort = cliList.length > 1500 ? cliList.substring(0, 1500) + '...' : cliList;
 
-          for (let ci = 0; ci < chunks.length; ci++) {
-            const chunk = chunks[ci];
-            // Delay 1s tra chunk
-            if (ci > 0) await new Promise(r => setTimeout(r, 1000));
-
-            // Per modalità "vuoti": filtra solo i giorni senza interventi
+          // Funzione per processare un singolo chunk
+          async function processChunk(chunk, weekLabel) {
             let targetDays = chunk.workDays;
             if (modalita === 'vuoti' && existingDays.size > 0) {
               targetDays = chunk.workDays.filter(wd => {
                 const dateOnly = wd.split('(')[0];
                 return !existingDays.has(dateOnly);
               });
-              if (!targetDays.length) { chunksDone++; continue; } // tutti i giorni già coperti
+              if (!targetDays.length) return { piano: [], warnings: [], ok: true };
             }
 
-            const prevSummary = allPiano.length > 0
-              ? '\nPIANO GIA GENERATO (NON duplicare):\n' +
-                allPiano.slice(-15).map(p => `${p.data} ${p.tecnico}: ${p.cliente}`).join('; ')
-              : '';
-
-            const chunkBaseCtx = `PLANNER FSM — ${meseTarget}
-OGGI: ${oggiIt} (${isoOggi})
-##### VINCOLI (INVIOLABILI) #####
-${vincoliText || '(Nessuno)'}
+            const chunkPrompt = `PLANNER FSM — ${meseTarget} — ${weekLabel}
+VINCOLI: ${vincoliText || '(Nessuno)'}
 ${testo ? 'UTENTE: ' + testo : ''}
-#####
 TECNICI (${nTecAttivi}): ${tecList}
-AUTOMEZZI: ${autoList || 'Nessuno'}
 ${urgList ? 'URGENZE: ' + urgList : ''}
-CLIENTI: ${cliList}
-${repContext}
-${pianoEsistente}
-${tagliandiContext ? tagliandiContext.substring(0, 600) : ''}
-${chunkFileCtx ? '\nFILE:\n' + chunkFileCtx : ''}
-${prevSummary}`;
+CLIENTI: ${cliListShort}
+${repContext ? repContext.substring(0, 500) : ''}
+${chunkFileCtx ? 'FILE: ' + chunkFileCtx : ''}
 
-            const chunkPrompt = `${chunkBaseCtx}
-
-GENERA PIANO per questi ${targetDays.length} GIORNI: ${targetDays.join(', ')}
-${modalita === 'vuoti' ? 'Questi sono giorni SENZA interventi — riempili tutti.' : ''}
-Genera ESATTAMENTE ${targetDays.length} giorni con almeno ${nTecAttivi} interventi ciascuno (minimo ${targetDays.length * nTecAttivi} righe).
+GENERA PIANO per ${targetDays.length} GIORNI: ${targetDays.join(', ')}
+${modalita === 'vuoti' ? 'Giorni VUOTI — riempili tutti.' : ''}
+Servono ${targetDays.length * nTecAttivi} righe (${nTecAttivi} tecnici x ${targetDays.length} giorni).
 
 ${instructions}`;
 
             try {
               const rawText = await callAI(chunkPrompt);
-              if (!rawText) continue;
+              if (!rawText) return { piano: [], warnings: [`${weekLabel}: risposta vuota`], ok: false };
               const parsed = parseAIResponse(rawText);
-              if (parsed?.piano) allPiano.push(...parsed.piano);
-              if (parsed?.warnings) parsed.warnings.forEach(w => allWarnings.add(w));
-              chunksDone++;
-            } catch (chunkErr) {
-              allWarnings.add(`${chunk.label}: ${chunkErr.message}`);
+              if (parsed?.piano?.length) {
+                return { piano: parsed.piano, warnings: parsed.warnings || [], ok: true };
+              }
+              return { piano: [], warnings: [`${weekLabel}: piano vuoto`], ok: false };
+            } catch (e) {
+              return { piano: [], warnings: [`${weekLabel}: ${e.message}`], ok: false };
             }
+          }
+
+          // Esecuzione SEQUENZIALE con delay intelligente
+          // Groq: 6000 token/min → max 1 call/minuto per prompt grandi
+          // Cerebras/Gemini: nessun limite → delay breve
+          const needsLongDelay = !env.CEREBRAS_KEY && !env.GEMINI_KEY; // solo Groq disponibile
+          const chunkDelay = needsLongDelay ? 65000 : 2000; // 65s per Groq solo, 2s per altri
+
+          for (let ci = 0; ci < chunks.length; ci++) {
+            if (ci > 0) await new Promise(r => setTimeout(r, chunkDelay));
+
+            const res = await processChunk(chunks[ci], chunks[ci].label);
+            if (res.piano.length) { allPiano.push(...res.piano); chunksDone++; }
+            res.warnings.forEach(w => allWarnings.add(w));
           }
 
           if (!allPiano.length) return err('AI non ha generato nessun intervento. Verifica le API key (GEMINI_KEY / GROQ_KEY).');
@@ -2791,6 +3179,99 @@ Rispondi SOLO con JSON valido:
       } catch {
         return ok({ categories: [], meta: {}, raw: rows[0].valore });
       }
+    }
+
+    // ──────── APPROVAL WORKFLOW ─────────────────────────────────────
+    case 'createApproval': {
+      // DEBUG: verifica che il case matchi
+      console.log('createApproval REACHED', JSON.stringify(Object.keys(body)));
+      const adminErr2 = await requireAdmin(env, body);
+      if (adminErr2) return err(adminErr2, 403);
+      const aprId = body.id || ('APR_' + Date.now());
+      const pianoData2 = body.piano;
+      if (!pianoData2) return err('Piano mancante');
+      const aprKey = `approval_${aprId}`;
+      const aprVal = JSON.stringify({
+        id: aprId, stato: 'in_attesa', piano: pianoData2,
+        mese: body.mese || '',
+        creato_da: body.creato_da || body.userId || 'admin',
+        data_creazione: body.data_creazione || new Date().toISOString(),
+        approvato_da: null, note_approvazione: null, data_approvazione: null,
+        modifiche_approvatore: null
+      });
+      try {
+        await sb(env, 'config', 'POST', { chiave: aprKey, valore: aprVal, tenant_id: TENANT }, '');
+      } catch (e1) {
+        try {
+          await sb(env, `config?chiave=eq.${aprKey}`, 'PATCH', { valore: aprVal }, '');
+        } catch (e2) {
+          return err(`createApproval failed — Insert: ${e1.message} | Patch: ${e2.message}`);
+        }
+      }
+      return ok({ id: aprId, stato: 'in_attesa' });
+    }
+
+    case 'getApprovals': {
+      const rows = await sb(env, 'config', 'GET', null,
+        `?chiave=like.approval_APR_%25&order=created_at.desc&limit=50`);
+      const filter = body.filter || '';
+      let approvals = (rows || []).map(r => { try { return JSON.parse(r.valore); } catch { return null; } }).filter(Boolean);
+      if (filter) approvals = approvals.filter(a => a.stato === filter);
+      // Arricchisci con nomi utenti
+      const utenti = await sb(env, 'utenti', 'GET', null, '?select=id,nome,cognome&limit=100');
+      const nameMap = {};
+      (utenti || []).forEach(u => { nameMap[u.id] = `${u.nome} ${u.cognome}`; });
+      approvals.forEach(a => {
+        a.creato_da_nome = nameMap[a.creato_da] || a.creato_da;
+        a.approvato_da_nome = a.approvato_da ? (nameMap[a.approvato_da] || a.approvato_da) : null;
+      });
+      return ok(approvals);
+    }
+
+    case 'getApproval': {
+      const aId = body.id;
+      if (!aId) return err('ID approvazione mancante');
+      const rows = await sb(env, 'config', 'GET', null, `?chiave=eq.approval_${aId}&limit=1`);
+      if (!rows?.length) return err('Approvazione non trovata', 404);
+      try { return ok(JSON.parse(rows[0].valore)); } catch { return err('Dati corrotti'); }
+    }
+
+    case 'updateApproval': {
+      const uId = body.id;
+      if (!uId) return err('ID mancante');
+      const rows = await sb(env, 'config', 'GET', null, `?chiave=eq.approval_${uId}&limit=1`);
+      if (!rows?.length) return err('Non trovata', 404);
+      let data;
+      try { data = JSON.parse(rows[0].valore); } catch { return err('Dati corrotti'); }
+      // Merge updates
+      if (body.stato) data.stato = body.stato;
+      if (body.approvato_da) data.approvato_da = body.approvato_da;
+      if (body.note_approvazione !== undefined) data.note_approvazione = body.note_approvazione;
+      if (body.data_approvazione) data.data_approvazione = body.data_approvazione;
+      if (body.piano) data.piano = body.piano; // l'approvatore può modificare il piano (drag&drop)
+      if (body.modifiche_approvatore) data.modifiche_approvatore = body.modifiche_approvatore;
+      await sb(env, `config?chiave=eq.approval_${uId}`, 'PATCH', { valore: JSON.stringify(data) });
+      return ok(data);
+    }
+
+    case 'notifyPlanApproved': {
+      const aprId = body.approval_id;
+      if (!aprId) return err('ID mancante');
+      const rows = await sb(env, 'config', 'GET', null, `?chiave=eq.approval_${aprId}&limit=1`);
+      if (!rows?.length) return ok({ notified: false });
+      let data;
+      try { data = JSON.parse(rows[0].valore); } catch { return ok({ notified: false }); }
+      if (data.stato !== 'approvato') return ok({ notified: false });
+      // Notifica su Telegram gruppo
+      if (env.TELEGRAM_BOT_TOKEN) {
+        const msg = `✅ *Piano Mensile Approvato*\n\n📅 Mese: ${data.mese || '?'}\n👤 Approvato da: ${data.approvato_da || '?'}\n📋 ${(data.piano?.piano || []).length} interventi\n\nIl piano è stato applicato al sistema.`;
+        const tgUrl = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`;
+        await fetch(tgUrl, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: env.TELEGRAM_GROUP_CHAT || '-5236723213', text: msg, parse_mode: 'Markdown' })
+        }).catch(() => {});
+      }
+      return ok({ notified: true });
     }
 
     case 'backupNow': {
