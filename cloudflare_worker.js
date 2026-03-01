@@ -1710,39 +1710,36 @@ async function handlePost(action, body, env) {
       const urgList = ctx.urgenze ? allUrgenze.slice(0,20).map(u => `${u.id}:${(u.problema||'').substring(0,40)}|${u.cliente_id}|pri:${u.priorita_id}`).join('; ') : '';
       const cliList = allClienti.slice(0,100).map(c => `${c.codice_m3}:${c.nome_interno||c.nome_account||'?'}(${c.citta_fatturazione||''})`).join(', ');
 
-      const prompt = `PLANNER FSM — Pianificazione intelligente interventi
+      const nTecAttivi = allTecnici.filter(t=>t.ruolo!=='admin').length;
+      const prompt = `PLANNER FSM — ${meseTarget || 'Piano interventi'}
 OGGI: ${oggiIt} (${isoOggi})
-${meseTarget ? 'MESE TARGET: ' + meseTarget : ''}
 
-=== VINCOLI UTENTE (dal prompt) ===
-${testo || 'Nessuno'}
+########## VINCOLI CONFIGURATI (INVIOLABILI — rispetta OGNI regola senza eccezioni) ##########
+${vincoliText || '(Nessun vincolo)'}
+${testo ? 'ISTRUZIONI AGGIUNTIVE UTENTE: ' + testo : ''}
+##########
 
-${vincoliText ? vincoliText : '(Nessun vincolo configurato nel sistema)'}
-
-TECNICI DISPONIBILI: ${tecList}
+TECNICI DISPONIBILI (${nTecAttivi}): ${tecList}
 AUTOMEZZI: ${autoList || 'Nessuno'}
-URGENZE APERTE: ${urgList || 'Nessuna'}
+${urgList ? 'URGENZE APERTE: ' + urgList : ''}
 CLIENTI: ${cliList}
 ${repContext}
 ${pianoEsistente}
 ${tagliandiContext}
-${fileContext ? '\nFILE ALLEGATI (riferimento — genera piano COMPLETO, non solo i giorni nel file):\n' + fileContext : ''}
+${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}
 
-ISTRUZIONI GENERAZIONE (SEGUI ALLA LETTERA):
-${periodoIstruzione || '1. Genera piano per OGNI giorno lavorativo (lun-sab) del periodo richiesto'}
-2. OGNI TECNICO deve avere 2-4 interventi AL GIORNO. Giornata 8h: 08:00-17:00.
-   ESEMPIO per 1 giorno con 6 tecnici = MINIMO 12 righe nel piano (2 per tecnico).
-3. Mese intero = TUTTI i giorni lun-sab × TUTTI i tecnici attivi = 150-250+ righe totali
-4. Raggruppa per zona geografica (stessa citta nello stesso giorno per tecnico)
-5. Urgenze aperte → priorita assoluta nei primi giorni
-6. Rispetta OGNI vincolo senza eccezioni
-7. Non duplicare interventi gia nel piano esistente
-8. Assegna automezzi coerenti con tecnico
-9. Tagliandi/service scaduti → pianifica PRIMA quelli piu urgenti
-10. Usa SOLO clienti REALI dalla lista fornita, con codice_m3 corretto
+ISTRUZIONI GENERAZIONE:
+${periodoIstruzione || 'Genera piano per OGNI giorno lavorativo (lun-sab)'}
+- OGNI tecnico attivo (${nTecAttivi}): 2-3 interventi AL GIORNO (08:00-17:00) = MINIMO ${nTecAttivi*2} righe/giorno.
+- Almeno 1 TAGLIANDO per tecnico al giorno.
+- Affiancamento: se un vincolo dice che un junior DEVE affiancare un senior, genera DUE righe (senior+junior) con STESSO cliente, data, ora.
+- Tecnici assenti da vincoli: NON inserirli nel piano.
+- Reperibilita: chi e reperibile ha max 1 intervento/giorno.
+- Raggruppa per zona geografica (stessa citta per lo stesso tecnico nello stesso giorno).
+- Urgenze → primi giorni. Tagliandi scaduti → priorita.
+- Usa SOLO clienti dalla lista con il loro codice_m3.
 
-Rispondi SOLO JSON:
-{"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|service|urgenza|installazione|ispezione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"..."}],"warnings":["..."]}`;
+JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|service|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"max15char"}],"warnings":["..."]}`;
 
       // ─── AI Call — Gemini 2.0 Flash (primary) con fallback Workers AI ───
       const validIds = new Set(allTecnici.map(t => t.id));
@@ -1754,17 +1751,19 @@ Rispondi SOLO JSON:
         const cUrg = ctx.urgenze ? allUrgenze.slice(0,8).map(u=>`${u.id}:${(u.problema||'').substring(0,25)}|${u.cliente_id}`).join('; ') : '';
         const cCli = allClienti.slice(0,40).map(c=>`${c.codice_m3}:${c.nome_interno||c.nome_account||'?'}`).join(', ');
         return `PIANO FSM ${meseTarget||''}
+##### VINCOLI (INVIOLABILI) #####
+${vincoliText || '(Nessuno)'}
+${testo ? 'UTENTE: ' + testo : ''}
+#####
 TECNICI: ${cTec}
 ${cUrg ? 'URGENZE: '+cUrg : ''}
 CLIENTI: ${cCli}
-${vincoliText ? vincoliText.substring(0,800) : ''}
-${tagliandiContext ? tagliandiContext.substring(0,600) : ''}
+${tagliandiContext ? tagliandiContext.substring(0,500) : ''}
 
-REGOLE:
-- OGNI tecnico: 2-3 interventi AL GIORNO (giornata 8h: 08:00-17:00)
-- Giorni lun-sab. Minimo 10 righe/giorno se 5+ tecnici
-- Usa SOLO clienti dalla lista con codice_m3
 ${periodoIstruzione || 'Genera piano mese intero'}
+- OGNI tecnico: 2-3 interventi AL GIORNO (08:00-17:00). Min ${nTecAttivi*2} righe/giorno.
+- Almeno 1 tagliando/tecnico/giorno. Affiancamento junior+senior = DUE righe stesso cliente/ora.
+- Tecnici assenti da vincoli: NON inserirli. Usa SOLO clienti dalla lista.
 
 JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice","tipo":"tagliando|service|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"max15"}],"warnings":[]}`;
       }
