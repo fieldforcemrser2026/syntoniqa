@@ -1004,6 +1004,32 @@ async function handlePost(action, body, env) {
       return ok();
     }
 
+    case 'updateOrdine': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const { id, userId: _u, operatoreId: _op, tenant_id: _t, action: _a, ...updates } = body;
+      if (!id) return err('ID ordine mancante');
+      if (updates.quantita !== undefined) {
+        const qty = Number(updates.quantita);
+        if (isNaN(qty) || qty <= 0) return err('Quantità non valida');
+        updates.quantita = qty;
+      }
+      updates.updated_at = new Date().toISOString();
+      await sb(env, `ordini?id=eq.${id}`, 'PATCH', updates);
+      await wlog('ordine', id, 'updated', body.operatoreId || body.userId);
+      return ok();
+    }
+
+    case 'deleteOrdine': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const id = body.id || body.ID;
+      if (!id) return err('ID ordine mancante');
+      await sb(env, `ordini?id=eq.${id}`, 'PATCH', { obsoleto: true, updated_at: new Date().toISOString() });
+      await wlog('ordine', id, 'deleted', body.operatoreId || body.userId);
+      return ok({ deleted: true });
+    }
+
     // -------- UTENTI --------
 
     case 'createUtente': {
@@ -1109,6 +1135,16 @@ async function handlePost(action, body, env) {
       return ok();
     }
 
+    case 'deleteCliente': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const id = body.id || body.ID;
+      if (!id) return err('ID cliente mancante');
+      await sb(env, `clienti?id=eq.${id}`, 'PATCH', { obsoleto: true, updated_at: new Date().toISOString() });
+      await wlog('cliente', id, 'deleted', body.operatoreId || body.userId);
+      return ok({ deleted: true });
+    }
+
     // -------- MACCHINE --------
 
     case 'createMacchina': {
@@ -1128,6 +1164,16 @@ async function handlePost(action, body, env) {
       await sb(env, `macchine?id=eq.${id}`, 'PATCH', updates);
       await wlog('macchina', id, 'updated', body.operatoreId);
       return ok();
+    }
+
+    case 'deleteMacchina': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const id = body.id || body.ID;
+      if (!id) return err('ID macchina mancante');
+      await sb(env, `macchine?id=eq.${id}`, 'PATCH', { obsoleto: true, updated_at: new Date().toISOString() });
+      await wlog('macchina', id, 'deleted', body.operatoreId || body.userId);
+      return ok({ deleted: true });
     }
 
     // -------- AUTOMEZZI --------
@@ -1174,6 +1220,21 @@ async function handlePost(action, body, env) {
       return ok({ synced: !!newAssId });
     }
 
+    case 'deleteAutomezzo': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const id = body.id || body.ID;
+      if (!id) return err('ID automezzo mancante');
+      // Rimuovi assegnazione dall'utente
+      const autoArr = await sb(env, 'automezzi', 'GET', null, `?id=eq.${id}&select=assegnatario_id`).catch(() => []);
+      if (autoArr?.[0]?.assegnatario_id) {
+        await sb(env, `utenti?id=eq.${autoArr[0].assegnatario_id}`, 'PATCH', { automezzo_id: null, updated_at: new Date().toISOString() }).catch(() => {});
+      }
+      await sb(env, `automezzi?id=eq.${id}`, 'PATCH', { obsoleto: true, updated_at: new Date().toISOString() });
+      await wlog('automezzo', id, 'deleted', body.operatoreId || body.userId);
+      return ok({ deleted: true });
+    }
+
     // -------- INSTALLAZIONI --------
 
     case 'createInstallazione': {
@@ -1205,6 +1266,16 @@ async function handlePost(action, body, env) {
       await sb(env, `installazioni?id=eq.${id}`, 'PATCH', updates);
       await wlog('installazione', id, 'updated', body.operatoreId);
       return ok();
+    }
+
+    case 'deleteInstallazione': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const id = body.id || body.ID;
+      if (!id) return err('ID installazione mancante');
+      await sb(env, `installazioni?id=eq.${id}`, 'PATCH', { obsoleto: true, updated_at: new Date().toISOString() });
+      await wlog('installazione', id, 'deleted', body.operatoreId || body.userId);
+      return ok({ deleted: true });
     }
 
     // -------- REPERIBILITA --------
@@ -1410,6 +1481,14 @@ async function handlePost(action, body, env) {
       const id = 'DOC_' + Date.now();
       const result = await sb(env, 'documenti', 'POST', { id, ...getFields(body), data_caricamento: new Date().toISOString() });
       return ok({ documento: pascalizeRecord(result[0]) });
+    }
+
+    case 'updateDocumento': {
+      const { id, userId: _u, operatoreId: _op, tenant_id: _t, action: _a, ...updates } = body;
+      if (!id) return err('ID documento mancante');
+      updates.updated_at = new Date().toISOString();
+      await sb(env, `documenti?id=eq.${id}`, 'PATCH', updates);
+      return ok();
     }
 
     case 'deleteDocumento': {

@@ -632,7 +632,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="btn-group">
 <select id="filtOrdStato" onchange="renderOrdini()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti</option><option value="richiesto">Richiesto</option><option value="preso_in_carico">Preso in Carico</option><option value="ordinato">Ordinato</option><option value="in_arrivo">In Arrivo</option><option value="arrivato">Arrivato</option></select>
 <button class="btn btn-ghost btn-sm" onclick="exportOrdiniCSV()" title="Esporta CSV">📥</button>
-<button class="btn btn-info btn-sm" onclick="openModal('modalOrdine')">+ Nuovo Ordine</button>
+<button class="btn btn-info btn-sm" onclick="EDITING.ordine=null;document.querySelector('#modalOrdine .modal-head h2').textContent='📦 Nuovo Ordine';openModal('modalOrdine')">+ Nuovo Ordine</button>
 </div>
 </div>
 <div class="card-body">
@@ -654,7 +654,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <!-- ========== SEC: INSTALLAZIONI ========== -->
 <section class="sec" id="secInstallazioni">
 <div class="card">
-<div class="card-head"><h3>🏗️ Installazioni in Corso</h3><button class="btn btn-primary btn-sm" onclick="openModal('modalInstall')">+ Nuova</button></div>
+<div class="card-head"><h3>🏗️ Installazioni in Corso</h3><button class="btn btn-primary btn-sm" onclick="EDITING.installazione=null;document.querySelector('#modalInstall .modal-head h2').textContent='🏗️ Nuova Installazione';openModal('modalInstall')">+ Nuova</button></div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
 <table class="tbl"><thead><tr><th>Cliente</th><th>Macchina</th><th>Inizio</th><th>Fine Prev.</th><th>Fase</th><th>Tecnici</th><th>Stato</th><th></th></tr></thead><tbody id="tblInstall"></tbody></table>
 </div>
@@ -1092,7 +1092,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <option value="">Tutte le categorie</option>
 <option>Contratti</option><option>Manuali</option><option>Certificati</option><option>Report</option><option>Altro</option>
 </select>
-<button class="btn btn-primary btn-sm" onclick="openModal('modalDocumento')">+ Documento</button>
+<button class="btn btn-primary btn-sm" onclick="EDITING.documento=null;document.querySelector('#modalDocumento .modal-head h2').textContent='📄 Nuovo Documento';openModal('modalDocumento')">+ Documento</button>
 </div></div>
 <div class="card-body"><div id="tblDocumenti"></div></div>
 </div>
@@ -1103,7 +1103,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card">
 <div class="card-head"><h3>✅ Checklist Templates</h3>
 <div class="btn-group">
-<button class="btn btn-primary btn-sm" onclick="openModal('modalChecklist')">+ Template</button>
+<button class="btn btn-primary btn-sm" onclick="EDITING.checklist=null;document.querySelector('#modalChecklist .modal-head h2').textContent='✅ Nuovo Template Checklist';openModal('modalChecklist')">+ Template</button>
 </div></div>
 <div class="card-body"><div id="tblChecklist"></div></div>
 </div>
@@ -2769,7 +2769,7 @@ function renderOrdini(){
     <td>${statusTag(o.Stato)}</td>
     <td>${fmtDate(o.DataRichiesta)}</td>
     <td>${fmtDate(o.DataArrivoPrevista)}</td>
-    <td class="actions-cell">${nextOrdAction(o)}<button class="btn btn-ghost btn-xs" onclick="showDetail('ordine','${o.ID}')">👁️</button></td>
+    <td class="actions-cell">${nextOrdAction(o)}<button class="btn btn-ghost btn-xs" onclick="editOrdine('${o.ID}')">✏️</button><button class="btn btn-ghost btn-xs" onclick="deleteOrdine('${o.ID}')" style="color:var(--err)">🗑️</button><button class="btn btn-ghost btn-xs" onclick="showDetail('ordine','${o.ID}')">👁️</button></td>
   </tr>`).join(''):'<tr><td colspan="9" class="empty"><p>Nessun ordine</p></td></tr>';
 }
 
@@ -2803,7 +2803,7 @@ function renderInstallazioni(){
       <td>${corrente?corrente.Nome:'—'}</td>
       <td>${(i.TecniciIDs||'').split(',').filter(Boolean).map(id=>getName(DATA.utenti||[],id)).join(', ')||'—'}</td>
       <td>${statusTag(i.Stato)}</td>
-      <td><button class="btn btn-ghost btn-xs" onclick="showDetail('installazione','${i.ID}')">👁️</button></td>
+      <td><button class="btn btn-ghost btn-xs" onclick="editInstallazione('${i.ID}')">✏️</button><button class="btn btn-ghost btn-xs" onclick="deleteInstallazione('${i.ID}')" style="color:var(--err)">🗑️</button><button class="btn btn-ghost btn-xs" onclick="showDetail('installazione','${i.ID}')">👁️</button></td>
     </tr>`}).join(''):'<tr><td colspan="8" class="empty"><p>Nessuna installazione in corso</p></td></tr>';
 }
 
@@ -2873,6 +2873,7 @@ function renderNotifiche(){
     <td style="white-space:nowrap">
       ${isNew?`<button class="btn btn-ok btn-xs" onclick="markNotifica('${n.ID}','presa_in_carico')">✅ Presa in carico</button>`:''}
       <button class="btn btn-ghost btn-xs" onclick="gotoNotificaTarget('${tipo}','${rifId}')" title="Vai alla sezione correlata">Vai ▸</button>
+      <button class="btn btn-ghost btn-xs" onclick="deleteNotifica('${n.ID}')" style="color:var(--err)" title="Elimina">🗑️</button>
     </td>
   </tr>`}).join(''):'<tr><td colspan="7" class="empty"><p>Nessuna notifica</p></td></tr>';
 }
@@ -2949,7 +2950,7 @@ function renderClienti(){
     <td>${c.Telefono?`<a href="tel:${c.Telefono}">${c.Telefono}</a>`:'—'}</td>
     <td>${c.Contratto||'—'}</td>
     <td>${(c.Lat||c.Latitudine)&&(c.Lng||c.Longitudine)?'<span class="tag tag-ok">📍</span>':'<span class="tag tag-gray">—</span>'}</td>
-    <td><button class="btn btn-ghost btn-xs" onclick="editCliente('${c.ID}')">✏️</button><button class="btn btn-ghost btn-xs" onclick="showDetail('cliente','${c.ID}')">👁️</button></td>
+    <td><button class="btn btn-ghost btn-xs" onclick="editCliente('${c.ID}')">✏️</button><button class="btn btn-ghost btn-xs" onclick="deleteCliente('${c.ID}')" style="color:var(--err)">🗑️</button><button class="btn btn-ghost btn-xs" onclick="showDetail('cliente','${c.ID}')">👁️</button></td>
   </tr>`).join(''):'<tr><td colspan="8" class="empty"><p>Nessun cliente trovato</p></td></tr>';
   populateProductDropdowns();
 }
@@ -3213,7 +3214,7 @@ function renderAutomezzi(){
           <div>👤 Assegnato: <strong>${f.AssegnatarioID?getName(DATA.utenti||[],f.AssegnatarioID):'—'}</strong></div>
           <div>🔧 Prossimo controllo: ${ctrl?`<span class="tag tag-err">⚠️ ${fmtDate(f.ProssimoControllo)}</span>`:`<span>${fmtDate(f.ProssimoControllo)}</span>`}</div>
         </div>
-        <div style="margin-top:10px;text-align:right"><button class="btn btn-outline btn-xs" onclick="editAutomezzo('${f.ID}')">✏️ Modifica</button></div>
+        <div style="margin-top:10px;text-align:right"><button class="btn btn-outline btn-xs" onclick="editAutomezzo('${f.ID}')">✏️ Modifica</button> <button class="btn btn-outline btn-xs" onclick="deleteAutomezzo('${f.ID}')" style="color:var(--err)">🗑️ Elimina</button></div>
       </div>
     </div>`}).join('')+'</div>':'<div class="empty"><div class="ico">🚐</div><p>Nessun automezzo configurato</p></div>';
 }
@@ -4652,7 +4653,7 @@ var _origShowSec=typeof showSec==='function'?showSec:null;
 // We'll hook into showSec after page load
 
 // ============ EDIT STATE ============
-var EDITING={utente:null,cliente:null,macchina:null,automezzo:null};
+var EDITING={utente:null,cliente:null,macchina:null,automezzo:null,ordine:null,installazione:null,checklist:null,documento:null};
 
 // ============ EDIT OPEN FUNCTIONS ============
 function editUtente(id){
@@ -4980,8 +4981,14 @@ async function saveOrdine(){
       Quantita:parseInt($('moQta').value)||1,TecnicoID:$('moTecnico').value,
       ClienteID:$('moCliente').value,Note:$('moNote').value};
     if(!data.Codice){toast('Inserisci il codice ricambio','warn');return}
-    await apiCall('createOrdine',{data},'POST');
-    toast('Ordine creato','ok');closeModal('modalOrdine');await refreshData(true);
+    if(EDITING.ordine){
+      await apiCall('updateOrdine',{id:EDITING.ordine,...data},'POST');
+      toast('Ordine aggiornato','ok');
+    }else{
+      await apiCall('createOrdine',{data},'POST');
+      toast('Ordine creato','ok');
+    }
+    EDITING.ordine=null;closeModal('modalOrdine');await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 
@@ -5082,10 +5089,17 @@ async function saveInstall(){
     const tecniciSel=Array.from($('miTecnici').selectedOptions).map(o=>o.value);
     const data={ClienteID:$('miCliente').value,MacchinaID:$('miMacchina').value,
       DataInizio:$('miDal').value,DataFinePrevista:$('miAl').value,
-      TecniciIDs:tecniciSel,Note:$('miNote').value,Stato:'in_corso'};
+      TecniciIDs:tecniciSel,Note:$('miNote').value};
     if(!data.ClienteID||!data.DataInizio){toast('Compila Cliente e Data Inizio','warn');return}
-    await apiCall('createInstallazione',{data},'POST');
-    toast('Installazione creata!','ok');closeModal('modalInstall');await refreshData(true);
+    if(EDITING.installazione){
+      await apiCall('updateInstallazione',{id:EDITING.installazione,...data},'POST');
+      toast('Installazione aggiornata!','ok');
+    }else{
+      data.Stato='in_corso';
+      await apiCall('createInstallazione',{data},'POST');
+      toast('Installazione creata!','ok');
+    }
+    EDITING.installazione=null;closeModal('modalInstall');await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 
@@ -5947,6 +5961,7 @@ function renderChecklist(){
     let voci=[];try{voci=JSON.parse(t.Voci||'[]')}catch(e){}
     html+=`<tr><td><b>${t.Nome||''}</b></td><td>${tipo?tipo.Nome:'—'}</td><td>${voci.length} voci</td>
     <td><button class="btn btn-outline btn-sm" onclick="viewChecklistTemplate('${t.ID}')">👁️</button>
+    <button class="btn btn-outline btn-sm" onclick="editChecklistTpl('${t.ID}')">✏️</button>
     <button class="btn btn-outline btn-sm" onclick="deleteChecklistTpl('${t.ID}')" style="color:var(--err)">🗑️</button></td></tr>`;
   });
   html+='</tbody></table>';
@@ -5995,8 +6010,15 @@ async function saveChecklistTemplate(){
   const voci=[...document.querySelectorAll('.mcl-voce')].map(i=>i.value.trim()).filter(Boolean);
   if(!$('mclNome').value||!voci.length){toast('Nome e almeno 1 voce richiesti','err');return}
   try{
-    await apiCall('createChecklistTemplate',{Nome:$('mclNome').value,TipoInterventoID:$('mclTipo').value,Voci:JSON.stringify(voci)},'POST');
-    toast('Template creato','ok');closeModal('modalChecklist');await refreshData(true);
+    const data={Nome:$('mclNome').value,TipoInterventoID:$('mclTipo').value,Voci:JSON.stringify(voci)};
+    if(EDITING.checklist){
+      await apiCall('updateChecklistTemplate',{id:EDITING.checklist,...data},'POST');
+      toast('Template aggiornato','ok');
+    }else{
+      await apiCall('createChecklistTemplate',data,'POST');
+      toast('Template creato','ok');
+    }
+    EDITING.checklist=null;closeModal('modalChecklist');await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 
@@ -6024,6 +6046,7 @@ function renderDocumenti(){
     <td style="font-size:.75rem">${(d.DataCaricamento||'').substring(0,10)}</td>
     <td>
       ${d.FileURL?`<a href="${d.FileURL}" target="_blank" class="btn btn-outline btn-sm">🔗 Apri</a>`:''}
+      <button class="btn btn-outline btn-sm" onclick="editDoc('${d.ID}')">✏️</button>
       <button class="btn btn-outline btn-sm" onclick="deleteDoc('${d.ID}')" style="color:var(--err)">🗑️</button>
     </td></tr>`;
   });
@@ -6035,7 +6058,7 @@ async function saveDocumento(){
   if(!$('mdNome').value){toast('Nome richiesto','err');return}
   const file=$('mdFile')?.files[0];
   const url=$('mdUrl')?.value;
-  if(!file&&!url){toast('Carica un file oppure inserisci un URL','err');return}
+  if(!EDITING.documento&&!file&&!url){toast('Carica un file oppure inserisci un URL','err');return}
   toast('Salvataggio...','info');
   try{
     let fileUrl=url,fileId='',mimeType='',dimKB=0;
@@ -6046,8 +6069,19 @@ async function saveDocumento(){
       if(!up.success)throw new Error(up.error||'Errore upload');
       fileUrl=up.data.fileUrl;fileId=up.data.fileId;mimeType=file.type;dimKB=Math.round(file.size/1024);
     }
-    await apiCall('createDocumento',{Nome:$('mdNome').value,FileURL:fileUrl,FileID:fileId,MimeType:mimeType,DimensioneKB:dimKB,Categoria:$('mdCategoria').value,Descrizione:$('mdDescrizione').value,Tags:$('mdTags').value,Pubblico:$('mdPubblico').value},'POST');
-    toast('Documento salvato!','ok');closeModal('modalDocumento');$('mdFile').value='';$('mdFileLabel').textContent='';await refreshData(true);
+    if(EDITING.documento){
+      const upd={id:EDITING.documento,Nome:$('mdNome').value,Categoria:$('mdCategoria').value,Descrizione:$('mdDescrizione').value,Tags:$('mdTags').value,Pubblico:$('mdPubblico').value};
+      if(fileUrl)upd.FileURL=fileUrl;
+      if(fileId)upd.FileID=fileId;
+      if(mimeType)upd.MimeType=mimeType;
+      if(dimKB)upd.DimensioneKB=dimKB;
+      await apiCall('updateDocumento',upd,'POST');
+      toast('Documento aggiornato!','ok');
+    }else{
+      await apiCall('createDocumento',{Nome:$('mdNome').value,FileURL:fileUrl,FileID:fileId,MimeType:mimeType,DimensioneKB:dimKB,Categoria:$('mdCategoria').value,Descrizione:$('mdDescrizione').value,Tags:$('mdTags').value,Pubblico:$('mdPubblico').value},'POST');
+      toast('Documento salvato!','ok');
+    }
+    EDITING.documento=null;closeModal('modalDocumento');if($('mdFile'))$('mdFile').value='';if($('mdFileLabel'))$('mdFileLabel').textContent='';await refreshData(true);
   }catch(e){toast(e.message,'err')}
 }
 // ============ FEATURE 30b: ALLEGATI ============
@@ -6076,6 +6110,107 @@ async function saveAllegato(){
 async function deleteAll(id){
   if(!confirm('Eliminare allegato?'))return;
   try{await apiCall('deleteAllegato',{id},'POST');toast('Eliminato','ok');await refreshData(true)}catch(e){toast(e.message,'err')}
+}
+
+// ============ CRUD MANCANTI: EDIT & DELETE FUNCTIONS ============
+
+// --- ORDINI: Edit + Delete ---
+function editOrdine(id){
+  const o=(DATA.ordini||[]).find(x=>x.ID===id);if(!o)return;
+  EDITING.ordine=id;
+  $('moCodice').value=o.Codice||'';$('moDesc').value=o.Descrizione||'';
+  $('moQta').value=o.Quantita||1;$('moTecnico').value=o.TecnicoID||'';
+  $('moCliente').value=o.ClienteID||'';$('moNote').value=o.Note||'';
+  document.querySelector('#modalOrdine .modal-head h2').textContent='✏️ Modifica Ordine';
+  openModal('modalOrdine');
+}
+async function deleteOrdine(id){
+  if(!confirm('Eliminare questo ordine?'))return;
+  try{await apiCall('deleteOrdine',{id},'POST');toast('Ordine eliminato','ok');await refreshData(true)}catch(e){toast(e.message,'err')}
+}
+
+// --- INSTALLAZIONI: Edit + Delete ---
+function editInstallazione(id){
+  const i=(DATA.installazioni||[]).find(x=>x.ID===id);if(!i)return;
+  EDITING.installazione=id;
+  $('miCliente').value=i.ClienteID||'';$('miMacchina').value=i.MacchinaID||'';
+  $('miDal').value=i.DataInizio||'';$('miAl').value=i.DataFinePrevista||'';
+  $('miNote').value=i.Note||'';
+  // Seleziona tecnici
+  const tecIds=(i.TecniciIDs||'').split(',').filter(Boolean);
+  Array.from($('miTecnici').options).forEach(opt=>{opt.selected=tecIds.includes(opt.value)});
+  document.querySelector('#modalInstall .modal-head h2').textContent='✏️ Modifica Installazione';
+  openModal('modalInstall');
+}
+async function deleteInstallazione(id){
+  if(!confirm('Eliminare questa installazione?'))return;
+  try{await apiCall('deleteInstallazione',{id},'POST');toast('Installazione eliminata','ok');await refreshData(true)}catch(e){toast(e.message,'err')}
+}
+
+// --- NOTIFICHE: Delete ---
+async function deleteNotifica(id){
+  if(!confirm('Eliminare questa notifica?'))return;
+  try{await apiCall('deleteNotifica',{id},'POST');toast('Notifica eliminata','ok');await refreshData(true)}catch(e){toast(e.message,'err')}
+}
+
+// --- CLIENTI: Soft Delete ---
+async function deleteCliente(id){
+  const c=(DATA.clienti||[]).find(x=>x.ID===id);
+  if(!confirm(`Disattivare il cliente "${c?.Nome||id}"? Non verrà più visibile nelle liste.`))return;
+  try{await apiCall('deleteCliente',{id},'POST');toast('Cliente disattivato','ok');await refreshData(true)}catch(e){toast(e.message,'err')}
+}
+
+// --- MACCHINE: Soft Delete ---
+async function deleteMacchina(id){
+  const m=(DATA.macchine||[]).find(x=>x.ID===id);
+  if(!confirm(`Disattivare la macchina "${m?.Tipo||''} ${m?.Modello||''}" (${id})? Non verrà più visibile.`))return;
+  try{await apiCall('deleteMacchina',{id},'POST');toast('Macchina disattivata','ok');await refreshData(true)}catch(e){toast(e.message,'err')}
+}
+
+// --- AUTOMEZZI: Soft Delete ---
+async function deleteAutomezzo(id){
+  const f=(DATA.automezzi||[]).find(x=>x.ID===id);
+  if(!confirm(`Disattivare l'automezzo "${f?.Targa||f?.Descrizione||id}"? L'assegnazione al tecnico verrà rimossa.`))return;
+  try{await apiCall('deleteAutomezzo',{id},'POST');toast('Automezzo disattivato','ok');await refreshData(true)}catch(e){toast(e.message,'err')}
+}
+
+// --- CHECKLIST TEMPLATE: Edit ---
+function editChecklistTpl(id){
+  const t=(DATA.checklistTemplate||DATA.ChecklistTemplate||[]).find(x=>x.ID===id);if(!t)return;
+  EDITING.checklist=id;
+  $('mclNome').value=t.Nome||'';
+  if($('mclTipo'))$('mclTipo').value=t.TipoInterventoID||'';
+  // Popola le voci
+  let voci=[];try{voci=JSON.parse(t.Voci||'[]')}catch(e){}
+  const container=$('mclVociList');
+  if(container){
+    container.innerHTML='';
+    voci.forEach(v=>{
+      const txt=typeof v==='string'?v:(v.testo||v.nome||'');
+      const row=document.createElement('div');
+      row.className='flex-row';row.style.cssText='gap:6px;margin-bottom:4px;align-items:center';
+      row.innerHTML=`<input type="text" value="${txt.replace(/"/g,'&quot;')}" style="flex:1" class="mcl-voce"><button class="btn btn-ghost btn-xs" onclick="this.parentElement.remove()" style="color:var(--err)">✕</button>`;
+      container.appendChild(row);
+    });
+  }
+  document.querySelector('#modalChecklist .modal-head h2').textContent='✏️ Modifica Template';
+  openModal('modalChecklist');
+}
+
+// --- DOCUMENTI: Edit + Delete ---
+function editDoc(id){
+  const d=(DATA.documenti||[]).find(x=>x.ID===id);if(!d)return;
+  EDITING.documento=id;
+  $('mdNome').value=d.Nome||'';$('mdCategoria').value=d.Categoria||'';
+  $('mdDescrizione').value=d.Descrizione||'';$('mdTags').value=d.Tags||'';
+  if($('mdUrl'))$('mdUrl').value=d.FileURL||'';
+  if($('mdPubblico'))$('mdPubblico').value=d.Pubblico||'no';
+  document.querySelector('#modalDocumento .modal-head h2').textContent='✏️ Modifica Documento';
+  openModal('modalDocumento');
+}
+async function deleteDoc(id){
+  if(!confirm('Eliminare questo documento?'))return;
+  try{await apiCall('deleteDocumento',{id},'POST');toast('Documento eliminato','ok');await refreshData(true)}catch(e){toast(e.message,'err')}
 }
 
 // ============ FEATURE 31: EMAIL CONFIG ============
