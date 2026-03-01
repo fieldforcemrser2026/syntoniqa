@@ -331,16 +331,17 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 
 /* ===== PIANO MENSILE ===== */
 .month-grid{border-collapse:collapse;width:100%;table-layout:fixed}
-.month-grid th{padding:3px 2px;background:#F9FAFB;border:1px solid #E5E7EB;font-size:.6rem;font-weight:600;color:#6B7280;text-align:center;white-space:nowrap}
+.month-grid th{padding:4px 3px;background:#F9FAFB;border:1px solid #E5E7EB;font-size:.65rem;font-weight:600;color:#6B7280;text-align:center;white-space:nowrap}
 .month-grid th.today{background:#FEF3C7;color:#92400E}
-.month-grid td{padding:2px;border:1px solid #E5E7EB;vertical-align:top;min-height:40px;font-size:.6rem;position:relative}
+.month-grid td{padding:3px;border:1px solid #E5E7EB;vertical-align:top;min-height:48px;font-size:.65rem;position:relative}
 .month-grid td.weekend{background:#F3F4F6}
 .month-grid td.ferie{background:#FEF9C3}
 .month-grid td.festivo{background:#FFF7ED}
-.month-cell-item{padding:2px 4px;margin-bottom:1px;border-radius:3px;font-size:.58rem;cursor:grab;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;line-height:1.3;border-left:2px solid}
-.month-cell-item:hover{opacity:.85;box-shadow:0 1px 3px rgba(0,0,0,.15)}
-.month-cell-rep{font-size:.5rem;background:#DBEAFE;color:#1E40AF;padding:1px 3px;border-radius:2px;display:inline-block;margin-bottom:1px}
-.month-tec-label{font-size:.6875rem;font-weight:600;padding:4px 8px;white-space:nowrap;background:#F9FAFB;border:1px solid #E5E7EB;position:sticky;left:0;z-index:2}
+.month-cell-item{padding:3px 5px;margin-bottom:2px;border-radius:4px;font-size:.68rem;cursor:grab;overflow:hidden;white-space:normal;word-break:break-word;line-height:1.35;border-left:3px solid;max-height:none}
+.month-cell-item:hover{opacity:.85;box-shadow:0 1px 3px rgba(0,0,0,.15);z-index:1}
+/* month-cell-rep moved below month-tec-label */
+.month-tec-label{font-size:.75rem;font-weight:600;padding:5px 10px;white-space:nowrap;background:#F9FAFB;border:1px solid #E5E7EB;position:sticky;left:0;z-index:2}
+.month-cell-rep{font-size:.55rem;background:#DBEAFE;color:#1E40AF;padding:2px 4px;border-radius:3px;display:inline-block;margin-bottom:2px;cursor:grab}
 .month-week-sep{background:#EEF2FF;font-size:.625rem;font-weight:600;color:#4338CA;text-align:center;padding:2px}
 
 /* ===== AI PLANNER ===== */
@@ -551,7 +552,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <!-- Alert critici -->
 <div id="dashAlerts" class="mb" style="display:none"></div>
 <!-- Tecnici attivi oggi -->
-<div class="card mb"><div class="card-head"><h3>👥 Tecnici Oggi</h3></div><div class="card-body" id="tecniciDash" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px"></div></div>
+<div class="card mb"><div class="card-head"><h3>👥 Attività Tecnici</h3></div><div class="card-body" id="tecniciDash" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px"></div></div>
 <!-- Andamento settimanale (sparkline SVG) + Timeline giornata -->
 <div class="grid-2 mb">
 <div class="card"><div class="card-head"><h3>📈 Andamento 7 Giorni</h3></div><div class="card-body" id="sparkDash" style="height:180px"></div></div>
@@ -1150,7 +1151,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="field" style="flex:2;min-width:200px"><label>Cerca (codice, nome, descrizione)</label>
 <input type="text" id="catSearch" class="inp" placeholder="Es: 9.1189.0283.0 oppure pompa latte" onkeyup="if(event.key==='Enter')searchCatalog()"></div>
 <div class="field" style="max-width:180px"><label>Modello Macchina</label>
-<select id="catModello" class="inp"><option value="">Tutti</option><option value="ASTRONAUT">Astronaut</option><option value="VECTOR">Vector</option><option value="JUNO">Juno</option><option value="DISCOVERY">Discovery</option><option value="CALM">Calm</option><option value="GRAZEWAY">Grazeway</option><option value="COSMIX">Cosmix</option></select></div>
+<select id="catModello" class="inp"><option value="">Tutti</option></select></div>
 <div class="field" style="max-width:140px"><label>Gruppo</label><input type="text" id="catGruppo" class="inp" placeholder="Es: Pompe"></div>
 <button class="btn btn-primary btn-sm" onclick="searchCatalog()" style="align-self:flex-end;margin-bottom:4px">🔍 Cerca</button>
 </div>
@@ -2132,6 +2133,14 @@ function populateSelects(){
   fillSel('filtPianoTec',tecs,tecFmt);fillSel('calFiltroTec',tecs,tecFmt);fillSel('mapFiltroTec',tecs,tecFmt);fillSel('kpiTecnico',tecs,tecFmt);
   // filtMacchCli will be populated by renderMacchine from anagrafica
 
+  // Catalogo: modelli macchine da PROD_CFG
+  const catMod=$('catModello');
+  if(catMod&&catMod.options.length<=1&&typeof PROD_CFG!=='undefined'){
+    Object.entries(PROD_CFG).filter(([k])=>k!=='ALTRI').forEach(([k,v])=>{
+      const o=document.createElement('option');o.value=k;o.textContent=(v.emoji||'')+' '+(v.label||k);catMod.appendChild(o);
+    });
+  }
+
   // ---- PICKLIST DINAMICHE DA CONFIG ----
   const cfg=DATA.config||{};
 
@@ -2416,9 +2425,10 @@ function renderDashboard(){
     </div>`).join('');
   }else{alertEl.style.display='none'}
 
-  // 2. TECNICI ATTIVI OGGI
-  const tecnici=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Attivo&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
+  // 2. ATTIVITÀ TECNICI (tutti, con status differenziato)
+  const tecnici=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
   $('tecniciDash').innerHTML=tecnici.map(t=>{
+    const isAttivo=t.Attivo&&t.Attivo!=='false';
     const intTec=oggi.filter(p=>p.TecnicoID===t.ID);
     const compTec=intTec.filter(p=>p.Stato==='completato').length;
     const corsoTec=intTec.filter(p=>p.Stato==='in_corso').length;
@@ -2426,20 +2436,26 @@ function renderDashboard(){
     const urgTec=(DATA.urgenze||[]).filter(u=>u.TecnicoAssegnato===t.ID&&u.Stato!=='risolta'&&u.Stato!=='chiusa').length;
     const repTec=reps.some(r=>r.TecnicoID===t.ID);
     const auto=(DATA.automezzi||[]).find(a=>a.AssegnatarioID===t.ID);
-    const statusDot=corsoTec>0?'🟢':intTec.length>0?'🔵':'⚪';
-    return `<div style="padding:10px 14px;background:var(--gray5);border-radius:10px;font-size:.8125rem">
+    const autoLabel=auto?(auto.Nome||auto.Descrizione||auto.Targa||auto.ID):'';
+    // Status: 🟢 Attivo (in corso) | 🔵 Reperibile | ⚪ Libero | 🔴 Assente/Inattivo
+    const statusDot=!isAttivo?'🔴':corsoTec>0?'🟢':repTec?'🔵':intTec.length>0?'🟡':'⚪';
+    const statusLabel=!isAttivo?'Assente':corsoTec>0?'In campo':repTec?'Reperibile':intTec.length>0?'Schedulato':'Libero';
+    return `<div style="padding:10px 14px;background:${!isAttivo?'#F9FAFB':'var(--gray5)'};border-radius:10px;font-size:.8125rem;${!isAttivo?'opacity:.6':''}">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <strong>${statusDot} ${t.Nome||''} ${(t.Cognome||'').charAt(0)}.</strong>
-        ${urgTec?`<span class="tag tag-err" style="font-size:.65rem">🚨${urgTec}</span>`:''}
-        ${repTec?'<span style="font-size:.7rem">📞</span>':''}
+        <div style="display:flex;gap:4px;align-items:center">
+          ${urgTec?`<span class="tag tag-err" style="font-size:.65rem">🚨${urgTec}</span>`:''}
+          ${repTec?'<span style="font-size:.7rem" title="Reperibile">📞</span>':''}
+          <span style="font-size:.6rem;color:var(--gray);background:var(--gray3);padding:1px 6px;border-radius:8px">${statusLabel}</span>
+        </div>
       </div>
-      <div style="display:flex;gap:4px;font-size:.7rem;margin-bottom:4px">
+      ${isAttivo?`<div style="display:flex;gap:4px;font-size:.7rem;margin-bottom:4px;flex-wrap:wrap">
         <span>${intTec.length} int.</span>·<span>${compTec}✅</span>·<span>${corsoTec}⚡</span>
-        ${auto?`· <span>🚐 ${auto.Descrizione||auto.Targa||auto.ID}</span>`:''}
+        ${autoLabel?`· <span>🚐 ${autoLabel}</span>`:''}
       </div>
       <div style="height:4px;background:var(--gray3);border-radius:2px;overflow:hidden">
         <div style="height:100%;width:${pctTec}%;background:${pctTec>=80?'var(--ok)':pctTec>=50?'var(--warn)':'var(--c1)'};border-radius:2px"></div>
-      </div>
+      </div>`:'<div style="font-size:.7rem;color:var(--gray)">Tecnico non attivo</div>'}
     </div>`;
   }).join('');
 
@@ -2468,19 +2484,29 @@ function renderDashboard(){
     <text x="${svgW-8}" y="36" text-anchor="end" style="font-size:8px;fill:#EF4444">· · Urgenze</text>
   </svg>`;
 
-  // 4. TIMELINE GIORNATA
+  // 4. TIMELINE GIORNATA (unificata: piano + urgenze + installazioni)
   const oreLav=[];for(let h=7;h<=19;h++)oreLav.push(h);
   const nowH=new Date().getHours();
+  // Urgenze di oggi con ora
+  const urgOggi=(DATA.urgenze||[]).filter(u=>!u.Obsoleto&&u.Stato!=='chiusa'&&u.Stato!=='risolta'&&(u.DataSegnalazione||'').startsWith(d));
+  // Installazioni di oggi
+  const instOggi=(DATA.installazioni||[]).filter(i=>!i.Obsoleto&&i.DataInizio&&i.DataInizio<=d&&(!i.DataFinePrevista||i.DataFinePrevista>=d)&&i.Stato!=='completata');
   $('timelineDash').innerHTML=oreLav.map(h=>{
     const hStr=String(h).padStart(2,'0');
     const intH=oggi.filter(p=>(p.OraInizio||'').startsWith(hStr));
+    const urgH=urgOggi.filter(u=>(u.OraPrevista||u.DataSegnalazione||'').includes(hStr+':'));
     const isPast=h<nowH;const isNow=h===nowH;
+    const items=[];
+    intH.forEach(p=>items.push(`<div style="font-size:.7rem;padding:2px 0;${isPast&&p.Stato!=='completato'?'color:var(--err)':''}">
+      📋 <strong>${getName(DATA.utenti||[],p.TecnicoID).split(' ')[0]}</strong> → ${getName(DATA.clienti||[],p.ClienteID).substring(0,20)} ${statusTag(p.Stato)}</div>`));
+    urgH.forEach(u=>items.push(`<div style="font-size:.7rem;padding:2px 0;color:var(--err)">
+      🚨 <strong>${getName(DATA.utenti||[],u.TecnicoAssegnato).split(' ')[0]||'?'}</strong> → ${getName(DATA.clienti||[],u.ClienteID).substring(0,20)} ${statusTag(u.Stato)}</div>`));
+    if(h===8&&instOggi.length)instOggi.forEach(i=>items.push(`<div style="font-size:.7rem;padding:2px 0;color:var(--c1)">
+      🏗️ Installazione → ${getName(DATA.clienti||[],i.ClienteID).substring(0,20)} ${statusTag(i.Stato)}</div>`));
     return `<div style="display:flex;gap:8px;align-items:flex-start;padding:3px 0;${isNow?'background:#EFF6FF;margin:0 -12px;padding:3px 12px;border-radius:6px':''}">
       <div style="width:32px;font-size:.7rem;font-weight:600;color:${isNow?'var(--c1)':isPast?'var(--gray)':'#111'};flex-shrink:0">${hStr}:00</div>
       <div style="flex:1;min-height:20px;border-left:2px solid ${isNow?'var(--c1)':isPast?'var(--gray3)':'#E5E7EB'};padding-left:8px">
-        ${intH.map(p=>`<div style="font-size:.7rem;padding:2px 0;${isPast&&p.Stato!=='completato'?'color:var(--err)':''}">
-          <strong>${getName(DATA.utenti||[],p.TecnicoID).split(' ')[0]}</strong> → ${getName(DATA.clienti||[],p.ClienteID).substring(0,20)} ${statusTag(p.Stato)}
-        </div>`).join('')}
+        ${items.join('')}
       </div>
     </div>`;
   }).join('');
@@ -4133,34 +4159,31 @@ var anagView='list';
 // Product type config: real images, color, label, lelyUrl
 const PROD_IMG_BASE='assets/products/';
 const PROD_CFG={
-  ROBOT:{img:'astronaut.png',emoji:'🤖',color:'#C30A14',label:'Astronaut',url:'https://www.lely.com/solutions/milking/astronaut/'},
-  JUNO:{img:'juno.png',emoji:'🔄',color:'#3b82f6',label:'Juno',url:'https://www.lely.com/solutions/feeding/juno/'},
-  VECTOR:{img:'vector.png',emoji:'🚜',color:'#8b5cf6',label:'Vector',url:'https://www.lely.com/solutions/feeding/vector/'},
-  DISCOVERY:{img:'discovery.png',emoji:'🧹',color:'#06b6d4',label:'Discovery',url:'https://www.lely.com/solutions/manure/discovery/'},
-  COLLECTOR:{img:'collector.png',emoji:'♻️',color:'#14b8a6',label:'Collector',url:'https://www.lely.com/solutions/manure/discovery-collector/'},
-  CU:{emoji:'🖥️',color:'#6366f1',label:'Central Unit',url:''},
-  CALM:{img:'calm.png',emoji:'🍼',color:'#f59e0b',label:'Calm',url:'https://www.lely.com/solutions/calf-rearing/calm/'},
-  COMPRESSORI:{emoji:'💨',color:'#78716c',label:'Compressori',url:''},
-  COSMIX:{img:'cosmix.png',emoji:'🥣',color:'#22c55e',label:'Cosmix',url:'https://www.lely.com/solutions/feeding/cosmix/'},
-  NAUTILUS:{emoji:'🔧',color:'#0ea5e9',label:'Nautilus',url:''},
-  LUNA:{emoji:'🐄',color:'#a855f7',label:'Luna',url:'https://www.lely.com/solutions/housing-and-caring/luna/'},
-  METEOR:{emoji:'🛏️',color:'#ef4444',label:'Meteor',url:''},
-  GRAZEWAY:{emoji:'🚪',color:'#16a34a',label:'Grazeway',url:'https://www.lely.com/solutions/grazing/grazeway/'},
-  'L4C LED':{emoji:'💡',color:'#eab308',label:'L4C LED',url:''},
-  ARLA:{emoji:'🏭',color:'#94a3b8',label:'Arla',url:''},
-  TITANIA:{emoji:'⚙️',color:'#64748b',label:'Titania',url:''},
-  ALTRI:{emoji:'📦',color:'#9ca3af',label:'Altri',url:''}
+  ROBOT:{icon:'M12 2a3 3 0 0 0-3 3v1H7a2 2 0 0 0-2 2v8a4 4 0 0 0 4 4h6a4 4 0 0 0 4-4V8a2 2 0 0 0-2-2h-2V5a3 3 0 0 0-3-3zm-1 5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm4 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm-5 5h4l-2 3z',color:'#C30A14',label:'Astronaut',url:'https://www.lely.com/solutions/milking/astronaut/'},
+  JUNO:{icon:'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3l3 5H9l3-5zm0 14c-2.76 0-5-2.24-5-5h10c0 2.76-2.24 5-5 5z',color:'#3b82f6',label:'Juno',url:'https://www.lely.com/solutions/feeding/juno/'},
+  VECTOR:{icon:'M3 12l3-8h12l3 8-3 8H6l-3-8zm5-2h8v4H8v-4zm2 1v2h4v-2h-4z',color:'#8b5cf6',label:'Vector',url:'https://www.lely.com/solutions/feeding/vector/'},
+  DISCOVERY:{icon:'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 4a6 6 0 0 1 5.2 3H6.8A6 6 0 0 1 12 6zm0 12a6 6 0 0 1-5.2-3h10.4A6 6 0 0 1 12 18zm6-5H6a6 6 0 0 1 0-2h12a6 6 0 0 1 0 2z',color:'#06b6d4',label:'Discovery',url:'https://www.lely.com/solutions/manure/discovery/'},
+  COLLECTOR:{icon:'M4 4h16v3H4zm2 5h12l-1 9H7zm3 2v5h1v-5zm3 0v5h1v-5z',color:'#14b8a6',label:'Collector',url:'https://www.lely.com/solutions/manure/discovery-collector/'},
+  CU:{icon:'M4 4h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm1 2v8h14V6zm3 10h8v2H8z',color:'#6366f1',label:'Central Unit',url:''},
+  CALM:{icon:'M12 2C7 2 3 6 3 11c0 3 1.5 5.5 4 7v2a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-2c2.5-1.5 4-4 4-7 0-5-4-9-9-9zm-2 14h4v1h-4zm2-8a2 2 0 1 1 0 4 2 2 0 0 1 0-4z',color:'#f59e0b',label:'Calm',url:'https://www.lely.com/solutions/calf-rearing/calm/'},
+  COMPRESSORI:{icon:'M12 2v4m0 12v4M4 12H2m20 0h-2M6.34 6.34L4.93 4.93m12.73 12.73l1.41 1.41M6.34 17.66l-1.41 1.41M17.66 6.34l1.41-1.41M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',color:'#78716c',label:'Compressori',url:''},
+  COSMIX:{icon:'M12 3c-1.1 0-2 .9-2 2v2H7l-3 4v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7l-3-4h-3V5c0-1.1-.9-2-2-2zm-3 9h6v2H9v-2z',color:'#22c55e',label:'Cosmix',url:'https://www.lely.com/solutions/feeding/cosmix/'},
+  NAUTILUS:{icon:'M4 12h16M7 8l-3 4 3 4m10-8l3 4-3 4M10 8v8m4-8v8',color:'#0ea5e9',label:'Nautilus',url:''},
+  LUNA:{icon:'M12 3a9 9 0 0 1 0 18c-3.27 0-6.16-1.76-7.73-4.38A7 7 0 0 0 12 10a7 7 0 0 0 7.73 6.62C18.16 19.24 15.27 21 12 21A9 9 0 0 1 12 3z',color:'#a855f7',label:'Luna',url:'https://www.lely.com/solutions/housing-and-caring/luna/'},
+  METEOR:{icon:'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm1 4v4h12V7zm0 6v4h5v-4zm7 0v4h5v-4z',color:'#ef4444',label:'Meteor',url:''},
+  GRAZEWAY:{icon:'M3 21V9l9-7 9 7v12H3zm4-8h2v6H7zm4-2h2v8h-2zm4 4h2v4h-2z',color:'#16a34a',label:'Grazeway',url:'https://www.lely.com/solutions/grazing/grazeway/'},
+  'L4C LED':{icon:'M9 2h6v2l-1 3h-4L9 4V2zm-1 7h8l1 5-2 3v3h-2v-3h-2v3h-2v-3l-2-3 1-5z',color:'#eab308',label:'L4C LED',url:''},
+  ARLA:{icon:'M4 4h16a1 1 0 0 1 1 1v2H3V5a1 1 0 0 1 1-1zm-1 5h18v4H3zm0 6h18v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-4z',color:'#94a3b8',label:'Arla',url:''},
+  TITANIA:{icon:'M12 2l2 6h6l-5 4 2 6-5-4-5 4 2-6-5-4h6l2-6z',color:'#64748b',label:'Titania',url:''},
+  ALTRI:{icon:'M20 7H4a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1zM6 14v-4h2v4H6zm4 0v-4h4v4h-4zm6 0v-4h2v4h-2z',color:'#9ca3af',label:'Altri',url:''}
 };
 function prodIcon(type,size){
   size=size||24;
   const cfg=PROD_CFG[type]||PROD_CFG[type.toUpperCase()]||{};
-  const src=cfg.img?PROD_IMG_BASE+cfg.img:'';
-  const emoji=cfg.emoji||'📦';
-  // Emoji fallback if no image or image fails
-  const emojiHtml=`<span style="display:inline-flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;font-size:${Math.round(size*0.7)}px;vertical-align:middle" title="${cfg.label||type}">${emoji}</span>`;
-  if(!src) return emojiHtml;
-  const lnk=cfg.url?`onclick="window.open('${cfg.url}','_blank')" style="cursor:pointer"`:''
-  return `<img src="${src}" alt="${cfg.label||type}" title="${cfg.label||type}" ${lnk} style="width:${size}px;height:${size}px;object-fit:contain;vertical-align:middle" onerror="this.outerHTML='${emojiHtml.replace(/'/g,"\\'")}'">`;
+  const path=cfg.icon||'M20 7H4v10h16V7zm-8 7a3 3 0 110-6 3 3 0 010 6z';
+  const col=cfg.color||'#9ca3af';
+  const lnk=cfg.url?`onclick="window.open('${cfg.url}','_blank')" style="cursor:pointer"`:'';
+  return `<span ${lnk} title="${cfg.label||type}" style="display:inline-flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;vertical-align:middle;border-radius:${Math.round(size*0.2)}px;background:${col}18"><svg width="${Math.round(size*0.75)}" height="${Math.round(size*0.75)}" viewBox="0 0 24 24" fill="none" stroke="${col}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg></span>`;
 }
 // Helper: normalize asset type to PROD_CFG key
 // SOLO i tipi con foglio dedicato nell'Excel + ARLA e TITANIA sono tipi reali
@@ -4209,14 +4232,19 @@ async function loadAnagClients(){
         if(!byM3[m3])byM3[m3]=[];
         byM3[m3].push(a);
       });
-      // Compute _assetCounts per client
+      // Compute _assetCounts per client — SOLO assets Attivi o Da installare
+      const VALID_ASSET_STATUS=['attivo','da installare','da_installare','installato','in uso'];
       ANAG_CLIENTI.forEach(c=>{
         const m3=c.CodiceM3;
         const myAssets=byM3[m3]||[];
         ANAG_ASSETS_CACHE[m3]=myAssets;
-        // Conta tutti gli asset del cliente senza filtri
-        const counts={_total:myAssets.length};
-        myAssets.forEach(a=>{
+        // Filtra solo assets con status valido (attivi + da installare)
+        const activeAssets=myAssets.filter(a=>{
+          const s=(a.Status||'').toLowerCase().trim();
+          return !s||VALID_ASSET_STATUS.some(v=>s.includes(v));
+        });
+        const counts={_total:activeAssets.length,_totalAll:myAssets.length};
+        activeAssets.forEach(a=>{
           const key=normAssetType(a.GruppoAttrezzatura||a.TipoFoglio||'Altro');
           counts[key]=(counts[key]||0)+1;
         });
@@ -4257,7 +4285,7 @@ function renderAnagClients(list){
     const totAssets=list.reduce((t,c)=>t+((c._assetCounts&&c._assetCounts._total)||0),0);
     const typeFilter=$('anagFilterType')?.value||'';
     const mainTypes=['ROBOT','JUNO','VECTOR','DISCOVERY','COLLECTOR','CU','COSMIX','NAUTILUS','LUNA','CALM','COMPRESSORI','METEOR','GRAZEWAY','L4C LED'];
-    let statCards=[[list.length,'Clienti'],[a,'Attivi'],[geo,'📍 Geo'],[totAssets,'Assets']];
+    let statCards=[[list.length,'Clienti'],[a,'Attivi'],[geo,'📍 Geo'],[totAssets,'Assets Attivi']];
     mainTypes.forEach(t=>{
       const cfg=PROD_CFG[t]||{};
       const v=sumType(t);
@@ -4914,10 +4942,16 @@ function onUrgPrioChange(){
   const pri=(DATA.priorita||[]).find(p=>p.ID===priId);
   const liv=pri?.Livello||1;
   const d=new Date();let hint='';
-  if(liv<=1){$('muDataPrev').value=today();$('muDurata').value='4';hint='⚡ Oggi, intervento immediato (4h)'}
-  else if(liv<=2){$('muDataPrev').value=today();$('muDurata').value='4';hint='🔴 Oggi (4h)'}
-  else if(liv<=3){d.setDate(d.getDate()+1);$('muDataPrev').value=d.toISOString().slice(0,10);$('muDurata').value='3';hint='🟠 Domani (3h)'}
-  else{d.setDate(d.getDate()+2);$('muDataPrev').value=d.toISOString().slice(0,10);$('muDurata').value='2';hint='🟡 Entro 2 giorni (2h)'}
+  if(liv<=1){$('muDataPrev').value=today();$('muDurata').value='4';hint='⚡ Urgente — Subito (SLA 4h)'}
+  else if(liv<=2){$('muDataPrev').value=today();$('muDurata').value='4';hint='🔴 Oggi — prossimo slot disponibile (SLA 8h)'}
+  else if(liv<=3){d.setDate(d.getDate()+1);$('muDataPrev').value=d.toISOString().slice(0,10);$('muDurata').value='3';hint='🟠 Entro 24 ore — domani mattina (SLA 24h)'}
+  else if(liv<=4){
+    // Prossimo giorno lavorativo (salta weekend)
+    let dd=new Date();dd.setDate(dd.getDate()+1);
+    while(dd.getDay()===0||dd.getDay()===6)dd.setDate(dd.getDate()+1);
+    $('muDataPrev').value=dd.toISOString().slice(0,10);$('muDurata').value='2';
+    hint='🟡 Entro settimana — prossimo giorno lavorativo (SLA 72h)';
+  }else{$('muDataPrev').value='';$('muDurata').value='2';hint='⚪ Programmabile — a discrezione del planner (nessun SLA)'}
   if($('muDataHint'))$('muDataHint').innerHTML=hint;
 }
 
@@ -7009,7 +7043,7 @@ function renderMonthPlan(){
   const getWeekNum = (ds) => { const d=new Date(ds); d.setDate(d.getDate()+4-(d.getDay()||7)); return Math.ceil((((d-new Date(d.getFullYear(),0,1))/86400000)+1)/7); };
 
   // Render griglia
-  let html = '<table class="month-grid"><thead><tr><th style="width:90px;position:sticky;left:0;z-index:3">Tecnico</th>';
+  let html = '<table class="month-grid"><thead><tr><th style="width:110px;position:sticky;left:0;z-index:3">Tecnico</th>';
   let lastWeek = 0;
   days.forEach(d => {
     const week = getWeekNum(d.ds);
@@ -7039,7 +7073,7 @@ function renderMonthPlan(){
       html += `<td class="${cellClass}" style="${isSat?'border-right:2px solid #6366F1':''}" ondragover="event.preventDefault()" ondrop="onMonthDrop(event,'${tec.ID}','${d.ds}')">`;
 
       // Rep badge
-      if(rep) html += `<div class="month-cell-rep" title="Reperibilita: ${rep.Turno||'24h'}">${rep.Turno==='notturno'?'🌙':'📞'}${(rep.Tipo||'').substring(0,3)}</div>`;
+      if(rep) html += `<div class="month-cell-rep" draggable="true" ondragstart="onMonthDragStart(event,'reperibilita','${rep.ID}')" onclick="showDetail('reperibilita','${rep.ID}')" title="Reperibilità: ${rep.Turno||'24h'} — ${rep.Tipo||''}\nDa: ${rep.DataInizio||'?'} A: ${rep.DataFine||'?'}\nClick per dettaglio, trascina per spostare">${rep.Turno==='notturno'?'🌙':'📞'}${(rep.Tipo||'').substring(0,3)}</div>`;
 
       // Ferie marker
       if(isFerie) html += `<div style="font-size:.55rem;color:#92400E;text-align:center">🏖️</div>`;
@@ -7050,9 +7084,11 @@ function renderMonthPlan(){
         const col = isPreview ? '#8B5CF6' : (statoCol[p.Stato] || '#6B7280');
         const clienteName = isPreview ? (p.Note||p.ClienteID||'AI') : getName(DATA.clienti||[], p.ClienteID);
         const tipoIco = isPreview ? '🤖' : (p.TipoIntervento||p.TipoInterventoID||'').includes('install')?'🏗️':(p.TipoIntervento||p.TipoInterventoID||'').includes('tagliando')?'🔧':(p.TipoIntervento||'').includes('urgenza')?'🚨':'📋';
-        const label = compact ? (clienteName||'').substring(0,8) : `${p.OraInizio||''} ${(clienteName||'').substring(0,12)}`;
+        const ora = p.OraInizio ? `<span style="font-weight:600">${p.OraInizio}</span> ` : '';
+        const nome = (clienteName||'').substring(0,compact?10:18);
+        const stato = p.Stato ? `<span style="font-size:.55rem;opacity:.7">${p.Stato==='completato'?'✓':p.Stato==='in_corso'?'▶':''}</span>` : '';
         const previewStyle = isPreview ? 'border-style:dashed;opacity:.85;' : '';
-        html += `<div class="month-cell-item" draggable="${!isPreview}" ${!isPreview?`ondragstart="onMonthDragStart(event,'piano','${p.ID}')" onclick="showDetail('piano','${p.ID}')"`:''}style="background:${col}15;border-left-color:${col};color:${col};${previewStyle}" title="${clienteName||''} — ${p.Note||''}${isPreview?' [Anteprima AI]':''}">${tipoIco} ${label}</div>`;
+        html += `<div class="month-cell-item" draggable="${!isPreview}" ${!isPreview?`ondragstart="onMonthDragStart(event,'piano','${p.ID}')" onclick="showDetail('piano','${p.ID}')"`:''}style="background:${col}15;border-left-color:${col};color:${col};${previewStyle}" title="${clienteName||''} — ${p.TipoIntervento||''} — ${p.Note||''}${isPreview?' [Anteprima AI]':''}">${tipoIco} ${ora}${nome} ${stato}</div>`;
       });
 
       html += '</td>';
@@ -7080,8 +7116,23 @@ async function onMonthDrop(e, tecnicoId, data){
   const {type, id} = MONTH_DRAGGING;
   MONTH_DRAGGING = null;
   try {
-    if(type==='piano') await apiCall('updatePiano',{id,data:{TecnicoID:tecnicoId,Data:data}},'POST');
-    toast('Intervento spostato','ok');
+    if(type==='piano'){
+      await apiCall('updatePiano',{id,data:{TecnicoID:tecnicoId,Data:data}},'POST');
+      toast('Intervento spostato','ok');
+    }else if(type==='reperibilita'){
+      // Per la reperibilità, aggiorna tecnico e date (sposta di N giorni)
+      const rep=(DATA.reperibilita||[]).find(r=>r.ID===id);
+      if(rep){
+        const oldStart=rep.DataInizio||data;
+        const diffDays=Math.round((new Date(data)-new Date(oldStart))/86400000);
+        const newStart=data;
+        const oldEnd=rep.DataFine||oldStart;
+        const endDate=new Date(oldEnd);endDate.setDate(endDate.getDate()+diffDays);
+        const newEnd=endDate.toISOString().split('T')[0];
+        await apiCall('updateReperibilita',{id,data:{TecnicoID:tecnicoId,DataInizio:newStart,DataFine:newEnd}},'POST');
+        toast('Reperibilità spostata','ok');
+      }
+    }
     await refreshData(true);
     renderMonthPlan();
   } catch(e){ toast(e.message,'err'); }
