@@ -4685,20 +4685,44 @@ Rispondi SOLO con JSON valido:
       const rows = body.rows || [];
       if (!rows.length) return err('rows richiesto (array)');
       if (rows.length > 2000) return err('Massimo 2000 righe per importazione anagrafica.');
-      const results = { inserted: 0, errors: [] };
+      const results = { inserted: 0, skipped: 0, errors: [] };
+      // Batch insert (much faster than one-by-one)
+      const batch = [];
+      const allCliKeys = new Set();
       for (const row of rows) {
         const fields = {};
         for (const [k, v] of Object.entries(row)) {
           const sk = toSnake(k);
-          if (v !== null && v !== undefined && v !== '') fields[sk] = v;
+          fields[sk] = (v !== null && v !== undefined && v !== '') ? v : null;
+          allCliKeys.add(sk);
         }
+        batch.push(fields);
+      }
+      // Uniform keys
+      const cliKeyList = [...allCliKeys];
+      for (const row of batch) {
+        for (const k of cliKeyList) { if (!(k in row)) row[k] = null; }
+      }
+      // Insert in chunks of 50
+      for (let i = 0; i < batch.length; i += 50) {
+        const chunk = batch.slice(i, i + 50);
         try {
-          await sb(env, 'anagrafica_clienti', 'POST', fields, null, { 'Prefer': 'return=minimal,resolution=merge-duplicates' });
-          results.inserted++;
+          await sb(env, 'anagrafica_clienti', 'POST', chunk, '', { 'Prefer': 'return=minimal' });
+          results.inserted += chunk.length;
         } catch (e) {
-          results.errors.push({ nome: fields.nome_account || '?', err: e.message });
+          // Fallback one by one
+          for (const row of chunk) {
+            try {
+              await sb(env, 'anagrafica_clienti', 'POST', row, '', { 'Prefer': 'return=minimal' });
+              results.inserted++;
+            } catch (e2) {
+              results.skipped++;
+              results.errors.push({ nome: row.nome_account || '?', err: e2.message });
+            }
+          }
         }
       }
+      results.sampleErrors = results.errors.slice(0, 5);
       return ok(results);
     }
 
@@ -4738,13 +4762,13 @@ Rispondi SOLO con JSON valido:
       for (let i = 0; i < batch.length; i += 100) {
         const chunk = batch.slice(i, i + 100);
         try {
-          await sb(env, 'anagrafica_assets', 'POST', chunk, null, { 'Prefer': 'return=minimal' });
+          await sb(env, 'anagrafica_assets', 'POST', chunk, '', { 'Prefer': 'return=minimal' });
           results.inserted += chunk.length;
         } catch (e) {
           // Fallback: one by one
           for (const row of chunk) {
             try {
-              await sb(env, 'anagrafica_assets', 'POST', row, null, { 'Prefer': 'return=minimal' });
+              await sb(env, 'anagrafica_assets', 'POST', row, '', { 'Prefer': 'return=minimal' });
               results.inserted++;
             } catch (e2) {
               results.skipped++;
