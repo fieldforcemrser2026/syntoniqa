@@ -4639,7 +4639,7 @@ Rispondi SOLO con JSON valido:
 
     case 'getAnagraficaClienti': {
       const search = sanitizePgFilter(body.search || '');
-      let url = 'anagrafica_clienti?select=*&obsoleto=eq.false&order=nome_account.asc&limit=500';
+      let url = 'anagrafica_clienti?select=*&order=nome_account.asc&limit=500';
       if (search) url += `&or=(nome_account.ilike.*${search}*,nome_interno.ilike.*${search}*,codice_m3.ilike.*${search}*,citta_fatturazione.ilike.*${search}*)`;
       const data = await sb(env, url, 'GET');
       return ok(data.map(pascalizeRecord));
@@ -4647,7 +4647,7 @@ Rispondi SOLO con JSON valido:
 
     case 'getAnagraficaCliente': {
       const { id, codice_m3 } = body;
-      let url = 'anagrafica_clienti?select=*&obsoleto=eq.false';
+      let url = 'anagrafica_clienti?select=*';
       if (id) url += `&id=eq.${id}`;
       else if (codice_m3) url += `&codice_m3=eq.${codice_m3}`;
       else return err('id o codice_m3 richiesto');
@@ -4658,7 +4658,7 @@ Rispondi SOLO con JSON valido:
 
     case 'getAnagraficaAssets': {
       const { codice_m3, search, all } = body;
-      let base = 'anagrafica_assets?select=*&obsoleto=eq.false&order=gruppo_attrezzatura.asc,nome_asset.asc';
+      let base = 'anagrafica_assets?select=*&order=gruppo_attrezzatura.asc,nome_asset.asc';
       if (codice_m3) base += `&codice_m3=eq.${codice_m3}`;
       const safeSearch = sanitizePgFilter(search || '');
       if (safeSearch) base += `&or=(nome_asset.ilike.*${safeSearch}*,numero_serie.ilike.*${safeSearch}*,modello.ilike.*${safeSearch}*,nome_account.ilike.*${safeSearch}*)`;
@@ -4686,7 +4686,7 @@ Rispondi SOLO con JSON valido:
       if (!rows.length) return err('rows richiesto (array)');
       if (rows.length > 2000) return err('Massimo 2000 righe per importazione anagrafica.');
       // Known columns in anagrafica_clienti table
-      const KNOWN_CLI_COLS = new Set(['id','tenant_id','obsoleto','created_at','updated_at',
+      const KNOWN_CLI_COLS = new Set(['id','tenant_id','created_at','updated_at',
         'id_account','account_number','codice_danea','codice_m3','partita_iva',
         'nome_account','nome_danea','nome_interno','lat','lng',
         'titolare_account','telefono','email','stato_cliente','status',
@@ -4715,12 +4715,12 @@ Rispondi SOLO con JSON valido:
       const rows = body.rows || [];
       if (!rows.length) return err('rows richiesto (array)');
       // Known columns in anagrafica_assets table
-      const KNOWN_COLS = new Set(['id','tenant_id','obsoleto','created_at','updated_at',
+      const KNOWN_COLS = new Set(['id','tenant_id','created_at','updated_at',
         'id_account','id_asset','codice_m3','nome_account','titolare_account',
         'nome_asset','numero_serie','modello','gruppo_attrezzatura','descrizione',
         'data_installazione','data_creazione','data_ultima_modifica','status','tipo_foglio']);
       // Verify existing codice_m3
-      const clienti = await sb(env, 'anagrafica_clienti?select=codice_m3&obsoleto=eq.false', 'GET');
+      const clienti = await sb(env, 'anagrafica_clienti?select=codice_m3', 'GET');
       const validM3 = new Set(clienti.filter(c => c.codice_m3).map(c => c.codice_m3));
       const results = { inserted: 0, skipped: 0, errors: [] };
       // Batch insert
@@ -4775,12 +4775,11 @@ Rispondi SOLO con JSON valido:
       const caller = await sb(env, 'utenti', 'GET', null, `?id=eq.${uid}&select=ruolo`).catch(()=>[]);
       if (!caller?.[0] || caller[0].ruolo !== 'admin') return err('Solo admin può eseguire clearAnagrafica', 403);
       if (body.confirmToken !== 'CLEAR_CONFIRMED') return err('Conferma richiesta: invia confirmToken="CLEAR_CONFIRMED"');
-      // Soft-delete con audit trail
-      const now = new Date().toISOString();
-      await sb(env, 'anagrafica_assets?obsoleto=eq.false', 'PATCH', { obsoleto: true, updated_at: now });
-      await sb(env, 'anagrafica_clienti?obsoleto=eq.false', 'PATCH', { obsoleto: true, updated_at: now });
+      // Hard-delete (anagrafica tables don't have obsoleto column)
+      await sb(env, 'anagrafica_assets?id=neq.IMPOSSIBLE', 'DELETE');
+      await sb(env, 'anagrafica_clienti?id=neq.IMPOSSIBLE', 'DELETE');
       await wlog('anagrafica', 'ALL', 'cleared_for_reimport', uid);
-      return ok({ cleared: true, method: 'soft_delete' });
+      return ok({ cleared: true, method: 'hard_delete' });
     }
 
     case 'searchParts': {
