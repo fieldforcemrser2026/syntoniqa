@@ -1400,15 +1400,15 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
   <th>Prov.</th>
   <th>Stato</th>
   <th>Titolare</th>
-  <th title="Astronaut">🤖</th>
-  <th title="Juno">🔄</th>
-  <th title="Vector">🚜</th>
-  <th title="Discovery">🧹</th>
-  <th title="CU">🖥️</th>
-  <th title="Cosmix">🥣</th>
-  <th title="Nautilus">🔧</th>
-  <th title="Altri">📦</th>
-  <th>Tot</th>
+  <th title="Astronaut" style="font-size:.7rem;text-align:center">🤖<br>Robot</th>
+  <th title="Juno" style="font-size:.7rem;text-align:center">🔄<br>Juno</th>
+  <th title="Vector" style="font-size:.7rem;text-align:center">🚜<br>Vector</th>
+  <th title="Discovery+Collector" style="font-size:.7rem;text-align:center">🧹<br>Disc+Col</th>
+  <th title="Central Unit" style="font-size:.7rem;text-align:center">🖥️<br>CU</th>
+  <th title="Cosmix" style="font-size:.7rem;text-align:center">🥣<br>Cosmix</th>
+  <th title="Nautilus" style="font-size:.7rem;text-align:center">🔧<br>Nautilus</th>
+  <th title="Altri: Luna, Meteor, Calm, Compressori, L4C, Grazeway" style="font-size:.7rem;text-align:center">📦<br>Altri</th>
+  <th style="font-size:.7rem;text-align:center">Tot</th>
   <th style="width:80px"></th>
 </tr></thead>
 <tbody id="anagClientiBody"></tbody>
@@ -4383,7 +4383,7 @@ function renderAnagClients(list){
     mainTypes.forEach(t=>{
       const cfg=PROD_CFG[t]||{};
       const v=sumType(t);
-      if(v>0) statCards.push([v, prodIcon(t,20)+' '+cfg.label||t]);
+      if(v>0) statCards.push([v, prodIcon(t,20)+' '+(cfg.label||t)]);
     });
     s.innerHTML=statCards.map(([v,l])=>`<div class="stat-card" style="min-width:75px;padding:6px 10px;text-align:center"><div class="stat-val" style="font-size:1.1rem">${v}</div><div class="stat-lbl" style="font-size:.65rem">${l}</div></div>`).join('');
   }
@@ -4454,7 +4454,7 @@ async function toggleAnagTree(m3){
 
     // Product badges from _assetCounts
     const ac=c._assetCounts||{};
-    const prodBadges=Object.entries(ac).filter(([k,v])=>k!=='_total'&&v>0).map(([type,cnt])=>{
+    const prodBadges=Object.entries(ac).filter(([k,v])=>!k.startsWith('_')&&v>0).map(([type,cnt])=>{
       const cfg=PROD_CFG[type]||{icon:'📦',color:'#666',label:type};
       return `<span class="badge" style="font-size:.75rem;margin:2px;background:${cfg.color}15;border:1px solid ${cfg.color}40;color:${cfg.color}">${prodIcon(type,18)} ${cfg.label}: <b>${cnt}</b></span>`;
     });
@@ -4780,10 +4780,18 @@ async function importAnagXlsx(file){
       // Normalize dates
       assets.forEach(a=>{a.DataInstallazione=formatAnagDate(a.DataInstallazione)});
 
+      // Strip fields that may not exist in DB (keep only known columns)
+      const KNOWN_ASSET_FIELDS=['IdAccount','IdAsset','CodiceM3','NomeAccount','TitolareAccount',
+        'NomeAsset','NumeroSerie','Modello','GruppoAttrezzatura','Descrizione',
+        'DataInstallazione','DataCreazione','DataUltimaModifica','Status','TipoFoglio'];
+      assets.forEach(a=>{
+        Object.keys(a).forEach(k=>{if(!KNOWN_ASSET_FIELDS.includes(k))delete a[k]});
+      });
+
       toast(`Parsati: ${clienti.length} clienti, ${assets.length} assets. Importazione...`,'info');
 
       // 5. Clear existing + import
-      try{ await apiCall('clearAnagrafica',{},'POST'); toast('Dati precedenti cancellati','info'); }catch(ce){ console.warn('Clear failed, continuing:',ce); }
+      try{ await apiCall('clearAnagrafica',{confirmToken:'CLEAR_CONFIRMED'},'POST'); toast('Dati precedenti cancellati','info'); }catch(ce){ console.warn('Clear failed, continuing:',ce); }
       const r1=await apiCall('importAnagraficaClienti',{rows:clienti},'POST');
       toast(`Clienti: ${r1.inserted} importati`,'ok');
       const r2=await apiCall('importAnagraficaAssets',{rows:assets},'POST');

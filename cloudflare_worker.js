@@ -4639,7 +4639,7 @@ Rispondi SOLO con JSON valido:
 
     case 'getAnagraficaClienti': {
       const search = sanitizePgFilter(body.search || '');
-      let url = 'anagrafica_clienti?select=*&order=nome_account.asc&limit=500';
+      let url = 'anagrafica_clienti?select=*&obsoleto=eq.false&order=nome_account.asc&limit=500';
       if (search) url += `&or=(nome_account.ilike.*${search}*,nome_interno.ilike.*${search}*,codice_m3.ilike.*${search}*,citta_fatturazione.ilike.*${search}*)`;
       const data = await sb(env, url, 'GET');
       return ok(data.map(pascalizeRecord));
@@ -4647,7 +4647,7 @@ Rispondi SOLO con JSON valido:
 
     case 'getAnagraficaCliente': {
       const { id, codice_m3 } = body;
-      let url = 'anagrafica_clienti?select=*';
+      let url = 'anagrafica_clienti?select=*&obsoleto=eq.false';
       if (id) url += `&id=eq.${id}`;
       else if (codice_m3) url += `&codice_m3=eq.${codice_m3}`;
       else return err('id o codice_m3 richiesto');
@@ -4658,7 +4658,7 @@ Rispondi SOLO con JSON valido:
 
     case 'getAnagraficaAssets': {
       const { codice_m3, search, all } = body;
-      let base = 'anagrafica_assets?select=*&order=gruppo_attrezzatura.asc,nome_asset.asc';
+      let base = 'anagrafica_assets?select=*&obsoleto=eq.false&order=gruppo_attrezzatura.asc,nome_asset.asc';
       if (codice_m3) base += `&codice_m3=eq.${codice_m3}`;
       const safeSearch = sanitizePgFilter(search || '');
       if (safeSearch) base += `&or=(nome_asset.ilike.*${safeSearch}*,numero_serie.ilike.*${safeSearch}*,modello.ilike.*${safeSearch}*,nome_account.ilike.*${safeSearch}*)`;
@@ -4685,11 +4685,21 @@ Rispondi SOLO con JSON valido:
       const rows = body.rows || [];
       if (!rows.length) return err('rows richiesto (array)');
       if (rows.length > 2000) return err('Massimo 2000 righe per importazione anagrafica.');
+      // Known columns in anagrafica_clienti table
+      const KNOWN_CLI_COLS = new Set(['id','tenant_id','obsoleto','created_at','updated_at',
+        'id_account','account_number','codice_danea','codice_m3','partita_iva',
+        'nome_account','nome_danea','nome_interno','lat','lng',
+        'titolare_account','telefono','email','stato_cliente','status',
+        'tipo_cliente','data_creazione','via_fatturazione','citta_fatturazione',
+        'provincia_fatturazione','cap_fatturazione','via_spedizioni','citta_spedizioni',
+        'provincia_spedizioni','cap_spedizioni','service_area','contratto_assistenza']);
       const results = { inserted: 0, errors: [] };
       for (const row of rows) {
         const fields = {};
         for (const [k, v] of Object.entries(row)) {
-          if (v !== null && v !== undefined && v !== '') fields[toSnake(k)] = v;
+          const sk = toSnake(k);
+          if (!KNOWN_CLI_COLS.has(sk)) continue; // Skip unknown columns
+          if (v !== null && v !== undefined && v !== '') fields[sk] = v;
         }
         try {
           await sb(env, 'anagrafica_clienti', 'POST', fields, null, { 'Prefer': 'return=minimal,resolution=merge-duplicates' });
@@ -4704,8 +4714,13 @@ Rispondi SOLO con JSON valido:
     case 'importAnagraficaAssets': {
       const rows = body.rows || [];
       if (!rows.length) return err('rows richiesto (array)');
+      // Known columns in anagrafica_assets table
+      const KNOWN_COLS = new Set(['id','tenant_id','obsoleto','created_at','updated_at',
+        'id_account','id_asset','codice_m3','nome_account','titolare_account',
+        'nome_asset','numero_serie','modello','gruppo_attrezzatura','descrizione',
+        'data_installazione','data_creazione','data_ultima_modifica','status','tipo_foglio']);
       // Verify existing codice_m3
-      const clienti = await sb(env, 'anagrafica_clienti?select=codice_m3', 'GET');
+      const clienti = await sb(env, 'anagrafica_clienti?select=codice_m3&obsoleto=eq.false', 'GET');
       const validM3 = new Set(clienti.filter(c => c.codice_m3).map(c => c.codice_m3));
       const results = { inserted: 0, skipped: 0, errors: [] };
       // Batch insert
@@ -4715,6 +4730,7 @@ Rispondi SOLO con JSON valido:
         const fields = {};
         for (const [k, v] of Object.entries(row)) {
           const sk = toSnake(k);
+          if (!KNOWN_COLS.has(sk)) continue; // Skip unknown columns
           fields[sk] = (v !== null && v !== undefined && v !== '') ? v : null;
           allKeys.add(sk);
         }
@@ -4734,13 +4750,13 @@ Rispondi SOLO con JSON valido:
       for (let i = 0; i < batch.length; i += 100) {
         const chunk = batch.slice(i, i + 100);
         try {
-          await sb(env, 'anagrafica_assets', 'POST', chunk, null, { 'Prefer': 'return=minimal' });
+          await sb(env, 'anagrafica_assets', 'POST', chunk, null, { 'Prefer': 'return=minimal,resolution=merge-duplicates' });
           results.inserted += chunk.length;
         } catch (e) {
           // Fallback: one by one
           for (const row of chunk) {
             try {
-              await sb(env, 'anagrafica_assets', 'POST', row, null, { 'Prefer': 'return=minimal' });
+              await sb(env, 'anagrafica_assets', 'POST', row, null, { 'Prefer': 'return=minimal,resolution=merge-duplicates' });
               results.inserted++;
             } catch (e2) {
               results.skipped++;
