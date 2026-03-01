@@ -1671,24 +1671,37 @@ async function handlePost(action, body, env) {
       }
       } // end if ctx.tagliandi
 
-      // Modalità: calcola periodo target
+      // Modalità: calcola periodo target con giorni lavorativi espliciti
       let periodoIstruzione = '';
+      const giorniNome = ['dom','lun','mar','mer','gio','ven','sab'];
+      function getWorkDays(startDate, endDate) {
+        const days = [];
+        const d = new Date(startDate);
+        while (d <= endDate) {
+          const dow = d.getDay(); // 0=dom, 6=sab
+          const iso = d.toISOString().split('T')[0];
+          if (dow >= 1 && dow <= 5) days.push(iso + '(' + giorniNome[dow] + ')');
+          d.setDate(d.getDate() + 1);
+        }
+        return days;
+      }
       if (meseTarget) {
         const [yy, mm] = meseTarget.split('-').map(Number);
         if (modalita === 'settimana') {
-          // Calcola date settimana N del mese
-          const firstDay = new Date(yy, mm - 1, 1);
           const startOffset = (settimanaNum - 1) * 7;
           const weekStart = new Date(yy, mm - 1, 1 + startOffset);
           const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6);
           const lastOfMonth = new Date(yy, mm, 0);
           if (weekEnd > lastOfMonth) weekEnd.setTime(lastOfMonth.getTime());
-          const fmtD = d => d.toISOString().split('T')[0];
-          periodoIstruzione = `GENERA PIANO SOLO per la SETTIMANA ${settimanaNum} del mese: dal ${fmtD(weekStart)} al ${fmtD(weekEnd)}`;
+          const wd = getWorkDays(weekStart, weekEnd);
+          periodoIstruzione = `GENERA PIANO SOLO per questi ${wd.length} GIORNI LAVORATIVI: ${wd.join(', ')}. Genera interventi per OGNUNO di questi giorni.`;
         } else if (modalita === 'vuoti') {
           periodoIstruzione = `GENERA PIANO SOLO per i giorni SENZA interventi nel piano esistente. Non duplicare giorni gia coperti.`;
         } else {
-          periodoIstruzione = `GENERA PIANO per TUTTO il mese ${meseTarget} (tutti i giorni lavorativi Lun-Ven). Sab/Dom solo reperibilita.`;
+          const monthStart = new Date(yy, mm - 1, 1);
+          const monthEnd = new Date(yy, mm, 0);
+          const wd = getWorkDays(monthStart, monthEnd);
+          periodoIstruzione = `GENERA PIANO per questi ${wd.length} GIORNI LAVORATIVI del mese: ${wd.join(', ')}. Sab/Dom solo reperibilita urgenze.`;
         }
       }
 
@@ -1867,15 +1880,33 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId
         return null;
       }
 
-      // Helper: validate and fix tecnicoId
+      // Helper: validate tecnicoId, fix furgoni, remove weekends
       function postProcess(piano) {
         return (piano || []).map(p => {
+          // Fix tecnicoId
           if (p.tecnicoId && !validIds.has(p.tecnicoId)) {
             const match = allTecnici.find(t => (t.nome + ' ' + t.cognome).toLowerCase().includes((p.tecnico||'').split(' ')[0].toLowerCase()));
             if (match) { p.tecnicoId = match.id; p.tecnico = match.nome + ' ' + match.cognome; }
           }
+          // Fix furgone: usa il furgone assegnato al tecnico dal DB
+          if (p.tecnicoId) {
+            const tec = allTecnici.find(t => t.id === p.tecnicoId);
+            if (tec && tec.automezzo_id) {
+              const auto = allAutomezzi.find(a => a.id === tec.automezzo_id);
+              if (auto) p.furgone = auto.id;
+            }
+          }
           return p;
-        }).filter(p => p.tecnicoId && validIds.has(p.tecnicoId));
+        }).filter(p => {
+          if (!p.tecnicoId || !validIds.has(p.tecnicoId)) return false;
+          // Rimuovi sab/dom (tipo tagliando) — tieni solo urgenze di reperibilita
+          try {
+            const d = new Date(p.data);
+            const dow = d.getDay(); // 0=dom, 6=sab
+            if ((dow === 0 || dow === 6) && p.tipo !== 'urgenza') return false;
+          } catch {}
+          return true;
+        });
       }
 
       // Single AI call for ALL modes (mese/settimana/vuoti)
