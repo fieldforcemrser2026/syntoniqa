@@ -436,12 +436,6 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 /* ===== TOOLTIP ===== */
 [data-tip]{position:relative}
 [data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:var(--dark);color:var(--white);padding:4px 10px;border-radius:4px;font-size:0.6875rem;white-space:nowrap;z-index:100}
-
-/* ===== PM CALENDAR ===== */
-.pm-tab-content{animation:fadeIn .2s ease}
-.pm-cal-row:hover td{background:rgba(99,102,241,.03)!important}
-.pm-cal-row td{transition:background .15s}
-#pmCalGrid table th{position:sticky;top:0;background:var(--surface);z-index:3}
 </style>
 </head>
 <body>
@@ -846,7 +840,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <section class="sec" id="secAi">
 <div class="ai-box">
 <h3>🤖 AI Planner — Simulatore Intelligente</h3>
-<p>Seleziona il mese, configura i vincoli e genera il piano. Il testo sotto è opzionale — i vincoli dalla sezione <strong>📐 Vincoli Piano</strong> vengono caricati automaticamente.</p>
+<p>Configura mese e contesto, poi clicca <strong>Genera Piano</strong>. L'AI considera vincoli, disponibilit&agrave;, urgenze e tagliandi per creare un piano ottimizzato. Il prompt testuale &egrave; opzionale — i vincoli dalla sezione <strong>📐 Vincoli Piano</strong> vengono caricati automaticamente.</p>
 <div id="aiVincoliStatus" style="margin-bottom:12px"></div>
 <textarea id="aiPrompt" placeholder="(Opzionale) Istruzioni aggiuntive in linguaggio naturale. Es: Dai priorità ai tagliandi scaduti. Il furgone F3 è in officina questa settimana."></textarea>
 <div style="margin-top:12px">
@@ -895,12 +889,13 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <!-- Contesto dati -->
 <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.1)">
 <label style="font-size:.75rem;font-weight:600;margin-bottom:10px;display:block;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.04em">📦 Includi nel contesto AI</label>
-<div style="display:flex;flex-wrap:wrap;gap:8px">
-<label style="font-size:.8rem;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.12);border-radius:20px;cursor:pointer;color:#fff;transition:all .15s;user-select:none" onmouseenter="this.style.background='rgba(255,255,255,.18)'" onmouseleave="this.style.background='rgba(255,255,255,.1)'"><input type="checkbox" id="aiCtxVincoli" checked style="accent-color:#818CF8"> 📋 Vincoli</label>
-<label style="font-size:.8rem;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.12);border-radius:20px;cursor:pointer;color:#fff;transition:all .15s;user-select:none" onmouseenter="this.style.background='rgba(255,255,255,.18)'" onmouseleave="this.style.background='rgba(255,255,255,.1)'"><input type="checkbox" id="aiCtxRep" checked style="accent-color:#818CF8"> 📞 Reperibilità</label>
-<label style="font-size:.8rem;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.12);border-radius:20px;cursor:pointer;color:#fff;transition:all .15s;user-select:none" onmouseenter="this.style.background='rgba(255,255,255,.18)'" onmouseleave="this.style.background='rgba(255,255,255,.1)'"><input type="checkbox" id="aiCtxPiano" checked style="accent-color:#818CF8"> 📅 Piano esistente</label>
-<label style="font-size:.8rem;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.12);border-radius:20px;cursor:pointer;color:#fff;transition:all .15s;user-select:none" onmouseenter="this.style.background='rgba(255,255,255,.18)'" onmouseleave="this.style.background='rgba(255,255,255,.1)'"><input type="checkbox" id="aiCtxUrgenze" checked style="accent-color:#818CF8"> 🚨 Urgenze</label>
-<label style="font-size:.8rem;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.12);border-radius:20px;cursor:pointer;color:#fff;transition:all .15s;user-select:none" onmouseenter="this.style.background='rgba(255,255,255,.18)'" onmouseleave="this.style.background='rgba(255,255,255,.1)'"><input type="checkbox" id="aiCtxTagliandi" checked style="accent-color:#818CF8"> 🔧 Tagliandi</label>
+<p style="font-size:.75rem;color:rgba(255,255,255,.5);margin:0 0 10px">Seleziona quali dati l'AI deve considerare per generare il piano. Disattiva quelli non necessari per risposte pi&ugrave; rapide.</p>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
+<label style="font-size:.8rem;display:flex;align-items:flex-start;gap:8px;padding:10px 14px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.12);border-radius:12px;cursor:pointer;color:#fff;transition:all .15s;user-select:none" onmouseenter="this.style.background='rgba(255,255,255,.18)'" onmouseleave="this.style.background='rgba(255,255,255,.1)'"><input type="checkbox" id="aiCtxVincoli" checked style="accent-color:#818CF8;margin-top:2px"><div><div style="font-weight:600">📋 Vincoli</div><div style="font-size:.7rem;color:rgba(255,255,255,.5);margin-top:2px">Regole team, accoppiamenti, orari, zone</div></div></label>
+<label style="font-size:.8rem;display:flex;align-items:flex-start;gap:8px;padding:10px 14px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.12);border-radius:12px;cursor:pointer;color:#fff;transition:all .15s;user-select:none" onmouseenter="this.style.background='rgba(255,255,255,.18)'" onmouseleave="this.style.background='rgba(255,255,255,.1)'"><input type="checkbox" id="aiCtxRep" checked style="accent-color:#818CF8;margin-top:2px"><div><div style="font-weight:600">📞 Reperibilit&agrave;</div><div style="font-size:.7rem;color:rgba(255,255,255,.5);margin-top:2px">Turni reperibilit&agrave;, chi &egrave; disponibile</div></div></label>
+<label style="font-size:.8rem;display:flex;align-items:flex-start;gap:8px;padding:10px 14px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.12);border-radius:12px;cursor:pointer;color:#fff;transition:all .15s;user-select:none" onmouseenter="this.style.background='rgba(255,255,255,.18)'" onmouseleave="this.style.background='rgba(255,255,255,.1)'"><input type="checkbox" id="aiCtxPiano" checked style="accent-color:#818CF8;margin-top:2px"><div><div style="font-weight:600">📅 Piano esistente</div><div style="font-size:.7rem;color:rgba(255,255,255,.5);margin-top:2px">Interventi gi&agrave; schedulati nel mese target</div></div></label>
+<label style="font-size:.8rem;display:flex;align-items:flex-start;gap:8px;padding:10px 14px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.12);border-radius:12px;cursor:pointer;color:#fff;transition:all .15s;user-select:none" onmouseenter="this.style.background='rgba(255,255,255,.18)'" onmouseleave="this.style.background='rgba(255,255,255,.1)'"><input type="checkbox" id="aiCtxUrgenze" checked style="accent-color:#818CF8;margin-top:2px"><div><div style="font-weight:600">🚨 Urgenze</div><div style="font-size:.7rem;color:rgba(255,255,255,.5);margin-top:2px">Urgenze aperte/assegnate da schedulare</div></div></label>
+<label style="font-size:.8rem;display:flex;align-items:flex-start;gap:8px;padding:10px 14px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.12);border-radius:12px;cursor:pointer;color:#fff;transition:all .15s;user-select:none" onmouseenter="this.style.background='rgba(255,255,255,.18)'" onmouseleave="this.style.background='rgba(255,255,255,.1)'"><input type="checkbox" id="aiCtxTagliandi" checked style="accent-color:#818CF8;margin-top:2px"><div><div style="font-weight:600">🔧 Tagliandi</div><div style="font-size:.7rem;color:rgba(255,255,255,.5);margin-top:2px">Manutenzioni PM scadute e prossime 30gg</div></div></label>
 </div>
 </div>
 </div>
@@ -969,7 +964,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <button class="btn btn-sm btn-ok" onclick="openGoogleMaps()">📍 Google Maps</button>
 </div>
 <div id="mapLegenda" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;font-size:.75rem"></div>
-<div id="mapAdmin" style="height:500px"></div>
+<div style="position:relative"><div id="mapAdmin" style="height:500px"></div><div id="mapLoading" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(255,255,255,.95);padding:12px 24px;border-radius:var(--radius);box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:999;font-size:.8125rem;font-weight:600"><span style="animation:spin 1s linear infinite;display:inline-block;margin-right:6px">🔄</span>Calcolo percorso...</div></div>
 <div id="mapSliderWrap" style="display:none;padding:10px 4px 0">
   <div style="display:flex;align-items:center;gap:10px">
     <span style="font-size:.75rem;color:var(--gray);white-space:nowrap;font-weight:600">⏭ Tappa</span>
@@ -1117,65 +1112,17 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 
 <!-- ========== SEC: PM SCHEDULING ========== -->
 <section class="sec" id="secPm">
-<!-- TABS -->
-<div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--gray3)">
-<button class="pm-tab active" onclick="switchPmTab('calendar',this)" style="padding:10px 20px;background:transparent;border:none;cursor:pointer;color:var(--text);font-weight:600;font-size:.85rem;border-bottom:2px solid var(--primary);margin-bottom:-2px">📅 Calendario PM</button>
-<button class="pm-tab" onclick="switchPmTab('schedule',this)" style="padding:10px 20px;background:transparent;border:none;cursor:pointer;color:var(--gray);font-weight:500;font-size:.85rem;margin-bottom:-2px">⚡ Genera PM</button>
-<button class="pm-tab" onclick="switchPmTab('cycles',this)" style="padding:10px 20px;background:transparent;border:none;cursor:pointer;color:var(--gray);font-weight:500;font-size:.85rem;margin-bottom:-2px">🔄 Cicli Manutenzione</button>
-<button class="pm-tab" onclick="switchPmTab('scadenze',this)" style="padding:10px 20px;background:transparent;border:none;cursor:pointer;color:var(--gray);font-weight:500;font-size:.85rem;margin-bottom:-2px">🔴 Scadenze</button>
-</div>
-
-<!-- TAB 1: CALENDARIO PM VISUALE -->
-<div id="pmTabCalendar" class="pm-tab-content">
 <div class="card">
-<div class="card-head"><h3>📅 Calendario Manutenzione Programmata</h3>
-<div class="btn-group">
-<button class="btn btn-sm" style="background:#6366F1;color:white" onclick="pmCalPrev()">← Mese</button>
-<span id="pmCalTitle" style="padding:0 12px;font-weight:700;font-size:.9rem;color:var(--text)"></span>
-<button class="btn btn-sm" style="background:#6366F1;color:white" onclick="pmCalNext()">Mese →</button>
-<select id="pmCalCliente" class="inp" style="max-width:180px;margin-left:12px" onchange="loadPMCalendar()"><option value="">Tutti i clienti</option></select>
-<button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="loadPMCalendar()">🔄 Aggiorna</button>
-</div></div>
-<div class="card-body" style="overflow-x:auto">
-<!-- Legenda -->
-<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;font-size:.75rem">
-<span>🟢 <b>A1</b> Base</span>
-<span>🔵 <b>B2</b> Intermedio</span>
-<span>🟡 <b>A3/A5/A7</b> Alternato</span>
-<span>🟠 <b>C4</b> Semestrale</span>
-<span>🔴 <b>D8</b> Completo</span>
-<span style="margin-left:12px">⬜ Futuro</span>
-<span>🟦 Pianificato</span>
-<span>✅ Completato</span>
-<span>⚠️ Scaduto</span>
-</div>
-<div id="pmCalGrid" style="min-height:300px">
-<p style="color:var(--gray);font-size:.85rem">⏳ Caricamento calendario PM...</p>
-</div>
-</div>
-</div>
-<!-- Dettaglio macchina -->
-<div class="card" style="margin-top:16px;display:none" id="pmCalDetail">
-<div class="card-head"><h3 id="pmCalDetailTitle">📋 Dettaglio Macchina</h3>
-<button class="btn btn-sm" onclick="$('pmCalDetail').style.display='none'">✕ Chiudi</button></div>
-<div class="card-body" id="pmCalDetailBody"></div>
-</div>
-</div>
-
-<!-- TAB 2: GENERA PM -->
-<div id="pmTabSchedule" class="pm-tab-content" style="display:none">
-<div class="card">
-<div class="card-head"><h3>⚡ Genera Interventi PM</h3>
+<div class="card-head"><h3>🔧 PM Scheduling — Manutenzione Programmata</h3>
 <div class="btn-group">
 <button class="btn btn-sm" style="background:#6366F1;color:white" onclick="generatePMSchedule(true)">🔍 Anteprima</button>
-<button class="btn btn-primary btn-sm" onclick="generatePMSchedule(false)">⚡ Genera Mese</button>
-<button class="btn btn-sm" style="background:#059669;color:white" onclick="bulkGeneratePM()">📅 Genera 3 Mesi</button>
+<button class="btn btn-primary btn-sm" onclick="generatePMSchedule(false)">⚡ Genera Interventi</button>
 </div></div>
 <div class="card-body">
 <div class="field-row" style="margin-bottom:16px;gap:12px;flex-wrap:wrap">
 <div class="field" style="max-width:180px"><label>Mese Target</label><input type="month" id="pmMeseTarget" class="inp"></div>
 <div class="field" style="max-width:180px"><label>Ciclo PM</label>
-<select id="pmCiclo" class="inp"><option value="">Tutti</option><option value="A1">A1 — Base</option><option value="B2">B2 — Intermedio</option><option value="C4">C4 — Semestrale</option><option value="D8">D8 — Completo</option></select></div>
+<select id="pmCiclo" class="inp"><option value="">Tutti</option><option value="A1">A1 — Bimestrale (60gg)</option><option value="B2">B2 — Trimestrale (90gg)</option><option value="C3">C3 — Semestrale (180gg)</option><option value="D8">D8 — Annuale (365gg)</option></select></div>
 <div class="field" style="max-width:200px"><label>Cliente (opz.)</label>
 <select id="pmCliente" class="inp"><option value="">Tutti i clienti</option></select></div>
 </div>
@@ -1183,32 +1130,10 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div id="pmResults" style="overflow-x:auto"></div>
 </div>
 </div>
-</div>
-
-<!-- TAB 3: CICLI MANUTENZIONE -->
-<div id="pmTabCycles" class="pm-tab-content" style="display:none">
-<div class="card">
-<div class="card-head"><h3>🔄 Definizioni Cicli PM Lely</h3>
-<div class="btn-group">
-<button class="btn btn-primary btn-sm" onclick="savePMCycleDefs()">💾 Salva Modifiche</button>
-</div></div>
-<div class="card-body">
-<p style="font-size:.8rem;color:var(--gray);margin-bottom:12px">Definisci i cicli di manutenzione per ogni modello di macchina. Sequenza step (es: A1→B2→A3→C4→A5→B6→A7→D8) e intervallo in giorni.</p>
-<div id="pmCycleDefs" style="overflow-x:auto"></div>
-</div>
-</div>
-</div>
-
-<!-- TAB 4: SCADENZE -->
-<div id="pmTabScadenze" class="pm-tab-content" style="display:none">
-<div class="card">
-<div class="card-head"><h3>🔴 Tagliandi in Scadenza</h3>
-<button class="btn btn-sm" onclick="renderPMTagliandi()" style="background:#6366F1;color:white">🔄 Aggiorna</button>
-</div>
+<div class="card" style="margin-top:16px">
+<div class="card-head"><h3>📅 Tagliandi in Scadenza</h3></div>
 <div class="card-body"><div id="pmTagliandiScadenza" style="overflow-x:auto"></div></div>
 </div>
-</div>
-
 </section>
 
 <!-- ========== SEC: CATALOGO PARTI ========== -->
@@ -1303,40 +1228,59 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 
 <!-- ========== SEC: TELEGRAM CONFIG ========== -->
 <section class="sec" id="secTelegramconfig">
+<!-- Card 1: Setup Bot -->
 <div class="card">
-<div class="card-head"><h3>💬 Configurazione Telegram</h3></div>
+<div class="card-head"><h3>🤖 1. Configurazione Bot Telegram</h3></div>
 <div class="card-body">
-<div style="margin-bottom:16px;padding:12px;background:#DBEAFE;border-radius:var(--radius-sm);font-size:.8125rem">
-ℹ️ <b>Setup:</b> 1) Crea bot con @BotFather su Telegram → copia token. 2) Ogni tecnico avvia il bot e invia /start. 3) Usa @userinfobot o /getUpdates per ottenere il chat_id.
+<div style="margin-bottom:16px;padding:14px;background:linear-gradient(135deg,#DBEAFE,#EDE9FE);border-radius:var(--radius);font-size:.8125rem;line-height:1.6">
+<div style="font-weight:700;margin-bottom:8px;font-size:.875rem">📖 Come configurare il bot in 3 passi:</div>
+<div style="display:grid;gap:6px">
+<div><strong>1.</strong> Apri Telegram e cerca <code style="background:rgba(0,0,0,.08);padding:1px 5px;border-radius:3px">@BotFather</code> → invia <code style="background:rgba(0,0,0,.08);padding:1px 5px;border-radius:3px">/newbot</code> → copia il <strong>token</strong> generato</div>
+<div><strong>2.</strong> Ogni tecnico deve cercare il bot su Telegram e inviare <code style="background:rgba(0,0,0,.08);padding:1px 5px;border-radius:3px">/start</code></div>
+<div><strong>3.</strong> Clicca <strong>🔍 Auto-rileva Chat ID</strong> qui sotto per trovare automaticamente i chat ID, oppure inseriscili manualmente</div>
 </div>
-<div class="field" style="margin-bottom:16px"><label>Bot Token</label><input type="text" id="cfgTgToken" placeholder="123456:ABC-DEF..." style="width:100%;font-family:JetBrains Mono,monospace;font-size:.75rem"></div>
-<button class="btn btn-outline btn-sm" onclick="saveTelegramConfig()" style="margin-bottom:16px">💾 Salva Token + Chat ID</button><h4 style="margin:16px 0 8px">Chat ID per Tecnico</h4>
+</div>
+<div class="field" style="margin-bottom:12px"><label>Bot Token</label><input type="text" id="cfgTgToken" placeholder="123456:ABC-DEF..." style="width:100%;font-family:JetBrains Mono,monospace;font-size:.75rem"></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+<button class="btn btn-primary btn-sm" onclick="saveTelegramConfig()">💾 Salva Configurazione</button>
+<button class="btn btn-outline btn-sm" onclick="autoDetectTelegramIds()">🔍 Auto-rileva Chat ID</button>
+<button class="btn btn-outline btn-sm" onclick="openTelegramBot()" id="btnOpenTgBot">🤖 Apri Bot</button>
+</div>
+<div id="tgAutoDetectResult" style="display:none;margin-top:12px"></div>
+</div>
+</div>
+<!-- Card 2: Tecnici Chat IDs -->
+<div class="card" style="margin-top:16px">
+<div class="card-head"><h3>👥 2. Chat ID Tecnici</h3>
+<span id="tgConnectedCount" style="font-size:.75rem;color:var(--gray)"></span>
+</div>
+<div class="card-body">
 <div id="tblTelegramIds"></div>
-<div class="field-row" style="margin-top:16px">
-<div class="field"><label>Test Chat ID</label><input type="text" id="testTgChatId" placeholder="123456789"></div>
+<div class="field-row" style="margin-top:16px;padding-top:12px;border-top:1px solid var(--gray4)">
+<div class="field"><label>Test Chat ID manuale</label><input type="text" id="testTgChatId" placeholder="123456789"></div>
 <div class="field" style="padding-top:24px"><button class="btn btn-outline" onclick="sendTestTelegram()">💬 Invia Test</button></div>
 </div>
-
-<hr style="margin:24px 0;border:none;border-top:1px solid var(--gray3)">
-<h4 style="margin-bottom:12px">📨 Invia Messaggio a Tecnici</h4>
+</div>
+</div>
+<!-- Card 3: Broadcast -->
+<div class="card" style="margin-top:16px">
+<div class="card-head"><h3>📨 3. Invia Messaggio</h3></div>
+<div class="card-body">
 <div class="field"><label>Destinatari</label>
 <select id="tgMsgDest" style="width:100%"><option value="all">🔔 Tutti i tecnici con Chat ID</option></select>
 </div>
 <div class="field"><label>Messaggio</label><textarea id="tgMsgText" rows="3" placeholder="Scrivi il messaggio da inviare via Telegram..."></textarea></div>
-<div style="display:flex;gap:8px">
-<button class="btn btn-outline" onclick="sendTelegramBroadcast()">📨 Invia Messaggio</button>
-<button class="btn btn-outline" onclick="openTelegramBot()" id="btnOpenTgBot" style="display:none">🤖 Apri Bot Telegram</button>
+<button class="btn btn-primary btn-sm" onclick="sendTelegramBroadcast()">📨 Invia Messaggio</button>
 </div>
-
-<hr style="margin:24px 0;border:none;border-top:1px solid var(--gray3)">
-<h4 style="margin-bottom:12px">💬 Chat Gruppo Telegram</h4>
-<div style="padding:12px;background:var(--gray5);border-radius:var(--radius-sm);margin-bottom:12px">
-<p style="font-size:.8125rem;color:var(--gray);margin-bottom:8px">Per accedere alla chat del gruppo, inserisci l'ID o il link del gruppo nella configurazione, poi clicca il bottone per aprire Telegram.</p>
+</div>
+<!-- Card 4: Gruppo -->
+<div class="card" style="margin-top:16px">
+<div class="card-head"><h3>💬 4. Chat Gruppo Telegram</h3></div>
+<div class="card-body">
 <div class="field"><label>Link/ID Gruppo</label><input type="text" id="cfgTgGroup" placeholder="@gruppo o https://t.me/gruppo" style="width:100%"></div>
 <div style="display:flex;gap:8px;margin-top:8px">
 <button class="btn btn-primary btn-sm" onclick="saveTelegramGroup()">💾 Salva</button>
-<button class="btn btn-outline btn-sm" onclick="openTelegramGroup()">💬 Apri Gruppo Telegram</button>
-</div>
+<button class="btn btn-outline btn-sm" onclick="openTelegramGroup()">💬 Apri Gruppo</button>
 </div>
 </div>
 </div>
@@ -1472,14 +1416,18 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div style="display:grid;grid-template-columns:280px 1fr;gap:0;height:calc(100vh - var(--header) - 40px)">
 <!-- Lista Canali -->
 <div class="card" style="border-radius:var(--radius) 0 0 var(--radius);border-right:1px solid #E5E7EB;display:flex;flex-direction:column">
-<div class="card-head" style="flex-shrink:0"><h3>💬 Canali</h3><button class="btn btn-primary btn-xs" onclick="openNewCanale()">+</button></div>
+<div class="card-head" style="flex-shrink:0"><h3>💬 Canali</h3><button class="btn btn-primary btn-xs" onclick="openNewCanale()" title="Crea nuovo canale">+ Nuovo</button></div>
 <div id="chatCanaliList" style="flex:1;overflow-y:auto;padding:4px 0"></div>
 </div>
 <!-- Area Messaggi -->
 <div class="card" style="border-radius:0 var(--radius) var(--radius) 0;display:flex;flex-direction:column">
-<div class="card-head" style="flex-shrink:0"><h3 id="chatTitle">Seleziona un canale</h3><span id="chatMembri" style="font-size:.75rem;color:var(--gray)"></span></div>
+<div class="card-head" style="flex-shrink:0;display:flex;align-items:center;gap:8px">
+<h3 id="chatTitle" style="flex:1">Seleziona un canale</h3>
+<span id="chatMembri" style="font-size:.75rem;color:var(--gray)"></span>
+<span id="chatOnline" style="font-size:.7rem;padding:2px 8px;background:#D1FAE5;color:#10B981;border-radius:10px;display:none">● Live</span>
+</div>
 <div id="chatMessages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px;background:var(--gray5)">
-<div class="empty" style="margin:auto"><p>Seleziona un canale per iniziare</p></div>
+<div class="empty" style="margin:auto"><p>👈 Seleziona un canale per iniziare</p></div>
 </div>
 <div id="adminChatAllegatoPreview" style="display:none;padding:6px 12px;border-top:1px solid #E5E7EB;background:var(--gray5)"></div>
 <div id="chatInput" style="padding:12px;border-top:1px solid #E5E7EB;display:none">
@@ -1819,10 +1767,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="field"><label>Password</label><input type="password" id="nuPassword" placeholder="••••••••"></div>
 </div>
 <div class="field-row">
-<div class="field"><label>Ruolo</label><select id="nuRuolo" onchange="onRuoloChange()"><option value="">Seleziona ruolo</option><option value="admin">Admin</option><option value="caposquadra">Caposquadra</option><option value="tecnico">Tecnico</option><option value="magazziniere">Magazziniere</option><option value="commerciale">Commerciale</option></select></div>
-<div class="field"><label>Livello</label><select id="nuLivello"><option value="">— Seleziona livello —</option><option value="junior">Junior</option><option value="intermedio">Intermedio</option><option value="senior">Senior</option><option value="livello_1">Admin Livello 1</option><option value="livello_2">Admin Livello 2</option></select></div>
-</div>
-<div class="field-row">
+<div class="field"><label>Ruolo</label><select id="nuRuolo"><option value="">Seleziona ruolo</option><option value="admin">Admin</option><option value="caposquadra">Caposquadra</option><option value="tecnico">Tecnico</option><option value="magazziniere">Magazziniere</option><option value="commerciale">Commerciale</option></select></div>
 <div class="field"><label>Squadra</label><select id="nuSquadra"><option value="">Seleziona squadra</option></select></div>
 </div>
 <div class="field-row">
@@ -2279,7 +2224,7 @@ const SEC_RENDERERS = {
   automezzi: renderAutomezzi,
   tecnici: renderTecnici,
   sla: renderSLA,
-  audit: renderAuditLog,
+  auditlog: renderAuditLog,
   powerbi: renderPowerBI,
   config: renderConfig,
   pagellini: renderPagellini,
@@ -2287,8 +2232,8 @@ const SEC_RENDERERS = {
   documenti: renderDocumenti,
   checklist: renderChecklist,
   allegati: renderAllegati,
-  email: renderEmailConfig,
-  telegram: ()=>{renderTelegramConfig();renderTelegramExtras()},
+  emailconfig: renderEmailConfig,
+  telegramconfig: ()=>{renderTelegramConfig();renderTelegramExtras()},
 };
 function lazyRender(secId, force){
   if(!force && _rendered.has(secId)) return;
@@ -3240,7 +3185,7 @@ function renderTecnici(){
     return `<tr>
     <td>${foto}</td>
     <td><strong>${(t.Nome||'')+' '+(t.Cognome||'')}</strong></td>
-    <td><span class="tag ${t.Ruolo==='admin'?'tag-purple':t.Ruolo==='caposquadra'?'tag-info':'tag-gray'}">${t.Ruolo}</span>${t.Livello?` <span style="font-size:.65rem;color:var(--gray)">${t.Livello.replace('_',' ')}</span>`:''}</td>
+    <td><span class="tag ${t.Ruolo==='admin'?'tag-purple':t.Ruolo==='caposquadra'?'tag-info':'tag-gray'}">${t.Ruolo}</span></td>
     <td>${sq?sq.Nome:'—'}</td>
     <td>${t.AutomezzoID||'—'}</td>
     <td>${t.Base||'—'}</td>
@@ -3405,6 +3350,8 @@ async function updateMap(){
   if(!MAP)return;
   const _myId=++_mapUpdateId;
   const stale=()=>_myId!==_mapUpdateId;
+  const loadEl=$('mapLoading');
+  if(loadEl)loadEl.style.display='';
   MARKERS.forEach(m=>MAP.removeLayer(m));MARKERS=[];
   MAP_WAYPOINTS=[]; // reset rich waypoints per slider
   MAP._ffTecRoutes=[]; // reset per-tech routes per animazione multi-furgone
@@ -3484,6 +3431,7 @@ async function updateMap(){
       if(allPts.length>1)MAP.fitBounds(allPts,{padding:[40,40]});
       else if(allPts.length===1)MAP.setView(allPts[0],12);
       $('mapInfo').innerHTML=`🏠 ${placed} clienti geocodificati · seleziona un tecnico per vedere i percorsi`;
+      if(loadEl)loadEl.style.display='none';
       return;
     }
 
@@ -3540,6 +3488,7 @@ async function updateMap(){
     else if(allPts.length===1)MAP.setView(allPts[0],12);
     const tecNomiSel=filtTecArr.map(t=>getName(DATA.utenti||[],t).split(' ')[0]).join(', ');
     $('mapInfo').innerHTML=`🚐 ${tecNomiSel} — ${MAP_WAYPOINTS.length} interventi totali`;
+    if(loadEl)loadEl.style.display='none';
     return;
   }
 
@@ -3622,6 +3571,7 @@ async function updateMap(){
     _setGiroBtn((MAP._ffRouteCoords||[]).length>1);
   }
   _updateMapSlider(MAP_WAYPOINTS);
+  if(loadEl)loadEl.style.display='none';
 }
 
 function openGoogleMaps(){
@@ -3971,6 +3921,13 @@ async function openChat(canaleId,nome){
   CHAT_CANALE=canaleId;
   $('chatTitle').textContent=(nome||canaleId);
   $('chatInput').style.display='block';
+  const onlineEl=$('chatOnline');if(onlineEl)onlineEl.style.display='';
+  // Show member count
+  const membriEl=$('chatMembri');
+  if(membriEl){
+    const tecCount=(DATA.utenti||[]).filter(u=>u.Attivo&&u.Attivo!=='false').length;
+    membriEl.textContent='👥 '+tecCount+' membri';
+  }
   loadChatCanali();// refresh sidebar highlight
   await loadChatMessages();
   // Polling ogni 5s — skip se tab nascosta o fuori dalla sezione chat
@@ -3989,15 +3946,20 @@ async function loadChatMessages(){
     const msgs=r.messaggi||[];
     const el=$('chatMessages');
     const wasAtBottom=el.scrollHeight-el.scrollTop-el.clientHeight<50;
+    let lastDate='';
     el.innerHTML=msgs.length?msgs.map(m=>{
       const isMine=m.MittenteID===USER?.ID;
       const nome=getName(DATA.utenti||[],m.MittenteID);
-      const ora=m.CreatedAt?new Date(m.CreatedAt).toLocaleString('it-IT',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'}):'';
-      return `<div style="display:flex;flex-direction:column;align-items:${isMine?'flex-end':'flex-start'};max-width:75%${isMine?';margin-left:auto':''}">
+      const dt=m.CreatedAt?new Date(m.CreatedAt):null;
+      const ora=dt?dt.toLocaleString('it-IT',{hour:'2-digit',minute:'2-digit'}):'';
+      const dateStr=dt?dt.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'}):'';
+      let dateSep='';
+      if(dateStr&&dateStr!==lastDate){lastDate=dateStr;dateSep=`<div style="text-align:center;margin:12px 0 8px"><span style="font-size:.7rem;padding:3px 12px;background:var(--gray4);border-radius:10px;color:var(--gray)">${dateStr}</span></div>`}
+      return `${dateSep}<div style="display:flex;flex-direction:column;align-items:${isMine?'flex-end':'flex-start'};max-width:75%${isMine?';margin-left:auto':''}">
         <div style="font-size:.6875rem;color:var(--gray);margin-bottom:2px">${isMine?'':nome+' · '}${ora}</div>
         <div style="background:${isMine?'var(--c1)':'var(--white)'};color:${isMine?'white':'var(--dark)'};padding:8px 14px;border-radius:${isMine?'16px 16px 4px 16px':'16px 16px 16px 4px'};font-size:.8125rem;box-shadow:0 1px 2px rgba(0,0,0,.06);word-break:break-word">${formatChatMsg(m.Testo||'',isMine)}</div>
       </div>`;
-    }).join(''):'<div style="margin:auto;color:var(--gray);font-size:.8125rem">Nessun messaggio. Scrivi il primo! 👋</div>';
+    }).join(''):'<div style="margin:auto;text-align:center;color:var(--gray)"><div style="font-size:2rem;margin-bottom:8px">💬</div><div style="font-size:.8125rem">Nessun messaggio in questo canale.<br>Scrivi il primo!</div></div>';
     if(wasAtBottom)el.scrollTop=el.scrollHeight;
   }catch(e){console.error('Chat load error:',e)}
 }
@@ -4626,7 +4588,6 @@ function editUtente(id){
   $('nuNome').value=u.Nome||'';$('nuCognome').value=u.Cognome||'';
   $('nuUsername').value=u.Username||'';$('nuPassword').value='';
   $('nuRuolo').value=u.Ruolo||'tecnico';
-  $('nuLivello').value=u.Livello||'';onRuoloChange();
   $('nuSquadra').value=u.SquadraID||'';$('nuAutomezzo').value=u.AutomezzoID||'';
   $('nuBase').value=u.Base||'';$('nuTelefono').value=u.Telefono||'';$('nuEmail').value=u.Email||'';
   document.querySelector('#modalUtente .modal-head h2').textContent='✏️ Modifica Utente';
@@ -4666,21 +4627,7 @@ function editAutomezzo(id){
 }
 
 // ============ RESET MODAL ON NEW ============
-function onRuoloChange(){
-  const r=$('nuRuolo').value;const lv=$('nuLivello');
-  // Mostra opzioni pertinenti
-  const opts=lv.querySelectorAll('option');
-  opts.forEach(o=>{
-    if(o.value==='')return;
-    if(r==='admin')o.style.display=['livello_1','livello_2'].includes(o.value)?'':'none';
-    else if(r==='tecnico')o.style.display=['junior','intermedio','senior'].includes(o.value)?'':'none';
-    else o.style.display='none';
-  });
-  if(r==='admin'&&!['livello_1','livello_2'].includes(lv.value))lv.value='livello_2';
-  if(r==='tecnico'&&!['junior','intermedio','senior'].includes(lv.value))lv.value='';
-  if(r!=='admin'&&r!=='tecnico')lv.value='';
-}
-function openNewUtente(){EDITING.utente=null;['nuNome','nuCognome','nuUsername','nuPassword','nuBase','nuTelefono','nuEmail'].forEach(id=>{if($(id))$(id).value=''});$('nuRuolo').value='tecnico';$('nuLivello').value='';onRuoloChange();$('nuSquadra').value='';$('nuAutomezzo').value='';$('resetPwdBox').style.display='none';document.querySelector('#modalUtente .modal-head h2').textContent='👤 Nuovo Utente';openModal('modalUtente')}
+function openNewUtente(){EDITING.utente=null;['nuNome','nuCognome','nuUsername','nuPassword','nuBase','nuTelefono','nuEmail'].forEach(id=>{if($(id))$(id).value=''});$('nuRuolo').value='tecnico';$('nuSquadra').value='';$('nuAutomezzo').value='';$('resetPwdBox').style.display='none';document.querySelector('#modalUtente .modal-head h2').textContent='👤 Nuovo Utente';openModal('modalUtente')}
 function openNewCliente(){EDITING.cliente=null;['ncNome','ncCitta','ncProv','ncIndirizzo','ncCap','ncTelefono','ncEmail','ncContratto','ncNote'].forEach(id=>{if($(id))$(id).value=''});document.querySelector('#modalCliente .modal-head h2').textContent='🏢 Nuovo Cliente';openModal('modalCliente')}
 function openNewMacchina(){EDITING.macchina=null;['nmTipo','nmModello','nmSeriale','nmAnno','nmOre','nmUltimoTag','nmProssTag','nmGaranzia','nmNote'].forEach(id=>{if($(id))$(id).value=''});$('nmCliente').value='';document.querySelector('#modalMacchina .modal-head h2').textContent='⚙️ Nuova Macchina';openModal('modalMacchina')}
 function openNewAutomezzo(){EDITING.automezzo=null;['naTarga','naDesc','naAllestimento','naKm','naControllo','naNote'].forEach(id=>{if($(id))$(id).value=''});$('naStatus').value='disponibile';$('naAssegnatario').value='';document.querySelector('#modalAutomezzo .modal-head h2').textContent='🚐 Nuovo Automezzo';openModal('modalAutomezzo')}
@@ -4692,7 +4639,6 @@ async function saveUtente(){
     Cognome:$('nuCognome').value,
     Username:$('nuUsername').value,
     Ruolo:$('nuRuolo').value,
-    Livello:$('nuLivello').value||null,
     SquadraID:$('nuSquadra').value||null,
     AutomezzoID:$('nuAutomezzo').value||null,
     Base:$('nuBase').value||null,
@@ -4814,43 +4760,7 @@ async function saveAutomezzo(){
   }catch(e){toast(e.message,'err')}
 }
 
-// ============ SAVE FUNCTIONS ============
-async function saveOrdine(){
-  const data={Codice:$('moCodice').value,Descrizione:$('moDesc').value,Quantita:$('moQta').value,TecnicoID:$('moTecnico').value,ClienteID:$('moCliente').value,Note:$('moNote').value};
-  if(!data.Codice){toast('Inserisci il codice ricambio','warn');return}
-  try{await apiCall('createOrdine',{data},'POST');toast('Ordine creato!','ok');closeModal('modalOrdine');await refreshData(true)}catch(e){toast(e.message,'err')}
-}
-
-async function saveRep(){
-  const data={TecnicoID:$('mrTecnico').value,DataInizio:$('mrDal').value,DataFine:$('mrAl').value,Turno:$('mrTurno').value,Tipo:$('mrTipo').value,Note:$('mrNote').value,Stato:'attiva'};
-  if(!data.TecnicoID||!data.DataInizio||!data.DataFine){toast('Compila tecnico e date','warn');return}
-  try{await apiCall('createReperibilita',{data},'POST');toast('Turno creato!','ok');closeModal('modalRep');await refreshData(true)}catch(e){toast(e.message,'err')}
-}
-
-async function saveTrasf(){
-  const data={TecniciIDs:[...($('mtTecnici').selectedOptions||[])].map(o=>o.value),ClienteID:$('mtCliente').value,DataInizio:$('mtDal').value,DataFine:$('mtAl').value,AutomezzoID:$('mtAutomezzo').value,Motivo:$('mtMotivo').value};
-  if(!data.TecniciIDs.length||!data.ClienteID||!data.DataInizio){toast('Compila tecnici, cliente e data inizio','warn');return}
-  try{await apiCall('createTrasferta',{data},'POST');toast('Trasferta creata!','ok');closeModal('modalTrasf');await refreshData(true)}catch(e){toast(e.message,'err')}
-}
-
-async function saveNotifica(){
-  const destIds=[...($('mnDest').selectedOptions||[])].map(o=>o.value); 
-  const data={destinatariIds:destIds,tipo:$('mnTipo').value,oggetto:$('mnOgg').value,messaggio:$('mnMsg').value};
-  if(!destIds.length||!data.oggetto){toast('Seleziona destinatari e oggetto','warn');return}
-  try{await apiCall('createNotifica',data,'POST');toast('Notifica inviata!','ok');closeModal('modalNotifica');await refreshData(true)}catch(e){toast(e.message,'err')}
-}
-
-async function savePagellino(){
-  const voci=[...$('pagVoci').querySelectorAll('.pag-voce')].map(div=>({
-    voce:div.querySelector('.pv-voce')?.value||'',
-    categoria:div.querySelector('.pv-cat')?.value||'generale',
-    voto:parseFloat(div.querySelector('.pv-voto')?.value)||3,
-    peso:parseFloat(div.querySelector('.pv-peso')?.value)||1
-  })).filter(v=>v.voce.trim());
-  const data={tecnicoId:$('mgTecnico').value,periodo:$('mgPeriodo').value,dataRilevazione:$('mgData').value||today(),valutatoreId:USER?.ID,notaComplessiva:$('mgNota').value,voci};
-  if(!data.tecnicoId||voci.length===0){toast('Seleziona tecnico e aggiungi almeno una voce','warn');return}
-  try{await apiCall('createPagellino',{data},'POST');toast('Pagellino creato!','ok');closeModal('modalPagellino');await refreshData(true)}catch(e){toast(e.message,'err')}
-}
+// ============ SAVE FUNCTIONS (dedup — le versioni aggiornate sono più avanti) ============
 
 
 
@@ -5326,12 +5236,8 @@ async function runAI(){
         };
       });
     }
-    // ENGINE: Deterministic Scheduler (istantaneo, 0 API key necessarie)
-    // Fallback: AI (se prompt utente specifico richiede creatività)
-    const useSmartEngine=!prompt.trim(); // usa scheduler se nessun prompt custom
-    const _action=useSmartEngine?'generatePlanSmart':'generateAIPlan';
-    const _aiTimeout=useSmartEngine?30000:(modalita==='mese'?300000:120000);
-    const _aiResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action:_action,userId:USER?.ID||'',vincoli:{testo:prompt,files:filesData,mese_target:meseTarget,modalita,settimana,ctx:ctxFlags,piano_esistente:pianoEsistente}}),signal:AbortSignal.timeout(_aiTimeout)});
+    // Direct fetch con timeout 120s (apiCall ha 30s hardcoded — insufficiente per Workers AI)
+    const _aiResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:{testo:prompt,files:filesData,mese_target:meseTarget,modalita,settimana,ctx:ctxFlags,piano_esistente:pianoEsistente}}),signal:AbortSignal.timeout(120000)});
     const _aiJson=await _aiResp.json();
     if(!_aiJson.success)throw new Error(_aiJson.error||'Errore AI');
     const result=_aiJson.data||_aiJson;
@@ -5346,10 +5252,8 @@ async function runAI(){
     const nGiorni=[...new Set(piano.map(p=>p.data))].length;
     const nTecnici=[...new Set(piano.map(p=>p.tecnicoId||p.tecnico))].length;
     // Header con KPI
-    const engineLabel=result.engine==='deterministic'?'⚡ Scheduler Deterministico':'🤖 AI';
-    const engineColor=result.engine==='deterministic'?'#009B83,#00C9A7':'#3B7EF7,#6366F1';
-    html+=`<div style="background:linear-gradient(135deg,${engineColor});color:white;border-radius:var(--radius-lg);padding:24px;margin-bottom:16px">
-      <h3 style="margin:0 0 4px;font-size:1.25rem">📋 Piano Generato — ${engineLabel}</h3>
+    html+=`<div style="background:linear-gradient(135deg,#009B83,#00C9A7);color:white;border-radius:var(--radius-lg);padding:24px;margin-bottom:16px">
+      <h3 style="margin:0 0 4px;font-size:1.25rem">📋 Piano Generato con AI</h3>
       <p style="margin:0;opacity:.85;font-size:.85rem">${result.summary||''}</p>
       <div style="display:flex;gap:24px;margin-top:16px">
         <div><span style="font-size:1.75rem;font-weight:700">${piano.length}</span><br><span style="font-size:.75rem;opacity:.7">Interventi</span></div>
@@ -5421,13 +5325,10 @@ async function runAI(){
       ${result.chunks?`<span style="font-size:.75rem;color:var(--gray);align-self:center">Generato in ${result.chunks} chunk settimanali</span>`:''}
     </div>`;
     $('aiResult').innerHTML=html;
-    // Admin può applicare direttamente, caposquadra deve passare per approvazione
-    const _curUser = USER||{};
-    const _isAdmin = _curUser.Ruolo==='admin';
-    $('btnApplyAI').disabled=!_isAdmin; // Solo admin può applicare senza approvazione
+    $('btnApplyAI').disabled=false;
     $('btnSubmitPlan').disabled=false;
     $('btnDownloadPlan').disabled=false;
-    toast(`Piano generato: ${piano.length} interventi, ${nGiorni} giorni${_isAdmin?'':' — Invia per approvazione per attivarlo'}`,'ok');
+    toast(`Piano generato: ${piano.length} interventi, ${nGiorni} giorni`,'ok');
   }catch(e){
     $('aiResult').innerHTML=`<div style="padding:16px;background:rgba(239,68,68,.1);border:1px solid var(--err);border-radius:var(--radius)">
       <strong>❌ Errore</strong><br>${e.message}<br><span style="font-size:.75rem;color:var(--gray)">Prova con un prompt più breve o riprova tra qualche secondo.</span>
@@ -5583,41 +5484,21 @@ async function applyAI(forceOverwrite){
 }
 
 // ============ WORKFLOW APPROVATIVO ============
-// Stato globale approvazione
-let PENDING_APPROVAL = null; // { id, piano, stato, ... }
-
 async function submitAIPlanForApproval(){
   if(!AI_PLAN){toast('Genera prima un piano','warn');return}
-  const currentUser=USER||{};
-  // Raccogli il piano corrente (potrebbe essere stato modificato con D&D nel calendario)
-  const previewItems = (DATA.piano||[]).filter(p=>p._aiPreview);
-  let pianoToSend = AI_PLAN;
-  if(previewItems.length) {
-    // Sincronizza: il piano nel calendario (post-D&D) è la versione più aggiornata
-    pianoToSend = { ...AI_PLAN, piano: previewItems.map(p=>({
-      data:p.Data, tecnico:getName(DATA.utenti||[],p.TecnicoID), tecnicoId:p.TecnicoID,
-      cliente:p.Note||p.ClienteID||'', clienteId:p.ClienteID, tipo:p.TipoIntervento||'service',
-      oraInizio:p.OraInizio||'08:00', durataOre:p.DurataOre||2, note:p.Note||'', furgone:''
-    }))};
-  }
+  const currentUser=SESSION?.user||{};
   try{
     const id='APR_'+Date.now();
-    const meseTarget = $('aiMese')?.value || '';
     await apiCall('createApproval',{
-      id, piano:pianoToSend, mese:meseTarget,
-      creato_da:currentUser.ID||'admin',
-      ruolo_creatore:currentUser.Ruolo||'admin',
+      id, piano:AI_PLAN,
+      creato_da:currentUser.id||'admin',
+      ruolo_creatore:currentUser.ruolo||'admin',
       stato:'in_attesa',
       data_creazione:new Date().toISOString()
     },'POST');
     toast('Piano inviato per approvazione!','ok');
     $('btnSubmitPlan').disabled=true;
-    $('btnApplyAI').disabled=true; // Lock apply finche' non approvato
     renderApprovalQueue();
-    // Notifica Telegram al gruppo
-    try { await apiCall('sendTelegramMsg',{chatId:'-5236723213',
-      text:`📋 *Nuovo Piano in Approvazione*\n\n👤 Inviato da: ${currentUser.Nome||'Admin'}\n📅 Mese: ${meseTarget}\n📊 ${(pianoToSend.piano||[]).length} interventi\n\n_Apri Syntoniqa Admin per approvare/rifiutare_`
-    },'POST'); } catch(e){}
   }catch(e){toast(e.message,'err')}
 }
 
@@ -5630,30 +5511,19 @@ async function renderApprovalQueue(){
       tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--gray)">Nessun piano in iter approvativo</td></tr>';
       return;
     }
-    const currentUser=USER||{};
-    const canReview = currentUser.Ruolo==='admin'||currentUser.Ruolo==='caposquadra';
     tbody.innerHTML=approvals.map(a=>{
-      const isOwn = a.creato_da===currentUser.ID;
-      // Admin può auto-approvare, caposquadra NO (serve approvazione admin)
-      const isSelfCapo = isOwn && currentUser.Ruolo==='caposquadra';
-      const canApprove = canReview && a.stato==='in_attesa' && !isSelfCapo;
-      const stCol={'in_attesa':'#F59E0B','approvato':'#10B981','rifiutato':'#EF4444'}[a.stato]||'#6B7280';
+      const currentUser=SESSION?.user||{};
+      const canApprove=(currentUser.ruolo==='admin'||currentUser.ruolo==='caposquadra')&&a.stato==='in_attesa';
       return `<tr>
-        <td><code style="font-size:.7rem">${a.id}</code></td>
+        <td><code>${a.id}</code></td>
         <td>${fmtDate(a.data_creazione)}</td>
-        <td>${a.creato_da_nome||a.creato_da||'?'}${isOwn?' <span style="font-size:.65rem;color:var(--c1)">(tu)</span>':''}</td>
-        <td><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:12px;font-size:.75rem;background:${stCol}18;color:${stCol};font-weight:600">${a.stato.replace('_',' ')}</span></td>
+        <td>${a.creato_da_nome||a.creato_da||'?'}</td>
+        <td>${statusTag(a.stato)}</td>
         <td>${a.approvato_da_nome||a.approvato_da||'—'}</td>
         <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${a.note_approvazione||'—'}</td>
-        <td style="white-space:nowrap">
-          <button class="btn btn-xs" style="background:#3B82F6;color:white" onclick="viewApprovalInCalendar('${a.id}')">📅 Vedi</button>
-          ${canApprove?`<button class="btn btn-xs btn-ok" onclick="approveOrReject('${a.id}','approvato')">✅</button> <button class="btn btn-xs btn-err" onclick="approveOrReject('${a.id}','rifiutato')">❌</button>`:''}
-        </td>
+        <td>${canApprove?`<button class="btn btn-xs btn-ok" onclick="approveOrReject('${a.id}','approvato')">✅</button> <button class="btn btn-xs btn-err" onclick="approveOrReject('${a.id}','rifiutato')">❌</button>`:`<button class="btn btn-xs btn-ghost" onclick="viewApprovalPlan('${a.id}')">👁️</button>`}</td>
       </tr>`;
     }).join('');
-    // Se c'e' un piano in_attesa, blocca il bottone Applica
-    const hasPending = approvals.some(a=>a.stato==='in_attesa');
-    if(hasPending && $('btnApplyAI')) $('btnApplyAI').disabled=true;
   }catch(e){
     tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--gray)">Approvazioni non ancora configurate</td></tr>';
   }
@@ -5662,101 +5532,56 @@ async function renderApprovalQueue(){
 async function approveOrReject(id,stato){
   const note=stato==='rifiutato'?prompt('Motivo del rifiuto:'):null;
   if(stato==='rifiutato'&&note===null)return;
-  const currentUser=USER||{};
-  // Caposquadra non può auto-approvare il proprio piano
-  if(stato==='approvato' && PENDING_APPROVAL && PENDING_APPROVAL.creato_da===currentUser.ID && currentUser.Ruolo==='caposquadra'){
-    toast('Non puoi approvare il tuo stesso piano — serve approvazione di un admin','warn');return;
-  }
-  // Se il piano e' stato modificato con D&D nel calendario, salva le modifiche
-  let updatedPiano = null;
-  if(PENDING_APPROVAL && PENDING_APPROVAL.id === id) {
-    const previewItems = (DATA.piano||[]).filter(p=>p._aiPreview);
-    if(previewItems.length) {
-      updatedPiano = previewItems.map(p=>({
-        data:p.Data, tecnico:getName(DATA.utenti||[],p.TecnicoID), tecnicoId:p.TecnicoID,
-        cliente:p.Note||p.ClienteID||'', clienteId:p.ClienteID, tipo:p.TipoIntervento||'service',
-        oraInizio:p.OraInizio||'08:00', durataOre:p.DurataOre||2, note:p.Note||'', furgone:''
-      }));
-    }
-  }
+  const currentUser=SESSION?.user||{};
   try{
-    const payload = {
+    await apiCall('updateApproval',{
       id, stato,
-      approvato_da:currentUser.ID||'admin',
+      approvato_da:currentUser.id||'admin',
       note_approvazione:note||'',
       data_approvazione:new Date().toISOString()
-    };
-    // Se l'approvatore ha fatto modifiche D&D, salva il piano aggiornato
-    if(updatedPiano && PENDING_APPROVAL) {
-      payload.piano = { ...PENDING_APPROVAL, piano: updatedPiano };
-      payload.modifiche_approvatore = `Modificato da ${currentUser.Nome||currentUser.ID} prima di ${stato==='approvato'?'approvare':'rifiutare'}`;
-    }
-    await apiCall('updateApproval',payload,'POST');
-    toast(stato==='approvato'?'Piano approvato! Ora puoi applicarlo al sistema.':'Piano rifiutato — il creatore ricevera il feedback.','ok');
-    // Se approvato, abilita Applica e carica il piano nell'AI_PLAN
-    if(stato==='approvato') {
-      if(updatedPiano && PENDING_APPROVAL) AI_PLAN = { ...PENDING_APPROVAL, piano: updatedPiano };
-      else if(PENDING_APPROVAL) AI_PLAN = PENDING_APPROVAL;
-      if($('btnApplyAI')) $('btnApplyAI').disabled=false;
-      // Notifica Telegram
+    },'POST');
+    toast(stato==='approvato'?'Piano approvato!':'Piano rifiutato','ok');
+    renderApprovalQueue();
+    // Se approvato, notifica tecnici via Telegram
+    if(stato==='approvato'){
       try{ await apiCall('notifyPlanApproved',{approval_id:id},'POST'); }catch(e){}
     }
-    PENDING_APPROVAL = null;
-    // Pulisci preview dal calendario
-    if(DATA.piano) DATA.piano = DATA.piano.filter(p=>!p._aiPreview);
-    renderApprovalQueue();
-    if(typeof renderMonthPlan==='function') renderMonthPlan();
   }catch(e){toast(e.message,'err')}
 }
 
-async function viewApprovalInCalendar(id){
+async function viewApprovalPlan(id){
   try{
     const data=await apiCall('getApproval',{id},'POST');
-    if(!data) { toast('Approvazione non trovata','err'); return; }
-    PENDING_APPROVAL = data;
-    // Carica il piano nel calendario come preview
-    if(data.piano && Array.isArray(data.piano.piano)){
-      AI_PLAN = data.piano;
-      // Pulisci vecchi preview
-      if(DATA.piano) DATA.piano = DATA.piano.filter(p=>!p._aiPreview);
-      // Setta mese corretto
-      const firstDate = data.piano.piano[0]?.data;
-      if(firstDate){
-        const parts=firstDate.split('-');
-        MONTH_DATE=new Date(parseInt(parts[0]),parseInt(parts[1])-1,1);
+    if(data&&data.piano){
+      AI_PLAN=data.piano;
+      // Scroll to AI result and show
+      $('aiResult').style.display='block';
+      if(typeof data.piano==='object'&&data.piano.piano){
+        let html='<h4>📋 Piano #'+id+'</h4>';
+        if(Array.isArray(data.piano.piano)){
+          html+='<table class="tbl" style="font-size:.8125rem"><thead><tr><th>Data</th><th>Tecnico</th><th>Cliente</th><th>Tipo</th></tr></thead><tbody>';
+          data.piano.piano.forEach(r=>{html+=`<tr><td>${r.data||''}</td><td>${r.tecnico||''}</td><td>${r.cliente||''}</td><td>${r.tipo||''}</td></tr>`;});
+          html+='</tbody></table>';
+        }
+        $('aiResult').innerHTML=html;
+      } else {
+        $('aiResult').textContent=JSON.stringify(data.piano,null,2);
       }
-      // Aggiungi preview items (draggable!)
-      const previews = data.piano.piano.map(p=>({
-        ID:'AI_PRV_'+Math.random().toString(36).slice(2,8),
-        TecnicoID:p.tecnicoId, ClienteID:p.clienteId||'',
-        Data:p.data, OraInizio:p.oraInizio||'08:00', DurataOre:p.durataOre||2,
-        TipoIntervento:p.tipo||'service', Note:p.note||p.cliente||'',
-        Stato:'pianificato', Origine:'ai_preview', Obsoleto:false, _aiPreview:true
-      }));
-      if(!DATA.piano) DATA.piano=[];
-      DATA.piano.push(...previews);
-      // Vai alla sezione Piano Mensile
-      showSec('pianomensile');
-      toast(`📅 Piano #${id} caricato nel calendario (${previews.length} interventi) — Usa drag & drop per modificare, poi approva/rifiuta dalla sezione AI Planner`,'ok');
-    } else {
-      toast('Piano non contiene interventi strutturati','warn');
+      $('btnApplyAI').disabled=data.stato!=='approvato';
     }
   }catch(e){toast(e.message,'err')}
 }
-
-// Retrocompatibilita
-async function viewApprovalPlan(id){ await viewApprovalInCalendar(id); }
 
 // ============ VISTA TECNICO: PIANO PERSONALE ============
 async function renderTecnicoPlan(){
   const grid=$('tecnicoPlanGrid');if(!grid)return;
   const view=$('tecViewSelect')?.value||'mio';
-  const currentUser=USER||{};
+  const currentUser=SESSION?.user||{};
   const piano=(DATA.piano||[]).filter(p=>!p.Obsoleto);
   const utenti=DATA.utenti||[];
 
   if(view==='mio'){
-    const myPlan=piano.filter(p=>p.TecnicoID===currentUser.ID);
+    const myPlan=piano.filter(p=>p.TecnicoID===currentUser.id);
     if(!myPlan.length){grid.innerHTML='<p style="padding:24px;text-align:center;color:var(--gray)">Nessun intervento assegnato a te</p>';return}
     // Group by date
     const byDate={};
@@ -5792,7 +5617,7 @@ async function renderTecnicoPlan(){
     let html='';
     Object.entries(byTec).forEach(([tecId,items])=>{
       const tecName=getName(utenti,tecId)||tecId;
-      const isMine=tecId===currentUser.ID;
+      const isMine=tecId===currentUser.id;
       html+=`<div style="padding:10px 16px;background:${isMine?'rgba(99,102,241,.1)':'var(--gray1)'};font-weight:600;font-size:.875rem;border-bottom:1px solid var(--gray2)">${isMine?'⭐':'👷'} ${tecName} (${items.length}) ${isMine?'— Il tuo piano':''}</div>`;
       items.forEach(p=>{
         html+=`<div style="padding:8px 16px;border-bottom:1px solid var(--gray1);font-size:.8125rem;display:flex;justify-content:space-between;align-items:center">
@@ -6189,265 +6014,19 @@ function printReport(){
   w.print();
 }
 
-// ============ PM SCHEDULING — CALENDARIO MULTI-TAGLIANDO ============
-let PM_CAL_MONTH = null; // {year, month}
-let PM_CAL_DATA = null;  // cached calendar data
-
+// ============ PM SCHEDULING ============
 function initPMSection(){
-  // Set default month to current
-  const d=new Date();
-  PM_CAL_MONTH={year:d.getFullYear(),month:d.getMonth()+1};
-  const el=$('pmMeseTarget'); if(el) el.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-  // Populate ALL client dropdowns in PM section
-  const opts=(DATA.clienti||[]).map(c=>`<option value="${c.ID}">${c.Nome||c.ID}</option>`).join('');
-  ['pmCliente','pmCalCliente'].forEach(id=>{
-    const sel=$(id);
-    if(sel) sel.innerHTML='<option value="">Tutti i clienti</option>'+opts;
-  });
-  // Load calendar
-  loadPMCalendar();
-}
-
-function switchPmTab(tab,btn){
-  document.querySelectorAll('.pm-tab-content').forEach(el=>el.style.display='none');
-  document.querySelectorAll('.pm-tab').forEach(b=>{b.style.borderBottom='none';b.style.color='var(--gray)';b.style.fontWeight='500'});
-  const target=$('pmTab'+tab.charAt(0).toUpperCase()+tab.slice(1));
-  if(target) target.style.display='block';
-  if(btn){btn.style.borderBottom='2px solid var(--primary)';btn.style.color='var(--text)';btn.style.fontWeight='600'}
-  // Lazy init
-  if(tab==='calendar') loadPMCalendar();
-  if(tab==='cycles') loadPMCycleDefs();
-  if(tab==='scadenze') renderPMTagliandi();
-}
-
-function pmCalPrev(){PM_CAL_MONTH.month--;if(PM_CAL_MONTH.month<1){PM_CAL_MONTH.month=12;PM_CAL_MONTH.year--}loadPMCalendar()}
-function pmCalNext(){PM_CAL_MONTH.month++;if(PM_CAL_MONTH.month>12){PM_CAL_MONTH.month=1;PM_CAL_MONTH.year++}loadPMCalendar()}
-
-async function loadPMCalendar(){
-  const m=PM_CAL_MONTH;
-  if(!m) return;
-  const meseStr=m.year+'-'+String(m.month).padStart(2,'0');
-  const mesi=['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
-  $('pmCalTitle').textContent=mesi[m.month-1]+' '+m.year;
-  $('pmCalGrid').innerHTML='<p style="color:var(--gray);font-size:.85rem">⏳ Caricamento calendario PM...</p>';
-  try{
-    const clienteId=$('pmCalCliente')?.value||'';
-    const r=await apiCall('getPMCalendar',{mese_target:meseStr,cliente_id:clienteId||undefined,userId:USER?.ID},'POST');
-    PM_CAL_DATA=r;
-    renderPMCalendarGrid(r,meseStr);
-  }catch(e){
-    $('pmCalGrid').innerHTML='<p style="color:var(--danger);font-size:.85rem">❌ '+esc(e.message)+'</p>';
+  // Set default month to next month
+  const d=new Date(); d.setMonth(d.getMonth()+1);
+  const el=$('pmMeseTarget'); if(el)el.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  // Populate client dropdown
+  const sel=$('pmCliente');
+  if(sel){
+    const opts=(DATA.clienti||[]).map(c=>`<option value="${c.ID}">${c.Nome||c.ID}</option>`).join('');
+    sel.innerHTML='<option value="">Tutti i clienti</option>'+opts;
   }
+  renderPMTagliandi();
 }
-
-function getCicloColor(tipo){
-  const colors={
-    'A1':{bg:'#DBEAFE',fg:'#1E40AF'},
-    'A3':{bg:'#FEF9C3',fg:'#854D0E'},
-    'A5':{bg:'#FEF9C3',fg:'#854D0E'},
-    'A7':{bg:'#FEF9C3',fg:'#854D0E'},
-    'B2':{bg:'#DBEAFE',fg:'#1E40AF'},
-    'B6':{bg:'#DBEAFE',fg:'#1E40AF'},
-    'C4':{bg:'#FFEDD5',fg:'#9A3412'},
-    'D8':{bg:'#FEE2E2',fg:'#991B1B'}
-  };
-  return colors[tipo]||{bg:'#F3F4F6',fg:'#374151'};
-}
-
-function getStatoBadge(stato){
-  if(stato==='completato') return {icon:'✅',bg:'rgba(34,197,94,.12)',fg:'#166534'};
-  if(stato==='pianificato') return {icon:'🟦',bg:'rgba(59,130,246,.1)',fg:'#1D4ED8'};
-  if(stato==='in_corso') return {icon:'🔄',bg:'rgba(234,179,8,.1)',fg:'#92400E'};
-  return {icon:'⬜',bg:'rgba(148,163,184,.08)',fg:'#64748B'}; // futuro
-}
-
-function renderPMCalendarGrid(data,meseStr){
-  const cal=data?.calendar||[];
-  if(!cal.length){
-    $('pmCalGrid').innerHTML=`<div style="text-align:center;padding:40px 20px">
-      <p style="font-size:1.2rem;margin-bottom:8px">📭 Nessun tagliando in questo mese</p>
-      <p style="color:var(--gray);font-size:.85rem;margin-bottom:16px">Nessuna macchina ha tagliandi scaduti o in scadenza in ${meseStr}.</p>
-      <p style="color:var(--gray);font-size:.8rem">Prova a cambiare mese o vai alla tab <b>⚡ Genera PM</b> per creare interventi.</p>
-    </div>`;
-    return;
-  }
-
-  // Raggruppa per cliente
-  const byCliente={};
-  cal.forEach(m=>{
-    const cli=m.cliente_nome||'Senza cliente';
-    if(!byCliente[cli]) byCliente[cli]=[];
-    byCliente[cli].push(m);
-  });
-
-  // Calcola giorni del mese
-  const [y,mo]=meseStr.split('-').map(Number);
-  const daysInMonth=new Date(y,mo,0).getDate();
-  const today=new Date().toISOString().split('T')[0];
-
-  // Conteggi
-  let totalPM=0, scaduti=0, pianificati=0;
-  cal.forEach(m=>{
-    m.prossimi.forEach(p=>{
-      if(p.data>=meseStr+'-01'&&p.data<=meseStr+'-'+String(daysInMonth).padStart(2,'0')){
-        totalPM++;
-        if(p.stato==='pianificato') pianificati++;
-        if(p.data<today&&p.stato!=='completato') scaduti++;
-      }
-    });
-  });
-
-  let html=`<div style="display:flex;gap:16px;margin-bottom:16px">
-    <div style="padding:8px 16px;border-radius:8px;background:rgba(99,102,241,.08);font-size:.8rem"><b>${totalPM}</b> tagliandi nel mese</div>
-    <div style="padding:8px 16px;border-radius:8px;background:rgba(34,197,94,.08);font-size:.8rem"><b>${pianificati}</b> pianificati</div>
-    ${scaduti?`<div style="padding:8px 16px;border-radius:8px;background:rgba(220,38,38,.08);font-size:.8rem"><b>${scaduti}</b> scaduti</div>`:''}
-    <div style="padding:8px 16px;border-radius:8px;background:rgba(148,163,184,.08);font-size:.8rem"><b>${cal.length}</b> macchine</div>
-  </div>`;
-
-  // Timeline view: una riga per cliente, colonne per giorni con PM badges
-  html+=`<div style="overflow-x:auto"><table class="data-table" style="font-size:.75rem;white-space:nowrap">
-  <thead><tr><th style="position:sticky;left:0;background:var(--surface);z-index:2;min-width:180px">Macchina / Cliente</th>
-  <th style="min-width:80px">Modello</th><th style="min-width:60px">Ciclo</th><th style="min-width:60px">Pos.</th>`;
-
-  // Date columns - show week markers
-  for(let d=1;d<=daysInMonth;d++){
-    const dt=new Date(y,mo-1,d);
-    const dow=dt.getDay(); // 0=dom
-    const isWeekend=dow===0||dow===6;
-    const isToday=`${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`===today;
-    html+=`<th style="text-align:center;min-width:32px;padding:4px 2px;${isWeekend?'background:rgba(148,163,184,.06);':''}${isToday?'background:rgba(234,179,8,.15);font-weight:800;':''}font-size:.65rem">${d}<br><span style="color:var(--gray);font-size:.55rem">${['Do','Lu','Ma','Me','Gi','Ve','Sa'][dow]}</span></th>`;
-  }
-  html+=`</tr></thead><tbody>`;
-
-  // Righe per cliente (accordion)
-  const sortedClienti=Object.keys(byCliente).sort();
-  sortedClienti.forEach(cli=>{
-    const macchine=byCliente[cli];
-    // Riga header cliente
-    html+=`<tr style="background:rgba(99,102,241,.04)"><td colspan="${4+daysInMonth}" style="font-weight:700;font-size:.8rem;padding:8px 12px;position:sticky;left:0;background:rgba(99,102,241,.04);cursor:pointer" onclick="this.parentElement.nextElementSibling&&this.parentElement.classList.toggle('collapsed')">📍 ${esc(cli)} <span style="color:var(--gray);font-weight:400">(${macchine.length} macchine)</span></td></tr>`;
-
-    macchine.forEach(mac=>{
-      html+=`<tr class="pm-cal-row" style="cursor:pointer" onclick="showPMDetail('${mac.macchina_id}')">`;
-      html+=`<td style="position:sticky;left:0;background:var(--card);z-index:1;padding:4px 8px"><span style="font-weight:500">${esc(mac.macchina_nome)}</span></td>`;
-      html+=`<td style="font-size:.7rem">${esc(mac.modello||'—')}</td>`;
-      html+=`<td style="font-size:.7rem">${esc(mac.ciclo_tipo)}</td>`;
-      // Posizione corrente nel ciclo
-      const posLabel=mac.ciclo_sequenza[mac.posizione_corrente]||'?';
-      const posCol=getCicloColor(posLabel);
-      html+=`<td><span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:.65rem;font-weight:700;background:${posCol.bg};color:${posCol.fg}">${posLabel}</span></td>`;
-
-      // Celle giornaliere
-      for(let d=1;d<=daysInMonth;d++){
-        const dateStr=`${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-        const dt=new Date(y,mo-1,d);
-        const dow=dt.getDay();
-        const isWeekend=dow===0||dow===6;
-        const isToday=dateStr===today;
-        const pm=mac.prossimi.find(p=>p.data===dateStr);
-
-        let cellStyle=`text-align:center;padding:2px;${isWeekend?'background:rgba(148,163,184,.04);':''}${isToday?'border:2px solid #EAB308;':''}`;
-        let cellContent='';
-
-        if(pm){
-          const col=getCicloColor(pm.tipo);
-          const stBadge=getStatoBadge(pm.stato);
-          const isOverdue=dateStr<today&&pm.stato!=='completato';
-          cellContent=`<div style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;margin:auto;font-size:.6rem;font-weight:800;background:${isOverdue?'rgba(220,38,38,.2)':col.bg};color:${isOverdue?'#DC2626':col.fg};border:${isOverdue?'2px solid #DC2626':'1px solid '+col.fg+'33'};position:relative" title="${pm.tipo} — ${pm.stato}${isOverdue?' ⚠️ SCADUTO':''}">${pm.tipo}${pm.stato==='completato'?'<span style="position:absolute;top:-4px;right:-4px;font-size:.5rem">✅</span>':''}</div>`;
-        }
-
-        // Controlla anche completati storici
-        if(!pm){
-          const comp=(mac.completati||[]).find(c=>c.data===dateStr);
-          if(comp){
-            cellContent=`<div style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;margin:auto;font-size:.6rem;font-weight:700;background:rgba(34,197,94,.15);color:#166534;border:1px solid rgba(34,197,94,.3)" title="${comp.tipo} completato">✅</div>`;
-          }
-        }
-
-        html+=`<td style="${cellStyle}">${cellContent}</td>`;
-      }
-      html+=`</tr>`;
-    });
-  });
-
-  html+=`</tbody></table></div>`;
-  $('pmCalGrid').innerHTML=html;
-}
-
-async function showPMDetail(macchinaId){
-  const detail=$('pmCalDetail');
-  detail.style.display='block';
-  const mac=(PM_CAL_DATA?.calendar||[]).find(m=>m.macchina_id===macchinaId);
-  if(!mac){detail.style.display='none';return}
-
-  $('pmCalDetailTitle').innerHTML=`📋 ${esc(mac.macchina_nome)} <span style="color:var(--gray);font-weight:400">— ${esc(mac.modello||'')} — ${esc(mac.cliente_nome)}</span>`;
-
-  const seq=mac.ciclo_sequenza||[];
-  const pos=mac.posizione_corrente||0;
-  const today=new Date().toISOString().split('T')[0];
-
-  // Ciclo visuale
-  let html=`<div style="margin-bottom:20px">
-  <h4 style="font-size:.85rem;margin-bottom:8px">🔄 Ciclo Manutenzione: ${esc(mac.ciclo_tipo)} (intervallo: ${mac.intervallo_giorni} giorni)</h4>
-  <div style="display:flex;gap:6px;flex-wrap:wrap">`;
-  seq.forEach((s,i)=>{
-    const col=getCicloColor(s);
-    const isCurrent=i===pos;
-    html+=`<div style="padding:6px 14px;border-radius:10px;font-size:.75rem;font-weight:700;background:${col.bg};color:${col.fg};border:${isCurrent?'3px solid '+col.fg:'1px solid '+col.fg+'33'};${isCurrent?'box-shadow:0 0 8px '+col.fg+'44;':''}">${s}${isCurrent?' ◀':''}</div>`;
-  });
-  html+=`</div></div>`;
-
-  // Prossimi tagliandi
-  html+=`<h4 style="font-size:.85rem;margin-bottom:8px">📅 Prossimi Tagliandi</h4>
-  <table class="data-table" style="font-size:.8rem"><thead><tr><th>Tipo</th><th>Data</th><th>Stato</th><th>Tecnico</th><th>Azioni</th></tr></thead><tbody>`;
-  (mac.prossimi||[]).forEach(p=>{
-    const col=getCicloColor(p.tipo);
-    const stBadge=getStatoBadge(p.stato);
-    const isOverdue=p.data<today&&p.stato!=='completato'&&p.stato!=='futuro';
-    const tecNome=p.tecnico_id?((DATA.utenti||[]).find(u=>u.ID===p.tecnico_id)||{}).Nome||p.tecnico_id:'—';
-    html+=`<tr${isOverdue?' style="background:rgba(220,38,38,.04)"':''}>
-      <td><span style="padding:2px 10px;border-radius:10px;font-weight:700;font-size:.75rem;background:${col.bg};color:${col.fg}">${p.tipo}</span></td>
-      <td style="font-family:JetBrains Mono;font-size:.75rem">${p.data}${isOverdue?' <span style="color:#DC2626;font-weight:700">⚠️ SCADUTO</span>':''}</td>
-      <td><span style="padding:2px 8px;border-radius:8px;font-size:.7rem;background:${stBadge.bg};color:${stBadge.fg}">${stBadge.icon} ${p.stato}</span></td>
-      <td>${tecNome}</td>
-      <td>`;
-    if(p.stato==='pianificato'||p.stato==='futuro'){
-      html+=`<button class="btn btn-sm" style="background:#059669;color:white;font-size:.7rem" onclick="completePMFromCal('${macchinaId}','${p.piano_id||''}')">✅ Completa</button>`;
-    }
-    if(p.piano_id){
-      html+=` <button class="btn btn-outline btn-sm" style="font-size:.7rem" onclick="showSec('interventi');setTimeout(()=>document.querySelector('[data-id=&quot;${p.piano_id}&quot;]')?.scrollIntoView({behavior:'smooth'}),300)">👁️</button>`;
-    }
-    html+=`</td></tr>`;
-  });
-  html+=`</tbody></table>`;
-
-  // Storico completati
-  if(mac.completati?.length){
-    html+=`<h4 style="font-size:.85rem;margin:16px 0 8px">📜 Storico Completati (ultimi ${mac.completati.length})</h4>
-    <table class="data-table" style="font-size:.8rem"><thead><tr><th>Tipo</th><th>Data</th><th>Note</th></tr></thead><tbody>`;
-    mac.completati.slice().reverse().forEach(c=>{
-      const col=getCicloColor(c.tipo);
-      html+=`<tr><td><span style="padding:2px 10px;border-radius:10px;font-weight:700;font-size:.75rem;background:${col.bg};color:${col.fg}">${c.tipo}</span></td>
-        <td style="font-family:JetBrains Mono;font-size:.75rem">${c.data}</td>
-        <td style="font-size:.75rem;color:var(--gray)">${esc(c.note||'—')}</td></tr>`;
-    });
-    html+=`</tbody></table>`;
-  }
-
-  $('pmCalDetailBody').innerHTML=html;
-  detail.scrollIntoView({behavior:'smooth'});
-}
-
-async function completePMFromCal(macchinaId,pianoId){
-  if(!confirm('Confermi completamento tagliando per questa macchina?\nIl sistema calcolerà automaticamente il prossimo tagliando nel ciclo.')) return;
-  try{
-    const r=await apiCall('completePM',{macchina_id:macchinaId,piano_id:pianoId||undefined,userId:USER?.ID},'POST');
-    toast(`✅ ${r.completato.tipo} completato! Prossimo: ${r.prossimo.tipo} il ${r.prossimo.data}`,'ok');
-    await loadPMCalendar();
-    showPMDetail(macchinaId);
-  }catch(e){toast('❌ '+e.message,'err')}
-}
-
-// --- GENERA PM (tab 2) ---
 async function generatePMSchedule(dryRun){
   const mese=$('pmMeseTarget')?.value;
   if(!mese){toast('Seleziona mese target','err');return}
@@ -6474,11 +6053,11 @@ async function generatePMSchedule(dryRun){
       if(r.errors?.length) console.warn('PM errors:',r.errors);
       await refreshData();
     }
+    // Render table
     let html='<table class="data-table"><thead><tr><th>Macchina</th><th>Modello</th><th>Cliente</th><th>Data Suggerita</th><th>Ciclo</th></tr></thead><tbody>';
     items.forEach(it=>{
       const cliName=it.cliente_id?((DATA.clienti||[]).find(c=>c.ID===it.cliente_id)||{}).Nome||it.cliente_id:'—';
-      const col=getCicloColor(it.ciclo);
-      html+=`<tr><td>${esc(it.macchina_nome)}</td><td>${esc(it.modello||'—')}</td><td>${esc(cliName)}</td><td>${it.data_suggerita}</td><td><span style="padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:600;background:${col.bg};color:${col.fg}">${it.ciclo||'?'} ${it.ciclo_nome||''}</span></td></tr>`;
+      html+=`<tr><td>${it.macchina_nome}</td><td>${it.modello||'—'}</td><td>${cliName}</td><td>${it.data_suggerita}</td><td><span style="padding:2px 8px;border-radius:12px;font-size:.7rem;font-weight:600;background:${it.ciclo==='A1'?'#DBEAFE':it.ciclo==='B2'?'#D1FAE5':it.ciclo==='C3'?'#FEF3C7':'#FEE2E2'};color:${it.ciclo==='A1'?'#1E40AF':it.ciclo==='B2'?'#065F46':it.ciclo==='C3'?'#92400E':'#991B1B'}">${it.ciclo||'?'} ${it.ciclo_nome||''}</span></td></tr>`;
     });
     html+='</tbody></table>';
     $('pmResults').innerHTML=html;
@@ -6487,136 +6066,20 @@ async function generatePMSchedule(dryRun){
     status.style.background='rgba(220,38,38,.1)';
   }
 }
-
-async function bulkGeneratePM(){
-  if(!confirm('Generare interventi PM per i prossimi 3 mesi?\nVerranno creati solo interventi non ancora esistenti (anti-duplicato).')) return;
-  const status=$('pmStatus');
-  status.style.display='block';
-  status.style.background='rgba(99,102,241,.08)';
-  status.innerHTML='⏳ Generazione bulk PM in corso...';
-  try{
-    const r=await apiCall('bulkGeneratePMCalendar',{mesi_avanti:3,userId:USER?.ID},'POST');
-    status.innerHTML=`✅ <b>${r.created}</b> interventi PM creati — ${r.skipped} già esistenti — ${r.total_macchine} macchine elaborate${r.errors?.length?' ('+r.errors.length+' errori)':''}`;
-    status.style.background='rgba(34,197,94,.1)';
-    await refreshData();
-  }catch(e){
-    status.innerHTML='❌ Errore: '+e.message;
-    status.style.background='rgba(220,38,38,.1)';
-  }
-}
-
-// --- CICLI PM (tab 3) ---
-let PM_CYCLE_DEFS=null;
-
-async function loadPMCycleDefs(){
-  $('pmCycleDefs').innerHTML='<p style="color:var(--gray);font-size:.85rem">⏳ Caricamento definizioni cicli...</p>';
-  try{
-    // Use calendar endpoint to get cycle definitions
-    const r=await apiCall('getPMCalendar',{mese_target:'2026-01',userId:USER?.ID},'POST');
-    PM_CYCLE_DEFS=r.cycle_definitions||[];
-    renderPMCycleDefs();
-  }catch(e){$('pmCycleDefs').innerHTML='<p style="color:var(--danger);font-size:.85rem">❌ '+esc(e.message)+'</p>'}
-}
-
-function renderPMCycleDefs(){
-  const defs=PM_CYCLE_DEFS||[];
-  if(!defs.length){$('pmCycleDefs').innerHTML='<p style="color:var(--gray)">Nessuna definizione ciclo trovata</p>';return}
-
-  let html='<div style="display:grid;gap:16px">';
-  defs.forEach((d,idx)=>{
-    html+=`<div style="border:1px solid var(--gray3);border-radius:12px;padding:16px;background:var(--card)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div>
-          <input type="text" value="${esc(d.nome)}" onchange="PM_CYCLE_DEFS[${idx}].nome=this.value" style="font-size:.9rem;font-weight:700;background:transparent;border:none;color:var(--text);border-bottom:1px dashed var(--gray3);padding:2px 4px">
-          <span style="font-size:.75rem;color:var(--gray);margin-left:8px">${esc(d.desc||'')}</span>
-        </div>
-      </div>
-      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px">
-        <div class="field" style="flex:1;min-width:200px">
-          <label style="font-size:.7rem">Modelli (virgola separati)</label>
-          <input type="text" class="inp" value="${esc((d.modelli||[]).join(', '))}" onchange="PM_CYCLE_DEFS[${idx}].modelli=this.value.split(',').map(s=>s.trim()).filter(Boolean)" style="font-size:.75rem">
-        </div>
-        <div class="field" style="max-width:120px">
-          <label style="font-size:.7rem">Intervallo (giorni)</label>
-          <input type="number" class="inp" value="${d.intervallo_giorni||112}" onchange="PM_CYCLE_DEFS[${idx}].intervallo_giorni=parseInt(this.value)" style="font-size:.75rem">
-        </div>
-      </div>
-      <div class="field">
-        <label style="font-size:.7rem">Sequenza Step (virgola separati: A1,B2,A3,C4,...)</label>
-        <div style="display:flex;align-items:center;gap:8px">
-          <input type="text" class="inp" value="${(d.sequenza||[]).join(', ')}" onchange="PM_CYCLE_DEFS[${idx}].sequenza=this.value.split(',').map(s=>s.trim()).filter(Boolean)" style="font-size:.75rem;flex:1">
-          <div style="display:flex;gap:3px">`;
-    (d.sequenza||[]).forEach(s=>{
-      const col=getCicloColor(s);
-      html+=`<span style="display:inline-block;padding:2px 6px;border-radius:6px;font-size:.6rem;font-weight:800;background:${col.bg};color:${col.fg}">${s}</span>`;
-    });
-    html+=`</div></div></div></div>`;
-  });
-  html+=`</div>`;
-  $('pmCycleDefs').innerHTML=html;
-}
-
-async function savePMCycleDefs(){
-  if(!PM_CYCLE_DEFS){toast('Nessuna definizione da salvare','err');return}
-  try{
-    await apiCall('savePMCycleDefinitions',{definitions:PM_CYCLE_DEFS,userId:USER?.ID},'POST');
-    toast('✅ Definizioni cicli PM salvate!','ok');
-  }catch(e){toast('❌ '+e.message,'err')}
-}
-
-// --- SCADENZE (tab 4) ---
 async function renderPMTagliandi(){
-  $('pmTagliandiScadenza').innerHTML='<p style="color:var(--gray);font-size:.8rem">⏳ Caricamento tagliandi in scadenza...</p>';
+  $('pmTagliandiScadenza').innerHTML='<p style="color:var(--gray);font-size:.8rem">⏳ Caricamento tagliandi...</p>';
   try{
-    // Carica macchine con prossimo_tagliando per avere dati azionabili
-    const calData=await apiCall('getPMCalendar',{userId:USER?.ID},'POST').catch(()=>null);
-    const machines=(calData?.calendar||[]).filter(m=>m.scaduto||m.prossimi?.some(p=>p.data&&p.data<=new Date(Date.now()+30*86400000).toISOString().split('T')[0]));
-
-    if(!machines.length){
-      $('pmTagliandiScadenza').innerHTML='<p style="color:var(--gray);font-size:.8rem">✅ Nessun tagliando in scadenza nei prossimi 30 giorni</p>';
-      return;
-    }
-
-    // Conteggi
-    const scaduti=machines.filter(m=>m.scaduto);
-    const urgenti=machines.filter(m=>!m.scaduto&&m.prossimi?.some(p=>{const d=p.data;const t=new Date().toISOString().split('T')[0];const w=new Date(Date.now()+7*86400000).toISOString().split('T')[0];return d>=t&&d<=w}));
-
-    let html=`<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
-      ${scaduti.length?`<div style="padding:8px 16px;border-radius:8px;background:rgba(220,38,38,.1);font-size:.8rem;font-weight:600;color:#991B1B">🔴 ${scaduti.length} SCADUTI</div>`:''}
-      ${urgenti.length?`<div style="padding:8px 16px;border-radius:8px;background:rgba(234,179,8,.1);font-size:.8rem;font-weight:600;color:#92400E">🟠 ${urgenti.length} entro 7 giorni</div>`:''}
-      <div style="padding:8px 16px;border-radius:8px;background:rgba(59,130,246,.1);font-size:.8rem;color:#1D4ED8">${machines.length} totali entro 30gg</div>
-    </div>`;
-
-    html+=`<table class="data-table"><thead><tr><th>Macchina</th><th>Modello</th><th>Cliente</th><th>Prossimo PM</th><th>Tipo Ciclo</th><th>Stato</th><th>Azioni</th></tr></thead><tbody>`;
-
-    machines.forEach(m=>{
-      const prossimoTag=m.prossimo_tagliando||'—';
-      const today=new Date().toISOString().split('T')[0];
-      const ggDiff=prossimoTag!=='—'?Math.round((new Date(prossimoTag)-new Date())/86400000):'?';
-      const isScaduto=m.scaduto;
-      const isUrgente=!isScaduto&&ggDiff<=7;
-      const rowBg=isScaduto?'background:rgba(220,38,38,.06)':isUrgente?'background:rgba(234,179,8,.06)':'';
-      const urgLabel=isScaduto?'🔴 SCADUTO':isUrgente?'🟠 URGENTE':ggDiff<=30?'🟡 PROSSIMO':'🟢 OK';
-
-      // Prossimo tipo ciclo
-      const nextPM=m.prossimi?.[0];
-      const cicloTipo=nextPM?.tipo||'?';
-      const col=getCicloColor(cicloTipo);
-
-      html+=`<tr style="${rowBg}">
-        <td style="font-weight:500;cursor:pointer" onclick="switchPmTab('calendar',document.querySelectorAll('.pm-tab')[0]);setTimeout(()=>showPMDetail('${m.macchina_id}'),500)">${esc(m.macchina_nome)}</td>
-        <td style="font-size:.8rem">${esc(m.modello||'—')}</td>
-        <td style="font-size:.8rem">${esc(m.cliente_nome||'—')}</td>
-        <td style="font-family:JetBrains Mono;font-size:.75rem">${prossimoTag} <span style="color:var(--gray)">(${ggDiff}gg)</span></td>
-        <td><span style="padding:2px 8px;border-radius:8px;font-size:.7rem;font-weight:700;background:${col.bg};color:${col.fg}">${cicloTipo}</span> <span style="font-size:.7rem;color:var(--gray)">${esc(m.ciclo_tipo)}</span></td>
-        <td><b>${urgLabel}</b></td>
-        <td style="white-space:nowrap">
-          <button class="btn btn-sm" style="background:#059669;color:white;font-size:.7rem" onclick="completePMFromCal('${m.macchina_id}','${nextPM?.piano_id||''}')">✅ Completa</button>
-          <button class="btn btn-outline btn-sm" style="font-size:.7rem" onclick="switchPmTab('calendar',document.querySelectorAll('.pm-tab')[0]);setTimeout(()=>showPMDetail('${m.macchina_id}'),500)">📋 Dettaglio</button>
-        </td>
-      </tr>`;
+    const r=await apiCall('generateReport',{tipo:'tagliandi_scadenza',filtri:{dataInizio:new Date().toISOString().split('T')[0]},userId:USER?.ID},'POST');
+    if(!r?.righe?.length){$('pmTagliandiScadenza').innerHTML='<p style="color:var(--gray);font-size:.8rem">✅ Nessun tagliando in scadenza</p>';return}
+    let html='<table class="data-table"><thead><tr>';
+    (r.colonne||[]).forEach(c=>{html+='<th>'+c+'</th>'});
+    html+='</tr></thead><tbody>';
+    r.righe.forEach(row=>{
+      const isUrgent=(row[5]||'').includes('SCADUTO')||(row[5]||'').includes('URGENTE');
+      html+=`<tr style="${isUrgent?'background:rgba(220,38,38,.04)':''}">`;
+      row.forEach((cell,i)=>{html+='<td>'+(i===5?'<b>'+esc(cell)+'</b>':esc(cell))+'</td>'});
+      html+='</tr>';
     });
-
     html+='</tbody></table>';
     $('pmTagliandiScadenza').innerHTML=html;
   }catch(e){$('pmTagliandiScadenza').innerHTML='<p style="color:var(--danger);font-size:.8rem">❌ Errore: '+esc(e.message)+'</p>'}
@@ -6664,17 +6127,72 @@ async function searchCatalog(){
 function renderTelegramConfig(){
   const config=DATA.config||{};
   $('cfgTgToken').value=config.telegram_bot_token||'';
-  
+
   const tecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&u.Attivo!=='false'&&['tecnico','team_leader'].includes(u.Ruolo));
-  let html='<table class="data-table"><thead><tr><th>Tecnico</th><th>Ruolo</th><th>Chat ID Telegram</th><th>Test</th></tr></thead><tbody>';
+  let connected=0;
+  let html='<table class="tbl"><thead><tr><th style="width:30px">Stato</th><th>Tecnico</th><th>Ruolo</th><th>Chat ID Telegram</th><th style="width:50px">Test</th></tr></thead><tbody>';
   tecnici.forEach(t=>{
     const chatId=config['telegram_chatid_'+t.ID]||'';
-    html+=`<tr><td>${t.Nome} ${t.Cognome}</td><td>${t.Ruolo}</td>
-    <td><input type="text" id="tgchat_${t.ID}" value="${chatId}" placeholder="Chat ID" style="padding:4px 8px;border:1px solid var(--gray3);border-radius:4px;font-size:.75rem;width:140px;font-family:JetBrains Mono"></td>
-    <td><button class="btn btn-outline btn-sm" onclick="testTgForTec('${t.ID}')">📤</button></td></tr>`;
+    if(chatId)connected++;
+    const statusIcon=chatId?'<span title="Configurato" style="color:#10B981;font-size:1rem">✅</span>':'<span title="Non configurato" style="color:#D1D5DB;font-size:1rem">⬜</span>';
+    html+=`<tr><td style="text-align:center">${statusIcon}</td><td style="font-weight:500">${t.Nome} ${t.Cognome}</td><td><span style="font-size:.75rem;padding:2px 8px;background:var(--gray5);border-radius:10px">${t.Ruolo}</span></td>
+    <td><input type="text" id="tgchat_${t.ID}" value="${chatId}" placeholder="Es: 123456789" style="padding:5px 8px;border:1.5px solid ${chatId?'#10B981':'var(--gray3)'};border-radius:var(--radius-sm);font-size:.75rem;width:160px;font-family:JetBrains Mono,monospace"></td>
+    <td><button class="btn btn-outline btn-xs" onclick="testTgForTec('${t.ID}')" ${chatId?'':'disabled'} title="Invia messaggio di test">📤</button></td></tr>`;
   });
   html+='</tbody></table>';
   $('tblTelegramIds').innerHTML=html;
+  const countEl=$('tgConnectedCount');
+  if(countEl)countEl.innerHTML=`<span style="color:${connected===tecnici.length?'#10B981':'var(--gray)'}">${connected}/${tecnici.length} configurati</span>`;
+}
+
+async function autoDetectTelegramIds(){
+  const token=$('cfgTgToken')?.value?.trim();
+  if(!token){toast('Inserisci prima il Bot Token','warn');return}
+  const resultEl=$('tgAutoDetectResult');
+  resultEl.style.display='block';
+  resultEl.innerHTML='<div style="padding:12px;background:var(--gray5);border-radius:var(--radius-sm);font-size:.8125rem"><span style="animation:spin 1s linear infinite;display:inline-block">⏳</span> Cercando utenti che hanno avviato il bot...</div>';
+  try{
+    const resp=await fetch('https://api.telegram.org/bot'+token+'/getUpdates?limit=100&allowed_updates=["message"]',{signal:AbortSignal.timeout(10000)});
+    const data=await resp.json();
+    if(!data.ok)throw new Error(data.description||'Bot token non valido');
+    const updates=data.result||[];
+    // Extract unique users from /start messages
+    const users={};
+    updates.forEach(u=>{
+      const msg=u.message;if(!msg||!msg.from)return;
+      const from=msg.from;
+      users[from.id]={chatId:String(msg.chat.id),firstName:from.first_name||'',lastName:from.last_name||'',username:from.username||'',lastMsg:msg.text||''};
+    });
+    const userList=Object.values(users);
+    if(!userList.length){
+      resultEl.innerHTML='<div style="padding:12px;background:#FEF3C7;border:1px solid #F59E0B;border-radius:var(--radius-sm);font-size:.8125rem">⚠️ Nessun utente trovato. Assicurati che i tecnici abbiano inviato <code>/start</code> al bot, poi riprova.</div>';
+      return;
+    }
+    // Show found users
+    let html='<div style="padding:12px;background:#D1FAE5;border:1px solid #10B981;border-radius:var(--radius-sm);font-size:.8125rem">';
+    html+=`<div style="font-weight:600;margin-bottom:8px">🎉 Trovati ${userList.length} utenti Telegram:</div>`;
+    html+='<table class="tbl" style="font-size:.8rem"><thead><tr><th>Nome TG</th><th>Username</th><th>Chat ID</th><th>Assegna a</th></tr></thead><tbody>';
+    const tecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&u.Attivo!=='false'&&['tecnico','team_leader'].includes(u.Ruolo));
+    userList.forEach(u=>{
+      const fullName=(u.firstName+' '+u.lastName).trim();
+      html+=`<tr><td>${fullName}</td><td>${u.username?'@'+u.username:'—'}</td><td><code>${u.chatId}</code></td>`;
+      html+='<td><select onchange="assignTgChatId(this.value,\''+u.chatId+'\')" style="font-size:.75rem;padding:3px 6px"><option value="">— Seleziona —</option>';
+      tecnici.forEach(t=>{html+='<option value="'+t.ID+'">'+t.Nome+' '+t.Cognome+'</option>'});
+      html+='</select></td></tr>';
+    });
+    html+='</tbody></table>';
+    html+='<div style="margin-top:8px;font-size:.75rem;color:var(--gray)">Seleziona il tecnico corrispondente per assegnare automaticamente il Chat ID.</div>';
+    html+='</div>';
+    resultEl.innerHTML=html;
+  }catch(e){
+    resultEl.innerHTML='<div style="padding:12px;background:#FEE2E2;border:1px solid #EF4444;border-radius:var(--radius-sm);font-size:.8125rem">❌ Errore: '+e.message+'</div>';
+  }
+}
+
+function assignTgChatId(tecId,chatId){
+  if(!tecId)return;
+  const input=document.getElementById('tgchat_'+tecId);
+  if(input){input.value=chatId;input.style.borderColor='#10B981';toast('Chat ID assegnato! Ricorda di salvare.','ok')}
 }
 
 async function saveTelegramConfig(){
@@ -6756,11 +6274,15 @@ function openTelegramGroup(){
   window.open(group,'_blank');
 }
 
-function openTelegramBot(){
+async function openTelegramBot(){
   const config=DATA.config||{};
-  const token=config.telegram_bot_token||'';
+  const token=config.telegram_bot_token||$('cfgTgToken')?.value?.trim()||'';
   if(!token){toast('Configura prima il Bot Token','warn');return}
-  // Extract bot username from token (not possible directly, but user can set it)
+  try{
+    const resp=await fetch('https://api.telegram.org/bot'+token+'/getMe',{signal:AbortSignal.timeout(5000)});
+    const data=await resp.json();
+    if(data.ok&&data.result?.username){window.open('https://t.me/'+data.result.username,'_blank');return}
+  }catch(e){}
   toast('Apri Telegram e cerca il tuo bot per avviare la chat','info');
 }
 
@@ -7063,8 +6585,7 @@ function renderMonthPlan(){
   // Tecnici
   let tecnici = (DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Ruolo!=='admin');
   if(filtTec) tecnici = tecnici.filter(t=>t.ID===filtTec);
-  const sortPrio = t => t.Ruolo==='caposquadra'?0:(t.Livello||'')==='senior'?1:(t.Livello||'')==='intermedio'?2:(t.Livello||'')==='junior'?4:3;
-  tecnici.sort((a,b)=>sortPrio(a)-sortPrio(b));
+  tecnici.sort((a,b)=>(a.Ruolo==='caposquadra'?0:a.Ruolo?.includes('senior')?1:2)-(b.Ruolo==='caposquadra'?0:b.Ruolo?.includes('senior')?1:2));
 
   // Piano items
   const piano = (DATA.piano||[]).filter(p=>!p.Obsoleto&&p.Data&&p.Data.startsWith(y+'-'+String(m+1).padStart(2,'0')));
@@ -7096,9 +6617,8 @@ function renderMonthPlan(){
   // Separatori settimana
   tecnici.forEach((tec, ti) => {
     const tecName = (tec.Nome||'')+' '+(tec.Cognome||'').charAt(0)+'.';
-    const livello = tec.Livello||'';
-    const ruoloBadge = tec.Ruolo==='caposquadra'?'👑':livello==='senior'?'⭐':livello==='junior'?'🔰':'';
-    html += `<tr><td class="month-tec-label" title="${tec.Nome} ${tec.Cognome} — ${tec.Ruolo||''} ${livello}">${ruoloBadge}${tecName}</td>`;
+    const ruoloBadge = tec.Ruolo==='caposquadra'?'👑':tec.Ruolo?.includes('senior')?'⭐':'';
+    html += `<tr><td class="month-tec-label" title="${tec.Nome} ${tec.Cognome} — ${tec.Ruolo||''}">${ruoloBadge}${tecName}</td>`;
 
     days.forEach(d => {
       const isSat = d.dow === 6;
@@ -7127,8 +6647,7 @@ function renderMonthPlan(){
         const tipoIco = isPreview ? '🤖' : (p.TipoIntervento||p.TipoInterventoID||'').includes('install')?'🏗️':(p.TipoIntervento||p.TipoInterventoID||'').includes('tagliando')?'🔧':(p.TipoIntervento||'').includes('urgenza')?'🚨':'📋';
         const label = compact ? (clienteName||'').substring(0,8) : `${p.OraInizio||''} ${(clienteName||'').substring(0,12)}`;
         const previewStyle = isPreview ? 'border-style:dashed;opacity:.85;' : '';
-        const dragType = isPreview ? 'preview' : 'piano';
-        html += `<div class="month-cell-item" draggable="true" ondragstart="onMonthDragStart(event,'${dragType}','${p.ID}')" ${!isPreview?`onclick="showDetail('piano','${p.ID}')"`:''}style="background:${col}15;border-left-color:${col};color:${col};${previewStyle};cursor:grab" title="${clienteName||''} — ${p.Note||''}${isPreview?' [Anteprima AI — Drag per spostare]':''}">${tipoIco} ${label}</div>`;
+        html += `<div class="month-cell-item" draggable="${!isPreview}" ${!isPreview?`ondragstart="onMonthDragStart(event,'piano','${p.ID}')" onclick="showDetail('piano','${p.ID}')"`:''}style="background:${col}15;border-left-color:${col};color:${col};${previewStyle}" title="${clienteName||''} — ${p.Note||''}${isPreview?' [Anteprima AI]':''}">${tipoIco} ${label}</div>`;
       });
 
       html += '</td>';
@@ -7142,17 +6661,8 @@ function renderMonthPlan(){
   Object.entries(statoCol).forEach(([k,v]) => { html += `<span><span style="display:inline-block;width:10px;height:10px;background:${v};border-radius:2px;vertical-align:middle"></span> ${k.replace('_',' ')}</span>`; });
   const hasPreview = piano.some(p=>p._aiPreview);
   html += ' · <span>📞 Reperibilita</span> · <span>🏖️ Ferie</span>';
-  if(hasPreview) {
-    html += ' · <span style="border-left:2px dashed #8B5CF6;padding-left:4px">🤖 Anteprima</span> · <button class="btn btn-xs" style="background:#EF4444;color:white;font-size:.65rem" onclick="clearAIPreview()">✕ Rimuovi</button>';
-    if(PENDING_APPROVAL && PENDING_APPROVAL.stato==='in_attesa') {
-      html += `</div><div style="margin-top:8px;padding:12px 16px;background:linear-gradient(135deg,#F59E0B18,#F59E0B08);border:1.5px solid #F59E0B40;border-radius:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <span style="font-size:.85rem;font-weight:600;color:#F59E0B">📋 Piano #${PENDING_APPROVAL.id} in attesa di approvazione</span>
-        <span style="font-size:.75rem;color:var(--gray)">Usa drag & drop per modificare, poi:</span>
-        <button class="btn btn-xs btn-ok" onclick="approveOrReject('${PENDING_APPROVAL.id}','approvato')">✅ Approva</button>
-        <button class="btn btn-xs btn-err" onclick="approveOrReject('${PENDING_APPROVAL.id}','rifiutato')">❌ Rifiuta</button>`;
-    }
-  }
-  html += ' · <span style="cursor:grab">↕ Drag & drop per spostare</span></div>';
+  if(hasPreview) html += ' · <span style="border-left:2px dashed #8B5CF6;padding-left:4px">🤖 Anteprima AI</span> · <button class="btn btn-xs" style="background:#EF4444;color:white;font-size:.65rem" onclick="clearAIPreview()">✕ Rimuovi Anteprima</button>';
+  html += ' · <span>Drag & drop per spostare</span></div>';
 
   grid.innerHTML = html;
 }
@@ -7165,25 +6675,9 @@ async function onMonthDrop(e, tecnicoId, data){
   const {type, id} = MONTH_DRAGGING;
   MONTH_DRAGGING = null;
   try {
-    if(type==='piano') {
-      // Intervento reale nel DB → aggiorna via API
-      await apiCall('updatePiano',{id,data:{TecnicoID:tecnicoId,Data:data}},'POST');
-      toast('Intervento spostato','ok');
-      await refreshData(true);
-    } else if(type==='preview') {
-      // Intervento preview (AI/approvazione) → aggiorna solo in-memory
-      const item = (DATA.piano||[]).find(p=>p.ID===id);
-      if(item) {
-        item.TecnicoID = tecnicoId;
-        item.Data = data;
-        // Aggiorna nome tecnico nel Note se affiancamento
-        const tec = (DATA.utenti||[]).find(u=>u.ID===tecnicoId);
-        if(tec && !(item.Note||'').includes('Affiancamento')) {
-          // Solo note informative
-        }
-        toast('Anteprima spostata (non salvata — applica o approva per confermare)','info');
-      }
-    }
+    if(type==='piano') await apiCall('updatePiano',{id,data:{TecnicoID:tecnicoId,Data:data}},'POST');
+    toast('Intervento spostato','ok');
+    await refreshData(true);
     renderMonthPlan();
   } catch(e){ toast(e.message,'err'); }
 }

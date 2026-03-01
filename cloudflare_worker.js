@@ -1217,6 +1217,29 @@ async function handlePost(action, body, env) {
       return ok({ reperibilita: pascalizeRecord(result[0]) });
     }
 
+    case 'updateReperibilita': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const id = body.id || body.ID;
+      if (!id) return err('ID reperibilita mancante');
+      const fields = getFields(body);
+      delete fields.id; delete fields.created_at;
+      fields.updated_at = new Date().toISOString();
+      const result = await sb(env, 'reperibilita', 'PATCH', fields, `?id=eq.${id}&select=*`);
+      await wlog('reperibilita', id, 'updated', body.operatoreId);
+      return ok({ reperibilita: pascalizeRecord(result[0]) });
+    }
+
+    case 'deleteReperibilita': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const id = body.id || body.ID;
+      if (!id) return err('ID reperibilita mancante');
+      await sb(env, 'reperibilita', 'PATCH', { obsoleto: true, updated_at: new Date().toISOString() }, `?id=eq.${id}`);
+      await wlog('reperibilita', id, 'deleted', body.operatoreId);
+      return ok({ deleted: true });
+    }
+
     // -------- TRASFERTE --------
 
     case 'createTrasferta': {
@@ -1241,6 +1264,29 @@ async function handlePost(action, body, env) {
       const result = await sb(env, 'trasferte', 'POST', row);
       await wlog('trasferta', id, 'created', body.operatoreId);
       return ok({ trasferta: pascalizeRecord(result[0]) });
+    }
+
+    case 'updateTrasferta': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const id = body.id || body.ID;
+      if (!id) return err('ID trasferta mancante');
+      const fields = getFields(body);
+      delete fields.id; delete fields.created_at;
+      fields.updated_at = new Date().toISOString();
+      const result = await sb(env, 'trasferte', 'PATCH', fields, `?id=eq.${id}&select=*`);
+      await wlog('trasferta', id, 'updated', body.operatoreId);
+      return ok({ trasferta: pascalizeRecord(result[0]) });
+    }
+
+    case 'deleteTrasferta': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const id = body.id || body.ID;
+      if (!id) return err('ID trasferta mancante');
+      await sb(env, 'trasferte', 'PATCH', { obsoleto: true, updated_at: new Date().toISOString() }, `?id=eq.${id}`);
+      await wlog('trasferta', id, 'deleted', body.operatoreId);
+      return ok({ deleted: true });
     }
 
     // -------- NOTIFICHE --------
@@ -4896,6 +4942,20 @@ Rispondi SOLO con JSON valido:
       }
 
       return ok({ saved: definitions.length });
+    }
+
+    case 'updatePMDate': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const macchina_id = body.macchina_id || body.MacchinaID;
+      const prossimo_tagliando = body.prossimo_tagliando || body.ProssimoTagliando;
+      if (!macchina_id) return err('macchina_id richiesto');
+      if (!prossimo_tagliando) return err('prossimo_tagliando richiesto');
+      const upd = { prossimo_tagliando, updated_at: new Date().toISOString() };
+      if (body.note !== undefined || body.Note !== undefined) upd.note = body.note || body.Note;
+      await sb(env, `macchine?id=eq.${macchina_id}`, 'PATCH', upd);
+      await wlog('macchina', macchina_id, 'pm_date_updated', body.operatoreId);
+      return ok({ updated: true, macchina_id, prossimo_tagliando });
     }
 
     case 'completePM': {
