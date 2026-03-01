@@ -187,7 +187,7 @@ function normalizeBody(raw) {
 
 // Supabase REST helper
 async function sb(env, table, method = 'GET', body = null, params = '', extraHeaders = {}) {
-  const url = `${env.SUPABASE_URL}/rest/v1/${table}${params}`;
+  const url = `${env.SUPABASE_URL}/rest/v1/${table}${params || ''}`;
   const res = await fetch(url, {
     method,
     headers: {
