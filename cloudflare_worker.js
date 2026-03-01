@@ -4764,7 +4764,7 @@ Rispondi SOLO con JSON valido:
       if (!uid) return err('userId richiesto per clearAnagrafica');
       const caller = await sb(env, 'utenti', 'GET', null, `?id=eq.${uid}&select=ruolo`).catch(()=>[]);
       if (!caller?.[0] || caller[0].ruolo !== 'admin') return err('Solo admin può eseguire clearAnagrafica', 403);
-      if (body.confirmToken !== 'CLEAR_CONFIRMED') return err('Conferma richiesta: invia confirmToken="CLEAR_CONFIRMED"');
+      if (body.confirm_token !== 'CLEAR_CONFIRMED' && body.confirmToken !== 'CLEAR_CONFIRMED') return err('Conferma richiesta: invia confirmToken="CLEAR_CONFIRMED"');
       // Hard-delete (anagrafica tables don't have obsoleto column)
       await sb(env, 'anagrafica_assets?numero_serie=neq.IMPOSSIBLE', 'DELETE');
       await sb(env, 'anagrafica_clienti?codice_m3=neq.IMPOSSIBLE', 'DELETE');
