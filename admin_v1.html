@@ -2215,7 +2215,7 @@ function loadMacchineCliente(prefix){
     });
     if(assets.length){
       assets.forEach(a=>{
-        const tipo=normAssetType(a.GruppoAttrezzatura||a.TipoFoglio);
+        const tipo=assetType(a);
         const cfg=PROD_CFG[tipo]||{};
         const o=document.createElement('option');
         o.value=a.NumeroSerie||a.NomeAsset||'';
@@ -3056,7 +3056,7 @@ function renderMacchine(){
   const typeSel=$('filtMacchType');
   if(typeSel&&typeSel.options.length<=1&&items.length){
     const typeCounts={};
-    items.forEach(a=>{const k=normAssetType(a.GruppoAttrezzatura||a.TipoFoglio);typeCounts[k]=(typeCounts[k]||0)+1});
+    items.forEach(a=>{const k=assetType(a);typeCounts[k]=(typeCounts[k]||0)+1});
     Object.entries(typeCounts).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>{
       const cfg=PROD_CFG[k]||{};
       const o=document.createElement('option');o.value=k;o.textContent=(cfg.label||k)+` (${v})`;typeSel.appendChild(o);
@@ -3069,13 +3069,13 @@ function renderMacchine(){
     return s.includes(q);
   });
   if(cliFilter)items=items.filter(a=>a.CodiceM3===cliFilter);
-  if(typeFilter)items=items.filter(a=>normAssetType(a.GruppoAttrezzatura||a.TipoFoglio)===typeFilter);
+  if(typeFilter)items=items.filter(a=>assetType(a)===typeFilter);
 
   // Stats bar
   const statsDiv=$('macchStats');
   if(statsDiv){
     const typeCounts={};
-    items.forEach(a=>{const k=normAssetType(a.GruppoAttrezzatura||a.TipoFoglio);typeCounts[k]=(typeCounts[k]||0)+1});
+    items.forEach(a=>{const k=assetType(a);typeCounts[k]=(typeCounts[k]||0)+1});
     const clientSet=new Set(items.map(a=>a.CodiceM3).filter(Boolean));
     let cards=[[items.length,'Totale Assets'],[clientSet.size,'Clienti']];
     Object.entries(typeCounts).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>{
@@ -3093,7 +3093,7 @@ function renderMacchine(){
     if(!items.length){treeDiv.innerHTML='<div class="empty"><p>Nessuna macchina trovata. Importa l\'anagrafica Excel per popolare il parco macchine.</p></div>';return}
     // Group by normalized type
     const groups={};
-    items.forEach(a=>{const k=normAssetType(a.GruppoAttrezzatura||a.TipoFoglio);if(!groups[k])groups[k]=[];groups[k].push(a)});
+    items.forEach(a=>{const k=assetType(a);if(!groups[k])groups[k]=[];groups[k].push(a)});
     let html='';
     // Sort: ALTRI always last, rest by count desc
     const sortedGroups=Object.entries(groups).sort((a,b)=>{
@@ -3146,7 +3146,7 @@ function renderMacchine(){
     $('macchTreeView').style.display='none';
     $('macchListTable').style.display='';
     $('tblMacchine').innerHTML=items.length?items.map(a=>{
-      const tipo=normAssetType(a.GruppoAttrezzatura||a.TipoFoglio);
+      const tipo=assetType(a);
       const cfg=PROD_CFG[tipo]||{};
       const stato=a.Stato||'';
       const statoTag=stato.toLowerCase().includes('attiv')?'<span class="tag tag-ok">Attivo</span>':stato.toLowerCase().includes('dismess')?'<span class="tag tag-err">Dismesso</span>':stato?`<span class="tag tag-gray">${stato}</span>`:'';
@@ -3244,7 +3244,7 @@ function showAssetOnMap(codiceM3,assetName){
   // Find asset to get type info
   const assets=ANAG_ASSETS_CACHE[codiceM3]||[];
   const asset=assetName?assets.find(a=>(a.NomeAsset||'')===(assetName||'')):assets[0];
-  const tipo=asset?normAssetType(asset.GruppoAttrezzatura||asset.TipoFoglio):'';
+  const tipo=asset?assetType(asset):'';
   const cfg=PROD_CFG[tipo]||{};
   $('macchMapTitle').innerHTML=`${prodIcon(tipo,24)} <span style="margin-left:6px">${asset?.NomeAsset||asset?.Modello||tipo} — ${asset?.NumeroSerie||''}</span> <small style="color:var(--muted)">@ ${locName}</small>`;
   $('macchMapModal').style.display='block';
@@ -4300,6 +4300,12 @@ function normAssetType(tipo){
   // Tutto il resto è "ALTRI"
   return 'ALTRI';
 }
+// Tipo asset: usa TipoFoglio (foglio prodotto, più affidabile) poi GruppoAttrezzatura come fallback
+function assetType(a){
+  let t=normAssetType(a.TipoFoglio||'');
+  if(t==='ALTRI') t=normAssetType(a.GruppoAttrezzatura||'');
+  return t;
+}
 // Get ALL anagrafica assets as flat array - tutti gli asset, nessun filtro
 function getAllAnagAssets(){
   let all=[];
@@ -4334,13 +4340,12 @@ async function loadAnagClients(){
           const s=(a.Status||'').toLowerCase().trim();
           if(!s)return false; // Nessuno status = non contare
           if(!VALID_ASSET_STATUS.some(v=>s.includes(v)))return false; // Status non valido
-          // Solo tipi prodotto reali (quelli con foglio dedicato)
-          const tipo=normAssetType(a.GruppoAttrezzatura||a.TipoFoglio||'');
-          return tipo!=='ALTRI'; // Escludi Customer Item, Accessories, Whole Goods ecc.
+          // TipoFoglio (foglio prodotto) è la fonte primaria del tipo, GruppoAttrezzatura come fallback
+          return assetType(a)!=='ALTRI'; // Escludi Customer Item, Accessories, Whole Goods ecc.
         });
         const counts={_total:activeAssets.length,_totalAll:myAssets.length};
         activeAssets.forEach(a=>{
-          const key=normAssetType(a.GruppoAttrezzatura||a.TipoFoglio||'Altro');
+          const key=assetType(a);
           counts[key]=(counts[key]||0)+1;
         });
         c._assetCounts=counts;
@@ -4688,12 +4693,12 @@ async function importAnagXlsx(file){
       // Each config: hr=header row (0-based), data starts at hr+1
       // Right-side table (extended): cc=client col, sc=serial col, dc=date col, mc=movex col, nc=note col, pc=provincia col, sa=sales advisor col, stc=status col, modc=model col
       const sheetCfgs={
-        ROBOT:  {hr:4,cc:0,mc:1,sc:9,dc:10,pc:11,sa:12,nc:14,modc:null,stc:31,rhlh:6,ind:7},
+        ROBOT:  {hr:4,cc:18,mc:30,sc:22,dc:23,pc:25,sa:26,nc:28,modc:19,stc:31,rhlh:20,ind:21},
         JUNO:   {hr:4,cc:1,mc:11,sc:3,dc:4,pc:6,sa:7,nc:9,modc:2,stc:12,rhlh:null,ind:null},
         VECTOR: {hr:4,cc:13,mc:23,sc:15,dc:16,pc:18,sa:19,nc:21,modc:14,stc:24,rhlh:null,ind:null},
         DISCOVERY:{hr:4,cc:13,mc:23,sc:15,dc:16,pc:18,sa:19,nc:21,modc:14,stc:24,rhlh:null,ind:null},
-        COLLECTOR:{hr:4,cc:16,mc:null,sc:18,dc:19,pc:21,sa:22,nc:null,modc:17,stc:27,rhlh:null,ind:null},
-        CU:     {hr:4,cc:17,mc:27,sc:19,dc:20,pc:22,sa:23,nc:25,modc:18,stc:28,rhlh:null,ind:null},
+        COLLECTOR:{hr:4,cc:16,mc:26,sc:18,dc:19,pc:21,sa:22,nc:24,modc:17,stc:27,rhlh:null,ind:null},
+        CU:     {hr:5,cc:17,mc:27,sc:19,dc:20,pc:22,sa:23,nc:25,modc:18,stc:28,rhlh:null,ind:null},
         CALM:   {hr:4,cc:8,mc:18,sc:10,dc:11,pc:13,sa:14,nc:16,modc:9,stc:19,rhlh:null,ind:null},
         COMPRESSORI:{hr:4,cc:15,mc:25,sc:17,dc:18,pc:20,sa:21,nc:23,modc:16,stc:26,rhlh:null,ind:null},
         COSMIX: {hr:4,cc:16,mc:26,sc:18,dc:19,pc:21,sa:22,nc:null,modc:17,stc:27,rhlh:null,ind:null},
@@ -4742,10 +4747,9 @@ async function importAnagXlsx(file){
             if(ind&&!existing.Ind)existing.Ind=String(ind);
             // Status dal foglio singolo SOVRASCRIVE sempre (più affidabile del foglio Assets generico)
             if(status)existing.Status=String(status);
-            // TipoFoglio: aggiorna solo se era 'Assets' (generico)
-            if(!existing.TipoFoglio||existing.TipoFoglio==='Assets')existing.TipoFoglio=sname;
-            // GruppoAttrezzatura: aggiorna solo se era nullo o generico (es 'Customer Item','Accessories')
-            if(!existing.GruppoAttrezzatura||existing.GruppoAttrezzatura==='Assets')existing.GruppoAttrezzatura=sname;
+            // TipoFoglio: SEMPRE aggiornato al foglio prodotto (fonte autorevole del tipo)
+            existing.TipoFoglio=sname;
+            // GruppoAttrezzatura: preserva il valore originale dal foglio Assets base
             // CodiceM3: se manca, risolvi dal foglio prodotto (client name + movex col)
             if(!existing.CodiceM3){
               const m3=resolveM3(cli,cfg.mc!=null?row[cfg.mc]:null);
