@@ -1692,13 +1692,12 @@ async function handlePost(action, body, env) {
         }
       }
 
-      // File context — compatta contenuto per stare nel budget prompt
+      // File context — include tutto il contenuto (Gemini ha 1M token context)
       let fileContext = '';
-      const maxPerFile = files.length > 2 ? 1200 : files.length > 1 ? 1800 : 2500;
       for (const f of files) {
         const content = typeof f.content === 'string' ? f.content : '';
         if (content.length > 10 && !content.match(/^[A-Za-z0-9+/=]{50,}$/)) {
-          fileContext += `\n[${f.name}]:\n${content.substring(0, maxPerFile)}\n`;
+          fileContext += `\n[${f.name}]:\n${content.substring(0, 4000)}\n`;
         }
       }
 
@@ -1709,8 +1708,7 @@ async function handlePost(action, body, env) {
       // Compact data — budget-aware: riduce clienti se ci sono file allegati (i file contengono info clienti)
       const tecList = allTecnici.filter(t=>t.ruolo!=='admin').map(t => `${t.nome} ${t.cognome}(${t.id},${t.ruolo},${t.base||'?'})`).join('; ');
       const urgList = ctx.urgenze ? allUrgenze.slice(0,20).map(u => `${u.id}:${(u.problema||'').substring(0,40)}|${u.cliente_id}|pri:${u.priorita_id}`).join('; ') : '';
-      const cliMax = files.length > 1 ? 50 : 100;
-      const cliList = allClienti.slice(0,cliMax).map(c => `${c.codice_m3}:${c.nome_interno||c.nome_account||'?'}(${c.citta_fatturazione||''})`).join(', ');
+      const cliList = allClienti.slice(0,100).map(c => `${c.codice_m3}:${c.nome_interno||c.nome_account||'?'}(${c.citta_fatturazione||''})`).join(', ');
 
       const prompt = `PLANNER FSM — Pianificazione intelligente interventi
 OGGI: ${oggiIt} (${isoOggi})
@@ -1745,20 +1743,47 @@ ${periodoIstruzione || '1. Genera piano per OGNI giorno lavorativo (lun-sab) del
 Rispondi SOLO JSON:
 {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|service|urgenza|installazione|ispezione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"..."}],"warnings":["..."]}`;
 
-      // ─── AI Call — single call, Promise.race timeout ───
+      // ─── AI Call — Gemini 2.0 Flash (primary) con fallback Workers AI ───
       const validIds = new Set(allTecnici.map(t => t.id));
+      const sysPrompt = 'Sei un pianificatore FSM per Lely Center. Rispondi SOLO con JSON valido, nessun testo prima o dopo. Note max 15 caratteri. Formato: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome cognome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|service|urgenza|installazione|ispezione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"breve"}],"warnings":["..."]}';
 
       async function callAI(promptText) {
-        const aiPromise = env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
-          messages: [
-            { role: 'system', content: 'Sei un pianificatore FSM. Rispondi SOLO JSON. Note max 15 char. Formato compatto: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice","tipo":"tagliando|service|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"breve"}],"warnings":[]}' },
-            { role: 'user', content: promptText }
-          ],
-          max_tokens: 8192
-        });
-        const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 90000));
-        const res = await Promise.race([aiPromise, timeout]);
-        return res?.response || null;
+        // PRIMARY: Gemini 2.0 Flash — fast, large context, reliable JSON
+        if (env.GEMINI_KEY) {
+          try {
+            const geminiRes = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  system_instruction: { parts: [{ text: sysPrompt }] },
+                  contents: [{ parts: [{ text: promptText }] }],
+                  generationConfig: { maxOutputTokens: 16384, temperature: 0.3, responseMimeType: 'application/json' }
+                })
+              }
+            );
+            const gd = await geminiRes.json();
+            const text = gd.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) return text;
+          } catch (gemErr) {
+            // Gemini failed, try Workers AI fallback
+          }
+        }
+        // FALLBACK: Workers AI Llama 3.1 8B
+        if (env.AI) {
+          const aiPromise = env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+            messages: [
+              { role: 'system', content: sysPrompt },
+              { role: 'user', content: promptText }
+            ],
+            max_tokens: 8192
+          });
+          const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 90000));
+          const res = await Promise.race([aiPromise, timeout]);
+          return res?.response || null;
+        }
+        return null;
       }
 
       // Parser robusto — gestisce JSON troncati (risposta tagliata a max_tokens)
@@ -1819,18 +1844,18 @@ Rispondi SOLO JSON:
         }).filter(p => p.tecnicoId && validIds.has(p.tecnicoId));
       }
 
-      // Single AI call for ALL modes (mese/settimana/vuoti) — no chunking, faster
+      // Single AI call for ALL modes (mese/settimana/vuoti)
       try {
         const rawText = await callAI(prompt);
-        if (!rawText) return err('Workers AI non ha generato risposta. Riprova (il servizio potrebbe essere sovraccarico).');
+        if (!rawText) return err('AI non ha generato risposta. Verifica GEMINI_KEY nelle env del worker e riprova.');
         const result = parseAIResponse(rawText);
-        if (!result) return ok({ summary: 'Errore formato risposta', piano: [], warnings: ['Risposta AI non parsabile. Riprova con meno file allegati.'], raw: rawText.substring(0, 1500) });
+        if (!result) return ok({ summary: 'Errore formato risposta', piano: [], warnings: ['Risposta AI non parsabile. Riprova.'], raw: rawText.substring(0, 1500) });
         result.piano = postProcess(result.piano);
         return ok(result);
       } catch (e) {
         const msg = (e.message || '').includes('timeout') || (e.message || '').includes('abort')
-          ? 'Timeout — il prompt è troppo lungo. Prova con meno file allegati o seleziona "Singola settimana" come modalità.'
-          : `Workers AI errore: ${e.message}`;
+          ? 'Timeout AI. Riprova tra qualche secondo.'
+          : `Errore AI: ${e.message}`;
         return err(msg);
       }
     }
