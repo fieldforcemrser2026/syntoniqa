@@ -1905,6 +1905,7 @@ const fmtDateTime=d=>{if(!d)return '—';try{return new Date(d).toLocaleString('
 function calcOraFine(oraInizio,durata){const [h,m]=(oraInizio||'08:00').split(':').map(Number);const t=h*60+m+Math.round(durata*60);return String(Math.floor(t/60)%24).padStart(2,'0')+':'+String(t%60).padStart(2,'0')}
 const getName=(list,id,field='Nome')=>{const o=list.find(x=>x.ID===id||x.CodiceM3===id);if(!o)return id||'—';if(field!=='Nome'&&o[field])return o[field];return(o.NomeInterno||o.Nome||o.Descrizione||'')+(o.Cognome?' '+o.Cognome:'');};
 const getColor=(list,id)=>{const o=list.find(x=>x.ID===id);return o?.Colore||'#6B7280'};
+function fmtAutoId(id){if(!id)return '—';const f=(DATA.automezzi||[]).find(a=>a.ID===id);if(!f)return id;const parts=[];if(f.Nome)parts.push(f.Nome);else if(f.Descrizione)parts.push(f.Descrizione);else{const m=(id||'').match(/FURG_(\d+)/i);parts.push(m?'Furgone '+m[1]:id)}if(f.Targa)parts.push(f.Targa);return parts.join(' · ')||id}
 const statusTag=(s)=>{const m={'pianificato':['tag-info','📅'],'in_corso':['tag-warn','⚡'],'completato':['tag-ok','✅'],'chiuso':['tag-gray','🔒'],'aperta':['tag-err','🔴'],'assegnata':['tag-warn','👤'],'schedulata':['tag-info','📅'],'risolta':['tag-ok','✅'],'richiesto':['tag-info','📝'],'preso_in_carico':['tag-warn','👋'],'ordinato':['tag-purple','📦'],'in_arrivo':['tag-info','🚚'],'arrivato':['tag-ok','✅'],'attiva':['tag-ok','✅'],'pianificata':['tag-info','📅'],'completata':['tag-ok','✅'],'bozza':['tag-warn','📝'],'approvato':['tag-ok','✅'],'approvata':['tag-ok','✅'],'rifiutata':['tag-err','❌'],'in_attesa':['tag-warn','⏳']};const x=m[s]||['tag-gray',''];return `<span class="tag ${x[0]}">${x[1]} ${s||'—'}</span>`};
 const slaTag=(s,pct)=>{const m={'ok':['tag-ok','✅ OK'],'warning':['tag-warn','⚠️ Warning'],'critical':['tag-err','🔴 Critical'],'breach':['tag-err','💥 Breach']};const x=m[s]||['tag-gray',s||'—'];return `<span class="tag ${x[0]}">${x[1]}</span>${pct!==undefined?`<div class="sla-bar sla-${s}"><div class="fill" style="width:${Math.min(pct,100)}%"></div></div>`:''}`};
 
@@ -2088,8 +2089,7 @@ function populateSelects(){
   const fillMulti=(id,items,fmt)=>{const s=$(id);if(!s)return;s.innerHTML='';items.forEach(i=>{const o=document.createElement('option');o.value=i.ID;o.textContent=fmt(i);s.appendChild(o)})};
   const tecFmt=t=>(t.Nome||'')+' '+(t.Cognome||'');
   const cliFmt=c=>c.Nome||c.ID;
-  // FURG_1→F1, FURG_2→F2; altri: usa Nome o Targa
-  const autoFmt=f=>{const m=(f.ID||'').match(/FURG_(\d+)/i);return m?'F'+m[1]:(f.Nome||f.Targa||f.Descrizione||f.ID)};
+  const autoFmt=f=>fmtAutoId(f.ID);
 
   // Piano
   fillSel('mpTecnico',tecs,tecFmt);fillMulti('mpTecnici',tecs,tecFmt);fillSel('mpAutomezzo',automezziList,autoFmt);
@@ -2811,15 +2811,25 @@ function renderInstallazioni(){
 function renderReperibilita(){
   const d=today();
   let items=(DATA.reperibilita||[]).filter(r=>!r.Obsoleto);
-  if(repFilter==='attivi')items=items.filter(r=>(r.Stato==='attiva'||!r.Stato)&&r.DataFine>=d);
-  items.sort((a,b)=>(b.DataInizio||'').localeCompare(a.DataInizio||''));
+  // Filtro puramente data-based: attivi = DataFine >= oggi (correnti+future), storico = DataFine < oggi
+  if(repFilter==='attivi')items=items.filter(r=>(r.DataFine||'9999-12-31').substring(0,10)>=d);
+  else if(repFilter==='tutti')items=items.filter(r=>(r.DataFine||'').substring(0,10)<d);
+  items.sort((a,b)=>(a.DataInizio||'').localeCompare(b.DataInizio||''));// ordina cronologico per attivi
+  if(repFilter==='tutti')items.sort((a,b)=>(b.DataInizio||'').localeCompare(a.DataInizio||''));// storico: più recenti prima
+  // Etichetta stato dinamica basata su date
+  const repStatusLabel=(r)=>{
+    const df=(r.DataFine||'').substring(0,10);const di=(r.DataInizio||'').substring(0,10);
+    if(df<d)return '<span class="tag tag-gray">Completato</span>';
+    if(di<=d&&df>=d)return '<span class="tag tag-ok">🟢 In corso</span>';
+    return '<span class="tag tag-info">📅 Futuro</span>';
+  };
   $('tblRep').innerHTML=items.length?items.map(r=>`<tr>
     <td>${getName(DATA.utenti||[],r.TecnicoID)}</td>
     <td>${fmtDate(r.DataInizio)}</td>
     <td>${fmtDate(r.DataFine)}</td>
     <td>${r.Turno||'24h'}</td>
     <td>${r.Tipo||'reperibilità'}</td>
-    <td>${statusTag(r.Stato)}</td>
+    <td>${repStatusLabel(r)}</td>
     <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.Note||'—'}</td>
     <td><button class="btn btn-outline btn-xs" onclick="editRep('${r.ID}')">✏️</button> <button class="btn btn-outline btn-xs" style="color:var(--err)" onclick="deleteRep('${r.ID}')">🗑️</button></td>
   </tr>`).join(''):'<tr><td colspan="8" class="empty"><p>Nessun turno</p></td></tr>';
@@ -2836,7 +2846,7 @@ function renderTrasferte(){
       <td>${getName(DATA.clienti||[],t.ClienteID)}</td>
       <td>${fmtDate(t.DataInizio)}</td>
       <td>${fmtDate(t.DataFine)}</td>
-      <td>${t.AutomezzoID||'—'}</td>
+      <td>${fmtAutoId(t.AutomezzoID)}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.Motivo||'—'}</td>
       <td>${statusTag(t.Stato)}</td>
       <td><button class="btn btn-outline btn-xs" onclick="editTrasf('${t.ID}')">✏️</button> <button class="btn btn-outline btn-xs" style="color:var(--err)" onclick="deleteTrasf('${t.ID}')">🗑️</button></td>
@@ -3194,7 +3204,7 @@ function renderAutomezzi(){
     return `<div class="card" style="border-left:4px solid ${f.Status==='attivo'?'var(--ok)':'var(--warn)'}">
       <div class="card-body">
         <div style="display:flex;justify-content:space-between;align-items:start">
-          <div><h4 style="font-size:1rem;margin-bottom:4px">🚐 ${f.ID}</h4><p style="font-size:.8125rem;color:var(--gray)">${f.Targa||''} · ${f.Descrizione||''}</p></div>
+          <div><h4 style="font-size:1rem;margin-bottom:4px">🚐 ${f.Nome||f.Descrizione||(()=>{const m=(f.ID||'').match(/FURG_(\d+)/i);return m?'Furgone '+m[1]:f.ID})()}</h4><p style="font-size:.8125rem;color:var(--gray)">${f.Targa?'🏷️ '+f.Targa:''} ${f.ID?'('+f.ID+')':''}</p></div>
           ${statusTag(f.Status)}
         </div>
         <div style="margin-top:12px;font-size:.8125rem">
@@ -3222,7 +3232,7 @@ function renderTecnici(){
     <td><strong>${(t.Nome||'')+' '+(t.Cognome||'')}</strong></td>
     <td><span class="tag ${t.Ruolo==='admin'?'tag-purple':t.Ruolo==='caposquadra'?'tag-info':'tag-gray'}">${t.Ruolo}</span></td>
     <td>${sq?sq.Nome:'—'}</td>
-    <td>${t.AutomezzoID||'—'}</td>
+    <td>${fmtAutoId(t.AutomezzoID)}</td>
     <td>${t.Base||'—'}</td>
     <td>${t.Telefono?`<a href="tel:${t.Telefono}">${t.Telefono}</a>`:'—'}</td>
     <td>${t.Email||'—'}</td>
@@ -6187,12 +6197,13 @@ function renderPMTable(){
   data.forEach(m=>{
     const st=getPMStatus(m.prossimo_tagliando);
     const dataFmt=m.prossimo_tagliando?new Date(m.prossimo_tagliando+'T00:00:00').toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'numeric'}):'—';
-    const ciclo=m.posizione_corrente||'A1';
+    const seqArr=Array.isArray(m.ciclo_sequenza)?m.ciclo_sequenza:(m.ciclo_sequenza||'A1,B2,A3,C4,A5,B6,A7,D8').split(',');
+    const ciclo=m.posizione_nome||seqArr[m.posizione_corrente]||'A1';
     const isOpen=PM_OPEN_ROW===m.macchina_id;
     html+=`<tr onclick="togglePMRow('${m.macchina_id}')" style="cursor:pointer;${st.cls==='overdue'?'background:#FEF2F2;':''}">
       <td style="width:20px">${isOpen?'▼':'▶'}</td>
       <td style="font-weight:500">${m.cliente_nome||'—'}</td>
-      <td>${m.macchina_nome||m.seriale||'—'}</td>
+      <td>${m.seriale||m.macchina_nome||'—'}</td>
       <td>${m.modello||'—'}</td>
       <td><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:.75rem;font-weight:600;background:${st.bg};color:${st.color}">${st.icon} ${dataFmt}</span></td>
       <td><span style="padding:2px 8px;border-radius:10px;font-size:.7rem;font-weight:600;background:${getCicloColor(ciclo)}22;color:${getCicloColor(ciclo)};border:1px solid ${getCicloColor(ciclo)}44">${ciclo}</span></td>
@@ -6214,8 +6225,8 @@ function togglePMRow(macchinaId){
 
 function renderPMExpanded(m){
   const st=getPMStatus(m.prossimo_tagliando);
-  const seq=(m.ciclo_sequenza||'A1,B2,A3,C4,A5,B6,A7,D8').split(',');
-  const pos=m.posizione_corrente||'A1';
+  const seq=Array.isArray(m.ciclo_sequenza)?m.ciclo_sequenza:(m.ciclo_sequenza||'A1,B2,A3,C4,A5,B6,A7,D8').split(',');
+  const pos=m.posizione_nome||seq[m.posizione_corrente]||seq[0]||'A1';
   const seqHtml=seq.map(s=>`<span style="padding:2px 8px;border-radius:8px;font-size:.7rem;font-weight:600;${s===pos?'background:'+getCicloColor(s)+';color:white':'background:'+getCicloColor(s)+'15;color:'+getCicloColor(s)}">${s}</span>`).join(' → ');
   const completati=(m.completati||[]).slice(0,8).map(c=>`<div style="font-size:.75rem;color:var(--gray)">✅ ${c.tipo} — ${c.data?new Date(c.data).toLocaleDateString('it-IT'):''} ${c.note?'('+c.note+')':''}</div>`).join('');
   const prossimi=(m.prossimi||[]).slice(0,4).map(p=>`<div style="font-size:.75rem;color:var(--gray)">📅 ${p.tipo} — ${p.data?new Date(p.data).toLocaleDateString('it-IT'):''} (${p.stato||'previsto'})</div>`).join('');
@@ -6224,9 +6235,9 @@ function renderPMExpanded(m){
       <div>
         <div style="font-size:.7rem;text-transform:uppercase;color:var(--gray);font-weight:600;margin-bottom:4px">Info Macchina</div>
         <div style="font-size:.8125rem"><strong>Cliente:</strong> ${m.cliente_nome||'—'}</div>
-        <div style="font-size:.8125rem"><strong>Seriale:</strong> ${m.seriale||m.macchina_nome||'—'}</div>
+        <div style="font-size:.8125rem"><strong>Seriale:</strong> ${m.seriale||m.macchina_id||'—'}</div>
         <div style="font-size:.8125rem"><strong>Modello:</strong> ${m.modello||'—'}</div>
-        <div style="font-size:.8125rem"><strong>Ore:</strong> ${m.ore_macchina||'—'}</div>
+        <div style="font-size:.8125rem"><strong>Ore:</strong> ${m.ore_macchina||'N/D'}</div>
       </div>
       <div>
         <div style="font-size:.7rem;text-transform:uppercase;color:var(--gray);font-weight:600;margin-bottom:4px">Ciclo Manutenzione</div>
@@ -6257,7 +6268,8 @@ async function savePMDate(macchinaId){
 async function completePMAction(macchinaId){
   const m=PM_DATA.find(x=>x.macchina_id===macchinaId);
   if(!m){toast('Macchina non trovata','err');return}
-  if(!confirm('Completare il tagliando '+( m.posizione_corrente||'A1')+' per '+( m.macchina_nome||macchinaId)+'?'))return;
+  const seqA=Array.isArray(m.ciclo_sequenza)?m.ciclo_sequenza:[];const posN=m.posizione_nome||seqA[m.posizione_corrente]||'A1';
+  if(!confirm('Completare il tagliando '+posN+' per '+(m.seriale||m.macchina_nome||macchinaId)+'?'))return;
   try{await apiCall('completePM',{macchina_id:macchinaId,userId:USER?.ID},'POST');toast('Tagliando completato! Ciclo avanzato.','ok');await loadPMList()}catch(e){toast(e.message,'err')}
 }
 

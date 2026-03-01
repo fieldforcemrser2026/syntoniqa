@@ -4869,16 +4869,20 @@ Rispondi SOLO con JSON valido:
         if (hasInMonth || isOverdue || !pmMese) {
           calendar.push({
             macchina_id: mac.id,
-            macchina_nome: mac.modello || mac.seriale || mac.id,
+            macchina_nome: mac.seriale || mac.id,
+            seriale: mac.seriale || '',
+            note: mac.note || '',
+            ore_macchina: mac.ore_lavoro || '',
             modello: mac.modello || mac.tipo,
             cliente_id: mac.cliente_id,
             cliente_nome: cliMap[mac.cliente_id] || mac.cliente_id || '—',
             ciclo_tipo: def ? def.nome : 'Standard',
             ciclo_sequenza: cicloSequenza,
             posizione_corrente: posizioneCorrente,
+            posizione_nome: cicloSequenza[posizioneCorrente] || 'A1',
             intervallo_giorni: intervallo,
             prossimi,
-            completati: completati.slice(-8), // ultimi 8
+            completati: completati.slice(-8),
             prossimo_tagliando: mac.prossimo_tagliando,
             scaduto: isOverdue
           });
