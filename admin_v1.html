@@ -5346,8 +5346,8 @@ async function runAI(){
     </div>`;
     $('aiResult').innerHTML=html;
     // Admin può applicare direttamente, caposquadra deve passare per approvazione
-    const _curUser = SESSION?.user||{};
-    const _isAdmin = _curUser.ruolo==='admin';
+    const _curUser = USER||{};
+    const _isAdmin = _curUser.Ruolo==='admin';
     $('btnApplyAI').disabled=!_isAdmin; // Solo admin può applicare senza approvazione
     $('btnSubmitPlan').disabled=false;
     $('btnDownloadPlan').disabled=false;
@@ -5512,7 +5512,7 @@ let PENDING_APPROVAL = null; // { id, piano, stato, ... }
 
 async function submitAIPlanForApproval(){
   if(!AI_PLAN){toast('Genera prima un piano','warn');return}
-  const currentUser=SESSION?.user||{};
+  const currentUser=USER||{};
   // Raccogli il piano corrente (potrebbe essere stato modificato con D&D nel calendario)
   const previewItems = (DATA.piano||[]).filter(p=>p._aiPreview);
   let pianoToSend = AI_PLAN;
@@ -5529,8 +5529,8 @@ async function submitAIPlanForApproval(){
     const meseTarget = $('aiMese')?.value || '';
     await apiCall('createApproval',{
       id, piano:pianoToSend, mese:meseTarget,
-      creato_da:currentUser.id||'admin',
-      ruolo_creatore:currentUser.ruolo||'admin',
+      creato_da:currentUser.ID||'admin',
+      ruolo_creatore:currentUser.Ruolo||'admin',
       stato:'in_attesa',
       data_creazione:new Date().toISOString()
     },'POST');
@@ -5540,7 +5540,7 @@ async function submitAIPlanForApproval(){
     renderApprovalQueue();
     // Notifica Telegram al gruppo
     try { await apiCall('sendTelegramMsg',{chatId:'-5236723213',
-      text:`📋 *Nuovo Piano in Approvazione*\n\n👤 Inviato da: ${currentUser.nome||'Admin'}\n📅 Mese: ${meseTarget}\n📊 ${(pianoToSend.piano||[]).length} interventi\n\n_Apri Syntoniqa Admin per approvare/rifiutare_`
+      text:`📋 *Nuovo Piano in Approvazione*\n\n👤 Inviato da: ${currentUser.Nome||'Admin'}\n📅 Mese: ${meseTarget}\n📊 ${(pianoToSend.piano||[]).length} interventi\n\n_Apri Syntoniqa Admin per approvare/rifiutare_`
     },'POST'); } catch(e){}
   }catch(e){toast(e.message,'err')}
 }
@@ -5554,12 +5554,12 @@ async function renderApprovalQueue(){
       tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--gray)">Nessun piano in iter approvativo</td></tr>';
       return;
     }
-    const currentUser=SESSION?.user||{};
-    const canReview = currentUser.ruolo==='admin'||currentUser.ruolo==='caposquadra';
+    const currentUser=USER||{};
+    const canReview = currentUser.Ruolo==='admin'||currentUser.Ruolo==='caposquadra';
     tbody.innerHTML=approvals.map(a=>{
-      const isOwn = a.creato_da===currentUser.id;
+      const isOwn = a.creato_da===currentUser.ID;
       // Admin può auto-approvare, caposquadra NO (serve approvazione admin)
-      const isSelfCapo = isOwn && currentUser.ruolo==='caposquadra';
+      const isSelfCapo = isOwn && currentUser.Ruolo==='caposquadra';
       const canApprove = canReview && a.stato==='in_attesa' && !isSelfCapo;
       const stCol={'in_attesa':'#F59E0B','approvato':'#10B981','rifiutato':'#EF4444'}[a.stato]||'#6B7280';
       return `<tr>
@@ -5586,9 +5586,9 @@ async function renderApprovalQueue(){
 async function approveOrReject(id,stato){
   const note=stato==='rifiutato'?prompt('Motivo del rifiuto:'):null;
   if(stato==='rifiutato'&&note===null)return;
-  const currentUser=SESSION?.user||{};
+  const currentUser=USER||{};
   // Caposquadra non può auto-approvare il proprio piano
-  if(stato==='approvato' && PENDING_APPROVAL && PENDING_APPROVAL.creato_da===currentUser.id && currentUser.ruolo==='caposquadra'){
+  if(stato==='approvato' && PENDING_APPROVAL && PENDING_APPROVAL.creato_da===currentUser.ID && currentUser.Ruolo==='caposquadra'){
     toast('Non puoi approvare il tuo stesso piano — serve approvazione di un admin','warn');return;
   }
   // Se il piano e' stato modificato con D&D nel calendario, salva le modifiche
@@ -5606,14 +5606,14 @@ async function approveOrReject(id,stato){
   try{
     const payload = {
       id, stato,
-      approvato_da:currentUser.id||'admin',
+      approvato_da:currentUser.ID||'admin',
       note_approvazione:note||'',
       data_approvazione:new Date().toISOString()
     };
     // Se l'approvatore ha fatto modifiche D&D, salva il piano aggiornato
     if(updatedPiano && PENDING_APPROVAL) {
       payload.piano = { ...PENDING_APPROVAL, piano: updatedPiano };
-      payload.modifiche_approvatore = `Modificato da ${currentUser.nome||currentUser.id} prima di ${stato==='approvato'?'approvare':'rifiutare'}`;
+      payload.modifiche_approvatore = `Modificato da ${currentUser.Nome||currentUser.ID} prima di ${stato==='approvato'?'approvare':'rifiutare'}`;
     }
     await apiCall('updateApproval',payload,'POST');
     toast(stato==='approvato'?'Piano approvato! Ora puoi applicarlo al sistema.':'Piano rifiutato — il creatore ricevera il feedback.','ok');
@@ -5675,12 +5675,12 @@ async function viewApprovalPlan(id){ await viewApprovalInCalendar(id); }
 async function renderTecnicoPlan(){
   const grid=$('tecnicoPlanGrid');if(!grid)return;
   const view=$('tecViewSelect')?.value||'mio';
-  const currentUser=SESSION?.user||{};
+  const currentUser=USER||{};
   const piano=(DATA.piano||[]).filter(p=>!p.Obsoleto);
   const utenti=DATA.utenti||[];
 
   if(view==='mio'){
-    const myPlan=piano.filter(p=>p.TecnicoID===currentUser.id);
+    const myPlan=piano.filter(p=>p.TecnicoID===currentUser.ID);
     if(!myPlan.length){grid.innerHTML='<p style="padding:24px;text-align:center;color:var(--gray)">Nessun intervento assegnato a te</p>';return}
     // Group by date
     const byDate={};
@@ -5716,7 +5716,7 @@ async function renderTecnicoPlan(){
     let html='';
     Object.entries(byTec).forEach(([tecId,items])=>{
       const tecName=getName(utenti,tecId)||tecId;
-      const isMine=tecId===currentUser.id;
+      const isMine=tecId===currentUser.ID;
       html+=`<div style="padding:10px 16px;background:${isMine?'rgba(99,102,241,.1)':'var(--gray1)'};font-weight:600;font-size:.875rem;border-bottom:1px solid var(--gray2)">${isMine?'⭐':'👷'} ${tecName} (${items.length}) ${isMine?'— Il tuo piano':''}</div>`;
       items.forEach(p=>{
         html+=`<div style="padding:8px 16px;border-bottom:1px solid var(--gray1);font-size:.8125rem;display:flex;justify-content:space-between;align-items:center">
