@@ -2013,60 +2013,103 @@ ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}`;
 
 JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome cognome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina"}],"warnings":["..."]}`;
 
-        // Determina se serve chunking (mese intero → chunk settimanale)
-        const needsChunking = modalita === 'mese' && meseTarget;
-
-        if (needsChunking) {
-          // ── CHUNKING SETTIMANALE: 4-5 chiamate AI, una per settimana ──
+        // ── CHUNKING BISETTIMANALE: 2-3 chiamate AI per coprire il mese ──
+        // Sempre chunking per meseTarget (mese/vuoti/settimana)
+        if (meseTarget) {
           const [yy, mm] = meseTarget.split('-').map(Number);
-          const monthStart = new Date(yy, mm - 1, 1);
-          const monthEnd = new Date(yy, mm, 0);
 
-          // Calcola settimane del mese
-          const weeks = [];
-          let ws = new Date(monthStart);
-          while (ws <= monthEnd) {
-            // Trova lunedi (inizio settimana lavorativa)
-            let we = new Date(ws);
-            we.setDate(we.getDate() + 6);
-            if (we > monthEnd) we = new Date(monthEnd);
-            const wd = getWorkDays(ws, we);
-            if (wd.length > 0) weeks.push({ workDays: wd, label: `Sett ${weeks.length + 1}` });
-            ws = new Date(we);
-            ws.setDate(ws.getDate() + 1);
+          // Calcola chunk: bisettimanali (2 settimane per chunk = 10 gg lavorativi)
+          // Così servono solo 2-3 chiamate AI, non 5 — molto più veloce
+          const chunks = [];
+          if (modalita === 'settimana') {
+            // Settimana singola: un solo chunk
+            const startOffset = (settimanaNum - 1) * 7;
+            const weekStart = new Date(yy, mm - 1, 1 + startOffset);
+            const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6);
+            const lastOfMonth = new Date(yy, mm, 0);
+            if (weekEnd > lastOfMonth) weekEnd.setTime(lastOfMonth.getTime());
+            const wd = getWorkDays(weekStart, weekEnd);
+            if (wd.length) chunks.push({ workDays: wd, label: 'Sett ' + settimanaNum });
+          } else {
+            // Mese intero o vuoti: 2 bisettimanali + eventuale resto
+            const monthStart = new Date(yy, mm - 1, 1);
+            const monthEnd = new Date(yy, mm, 0);
+            const mid1 = new Date(yy, mm - 1, 15);  // prima metà: 1-15
+            const mid2 = new Date(yy, mm - 1, 16);  // seconda metà: 16-fine
+            const wd1 = getWorkDays(monthStart, mid1);
+            const wd2 = getWorkDays(mid2, monthEnd);
+            if (wd1.length) chunks.push({ workDays: wd1, label: 'Prima metà mese' });
+            if (wd2.length) chunks.push({ workDays: wd2, label: 'Seconda metà mese' });
+          }
+
+          // Piano esistente context per modalità "vuoti"
+          const existingDays = new Set();
+          if (modalita === 'vuoti' && vincoli.piano_esistente?.length) {
+            vincoli.piano_esistente.forEach(p => {
+              if (p.data) existingDays.add(p.data);
+            });
           }
 
           const allPiano = [];
           const allWarnings = new Set();
           let chunksDone = 0;
 
-          for (let wi = 0; wi < weeks.length; wi++) {
-            const week = weeks[wi];
-            // Delay 2s tra chunk per evitare rate limiting Groq (6000 tok/min)
-            if (wi > 0) await new Promise(r => setTimeout(r, 2000));
-            // Costruisci prompt per questa settimana
+          // File allegati: comprimi per chunk (max 1500 char per non pesare)
+          const chunkFileCtx = fileContext ? fileContext.substring(0, 1500) : '';
+
+          for (let ci = 0; ci < chunks.length; ci++) {
+            const chunk = chunks[ci];
+            // Delay 1s tra chunk
+            if (ci > 0) await new Promise(r => setTimeout(r, 1000));
+
+            // Per modalità "vuoti": filtra solo i giorni senza interventi
+            let targetDays = chunk.workDays;
+            if (modalita === 'vuoti' && existingDays.size > 0) {
+              targetDays = chunk.workDays.filter(wd => {
+                const dateOnly = wd.split('(')[0];
+                return !existingDays.has(dateOnly);
+              });
+              if (!targetDays.length) { chunksDone++; continue; } // tutti i giorni già coperti
+            }
+
             const prevSummary = allPiano.length > 0
-              ? '\nPIANO GIA GENERATO (NON duplicare — genera solo i giorni richiesti):\n' +
-                allPiano.slice(-20).map(p => `${p.data} ${p.tecnico}: ${p.cliente}`).join('; ')
+              ? '\nPIANO GIA GENERATO (NON duplicare):\n' +
+                allPiano.slice(-15).map(p => `${p.data} ${p.tecnico}: ${p.cliente}`).join('; ')
               : '';
 
-            const weekPrompt = `${baseContext}
-${prevSummary}
+            const chunkBaseCtx = `PLANNER FSM — ${meseTarget}
+OGGI: ${oggiIt} (${isoOggi})
+##### VINCOLI (INVIOLABILI) #####
+${vincoliText || '(Nessuno)'}
+${testo ? 'UTENTE: ' + testo : ''}
+#####
+TECNICI (${nTecAttivi}): ${tecList}
+AUTOMEZZI: ${autoList || 'Nessuno'}
+${urgList ? 'URGENZE: ' + urgList : ''}
+CLIENTI: ${cliList}
+${repContext}
+${pianoEsistente}
+${tagliandiContext ? tagliandiContext.substring(0, 600) : ''}
+${chunkFileCtx ? '\nFILE:\n' + chunkFileCtx : ''}
+${prevSummary}`;
 
-GENERA PIANO SOLO per questi ${week.workDays.length} GIORNI: ${week.workDays.join(', ')}
-Genera ESATTAMENTE ${week.workDays.length} giorni con almeno ${nTecAttivi} interventi ciascuno (totale minimo: ${week.workDays.length * nTecAttivi} righe).
+            const chunkPrompt = `${chunkBaseCtx}
+
+GENERA PIANO per questi ${targetDays.length} GIORNI: ${targetDays.join(', ')}
+${modalita === 'vuoti' ? 'Questi sono giorni SENZA interventi — riempili tutti.' : ''}
+Genera ESATTAMENTE ${targetDays.length} giorni con almeno ${nTecAttivi} interventi ciascuno (minimo ${targetDays.length * nTecAttivi} righe).
 
 ${instructions}`;
 
             try {
-              const rawText = await callAI(weekPrompt);
+              const rawText = await callAI(chunkPrompt);
               if (!rawText) continue;
               const parsed = parseAIResponse(rawText);
               if (parsed?.piano) allPiano.push(...parsed.piano);
               if (parsed?.warnings) parsed.warnings.forEach(w => allWarnings.add(w));
               chunksDone++;
             } catch (chunkErr) {
-              allWarnings.add(`${week.label}: ${chunkErr.message}`);
+              allWarnings.add(`${chunk.label}: ${chunkErr.message}`);
             }
           }
 
@@ -2074,17 +2117,17 @@ ${instructions}`;
 
           const processed = postProcess(allPiano);
           return ok({
-            summary: `Piano ${meseTarget}: ${processed.length} interventi su ${[...new Set(processed.map(p=>p.data))].length} giorni (${chunksDone}/${weeks.length} settimane)`,
+            summary: `Piano ${meseTarget}: ${processed.length} interventi su ${[...new Set(processed.map(p=>p.data))].length} giorni (${chunksDone}/${chunks.length} parti)`,
             piano: processed,
             warnings: [...allWarnings],
             chunks: chunksDone
           });
 
         } else {
-          // ── SINGOLA CHIAMATA: settimana specifica o giorni vuoti ──
+          // ── SINGOLA CHIAMATA: nessun mese target ──
           const singlePrompt = `${baseContext}
 
-${periodoIstruzione || 'Genera piano per OGNI giorno lavorativo (lun-ven)'}
+Genera piano per OGNI giorno lavorativo (lun-ven) della prossima settimana.
 Genera almeno ${nTecAttivi} interventi per OGNI giorno lavorativo.
 
 ${instructions}`;
