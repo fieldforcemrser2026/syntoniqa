@@ -4409,7 +4409,7 @@ function renderAnagClients(list){
     const geo=c.Lat?'📍':'';
     return `<tr class="anag-row" id="anagRow_${m3}" onclick="toggleAnagTree('${m3}')" style="cursor:pointer">
       <td><span class="anag-arrow" id="anagArrow_${m3}">▶</span></td>
-      <td><strong>${esc(c.NomeAccount||'-')}</strong><br><small style="color:var(--muted)">${esc(c.NomeInterno||'')} ${geo}</small></td>
+      <td><strong>${esc(c.NomeInterno||c.NomeAccount||'-')}</strong><br><small style="color:var(--muted)">${esc(c.NomeInterno?c.NomeAccount||'':'')} ${geo}</small></td>
       <td>${esc(c.CittaFatturazione||'')}</td>
       <td>${esc(c.ProvinciaFatturazione||'')}</td>
       <td><span class="badge ${c.StatoCliente==='Attivo'?'badge-ok':'badge-warn'}" style="font-size:.7rem">${esc(c.StatoCliente||'-')}</span></td>
@@ -4673,6 +4673,16 @@ async function importAnagXlsx(file){
         return nomeInternoMap[up]||nomeAccountMap[up]||movexMap[up]||null;
       }
 
+      // 3b. Resolve CodiceM3 for base Assets (Movex col doesn't exist in Assets sheet)
+      let m3Resolved=0;
+      assets.forEach(a=>{
+        if(!a.CodiceM3&&a.NomeAccount){
+          const m3=resolveM3(a.NomeAccount,null);
+          if(m3){a.CodiceM3=m3;m3Resolved++}
+        }
+      });
+      console.log(`Assets base: ${assets.length} total, ${m3Resolved} CodiceM3 resolved from client name`);
+
       // 4. Parse ALL individual asset sheets with full column mappings
       // Each config: hr=header row (0-based), data starts at hr+1
       // Right-side table (extended): cc=client col, sc=serial col, dc=date col, mc=movex col, nc=note col, pc=provincia col, sa=sales advisor col, stc=status col, modc=model col
@@ -4731,9 +4741,15 @@ async function importAnagXlsx(file){
             if(ind&&!existing.Ind)existing.Ind=String(ind);
             // Status dal foglio singolo SOVRASCRIVE sempre (più affidabile del foglio Assets generico)
             if(status)existing.Status=String(status);
-            // Il foglio prodotto è la fonte autorevole per il tipo
-            existing.TipoFoglio=sname;
-            existing.GruppoAttrezzatura=sname;
+            // TipoFoglio: aggiorna solo se era 'Assets' (generico)
+            if(!existing.TipoFoglio||existing.TipoFoglio==='Assets')existing.TipoFoglio=sname;
+            // GruppoAttrezzatura: aggiorna solo se era nullo o generico (es 'Customer Item','Accessories')
+            if(!existing.GruppoAttrezzatura||existing.GruppoAttrezzatura==='Assets')existing.GruppoAttrezzatura=sname;
+            // CodiceM3: se manca, risolvi dal foglio prodotto (client name + movex col)
+            if(!existing.CodiceM3){
+              const m3=resolveM3(cli,cfg.mc!=null?row[cfg.mc]:null);
+              if(m3)existing.CodiceM3=m3;
+            }
             enriched++;
             continue;
           }
