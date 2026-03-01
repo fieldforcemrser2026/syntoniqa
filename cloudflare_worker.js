@@ -1748,44 +1748,78 @@ Rispondi SOLO JSON:
       const sysPrompt = 'Sei un pianificatore FSM per Lely Center. Rispondi SOLO con JSON valido, nessun testo prima o dopo. Note max 15 caratteri. Formato: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome cognome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|service|urgenza|installazione|ispezione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"breve"}],"warnings":["..."]}';
 
       async function callAI(promptText) {
-        // PRIMARY: Gemini 2.0 Flash — fast, large context, reliable JSON
-        if (env.GEMINI_KEY) {
-          const geminiRes = await fetch(
+        // Helper: singola chiamata Gemini
+        async function geminiCall(text) {
+          const res = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+            { method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 system_instruction: { parts: [{ text: sysPrompt }] },
-                contents: [{ parts: [{ text: promptText }] }],
+                contents: [{ parts: [{ text }] }],
                 generationConfig: { maxOutputTokens: 16384, temperature: 0.3, responseMimeType: 'application/json' }
               })
             }
           );
-          if (!geminiRes.ok) {
-            const errBody = await geminiRes.text().catch(() => '');
-            throw new Error(`Gemini HTTP ${geminiRes.status}: ${errBody.substring(0, 200)}`);
-          }
-          const gd = await geminiRes.json();
-          if (gd.error) throw new Error(`Gemini API: ${gd.error.message || JSON.stringify(gd.error).substring(0, 200)}`);
-          const text = gd.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (!text) {
-            const blockReason = gd.candidates?.[0]?.finishReason || gd.promptFeedback?.blockReason || 'no_candidates';
-            throw new Error(`Gemini no output (${blockReason}). PromptFeedback: ${JSON.stringify(gd.promptFeedback || {}).substring(0, 150)}`);
-          }
-          return text;
+          return res;
         }
-        // FALLBACK: Workers AI Llama (solo se Gemini non configurato)
+
+        // PRIMARY: Gemini 2.0 Flash con retry su 429
+        if (env.GEMINI_KEY) {
+          let lastErr = null;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 4000)); // 4s, 8s delay
+            try {
+              const geminiRes = await geminiCall(promptText);
+              if (geminiRes.status === 429) {
+                lastErr = 'Gemini rate limit (429) — retry ' + (attempt + 1);
+                continue; // retry after delay
+              }
+              if (!geminiRes.ok) {
+                const errBody = await geminiRes.text().catch(() => '');
+                lastErr = `Gemini HTTP ${geminiRes.status}: ${errBody.substring(0, 200)}`;
+                break; // non-429 errors: don't retry
+              }
+              const gd = await geminiRes.json();
+              if (gd.error) { lastErr = `Gemini: ${gd.error.message || 'errore'}`; break; }
+              const text = gd.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (text) return text;
+              lastErr = `Gemini no output: ${gd.candidates?.[0]?.finishReason || 'no_candidates'}`;
+              break;
+            } catch (e) { lastErr = `Gemini fetch: ${e.message}`; break; }
+          }
+          // Gemini fallita → Workers AI con prompt COMPATTO (max ~5000 chars)
+          if (env.AI) {
+            const shortPrompt = promptText.length > 5000
+              ? promptText.substring(0, 2000) + '\n...[DATI TRONCATI per limiti modello]...\n' + promptText.substring(promptText.length - 2500)
+              : promptText;
+            try {
+              const aiPromise = env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+                messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: shortPrompt }],
+                max_tokens: 4096
+              });
+              const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 60000));
+              const res = await Promise.race([aiPromise, timeout]);
+              if (res?.response) return res.response;
+            } catch (fallbackErr) {
+              // Workers AI also failed
+            }
+          }
+          throw new Error(lastErr || 'AI non disponibile');
+        }
+        // Solo Workers AI (no Gemini key)
         if (env.AI) {
+          const shortPrompt = promptText.length > 5000
+            ? promptText.substring(0, 2000) + '\n...[TRONCATO]...\n' + promptText.substring(promptText.length - 2500)
+            : promptText;
           const aiPromise = env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
-            messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
-            max_tokens: 8192
+            messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: shortPrompt }],
+            max_tokens: 4096
           });
-          const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 90000));
+          const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 60000));
           const res = await Promise.race([aiPromise, timeout]);
           return res?.response || null;
         }
-        throw new Error('Nessun AI engine configurato. Serve GEMINI_KEY o AI binding.');
+        throw new Error('Nessun AI configurato. Serve GEMINI_KEY o AI binding.');
       }
 
       // Parser robusto — gestisce JSON troncati (risposta tagliata a max_tokens)
