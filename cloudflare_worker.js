@@ -4750,13 +4750,13 @@ Rispondi SOLO con JSON valido:
       for (let i = 0; i < batch.length; i += 100) {
         const chunk = batch.slice(i, i + 100);
         try {
-          await sb(env, 'anagrafica_assets', 'POST', chunk, null, { 'Prefer': 'return=minimal,resolution=merge-duplicates' });
+          await sb(env, 'anagrafica_assets', 'POST', chunk, null, { 'Prefer': 'return=minimal' });
           results.inserted += chunk.length;
         } catch (e) {
           // Fallback: one by one
           for (const row of chunk) {
             try {
-              await sb(env, 'anagrafica_assets', 'POST', row, null, { 'Prefer': 'return=minimal,resolution=merge-duplicates' });
+              await sb(env, 'anagrafica_assets', 'POST', row, null, { 'Prefer': 'return=minimal' });
               results.inserted++;
             } catch (e2) {
               results.skipped++;
@@ -4776,8 +4776,8 @@ Rispondi SOLO con JSON valido:
       if (!caller?.[0] || caller[0].ruolo !== 'admin') return err('Solo admin può eseguire clearAnagrafica', 403);
       if (body.confirmToken !== 'CLEAR_CONFIRMED') return err('Conferma richiesta: invia confirmToken="CLEAR_CONFIRMED"');
       // Hard-delete (anagrafica tables don't have obsoleto column)
-      await sb(env, 'anagrafica_assets?id=neq.IMPOSSIBLE', 'DELETE');
-      await sb(env, 'anagrafica_clienti?id=neq.IMPOSSIBLE', 'DELETE');
+      await sb(env, 'anagrafica_assets?numero_serie=neq.IMPOSSIBLE', 'DELETE');
+      await sb(env, 'anagrafica_clienti?codice_m3=neq.IMPOSSIBLE', 'DELETE');
       await wlog('anagrafica', 'ALL', 'cleared_for_reimport', uid);
       return ok({ cleared: true, method: 'hard_delete' });
     }
