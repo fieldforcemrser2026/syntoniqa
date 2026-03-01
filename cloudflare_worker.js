@@ -1796,7 +1796,9 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId
       }
 
       async function callAI(promptText) {
-        // PRIMARY: Gemini 2.0 Flash (1 tentativo + 1 retry su 429)
+        let lastError = '';
+
+        // ENGINE 1: Gemini 2.0 Flash (primario — migliore qualita, JSON nativo)
         if (env.GEMINI_KEY) {
           for (let attempt = 0; attempt < 2; attempt++) {
             if (attempt > 0) await new Promise(r => setTimeout(r, 3000));
@@ -1811,15 +1813,45 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId
                   })
                 }
               );
-              if (geminiRes.status === 429) continue;
-              if (!geminiRes.ok) break;
+              if (geminiRes.status === 429) { lastError = 'Gemini 429'; continue; }
+              if (!geminiRes.ok) { lastError = `Gemini HTTP ${geminiRes.status}`; break; }
               const gd = await geminiRes.json();
               const text = gd.candidates?.[0]?.content?.parts?.[0]?.text;
               if (text) return text;
-            } catch (e) { break; }
+              lastError = 'Gemini: risposta vuota';
+            } catch (e) { lastError = `Gemini: ${e.message}`; break; }
           }
         }
-        // FALLBACK: Workers AI con prompt COMPATTO (file rimossi, dati compressi)
+
+        // ENGINE 2: Groq (Llama 3.3 70B — gratis, veloce, JSON nativo)
+        if (env.GROQ_KEY) {
+          try {
+            const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.GROQ_KEY}` },
+              body: JSON.stringify({
+                model: 'llama-3.3-70b-versatile',
+                messages: [
+                  { role: 'system', content: sysPrompt },
+                  { role: 'user', content: promptText }
+                ],
+                max_tokens: 16384,
+                temperature: 0.3,
+                response_format: { type: 'json_object' }
+              })
+            });
+            if (groqRes.ok) {
+              const gd = await groqRes.json();
+              const text = gd.choices?.[0]?.message?.content;
+              if (text) return text;
+            } else {
+              const errBody = await groqRes.text().catch(() => '');
+              lastError = `Groq HTTP ${groqRes.status}: ${errBody.substring(0, 100)}`;
+            }
+          } catch (e) { lastError = `Groq: ${e.message}`; }
+        }
+
+        // ENGINE 3: Workers AI Llama 3.3 70B (fallback — sempre disponibile, prompt compatto)
         if (env.AI) {
           const compactPrompt = buildCompactPrompt();
           const aiPromise = env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
@@ -1829,8 +1861,9 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId
           const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 120000));
           const res = await Promise.race([aiPromise, timeout]);
           if (res?.response) return res.response;
+          lastError = 'Workers AI timeout/vuoto';
         }
-        throw new Error('Gemini quota esaurita e Workers AI non disponibile. Attendi qualche minuto e riprova.');
+        throw new Error(`AI non disponibile (${lastError}). Configura GEMINI_KEY o GROQ_KEY nelle env del worker.`);
       }
 
       // Parser robusto — gestisce JSON troncati (risposta tagliata a max_tokens)
@@ -1880,25 +1913,62 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId
         return null;
       }
 
-      // Helper: validate tecnicoId, fix furgoni, remove weekends
+      // ─── Parse vincoli per estrarre regole programmatiche ───
+      const vincoliRules = { assenti: new Set(), affiancamenti: [] };
+      if (vincoliCfg.length) {
+        try {
+          const vc = JSON.parse(vincoliCfg[0].valore);
+          const oggi2 = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
+          for (const cat of (vc.categories || []).filter(c => c.attiva !== false)) {
+            for (const r of (cat.regole || [])) {
+              if (!r.testo) continue;
+              const attiva = r.permanente || !(r.data_fine && r.data_fine < oggi2);
+              if (!attiva) continue;
+              const txt = (r.testo || '').toLowerCase();
+              // Regola assenza: "assente", "non disponibile", "ferie", "malattia"
+              if (txt.match(/assent|non disponibil|ferie|malattia|indisponibil/)) {
+                for (const id of (r.soggetti || [])) vincoliRules.assenti.add(id);
+              }
+              // Regola affiancamento: "affianc", "accompagn", "coppia"
+              if (txt.match(/affianc|accompagn|coppia|deve lavorare con|junior.*senior/)) {
+                vincoliRules.affiancamenti.push({
+                  junior: r.soggetti || [],
+                  senior: r.riferimenti || [],
+                  testo: r.testo
+                });
+              }
+            }
+          }
+        } catch {}
+      }
+
+      // Helper: validate tecnicoId, fix furgoni, remove weekends, ENFORCE vincoli
       function postProcess(piano) {
         return (piano || []).map(p => {
-          // Fix tecnicoId
+          // Fix tecnicoId: se non valido, cerca match per nome
           if (p.tecnicoId && !validIds.has(p.tecnicoId)) {
-            const match = allTecnici.find(t => (t.nome + ' ' + t.cognome).toLowerCase().includes((p.tecnico||'').split(' ')[0].toLowerCase()));
+            const searchName = (p.tecnico||'').toLowerCase();
+            const match = allTecnici.find(t =>
+              searchName.includes(t.nome.toLowerCase()) ||
+              (t.cognome && searchName.includes(t.cognome.toLowerCase())) ||
+              `${t.nome} ${t.cognome}`.toLowerCase() === searchName
+            );
             if (match) { p.tecnicoId = match.id; p.tecnico = match.nome + ' ' + match.cognome; }
           }
-          // Fix furgone: usa il furgone assegnato al tecnico dal DB
+          // Fix furgone: SEMPRE usa il furgone dal DB (ignora quello AI)
           if (p.tecnicoId) {
             const tec = allTecnici.find(t => t.id === p.tecnicoId);
             if (tec && tec.automezzo_id) {
-              const auto = allAutomezzi.find(a => a.id === tec.automezzo_id);
-              if (auto) p.furgone = auto.id;
+              p.furgone = tec.automezzo_id;
+            } else if (tec) {
+              p.furgone = '';
             }
           }
           return p;
         }).filter(p => {
           if (!p.tecnicoId || !validIds.has(p.tecnicoId)) return false;
+          // VINCOLO: rimuovi tecnici assenti
+          if (vincoliRules.assenti.has(p.tecnicoId)) return false;
           // Rimuovi sab/dom (tipo tagliando) — tieni solo urgenze di reperibilita
           try {
             const d = new Date(p.data);
@@ -1909,14 +1979,123 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId
         });
       }
 
-      // Single AI call for ALL modes (mese/settimana/vuoti)
+      // ─── GENERAZIONE: chunking settimanale per mese intero ───
       try {
-        const rawText = await callAI(prompt);
-        if (!rawText) return err('AI non ha generato risposta. Verifica GEMINI_KEY nelle env del worker.');
-        const result = parseAIResponse(rawText);
-        if (!result) return ok({ summary: 'Errore formato risposta', piano: [], warnings: ['Risposta AI non parsabile. Riprova.'], raw: rawText.substring(0, 1500) });
-        result.piano = postProcess(result.piano);
-        return ok(result);
+        // Costruisci contesto base (comune a tutti i chunk)
+        const baseContext = `PLANNER FSM — ${meseTarget || 'Piano interventi'}
+OGGI: ${oggiIt} (${isoOggi})
+
+########## VINCOLI CONFIGURATI (INVIOLABILI — rispetta OGNI regola senza eccezioni) ##########
+${vincoliText || '(Nessun vincolo)'}
+${testo ? 'ISTRUZIONI AGGIUNTIVE UTENTE: ' + testo : ''}
+##########
+
+TECNICI DISPONIBILI (${nTecAttivi}): ${tecList}
+AUTOMEZZI: ${autoList || 'Nessuno'}
+${urgList ? 'URGENZE APERTE: ' + urgList : ''}
+CLIENTI: ${cliList}
+${repContext}
+${pianoEsistente}
+${tagliandiContext}
+${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}`;
+
+        const instructions = `ISTRUZIONI GENERAZIONE:
+- Tagliandi/interventi SOLO lun-ven. SABATO e DOMENICA: NIENTE.
+- Lun-ven: TUTTI i ${nTecAttivi} tecnici attivi devono avere interventi OGNI giorno (08:00-17:00) = MINIMO ${nTecAttivi} righe/giorno.
+- Durata: un tagliando puo richiedere 4-8 ore (anche giornata intera). Urgenze 1-3h.
+- "tagliando" e "service" = sinonimi. Nelle note scrivi il MODELLO macchina (es: "Astronaut A5", "Vector 70").
+- Affiancamento junior+senior: genera DUE righe (una per senior, una per junior) con STESSO cliente/data/ora/furgone.
+- Tecnici marcati come assenti nei vincoli: NON inserirli.
+- Usa il FURGONE indicato tra parentesi nel tecnico.
+- Raggruppa per zona (stessa citta per stesso tecnico nello stesso giorno).
+- Urgenze → primi giorni. Tagliandi scaduti → massima priorita.
+- Usa SOLO clienti dalla lista con codice_m3 corretto.
+
+JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome cognome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina"}],"warnings":["..."]}`;
+
+        // Determina se serve chunking (mese intero → chunk settimanale)
+        const needsChunking = modalita === 'mese' && meseTarget;
+
+        if (needsChunking) {
+          // ── CHUNKING SETTIMANALE: 4-5 chiamate AI, una per settimana ──
+          const [yy, mm] = meseTarget.split('-').map(Number);
+          const monthStart = new Date(yy, mm - 1, 1);
+          const monthEnd = new Date(yy, mm, 0);
+
+          // Calcola settimane del mese
+          const weeks = [];
+          let ws = new Date(monthStart);
+          while (ws <= monthEnd) {
+            // Trova lunedi (inizio settimana lavorativa)
+            let we = new Date(ws);
+            we.setDate(we.getDate() + 6);
+            if (we > monthEnd) we = new Date(monthEnd);
+            const wd = getWorkDays(ws, we);
+            if (wd.length > 0) weeks.push({ workDays: wd, label: `Sett ${weeks.length + 1}` });
+            ws = new Date(we);
+            ws.setDate(ws.getDate() + 1);
+          }
+
+          const allPiano = [];
+          const allWarnings = new Set();
+          let chunksDone = 0;
+
+          for (let wi = 0; wi < weeks.length; wi++) {
+            const week = weeks[wi];
+            // Delay 2s tra chunk per evitare rate limiting Groq (6000 tok/min)
+            if (wi > 0) await new Promise(r => setTimeout(r, 2000));
+            // Costruisci prompt per questa settimana
+            const prevSummary = allPiano.length > 0
+              ? '\nPIANO GIA GENERATO (NON duplicare — genera solo i giorni richiesti):\n' +
+                allPiano.slice(-20).map(p => `${p.data} ${p.tecnico}: ${p.cliente}`).join('; ')
+              : '';
+
+            const weekPrompt = `${baseContext}
+${prevSummary}
+
+GENERA PIANO SOLO per questi ${week.workDays.length} GIORNI: ${week.workDays.join(', ')}
+Genera ESATTAMENTE ${week.workDays.length} giorni con almeno ${nTecAttivi} interventi ciascuno (totale minimo: ${week.workDays.length * nTecAttivi} righe).
+
+${instructions}`;
+
+            try {
+              const rawText = await callAI(weekPrompt);
+              if (!rawText) continue;
+              const parsed = parseAIResponse(rawText);
+              if (parsed?.piano) allPiano.push(...parsed.piano);
+              if (parsed?.warnings) parsed.warnings.forEach(w => allWarnings.add(w));
+              chunksDone++;
+            } catch (chunkErr) {
+              allWarnings.add(`${week.label}: ${chunkErr.message}`);
+            }
+          }
+
+          if (!allPiano.length) return err('AI non ha generato nessun intervento. Verifica le API key (GEMINI_KEY / GROQ_KEY).');
+
+          const processed = postProcess(allPiano);
+          return ok({
+            summary: `Piano ${meseTarget}: ${processed.length} interventi su ${[...new Set(processed.map(p=>p.data))].length} giorni (${chunksDone}/${weeks.length} settimane)`,
+            piano: processed,
+            warnings: [...allWarnings],
+            chunks: chunksDone
+          });
+
+        } else {
+          // ── SINGOLA CHIAMATA: settimana specifica o giorni vuoti ──
+          const singlePrompt = `${baseContext}
+
+${periodoIstruzione || 'Genera piano per OGNI giorno lavorativo (lun-ven)'}
+Genera almeno ${nTecAttivi} interventi per OGNI giorno lavorativo.
+
+${instructions}`;
+
+          const rawText = await callAI(singlePrompt);
+          if (!rawText) return err('AI non ha generato risposta. Verifica GEMINI_KEY/GROQ_KEY nelle env del worker.');
+          const result = parseAIResponse(rawText);
+          if (!result) return ok({ summary: 'Errore formato risposta', piano: [], warnings: ['Risposta AI non parsabile. Riprova.'], raw: rawText.substring(0, 1500) });
+          result.piano = postProcess(result.piano);
+          return ok(result);
+        }
       } catch (e) {
         return err(`Errore AI: ${e.message || 'sconosciuto'}`);
       }
@@ -2028,14 +2207,29 @@ Rispondi SOLO con JSON valido:
     case 'applyAIPlan': {
       const adminErr = await requireAdmin(env, body);
       if (adminErr) return err(adminErr, 403);
-      const pianoAI = body.piano?.piano || body.piano || [];
+
+      // Estrai array piano: supporta body.piano.piano (nested) e body.piano (flat array)
+      let pianoAI = [];
+      if (body.piano) {
+        if (Array.isArray(body.piano)) {
+          pianoAI = body.piano;
+        } else if (body.piano.piano && Array.isArray(body.piano.piano)) {
+          pianoAI = body.piano.piano;
+        } else if (typeof body.piano === 'object') {
+          // Potrebbe essere l'intero result object — cerca piano dentro
+          pianoAI = body.piano.piano || [];
+        }
+      }
       const forceOverwrite = body.force_overwrite === true;
       const operatoreId = body.operatore_id || body.userId || 'admin';
-      if (!Array.isArray(pianoAI) || !pianoAI.length) return err('Piano vuoto, nulla da applicare');
+
+      if (!Array.isArray(pianoAI) || !pianoAI.length) {
+        return err(`Piano vuoto (${typeof body.piano}, keys: ${body.piano ? Object.keys(body.piano).join(',') : 'null'}). Genera prima un piano.`);
+      }
 
       // 1. Check for conflicts (existing interventions same tecnico+data)
-      const dates = [...new Set(pianoAI.map(p => p.data).filter(Boolean))];
-      const tecIds = [...new Set(pianoAI.map(p => p.tecnicoId).filter(Boolean))];
+      const dates = [...new Set(pianoAI.map(p => p.data || p.Data).filter(Boolean))];
+      const tecIds = [...new Set(pianoAI.map(p => p.tecnicoId || p.tecnico_id || p.TecnicoID).filter(Boolean))];
       let existing = [];
       if (dates.length && tecIds.length) {
         const dateMin = dates.sort()[0];
@@ -2056,7 +2250,8 @@ Rispondi SOLO con JSON valido:
       const conflicts = [];
       const toCreate = [];
       for (const item of pianoAI) {
-        const key = `${item.tecnicoId}|${item.data}`;
+        const tid = item.tecnicoId || item.tecnico_id || item.TecnicoID;
+        const key = `${tid}|${item.data || item.Data}`;
         if (conflictMap[key] && conflictMap[key].length > 0) {
           conflicts.push({
             nuovo: { data: item.data, tecnico: item.tecnico, cliente: item.cliente, tipo: item.tipo },
@@ -2085,21 +2280,22 @@ Rispondi SOLO con JSON valido:
       }
 
       // 2. Create new interventions
-      const created = [], errors = [];
+      const created = [], applyErrors = [];
       const now = new Date().toISOString();
       for (const item of toCreate) {
         try {
           const id = 'INT_AI_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
-          const noteParts = [item.tipo || '', item.note || ''].filter(Boolean);
+          const tid = item.tecnicoId || item.tecnico_id || item.TecnicoID;
+          const cid = item.clienteId || item.cliente_id || item.ClienteID || null;
+          const durata = item.durataOre || item.durata_ore || '';
+          const noteParts = [item.tipo || '', item.note || '', durata ? durata+'h' : ''].filter(Boolean);
           await sb(env, 'piano', 'POST', {
             id,
-            tecnico_id: item.tecnicoId,
-            cliente_id: item.clienteId || null,
-            data: item.data,
-            ora_inizio: item.oraInizio || null,
-            durata_ore: item.durataOre || null,
-            tipo_intervento: item.tipo || 'service',
-            automezzo_id: item.furgone || null,
+            tecnico_id: tid,
+            cliente_id: cid,
+            data: item.data || item.Data,
+            ora_inizio: item.oraInizio || item.ora_inizio || null,
+            automezzo_id: item.furgone || item.automezzo_id || null,
             stato: 'pianificato',
             origine: 'ai',
             note: noteParts.join(' — '),
@@ -2109,17 +2305,18 @@ Rispondi SOLO con JSON valido:
             updated_at: now
           });
           created.push(id);
-          await wlog('piano', id, 'ai_plan_applied', operatoreId, `${item.tecnico} @ ${item.cliente}`);
+          await wlog('piano', id, 'ai_plan_applied', operatoreId, `${item.tecnico || tid} @ ${item.cliente || cid}`).catch(()=>{});
         } catch (e) {
-          errors.push({ item: `${item.data} ${item.tecnico}`, err: e.message });
+          applyErrors.push({ item: `${item.data} ${item.tecnico}`, err: e.message });
         }
       }
 
       return ok({
         created: created.length,
         overwritten: forceOverwrite ? conflicts.length : 0,
-        errors: errors.length ? errors : undefined,
-        ids: created
+        errors: applyErrors.length ? applyErrors : undefined,
+        ids: created,
+        total_received: pianoAI.length
       });
     }
 
