@@ -4759,8 +4759,8 @@ Rispondi SOLO con JSON valido:
       const defRows = await sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_definitions&limit=1').catch(() => []);
       const cycleDefs = defRows?.[0]?.valore ? JSON.parse(defRows[0].valore) : getDefaultCycleDefs();
 
-      // 3. Carica macchine
-      let mFilter = '?obsoleto=eq.false&select=id,nome,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,data_installazione&limit=1000';
+      // 3. Carica macchine (solo quelle con prossimo_tagliando)
+      let mFilter = '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,nome,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&limit=1000';
       if (pmMacId) mFilter += `&id=eq.${pmMacId}`;
       if (pmCliId) mFilter += `&cliente_id=eq.${pmCliId}`;
       const macchine = await sb(env, 'macchine', 'GET', null, mFilter).catch(() => []);
@@ -4794,9 +4794,7 @@ Rispondi SOLO con JSON valido:
         // Genera prossimi N tagliandi (fino a 4 futuri)
         const prossimi = [];
         let baseDate = mac.prossimo_tagliando || (ultimoCompletato ? addDays(ultimoCompletato, intervallo) : null);
-        if (!baseDate && mac.data_installazione) {
-          baseDate = addDays(mac.data_installazione, intervallo);
-        }
+        if (!baseDate) continue; // skip machines without any PM date
 
         for (let i = 0; i < 4 && baseDate; i++) {
           const idx = (posizioneCorrente + i) % cicloSequenza.length;
@@ -4817,20 +4815,36 @@ Rispondi SOLO con JSON valido:
         // Storico completati
         const completati = state.completati || [];
 
-        calendar.push({
-          macchina_id: mac.id,
-          macchina_nome: mac.nome || mac.id,
-          modello: mac.modello || mac.tipo,
-          cliente_id: mac.cliente_id,
-          cliente_nome: cliMap[mac.cliente_id] || mac.cliente_id || '—',
-          ciclo_tipo: def ? def.nome : 'Standard',
-          ciclo_sequenza: cicloSequenza,
-          posizione_corrente: posizioneCorrente,
-          intervallo_giorni: intervallo,
-          prossimi,
-          completati: completati.slice(-8) // ultimi 8
-        });
+        // Se mese_target specificato, includi solo macchine con almeno un PM nel mese
+        const hasInMonth = pmMese ? prossimi.some(p => p.data && p.data.startsWith(pmMese)) : true;
+        // Oppure include se prossimo tagliando è scaduto (passato)
+        const isOverdue = mac.prossimo_tagliando && mac.prossimo_tagliando < today;
+
+        if (hasInMonth || isOverdue || !pmMese) {
+          calendar.push({
+            macchina_id: mac.id,
+            macchina_nome: mac.nome || mac.id,
+            modello: mac.modello || mac.tipo,
+            cliente_id: mac.cliente_id,
+            cliente_nome: cliMap[mac.cliente_id] || mac.cliente_id || '—',
+            ciclo_tipo: def ? def.nome : 'Standard',
+            ciclo_sequenza: cicloSequenza,
+            posizione_corrente: posizioneCorrente,
+            intervallo_giorni: intervallo,
+            prossimi,
+            completati: completati.slice(-8), // ultimi 8
+            prossimo_tagliando: mac.prossimo_tagliando,
+            scaduto: isOverdue
+          });
+        }
       }
+
+      // Ordina: scaduti prima, poi per data prossimo tagliando
+      calendar.sort((a, b) => {
+        if (a.scaduto && !b.scaduto) return -1;
+        if (!a.scaduto && b.scaduto) return 1;
+        return (a.prossimo_tagliando || '').localeCompare(b.prossimo_tagliando || '');
+      });
 
       return ok({ calendar, cycle_definitions: cycleDefs, mese: pmMese || 'prossimi_6_mesi', total: calendar.length });
     }
@@ -4997,7 +5011,7 @@ Rispondi SOLO con JSON valido:
 
       // Carica tutto
       const [macchine2, cycleR, defR, existingPM] = await Promise.all([
-        sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,nome,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,data_installazione&limit=1000').catch(() => []),
+        sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,nome,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&limit=1000').catch(() => []),
         sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_state&limit=1').catch(() => []),
         sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_definitions&limit=1').catch(() => []),
         sb(env, 'piano', 'GET', null, `?obsoleto=eq.false&tipo_intervento_id=eq.TAGLIANDO&stato=eq.pianificato&data=gte.${today2}&order=data.asc&limit=1000`).catch(() => [])

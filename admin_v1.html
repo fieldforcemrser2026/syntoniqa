@@ -6263,7 +6263,14 @@ function getStatoBadge(stato){
 
 function renderPMCalendarGrid(data,meseStr){
   const cal=data?.calendar||[];
-  if(!cal.length){$('pmCalGrid').innerHTML='<p style="color:var(--gray);font-size:.85rem">Nessuna macchina con tagliandi programmati</p>';return}
+  if(!cal.length){
+    $('pmCalGrid').innerHTML=`<div style="text-align:center;padding:40px 20px">
+      <p style="font-size:1.2rem;margin-bottom:8px">📭 Nessun tagliando in questo mese</p>
+      <p style="color:var(--gray);font-size:.85rem;margin-bottom:16px">Nessuna macchina ha tagliandi scaduti o in scadenza in ${meseStr}.</p>
+      <p style="color:var(--gray);font-size:.8rem">Prova a cambiare mese o vai alla tab <b>⚡ Genera PM</b> per creare interventi.</p>
+    </div>`;
+    return;
+  }
 
   // Raggruppa per cliente
   const byCliente={};
@@ -6559,19 +6566,57 @@ async function savePMCycleDefs(){
 
 // --- SCADENZE (tab 4) ---
 async function renderPMTagliandi(){
-  $('pmTagliandiScadenza').innerHTML='<p style="color:var(--gray);font-size:.8rem">⏳ Caricamento tagliandi...</p>';
+  $('pmTagliandiScadenza').innerHTML='<p style="color:var(--gray);font-size:.8rem">⏳ Caricamento tagliandi in scadenza...</p>';
   try{
-    const r=await apiCall('generateReport',{tipo:'tagliandi_scadenza',filtri:{dataInizio:new Date().toISOString().split('T')[0]},userId:USER?.ID},'POST');
-    if(!r?.righe?.length){$('pmTagliandiScadenza').innerHTML='<p style="color:var(--gray);font-size:.8rem">✅ Nessun tagliando in scadenza</p>';return}
-    let html='<table class="data-table"><thead><tr>';
-    (r.colonne||[]).forEach(c=>{html+='<th>'+c+'</th>'});
-    html+='</tr></thead><tbody>';
-    r.righe.forEach(row=>{
-      const isUrgent=(row[5]||'').includes('SCADUTO')||(row[5]||'').includes('URGENTE');
-      html+=`<tr style="${isUrgent?'background:rgba(220,38,38,.04)':''}">`;
-      row.forEach((cell,i)=>{html+='<td>'+(i===5?'<b>'+esc(cell)+'</b>':esc(cell))+'</td>'});
-      html+='</tr>';
+    // Carica macchine con prossimo_tagliando per avere dati azionabili
+    const calData=await apiCall('getPMCalendar',{userId:USER?.ID},'POST').catch(()=>null);
+    const machines=(calData?.calendar||[]).filter(m=>m.scaduto||m.prossimi?.some(p=>p.data&&p.data<=new Date(Date.now()+30*86400000).toISOString().split('T')[0]));
+
+    if(!machines.length){
+      $('pmTagliandiScadenza').innerHTML='<p style="color:var(--gray);font-size:.8rem">✅ Nessun tagliando in scadenza nei prossimi 30 giorni</p>';
+      return;
+    }
+
+    // Conteggi
+    const scaduti=machines.filter(m=>m.scaduto);
+    const urgenti=machines.filter(m=>!m.scaduto&&m.prossimi?.some(p=>{const d=p.data;const t=new Date().toISOString().split('T')[0];const w=new Date(Date.now()+7*86400000).toISOString().split('T')[0];return d>=t&&d<=w}));
+
+    let html=`<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      ${scaduti.length?`<div style="padding:8px 16px;border-radius:8px;background:rgba(220,38,38,.1);font-size:.8rem;font-weight:600;color:#991B1B">🔴 ${scaduti.length} SCADUTI</div>`:''}
+      ${urgenti.length?`<div style="padding:8px 16px;border-radius:8px;background:rgba(234,179,8,.1);font-size:.8rem;font-weight:600;color:#92400E">🟠 ${urgenti.length} entro 7 giorni</div>`:''}
+      <div style="padding:8px 16px;border-radius:8px;background:rgba(59,130,246,.1);font-size:.8rem;color:#1D4ED8">${machines.length} totali entro 30gg</div>
+    </div>`;
+
+    html+=`<table class="data-table"><thead><tr><th>Macchina</th><th>Modello</th><th>Cliente</th><th>Prossimo PM</th><th>Tipo Ciclo</th><th>Stato</th><th>Azioni</th></tr></thead><tbody>`;
+
+    machines.forEach(m=>{
+      const prossimoTag=m.prossimo_tagliando||'—';
+      const today=new Date().toISOString().split('T')[0];
+      const ggDiff=prossimoTag!=='—'?Math.round((new Date(prossimoTag)-new Date())/86400000):'?';
+      const isScaduto=m.scaduto;
+      const isUrgente=!isScaduto&&ggDiff<=7;
+      const rowBg=isScaduto?'background:rgba(220,38,38,.06)':isUrgente?'background:rgba(234,179,8,.06)':'';
+      const urgLabel=isScaduto?'🔴 SCADUTO':isUrgente?'🟠 URGENTE':ggDiff<=30?'🟡 PROSSIMO':'🟢 OK';
+
+      // Prossimo tipo ciclo
+      const nextPM=m.prossimi?.[0];
+      const cicloTipo=nextPM?.tipo||'?';
+      const col=getCicloColor(cicloTipo);
+
+      html+=`<tr style="${rowBg}">
+        <td style="font-weight:500;cursor:pointer" onclick="switchPmTab('calendar',document.querySelectorAll('.pm-tab')[0]);setTimeout(()=>showPMDetail('${m.macchina_id}'),500)">${esc(m.macchina_nome)}</td>
+        <td style="font-size:.8rem">${esc(m.modello||'—')}</td>
+        <td style="font-size:.8rem">${esc(m.cliente_nome||'—')}</td>
+        <td style="font-family:JetBrains Mono;font-size:.75rem">${prossimoTag} <span style="color:var(--gray)">(${ggDiff}gg)</span></td>
+        <td><span style="padding:2px 8px;border-radius:8px;font-size:.7rem;font-weight:700;background:${col.bg};color:${col.fg}">${cicloTipo}</span> <span style="font-size:.7rem;color:var(--gray)">${esc(m.ciclo_tipo)}</span></td>
+        <td><b>${urgLabel}</b></td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm" style="background:#059669;color:white;font-size:.7rem" onclick="completePMFromCal('${m.macchina_id}','${nextPM?.piano_id||''}')">✅ Completa</button>
+          <button class="btn btn-outline btn-sm" style="font-size:.7rem" onclick="switchPmTab('calendar',document.querySelectorAll('.pm-tab')[0]);setTimeout(()=>showPMDetail('${m.macchina_id}'),500)">📋 Dettaglio</button>
+        </td>
+      </tr>`;
     });
+
     html+='</tbody></table>';
     $('pmTagliandiScadenza').innerHTML=html;
   }catch(e){$('pmTagliandiScadenza').innerHTML='<p style="color:var(--danger);font-size:.8rem">❌ Errore: '+esc(e.message)+'</p>'}
