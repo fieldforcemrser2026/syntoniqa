@@ -483,11 +483,13 @@ async function handleGet(action, url, env) {
 
 async function handlePost(action, body, env) {
   // Wrapper per log workflow automatico
+  const TENANT = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
   async function wlog(entityType, entityId, action, userId, note = '') {
     await sb(env, 'workflow_log', 'POST', {
       id: `WL_${Date.now()}`,
       entity_type: entityType, entity_id: entityId,
       action, user_id: userId, note,
+      tenant_id: TENANT,
       timestamp_at: new Date().toISOString()
     }).catch(() => {}); // non-blocking
   }

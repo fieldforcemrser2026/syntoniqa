@@ -1886,6 +1886,9 @@ function showSec(id,btn){
   $('headerTitle').textContent=titles[id]||id;
   // Stop chat polling when navigating away from chat section
   if(id!=='chat'&&CHAT_POLL){clearInterval(CHAT_POLL);CHAT_POLL=null;}
+  // Lazy render: renderizza sezione solo alla prima apertura
+  lazyRender(id);
+  // Sezioni con init speciale (async o con librerie esterne)
   if(id==='mappa')setTimeout(()=>initMap(),100);
   if(id==='kpi')loadKPIWithCharts();
   if(id==='planner')setTimeout(()=>initPlanner(),100);
@@ -1938,7 +1941,7 @@ async function refreshData(silent){
     let url=API_URL+'?'+new URLSearchParams({action:'getAll',token:API_TOKEN,userId:USER?.ID||''});
     const r=await fetch(url,{signal:AbortSignal.timeout(15000)});
     const json=await r.json();
-    if(json.success&&json.data){DATA=json.data;renderAll()}
+    if(json.success&&json.data){DATA=json.data;renderAllForce()}
   }catch(e){if(!silent)toast('Errore refresh: '+e.message,'err');else console.warn('[REFRESH]',e.message)}
   finally{_refreshBusy=false}
 }
@@ -2176,14 +2179,56 @@ function populateModalClients(selId){
 }
 
 // ============ RENDER ALL ============
+// ---- LAZY RENDERING: sezioni renderizzate on-demand ----
+const _rendered = new Set();
+const SEC_RENDERERS = {
+  dashboard: renderDashboard,
+  piano: renderPiano,
+  urgenze: renderUrgenze,
+  ordini: renderOrdini,
+  installazioni: renderInstallazioni,
+  reperibilita: renderReperibilita,
+  trasferte: renderTrasferte,
+  notifiche: renderNotifiche,
+  richieste: renderRichieste,
+  clienti: renderClienti,
+  macchine: renderMacchine,
+  automezzi: renderAutomezzi,
+  tecnici: renderTecnici,
+  sla: renderSLA,
+  audit: renderAuditLog,
+  powerbi: renderPowerBI,
+  config: renderConfig,
+  pagellini: renderPagellini,
+  calendario: renderCal,
+  documenti: renderDocumenti,
+  checklist: renderChecklist,
+  allegati: renderAllegati,
+  email: renderEmailConfig,
+  telegram: ()=>{renderTelegramConfig();renderTelegramExtras()},
+};
+function lazyRender(secId, force){
+  if(!force && _rendered.has(secId)) return;
+  const fn = SEC_RENDERERS[secId];
+  if(fn) { fn(); _rendered.add(secId); }
+}
 function renderAll(){
-  renderDashboard();renderPiano();renderUrgenze();renderOrdini();renderInstallazioni();
-  renderReperibilita();renderTrasferte();renderNotifiche();renderRichieste();
-  renderClienti();renderMacchine();renderAutomezzi();renderTecnici();
-  renderSLA();renderAuditLog();renderPowerBI();renderConfig();renderPagellini();
-  renderCal();renderDocumenti();renderChecklist();renderAllegati();
-  renderEmailConfig();renderTelegramConfig();renderTelegramExtras();
+  // Al login: solo dashboard + badges (rest sarà lazy)
+  _rendered.clear();
+  renderDashboard(); _rendered.add('dashboard');
   updateBadges();
+}
+function renderAllForce(){
+  // Dopo refreshData: invalida cache e ri-renderizza sezione attiva
+  _rendered.clear();
+  renderDashboard(); _rendered.add('dashboard');
+  updateBadges();
+  // Re-render only the active section
+  const activeSec = document.querySelector('.sec.active');
+  if(activeSec){
+    const secId = activeSec.id.replace('sec','').toLowerCase();
+    lazyRender(secId, true);
+  }
 }
 
 function updateBadges(){
@@ -5991,21 +6036,22 @@ async function generatePMSchedule(dryRun){
   }
 }
 async function renderPMTagliandi(){
+  $('pmTagliandiScadenza').innerHTML='<p style="color:var(--gray);font-size:.8rem">⏳ Caricamento tagliandi...</p>';
   try{
     const r=await apiCall('generateReport',{tipo:'tagliandi_scadenza',filtri:{dataInizio:new Date().toISOString().split('T')[0]},userId:USER?.ID},'POST');
-    if(!r?.righe?.length){$('pmTagliandiScadenza').innerHTML='<p style="color:var(--gray);font-size:.8rem">Nessun tagliando in scadenza</p>';return}
+    if(!r?.righe?.length){$('pmTagliandiScadenza').innerHTML='<p style="color:var(--gray);font-size:.8rem">✅ Nessun tagliando in scadenza</p>';return}
     let html='<table class="data-table"><thead><tr>';
     (r.colonne||[]).forEach(c=>{html+='<th>'+c+'</th>'});
     html+='</tr></thead><tbody>';
     r.righe.forEach(row=>{
       const isUrgent=(row[5]||'').includes('SCADUTO')||(row[5]||'').includes('URGENTE');
       html+=`<tr style="${isUrgent?'background:rgba(220,38,38,.04)':''}">`;
-      row.forEach((cell,i)=>{html+='<td>'+(i===5?'<b>'+cell+'</b>':cell)+'</td>'});
+      row.forEach((cell,i)=>{html+='<td>'+(i===5?'<b>'+esc(cell)+'</b>':esc(cell))+'</td>'});
       html+='</tr>';
     });
     html+='</tbody></table>';
     $('pmTagliandiScadenza').innerHTML=html;
-  }catch(e){$('pmTagliandiScadenza').innerHTML='<p style="color:var(--danger);font-size:.8rem">Errore: '+e.message+'</p>'}
+  }catch(e){$('pmTagliandiScadenza').innerHTML='<p style="color:var(--danger);font-size:.8rem">❌ Errore: '+esc(e.message)+'</p>'}
 }
 
 // ============ CATALOGO PARTI ============

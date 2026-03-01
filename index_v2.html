@@ -893,6 +893,8 @@ function goPage(name){
     'mappa':'🗺️ Mappa Giro','calendario':'📅 Calendario','profilo':'👤 Profilo','kpi':'📊 Le mie KPI'};
   $('hdrTitle').textContent=t[name]||name;
   window.scrollTo(0,0);
+  // Lazy render on navigation
+  mobLazy(name);
   if(name==='calendario')renderCalMobile();
   if(name==='mappa')setTimeout(initMap,200);
   if(name==='chat')initChat();
@@ -934,7 +936,7 @@ async function refreshData(silent){
       let url=API_URL+'?'+new URLSearchParams({action:'getAll',token:API_TOKEN,userId:USER?.ID||''});
       const r=await fetch(url,{signal:AbortSignal.timeout(15000)});
       const json=await r.json();
-      if(json.success&&json.data){DATA=json.data;if(USER&&USER.ID){const fresh=(DATA.utenti||[]).find(x=>x.ID===USER.ID);if(fresh)USER={...fresh}}renderAll()}
+      if(json.success&&json.data){DATA=json.data;if(USER&&USER.ID){const fresh=(DATA.utenti||[]).find(x=>x.ID===USER.ID);if(fresh)USER={...fresh}}renderAllForce()}
     }catch(e){console.warn('[SILENT-REFRESH]',e.message)}
     return;
   }
@@ -1097,8 +1099,31 @@ function my(list){
 }
 
 // ============ RENDER ALL ============
+// ---- LAZY RENDERING ----
+const _mobRendered = new Set();
+const MOB_RENDERERS = {
+  home: renderHome, interventi: renderInt, urgenze: renderUrg,
+  ordini: renderOrd, notifiche: renderNot, reperibilita: renderRep,
+  richieste: renderRich, trasferte: renderTrasf, installazioni: renderInst,
+  clienti: renderCliMob, macchine: renderMacMob, documenti: renderDocMob, profilo: renderProf,
+};
+function mobLazy(pgId, force){
+  if(!force && _mobRendered.has(pgId)) return;
+  const fn = MOB_RENDERERS[pgId];
+  if(fn){fn();_mobRendered.add(pgId);}
+}
 function renderAll(){
-  renderHome();renderInt();renderUrg();renderOrd();renderNot();renderRep();renderRich();renderTrasf();renderInst();renderCliMob();renderMacMob();renderDocMob();renderProf();updateBadges();
+  _mobRendered.clear();
+  renderHome();_mobRendered.add('home');
+  updateBadges();
+}
+function renderAllForce(){
+  _mobRendered.clear();
+  renderHome();_mobRendered.add('home');
+  updateBadges();
+  // Re-render active page
+  const active = document.querySelector('.page.active');
+  if(active) mobLazy(active.id.replace('pg','').toLowerCase(), true);
 }
 
 function updateBadges(){
