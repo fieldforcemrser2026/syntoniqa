@@ -1641,7 +1641,7 @@ async function handlePost(action, body, env) {
         sb(env, 'config', 'GET', null, '?chiave=eq.vincoli_categories&limit=1').catch(()=>[]),
         sb(env, 'reperibilita', 'GET', null, `?obsoleto=eq.false${repFilter}&select=id,tecnico_id,data_inizio,data_fine,turno,tipo&order=data_inizio.asc&limit=100`).catch(()=>[]),
         sb(env, 'automezzi', 'GET', null, '?obsoleto=eq.false&select=id,targa,modello,stato&limit=20').catch(()=>[]),
-        sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,nome,modello,tipo,cliente_id,prossimo_tagliando&order=prossimo_tagliando.asc&limit=80').catch(()=>[]),
+        sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,seriale,note,modello,tipo,cliente_id,prossimo_tagliando&order=prossimo_tagliando.asc&limit=80').catch(()=>[]),
         sb(env, 'anagrafica_assets', 'GET', null, '?prossimo_controllo=not.is.null&select=id,nome_asset,modello,gruppo_attrezzatura,codice_m3,nome_account,prossimo_controllo&order=prossimo_controllo.asc&limit=80').catch(()=>[]),
         sb(env, 'piano', 'GET', null, `?data=gte.${meseTarget}-01&data=lte.${meseTarget}-31&stato=in.(pianificato,in_corso)&obsoleto=eq.false&select=id,data,tecnico_id,cliente_id&limit=500`).catch(()=>[])
       ]);
@@ -1718,7 +1718,7 @@ async function handlePost(action, body, env) {
         const pos = cycleInfo.posizione || 0;
         const cicloTipo = seq[pos % seq.length] || 'A1';
         serviceBacklog.push({
-          tipo: 'tagliando', macchina: m.modello || m.tipo || m.nome || '?',
+          tipo: 'tagliando', macchina: m.modello || m.tipo || m.seriale || '?',
           macchinaId: m.id, clienteId: m.cliente_id,
           clienteNome: cli?.nome_interno || cli?.nome_account || m.cliente_id || '?',
           citta: cli?.citta_fatturazione || '',
@@ -1955,7 +1955,7 @@ async function handlePost(action, body, env) {
         sb(env, 'config', 'GET', null, '?chiave=eq.vincoli_categories&limit=1').catch(()=>[]),
         sb(env, 'reperibilita', 'GET', null, `?obsoleto=eq.false${repFilter}&select=id,tecnico_id,data_inizio,data_fine,turno,tipo&order=data_inizio.asc&limit=100`).catch(()=>[]),
         sb(env, 'automezzi', 'GET', null, '?obsoleto=eq.false&select=id,targa,modello,stato&limit=20').catch(()=>[]),
-        sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,nome,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&order=prossimo_tagliando.asc&limit=50').catch(()=>[]),
+        sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,seriale,note,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&order=prossimo_tagliando.asc&limit=50').catch(()=>[]),
         sb(env, 'anagrafica_assets', 'GET', null, '?prossimo_controllo=not.is.null&select=id,nome_asset,numero_serie,modello,gruppo_attrezzatura,codice_m3,nome_account,prossimo_controllo&order=prossimo_controllo.asc&limit=50').catch(()=>[])
       ]);
 
@@ -2019,7 +2019,7 @@ async function handlePost(action, body, env) {
         const ggDiff = Math.round((new Date(m.prossimo_tagliando) - new Date(oggi)) / 86400000);
         tagItems.push({
           tipo: 'tagliando',
-          macchina: `${m.nome||m.modello||m.tipo||'?'} (${m.id})`,
+          macchina: `${m.modello||m.tipo||m.seriale||'?'} (${m.id})`,
           cliente: cli.nome_interno || cli.nome_account || m.cliente_id || '?',
           clienteId: m.cliente_id || '',
           data: m.prossimo_tagliando,
@@ -3063,7 +3063,7 @@ Rispondi SOLO con JSON valido:
           const assets = await sb(env, 'anagrafica_assets', 'GET', null, '?prossimo_controllo=not.is.null&order=prossimo_controllo.asc&limit=50').catch(() => []);
           const todayTag = new Date().toISOString().split('T')[0];
           const items = [
-            ...macchine.map(m => ({ nome: m.nome || m.id, modello: m.modello || m.tipo || '—', cliente: getName(clienti, m.cliente_id), data: m.prossimo_tagliando })),
+            ...macchine.map(m => ({ nome: m.modello || m.seriale || m.id, modello: m.modello || m.tipo || '—', cliente: getName(clienti, m.cliente_id), data: m.prossimo_tagliando })),
             ...assets.map(a => ({ nome: a.nome_asset || a.id, modello: a.modello || a.gruppo_attrezzatura || '—', cliente: a.nome_account || a.codice_m3 || '—', data: a.prossimo_controllo }))
           ].sort((a, b) => (a.data || '9999').localeCompare(b.data || '9999'));
 
@@ -3874,14 +3874,14 @@ Rispondi SOLO con JSON valido:
               macFilter += `&cliente_id=eq.${cliMatch[0].codice_m3}`;
             }
           }
-          const macchine = await sb(env, 'macchine', 'GET', null, `${macFilter}&select=id,nome,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando`).catch(()=>[]);
+          const macchine = await sb(env, 'macchine', 'GET', null, `${macFilter}&select=id,seriale,note,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando`).catch(()=>[]);
           if (!macchine.length) { reply = '✅ Nessun tagliando in scadenza' + (cliTagArg.toLowerCase() !== 'tutti' ? ` per "${cliTagArg}"` : ''); break; }
           const oggiTag = new Date().toISOString().split('T')[0];
           reply = `🔧 *Tagliandi in scadenza${cliTagArg.toLowerCase() !== 'tutti' ? ' — ' + cliTagArg : ''}:*\n\n`;
           for (const m of macchine.slice(0, 10)) {
             const gg = Math.round((new Date(m.prossimo_tagliando) - new Date(oggiTag)) / 86400000);
             const urgIco = gg < 0 ? '🔴' : gg <= 7 ? '🟠' : gg <= 30 ? '🟡' : '🟢';
-            reply += `${urgIco} *${m.nome || m.modello || m.tipo || 'Robot'}* (${m.id})\n   📅 ${m.prossimo_tagliando} (${gg < 0 ? Math.abs(gg) + 'gg SCADUTO' : gg + 'gg'})\n`;
+            reply += `${urgIco} *${m.modello || m.tipo || m.seriale || 'Robot'}* (${m.id})\n   📅 ${m.prossimo_tagliando} (${gg < 0 ? Math.abs(gg) + 'gg SCADUTO' : gg + 'gg'})\n`;
           }
           break;
         }
@@ -4673,7 +4673,7 @@ Rispondi SOLO con JSON valido:
       const cicliNomi = { A1: 'Bimestrale', B2: 'Trimestrale', C3: 'Semestrale', D8: 'Annuale' };
 
       // Carica macchine con prossimo_tagliando
-      let macFilter = '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,nome,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&order=prossimo_tagliando.asc&limit=500';
+      let macFilter = '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,seriale,note,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&order=prossimo_tagliando.asc&limit=500';
       if (cliente_id) macFilter += `&cliente_id=eq.${cliente_id}`;
       const macchine = await sb(env, 'macchine', 'GET', null, macFilter).catch(() => []);
 
@@ -4690,7 +4690,7 @@ Rispondi SOLO con JSON valido:
       const scheduled = [];
       const allItems = [
         ...macchine.map(m => ({
-          id: m.id, nome: m.nome || m.id, modello: m.modello || m.tipo,
+          id: m.id, nome: m.modello || m.seriale || m.id, modello: m.modello || m.tipo,
           cliente_id: m.cliente_id, prossimo: m.prossimo_tagliando,
           ciclo: null, source: 'macchine'
         })),
@@ -4760,7 +4760,7 @@ Rispondi SOLO con JSON valido:
       const cycleDefs = defRows?.[0]?.valore ? JSON.parse(defRows[0].valore) : getDefaultCycleDefs();
 
       // 3. Carica macchine (solo quelle con prossimo_tagliando)
-      let mFilter = '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,nome,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&limit=1000';
+      let mFilter = '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,seriale,note,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&limit=1000';
       if (pmMacId) mFilter += `&id=eq.${pmMacId}`;
       if (pmCliId) mFilter += `&cliente_id=eq.${pmCliId}`;
       const macchine = await sb(env, 'macchine', 'GET', null, mFilter).catch(() => []);
@@ -4823,7 +4823,7 @@ Rispondi SOLO con JSON valido:
         if (hasInMonth || isOverdue || !pmMese) {
           calendar.push({
             macchina_id: mac.id,
-            macchina_nome: mac.nome || mac.id,
+            macchina_nome: mac.modello || mac.seriale || mac.id,
             modello: mac.modello || mac.tipo,
             cliente_id: mac.cliente_id,
             cliente_nome: cliMap[mac.cliente_id] || mac.cliente_id || '—',
@@ -5011,7 +5011,7 @@ Rispondi SOLO con JSON valido:
 
       // Carica tutto
       const [macchine2, cycleR, defR, existingPM] = await Promise.all([
-        sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,nome,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&limit=1000').catch(() => []),
+        sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,seriale,note,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&limit=1000').catch(() => []),
         sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_state&limit=1').catch(() => []),
         sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_definitions&limit=1').catch(() => []),
         sb(env, 'piano', 'GET', null, `?obsoleto=eq.false&tipo_intervento_id=eq.TAGLIANDO&stato=eq.pianificato&data=gte.${today2}&order=data.asc&limit=1000`).catch(() => [])
@@ -5056,7 +5056,7 @@ Rispondi SOLO con JSON valido:
               cliente_id: mac.cliente_id,
               data: nextDate, stato: 'pianificato',
               tipo_intervento_id: 'TAGLIANDO',
-              note: `[PM Auto] ${tipo2} — ${mac.nome || mac.id} (${mac.modello || '?'})`,
+              note: `[PM Auto] ${tipo2} — ${mac.modello || mac.seriale || mac.id} (${mac.modello || '?'})`,
               obsoleto: false, created_at: now
             });
             existingKeys.add(key);
