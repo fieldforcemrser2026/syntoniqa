@@ -5231,8 +5231,9 @@ async function runAI(){
         };
       });
     }
-    // Direct fetch con timeout 120s (apiCall ha 30s hardcoded — insufficiente per Workers AI)
-    const _aiResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:{testo:prompt,files:filesData,mese_target:meseTarget,modalita,settimana,ctx:ctxFlags,piano_esistente:pianoEsistente}}),signal:AbortSignal.timeout(120000)});
+    // Timeout: 300s per mese intero (5 chunk AI sequenziali), 120s per settimana singola
+    const _aiTimeout=modalita==='mese'?300000:120000;
+    const _aiResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:{testo:prompt,files:filesData,mese_target:meseTarget,modalita,settimana,ctx:ctxFlags,piano_esistente:pianoEsistente}}),signal:AbortSignal.timeout(_aiTimeout));
     const _aiJson=await _aiResp.json();
     if(!_aiJson.success)throw new Error(_aiJson.error||'Errore AI');
     const result=_aiJson.data||_aiJson;

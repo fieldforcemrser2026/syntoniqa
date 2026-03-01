@@ -1858,7 +1858,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId
             messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: compactPrompt }],
             max_tokens: 4096
           });
-          const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 120000));
+          const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 45000));
           const res = await Promise.race([aiPromise, timeout]);
           if (res?.response) return res.response;
           lastError = 'Workers AI timeout/vuoto';
