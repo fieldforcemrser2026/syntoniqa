@@ -4731,8 +4731,9 @@ async function importAnagXlsx(file){
             if(ind&&!existing.Ind)existing.Ind=String(ind);
             // Status dal foglio singolo SOVRASCRIVE sempre (più affidabile del foglio Assets generico)
             if(status)existing.Status=String(status);
-            if(!existing.TipoFoglio||existing.TipoFoglio==='Assets')existing.TipoFoglio=sname;
-            if(!existing.GruppoAttrezzatura||existing.GruppoAttrezzatura==='Assets')existing.GruppoAttrezzatura=sname;
+            // Il foglio prodotto è la fonte autorevole per il tipo
+            existing.TipoFoglio=sname;
+            existing.GruppoAttrezzatura=sname;
             enriched++;
             continue;
           }
