@@ -893,6 +893,8 @@ function goPage(name){
     'mappa':'🗺️ Mappa Giro','calendario':'📅 Calendario','profilo':'👤 Profilo','kpi':'📊 Le mie KPI'};
   $('hdrTitle').textContent=t[name]||name;
   window.scrollTo(0,0);
+  // Stop chat polling when leaving chat page
+  if(name!=='chat' && chatPollTimer){clearInterval(chatPollTimer);chatPollTimer=null}
   // Lazy render on navigation
   mobLazy(name);
   if(name==='calendario')renderCalMobile();
@@ -1048,10 +1050,13 @@ function enterApp(){
 }
 
 /* ─── PULL TO REFRESH ─── */
+let _pullInitialized=false;
 function initPullToRefresh(){
+  if(_pullInitialized) return; // Prevent duplicate listeners
+  _pullInitialized=true;
   let startY=0, pulling=false, triggered=false;
   const app=$('app'), ptr=$('ptr');
-  if(!app||!ptr) return;
+  if(!app||!ptr){_pullInitialized=false;return;}
   app.addEventListener('touchstart',e=>{
     if(window.scrollY===0 && e.touches.length===1){
       startY=e.touches[0].clientY; pulling=true; triggered=false;

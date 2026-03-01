@@ -238,7 +238,8 @@ function rateLimit(ip, bucket = 'default') {
   let hits = _rateStore.get(key) || [];
   hits = hits.filter(t => t > now - windowMs); // Remove expired
   if (hits.length >= cfg.max) {
-    return { limited: true, retryAfter: Math.ceil((hits[0] + windowMs - now) / 1000) };
+    const retryAfter = hits.length > 0 ? Math.ceil((hits[0] + windowMs - now) / 1000) : Math.ceil(windowMs / 1000);
+    return { limited: true, retryAfter };
   }
   hits.push(now);
   _rateStore.set(key, hits);
@@ -1252,7 +1253,7 @@ async function handlePost(action, body, env) {
         id,
         tenant_id: fields.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
         cliente_id: fields.cliente_id || null,
-        tecnico_id: fields.tecnico_id || fields.tecnici_i_ds?.[0] || null,
+        tecnico_id: fields.tecnico_id || fields.tecnici_ids?.[0] || null,
         automezzo_id: fields.automezzo_id || null,
         motivo: fields.motivo || fields.note || '',
         stato: fields.stato || 'pianificata',
@@ -4590,7 +4591,8 @@ Rispondi SOLO con JSON valido:
       let allData = [];
       let offset = 0;
       const pageSize = 1000;
-      while (true) {
+      const maxPages = 20; // Safety: max 20,000 rows
+      for (let pageNum = 0; pageNum < maxPages; pageNum++) {
         const page = await sb(env, base, 'GET', null, '', { 'Range': `${offset}-${offset + pageSize - 1}`, 'Prefer': 'count=exact' });
         if (!Array.isArray(page) || page.length === 0) break;
         allData = allData.concat(page);
@@ -5543,54 +5545,58 @@ async function checkSLAUrgenze(env) {
     const now = new Date();
     let updated = 0;
     for (const u of (urgenze || [])) {
-      const scadenza = new Date(u.sla_scadenza);
-      const diffOre = (scadenza - now) / 3600000;
-      let newStatus = 'ok';
-      if (diffOre < 0) newStatus = 'breach';
-      else if (diffOre < 2) newStatus = 'critical';
-      else if (diffOre < 6) newStatus = 'warning';
-      if (newStatus !== u.sla_status) {
-        await sb(env, `urgenze?id=eq.${u.id}`, 'PATCH', { sla_status: newStatus });
-        updated++;
-        // Notifica se breach o critical
-        if ((newStatus === 'breach' || newStatus === 'critical') && u.sla_status !== 'breach') {
-          const cliNome = await getEntityName(env, 'clienti', u.cliente_id);
-          const emoji = newStatus === 'breach' ? '🔴' : '🟠';
-          const label = newStatus === 'breach' ? 'SLA SCADUTO' : 'SLA CRITICO';
-          // Notifica admin via chat
-          await sb(env, 'chat_messaggi', 'POST', {
-            id: 'MSG_SLA_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
-            canale_id: 'CH_URGENZE', mittente_id: 'TELEGRAM',
-            testo: `${emoji} ${label}: Urgenza ${u.id}\n🏢 ${cliNome}\n📝 ${(u.problema || '').substring(0, 60)}\n⏱️ Scadenza: ${u.sla_scadenza?.substring(0, 16)?.replace('T', ' ')}`,
-            tipo: 'testo', created_at: new Date().toISOString()
-          }).catch(() => {});
-          // Email admin se breach
-          if (newStatus === 'breach') {
-            await emailAdmins(env, `🔴 SLA SCADUTO - Urgenza ${u.id}`,
-              `<h3 style="color:#DC2626">${emoji} ${label}</h3>
-              <p><strong>Urgenza:</strong> ${u.id}</p>
-              <p><strong>Cliente:</strong> ${cliNome}</p>
-              <p><strong>Problema:</strong> ${(u.problema || '').substring(0, 120)}</p>
-              <p><strong>Scadenza SLA:</strong> ${u.sla_scadenza?.substring(0, 16)?.replace('T', ' ')}</p>
-              <p><strong>Tecnico:</strong> ${u.tecnico_assegnato || 'Non assegnato'}</p>
-              <p style="margin-top:16px"><a href="https://fieldforcemrser2026.github.io/syntoniqa/admin_v1.html" style="background:#DC2626;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">Apri Admin Dashboard</a></p>`
-            );
-          }
-          // Notifica tecnico assegnato
-          if (u.tecnico_assegnato) {
-            const notifId = 'NOT_SLA_' + u.id + '_' + newStatus + '_' + now.toISOString().split('T')[0];
-            const existing = await sb(env, 'notifiche', 'GET', null, `?id=eq.${notifId}&select=id`).catch(() => []);
-            if (!existing?.length) {
-              await sb(env, 'notifiche', 'POST', {
-                id: notifId, tipo: 'sla_alert', oggetto: `${emoji} ${label}`,
-                testo: `Urgenza ${u.id} per ${cliNome}: ${label}! Intervieni subito.`,
-                destinatario_id: u.tecnico_assegnato, stato: 'inviata', priorita: 'urgente',
-                riferimento_id: u.id, riferimento_tipo: 'urgenza',
-                tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
-              }).catch(() => {});
+      try {
+        const scadenza = new Date(u.sla_scadenza);
+        const diffOre = (scadenza - now) / 3600000;
+        let newStatus = 'ok';
+        if (diffOre < 0) newStatus = 'breach';
+        else if (diffOre < 2) newStatus = 'critical';
+        else if (diffOre < 6) newStatus = 'warning';
+        if (newStatus !== u.sla_status) {
+          await sb(env, `urgenze?id=eq.${u.id}`, 'PATCH', { sla_status: newStatus });
+          updated++;
+          // Notifica se breach o critical
+          if ((newStatus === 'breach' || newStatus === 'critical') && u.sla_status !== 'breach') {
+            const cliNome = await getEntityName(env, 'clienti', u.cliente_id);
+            const emoji = newStatus === 'breach' ? '🔴' : '🟠';
+            const label = newStatus === 'breach' ? 'SLA SCADUTO' : 'SLA CRITICO';
+            // Notifica admin via chat
+            await sb(env, 'chat_messaggi', 'POST', {
+              id: 'MSG_SLA_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+              canale_id: 'CH_URGENZE', mittente_id: 'TELEGRAM',
+              testo: `${emoji} ${label}: Urgenza ${u.id}\n🏢 ${cliNome}\n📝 ${(u.problema || '').substring(0, 60)}\n⏱️ Scadenza: ${u.sla_scadenza?.substring(0, 16)?.replace('T', ' ')}`,
+              tipo: 'testo', created_at: new Date().toISOString()
+            }).catch(() => {});
+            // Email admin se breach
+            if (newStatus === 'breach') {
+              await emailAdmins(env, `🔴 SLA SCADUTO - Urgenza ${u.id}`,
+                `<h3 style="color:#DC2626">${emoji} ${label}</h3>
+                <p><strong>Urgenza:</strong> ${u.id}</p>
+                <p><strong>Cliente:</strong> ${cliNome}</p>
+                <p><strong>Problema:</strong> ${(u.problema || '').substring(0, 120)}</p>
+                <p><strong>Scadenza SLA:</strong> ${u.sla_scadenza?.substring(0, 16)?.replace('T', ' ')}</p>
+                <p><strong>Tecnico:</strong> ${u.tecnico_assegnato || 'Non assegnato'}</p>
+                <p style="margin-top:16px"><a href="https://fieldforcemrser2026.github.io/syntoniqa/admin_v1.html" style="background:#DC2626;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">Apri Admin Dashboard</a></p>`
+              );
+            }
+            // Notifica tecnico assegnato
+            if (u.tecnico_assegnato) {
+              const notifId = 'NOT_SLA_' + u.id + '_' + newStatus + '_' + now.toISOString().split('T')[0];
+              const existing = await sb(env, 'notifiche', 'GET', null, `?id=eq.${notifId}&select=id`).catch(() => []);
+              if (!existing?.length) {
+                await sb(env, 'notifiche', 'POST', {
+                  id: notifId, tipo: 'sla_alert', oggetto: `${emoji} ${label}`,
+                  testo: `Urgenza ${u.id} per ${cliNome}: ${label}! Intervieni subito.`,
+                  destinatario_id: u.tecnico_assegnato, stato: 'inviata', priorita: 'urgente',
+                  riferimento_id: u.id, riferimento_tipo: 'urgenza',
+                  tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
+                }).catch(() => {});
+              }
             }
           }
         }
+      } catch(e) {
+        console.error(`[CRON] SLA check failed for urgenza ${u.id}: ${e.message}`);
       }
     }
     console.log(`[CRON] checkSLAUrgenze: ${urgenze?.length || 0} urgenze checked, ${updated} updated`);

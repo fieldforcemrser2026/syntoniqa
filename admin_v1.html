@@ -3242,16 +3242,16 @@ function renderTecnici(){
 }
 async function uploadFotoTec(tecId,input){
   const file=input.files[0];if(!file)return;
-  if(file.size>5*1024*1024){showToast('Foto troppo grande (max 5MB)','warn');return}
-  showToast('Caricamento foto...','info');
+  if(file.size>5*1024*1024){toast('Foto troppo grande (max 5MB)','warn');return}
+  toast('Caricamento foto...','info');
   const reader=new FileReader();
   reader.onload=async function(){
     try{
       const base64=reader.result.split(',')[1];
       const r=await apiCall('uploadFotoProfilo',{base64,mimeType:file.type,userId:tecId});
-      if(r.success){showToast('Foto caricata!','ok');await reloadData();renderTecnici()}
-      else showToast('Errore: '+(r.error||'sconosciuto'),'err');
-    }catch(e){showToast('Errore upload: '+e.message,'err')}
+      if(r.success){toast('Foto caricata!','ok');await refreshData(true);renderTecnici()}
+      else toast('Errore: '+(r.error||'sconosciuto'),'err');
+    }catch(e){toast('Errore upload: '+e.message,'err')}
   };
   reader.readAsDataURL(file);
 }
@@ -6036,7 +6036,7 @@ async function saveDocumento(){
   const file=$('mdFile')?.files[0];
   const url=$('mdUrl')?.value;
   if(!file&&!url){toast('Carica un file oppure inserisci un URL','err');return}
-  showToast('Salvataggio...','info');
+  toast('Salvataggio...','info');
   try{
     let fileUrl=url,fileId='',mimeType='',dimKB=0;
     if(file){
