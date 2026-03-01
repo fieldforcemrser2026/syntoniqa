@@ -1662,12 +1662,12 @@ async function handlePost(action, body, env) {
         const urgenti = tagItems.filter(t => t.giorniScadenza >= 0 && t.giorniScadenza <= 7);
         const prossimi = tagItems.filter(t => t.giorniScadenza > 7 && t.giorniScadenza <= 30);
         const programmati = tagItems.filter(t => t.giorniScadenza > 30);
-        const fmtItem = t => `- [${t.urgenza}] ${t.tipo.toUpperCase()} ${t.macchina} @ ${t.cliente}(${t.clienteId}) — ${t.data} (${t.giorniScadenza < 0 ? Math.abs(t.giorniScadenza)+'gg SCADUTO' : t.giorniScadenza+'gg'})${t.oreLavoro ? ' ore:'+t.oreLavoro : ''}`;
-        tagliandiContext = '\nTAGLIANDI E SERVICE IN SCADENZA (pianifica PRIMA i piu urgenti):';
-        if (scaduti.length) tagliandiContext += '\n⚠️ SCADUTI:\n' + scaduti.slice(0,15).map(fmtItem).join('\n');
-        if (urgenti.length) tagliandiContext += '\n🔴 URGENTI (entro 7gg):\n' + urgenti.slice(0,10).map(fmtItem).join('\n');
-        if (prossimi.length) tagliandiContext += '\n🟡 PROSSIMI (entro 30gg):\n' + prossimi.slice(0,10).map(fmtItem).join('\n');
-        if (programmati.length) tagliandiContext += '\n🟢 PROGRAMMATI:\n' + programmati.slice(0,5).map(fmtItem).join('\n');
+        const fmtItem = t => `${t.tipo}|${t.macchina}@${t.cliente}(${t.clienteId})${t.data}|${t.giorniScadenza}gg`;
+        tagliandiContext = '\nTAGLIANDI/SERVICE SCADENZA (pianifica PRIMA i piu urgenti):';
+        if (scaduti.length) tagliandiContext += '\nSCADUTI:' + scaduti.slice(0,10).map(fmtItem).join(';');
+        if (urgenti.length) tagliandiContext += '\nURGENTI(<7gg):' + urgenti.slice(0,8).map(fmtItem).join(';');
+        if (prossimi.length) tagliandiContext += '\nPROSSIMI(<30gg):' + prossimi.slice(0,6).map(fmtItem).join(';');
+        if (programmati.length) tagliandiContext += '\nPROGRAMMATI:' + programmati.slice(0,3).map(fmtItem).join(';');
       }
       } // end if ctx.tagliandi
 
@@ -1692,12 +1692,13 @@ async function handlePost(action, body, env) {
         }
       }
 
-      // File context — include tutto il contenuto testuale (già compattato dal frontend)
+      // File context — compatta contenuto per stare nel budget prompt
       let fileContext = '';
+      const maxPerFile = files.length > 2 ? 1200 : files.length > 1 ? 1800 : 2500;
       for (const f of files) {
         const content = typeof f.content === 'string' ? f.content : '';
         if (content.length > 10 && !content.match(/^[A-Za-z0-9+/=]{50,}$/)) {
-          fileContext += `\n[${f.name}]:\n${content.substring(0, 3000)}\n`;
+          fileContext += `\n[${f.name}]:\n${content.substring(0, maxPerFile)}\n`;
         }
       }
 
@@ -1705,10 +1706,11 @@ async function handlePost(action, body, env) {
       const isoOggi = oggi; // reuse
       const oggiIt = new Intl.DateTimeFormat('it-IT', { weekday:'long', year:'numeric', month:'long', day:'numeric', timeZone:'Europe/Rome' }).format(new Date());
 
-      // Compact data — tutti i dati disponibili
+      // Compact data — budget-aware: riduce clienti se ci sono file allegati (i file contengono info clienti)
       const tecList = allTecnici.filter(t=>t.ruolo!=='admin').map(t => `${t.nome} ${t.cognome}(${t.id},${t.ruolo},${t.base||'?'})`).join('; ');
       const urgList = ctx.urgenze ? allUrgenze.slice(0,20).map(u => `${u.id}:${(u.problema||'').substring(0,40)}|${u.cliente_id}|pri:${u.priorita_id}`).join('; ') : '';
-      const cliList = allClienti.slice(0,100).map(c => `${c.codice_m3}:${c.nome_interno||c.nome_account||'?'}(${c.citta_fatturazione||''})`).join(', ');
+      const cliMax = files.length > 1 ? 50 : 100;
+      const cliList = allClienti.slice(0,cliMax).map(c => `${c.codice_m3}:${c.nome_interno||c.nome_account||'?'}(${c.citta_fatturazione||''})`).join(', ');
 
       const prompt = `PLANNER FSM — Pianificazione intelligente interventi
 OGGI: ${oggiIt} (${isoOggi})
@@ -1754,7 +1756,7 @@ Rispondi SOLO JSON:
           ],
           max_tokens: 8192
         });
-        const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 55000));
+        const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 90000));
         const res = await Promise.race([aiPromise, timeout]);
         return res?.response || null;
       }
