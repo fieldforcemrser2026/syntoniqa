@@ -1698,18 +1698,32 @@ async function handlePost(action, body, env) {
       allClienti.forEach(c => { clientMap[c.codice_m3] = c; });
 
       // Build service backlog: macchine + assets needing service, sorted by urgency
+      // Enrich with PM cycle info if available
+      const pmCycleRows = await sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_state&limit=1').catch(() => []);
+      const pmCycleState = pmCycleRows?.[0]?.valore ? JSON.parse(pmCycleRows[0].valore) : {};
+      const pmDefRows = await sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_definitions&limit=1').catch(() => []);
+      const pmDefs = pmDefRows?.[0]?.valore ? JSON.parse(pmDefRows[0].valore) : getDefaultCycleDefs();
+
       const serviceBacklog = [];
       const oggiDate = new Date();
       for (const m of allMacchine) {
         if (!m.prossimo_tagliando) continue;
         const ggDiff = Math.round((new Date(m.prossimo_tagliando) - oggiDate) / 86400000);
         const cli = allClienti.find(c => c.codice_m3 === m.cliente_id);
+        // Determine cycle type (A1/B2/C4/D8) from PM state
+        const cycleInfo = pmCycleState[m.id] || {};
+        const modKey = (m.modello || m.tipo || '').toUpperCase();
+        const cycleDef = findCycleDef(pmDefs, modKey);
+        const seq = cycleDef ? cycleDef.sequenza : ['A1','B2','A3','C4','A5','B6','A7','D8'];
+        const pos = cycleInfo.posizione || 0;
+        const cicloTipo = seq[pos % seq.length] || 'A1';
         serviceBacklog.push({
           tipo: 'tagliando', macchina: m.modello || m.tipo || m.nome || '?',
           macchinaId: m.id, clienteId: m.cliente_id,
           clienteNome: cli?.nome_interno || cli?.nome_account || m.cliente_id || '?',
           citta: cli?.citta_fatturazione || '',
           dataScadenza: m.prossimo_tagliando, giorniDiff: ggDiff,
+          cicloTipo: cicloTipo,
           priorita: ggDiff < 0 ? 0 : ggDiff <= 7 ? 1 : ggDiff <= 30 ? 2 : 3
         });
       }
@@ -1847,16 +1861,19 @@ async function handlePost(action, body, env) {
             if (partner) {
               const service = getNextService(junior.base || partner.base);
               if (!service) continue;
+              const svcNote = service.cicloTipo ? `[${service.cicloTipo}] ${service.macchina || ''}` : (service.macchina || '');
               piano.push({
                 data: day, tecnico: `${partner.nome} ${partner.cognome}`, tecnicoId: partner.id,
                 cliente: service.clienteNome, clienteId: service.clienteId, tipo: service.tipo || 'tagliando',
-                oraInizio: '08:00', durataOre: 6, furgone: getFurgone(partner), note: service.macchina || ''
+                oraInizio: '08:00', durataOre: 6, furgone: getFurgone(partner), note: svcNote,
+                macchina_id: service.macchinaId || null
               });
               piano.push({
                 data: day, tecnico: `${junior.nome} ${junior.cognome}`, tecnicoId: junior.id,
                 cliente: service.clienteNome, clienteId: service.clienteId, tipo: service.tipo || 'tagliando',
                 oraInizio: '08:00', durataOre: 6, furgone: getFurgone(partner),
-                note: `Affiancamento con ${partner.nome} — ${service.macchina || ''}`
+                note: `Affiancamento con ${partner.nome} — ${svcNote}`,
+                macchina_id: service.macchinaId || null
               });
               tecAssignments[day].add(partner.id);
               tecAssignments[day].add(junior.id);
@@ -1871,11 +1888,12 @@ async function handlePost(action, body, env) {
 
           const service = getNextService(tec.base);
           if (!service) continue;
-
+          const svcNote2 = service.cicloTipo ? `[${service.cicloTipo}] ${service.macchina || ''}` : (service.macchina || '');
           piano.push({
             data: day, tecnico: `${tec.nome} ${tec.cognome}`, tecnicoId: tec.id,
             cliente: service.clienteNome, clienteId: service.clienteId, tipo: service.tipo || 'tagliando',
-            oraInizio: '08:00', durataOre: 7, furgone: getFurgone(tec), note: service.macchina || ''
+            oraInizio: '08:00', durataOre: 7, furgone: getFurgone(tec), note: svcNote2,
+            macchina_id: service.macchinaId || null
           });
           tecAssignments[day].add(tec.id);
         }
@@ -4727,12 +4745,410 @@ Rispondi SOLO con JSON valido:
       return ok({ scheduled, count: scheduled.length, mese: mese_target, dry_run: true });
     }
 
+    // ============ PM CALENDAR: Multi-tagliando per macchina ============
+
+    case 'getPMCalendar': {
+      // Ritorna calendario PM completo: stato cicli macchine + interventi pianificati/completati
+      const { mese_target: pmMese, macchina_id: pmMacId, cliente_id: pmCliId } = body;
+
+      // 1. Carica stato cicli da config
+      const cycleRows = await sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_state&limit=1').catch(() => []);
+      const cycleState = cycleRows?.[0]?.valore ? JSON.parse(cycleRows[0].valore) : {};
+
+      // 2. Carica definizioni cicli da config
+      const defRows = await sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_definitions&limit=1').catch(() => []);
+      const cycleDefs = defRows?.[0]?.valore ? JSON.parse(defRows[0].valore) : getDefaultCycleDefs();
+
+      // 3. Carica macchine
+      let mFilter = '?obsoleto=eq.false&select=id,nome,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,data_installazione&limit=1000';
+      if (pmMacId) mFilter += `&id=eq.${pmMacId}`;
+      if (pmCliId) mFilter += `&cliente_id=eq.${pmCliId}`;
+      const macchine = await sb(env, 'macchine', 'GET', null, mFilter).catch(() => []);
+
+      // 4. Carica interventi TAGLIANDO per il range (6 mesi avanti)
+      const today = new Date().toISOString().split('T')[0];
+      const sixMonths = new Date(Date.now() + 180 * 86400000).toISOString().split('T')[0];
+      const startDate = pmMese ? pmMese + '-01' : today;
+      const endDate = pmMese ? (() => { const d = new Date(pmMese + '-01'); d.setMonth(d.getMonth() + 1); d.setDate(0); return d.toISOString().split('T')[0]; })() : sixMonths;
+      const pianoFilter = `?obsoleto=eq.false&tipo_intervento_id=eq.TAGLIANDO&data=gte.${startDate}&data=lte.${endDate}&order=data.asc&limit=500`;
+      const pianoTags = await sb(env, 'piano', 'GET', null, pianoFilter).catch(() => []);
+
+      // 5. Carica clienti per nomi
+      const clienti = await sb(env, 'clienti', 'GET', null, '?obsoleto=eq.false&select=id,nome&limit=500').catch(() => []);
+      const cliMap = {};
+      clienti.forEach(c => { cliMap[c.id] = c.nome; });
+
+      // 6. Build calendario per ogni macchina
+      const calendar = [];
+      for (const mac of macchine) {
+        const state = cycleState[mac.id] || {};
+        const modelloKey = (mac.modello || mac.tipo || '').toUpperCase();
+        const def = findCycleDef(cycleDefs, modelloKey);
+        const cicloSequenza = def ? def.sequenza : ['A1', 'B2', 'A3', 'C4', 'A5', 'B6', 'A7', 'D8'];
+        const intervallo = def ? def.intervallo_giorni : 112; // default 16 weeks
+
+        // Posizione attuale nel ciclo
+        const posizioneCorrente = state.posizione || 0;
+        const ultimoCompletato = state.ultimo_completato || mac.ultimo_tagliando || null;
+
+        // Genera prossimi N tagliandi (fino a 4 futuri)
+        const prossimi = [];
+        let baseDate = mac.prossimo_tagliando || (ultimoCompletato ? addDays(ultimoCompletato, intervallo) : null);
+        if (!baseDate && mac.data_installazione) {
+          baseDate = addDays(mac.data_installazione, intervallo);
+        }
+
+        for (let i = 0; i < 4 && baseDate; i++) {
+          const idx = (posizioneCorrente + i) % cicloSequenza.length;
+          const tipo = cicloSequenza[idx];
+          const dataTag = i === 0 ? baseDate : addDays(baseDate, intervallo * i);
+          // Cerca se già pianificato
+          const existing = pianoTags.find(p => p.macchina_id === mac.id && p.data === dataTag);
+          prossimi.push({
+            tipo,
+            data: dataTag,
+            stato: existing ? existing.stato : 'futuro',
+            piano_id: existing ? existing.id : null,
+            tecnico_id: existing ? existing.tecnico_id : null,
+            posizione: idx
+          });
+        }
+
+        // Storico completati
+        const completati = state.completati || [];
+
+        calendar.push({
+          macchina_id: mac.id,
+          macchina_nome: mac.nome || mac.id,
+          modello: mac.modello || mac.tipo,
+          cliente_id: mac.cliente_id,
+          cliente_nome: cliMap[mac.cliente_id] || mac.cliente_id || '—',
+          ciclo_tipo: def ? def.nome : 'Standard',
+          ciclo_sequenza: cicloSequenza,
+          posizione_corrente: posizioneCorrente,
+          intervallo_giorni: intervallo,
+          prossimi,
+          completati: completati.slice(-8) // ultimi 8
+        });
+      }
+
+      return ok({ calendar, cycle_definitions: cycleDefs, mese: pmMese || 'prossimi_6_mesi', total: calendar.length });
+    }
+
+    case 'savePMCycleState': {
+      // Admin salva stato ciclo per una o più macchine
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+
+      const { updates } = body; // [{macchina_id, posizione, ultimo_completato, completati}]
+      if (!updates || !Array.isArray(updates)) return err('updates array richiesto');
+
+      const cycleRows2 = await sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_state&limit=1').catch(() => []);
+      const cycleState2 = cycleRows2?.[0]?.valore ? JSON.parse(cycleRows2[0].valore) : {};
+
+      for (const u of updates) {
+        if (!u.macchina_id) continue;
+        if (!cycleState2[u.macchina_id]) cycleState2[u.macchina_id] = {};
+        if (u.posizione !== undefined) cycleState2[u.macchina_id].posizione = u.posizione;
+        if (u.ultimo_completato) cycleState2[u.macchina_id].ultimo_completato = u.ultimo_completato;
+        if (u.completati) cycleState2[u.macchina_id].completati = u.completati;
+      }
+
+      const val2 = JSON.stringify(cycleState2);
+      const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+      try {
+        await sb(env, 'config', 'POST', { chiave: 'pm_cycle_state', valore: val2, tenant_id: tid }, '');
+      } catch {
+        await sb(env, 'config?chiave=eq.pm_cycle_state', 'PATCH', { valore: val2 }, '').catch(() => {});
+      }
+
+      return ok({ updated: updates.length });
+    }
+
+    case 'savePMCycleDefinitions': {
+      // Admin salva/modifica definizioni cicli PM per modelli macchina
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+
+      const { definitions } = body; // array di {nome, modelli, sequenza, intervallo_giorni, desc}
+      if (!definitions || !Array.isArray(definitions)) return err('definitions array richiesto');
+
+      const val3 = JSON.stringify(definitions);
+      const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+      try {
+        await sb(env, 'config', 'POST', { chiave: 'pm_cycle_definitions', valore: val3, tenant_id: tid }, '');
+      } catch {
+        await sb(env, 'config?chiave=eq.pm_cycle_definitions', 'PATCH', { valore: val3 }, '').catch(() => {});
+      }
+
+      return ok({ saved: definitions.length });
+    }
+
+    case 'completePM': {
+      // Segna un tagliando come completato e avanza il ciclo
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+
+      const { macchina_id: cmId, piano_id: cmPianoId, data_completamento, note: cmNote } = body;
+      if (!cmId) return err('macchina_id richiesto');
+
+      const now = new Date().toISOString();
+      const dataComp = data_completamento || now.split('T')[0];
+
+      // 1. Se c'è un piano_id, segna come completato
+      if (cmPianoId) {
+        await sb(env, `piano?id=eq.${cmPianoId}`, 'PATCH', {
+          stato: 'completato',
+          note: cmNote || undefined,
+          updated_at: now
+        }).catch(() => {});
+      }
+
+      // 2. Carica stato ciclo corrente
+      const cr = await sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_state&limit=1').catch(() => []);
+      const cs = cr?.[0]?.valore ? JSON.parse(cr[0].valore) : {};
+      if (!cs[cmId]) cs[cmId] = { posizione: 0, completati: [] };
+
+      // 3. Carica definizione ciclo per questa macchina
+      const macRow = await sb(env, 'macchine', 'GET', null, `?id=eq.${cmId}&select=modello,tipo&limit=1`).catch(() => []);
+      const modKey = ((macRow?.[0]?.modello || macRow?.[0]?.tipo || '').toUpperCase());
+      const dr = await sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_definitions&limit=1').catch(() => []);
+      const defs = dr?.[0]?.valore ? JSON.parse(dr[0].valore) : getDefaultCycleDefs();
+      const def = findCycleDef(defs, modKey);
+      const seq = def ? def.sequenza : ['A1', 'B2', 'A3', 'C4', 'A5', 'B6', 'A7', 'D8'];
+      const intervallo = def ? def.intervallo_giorni : 112;
+
+      // 4. Registra completamento
+      const pos = cs[cmId].posizione || 0;
+      const tipoCompletato = seq[pos % seq.length];
+      if (!cs[cmId].completati) cs[cmId].completati = [];
+      cs[cmId].completati.push({
+        tipo: tipoCompletato,
+        data: dataComp,
+        piano_id: cmPianoId || null,
+        note: cmNote || ''
+      });
+
+      // 5. Avanza posizione
+      cs[cmId].posizione = (pos + 1) % seq.length;
+      cs[cmId].ultimo_completato = dataComp;
+
+      // 6. Calcola prossima data
+      const prossimaData = addDays(dataComp, intervallo);
+      const prossimoTipo = seq[cs[cmId].posizione];
+
+      // 7. Aggiorna prossimo_tagliando nella macchina
+      await sb(env, `macchine?id=eq.${cmId}`, 'PATCH', {
+        prossimo_tagliando: prossimaData,
+        ultimo_tagliando: dataComp,
+        updated_at: now
+      }).catch(() => {});
+
+      // 8. Salva stato ciclo
+      const val4 = JSON.stringify(cs);
+      const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+      try {
+        await sb(env, 'config', 'POST', { chiave: 'pm_cycle_state', valore: val4, tenant_id: tid }, '');
+      } catch {
+        await sb(env, 'config?chiave=eq.pm_cycle_state', 'PATCH', { valore: val4 }, '').catch(() => {});
+      }
+
+      // 9. Anti-duplicato: verifica che non esista già un piano per prossima data + macchina
+      const dupeCheck = await sb(env, 'piano', 'GET', null,
+        `?obsoleto=eq.false&macchina_id=eq.${cmId}&data=eq.${prossimaData}&tipo_intervento_id=eq.TAGLIANDO&limit=1`
+      ).catch(() => []);
+
+      let nextPianoId = null;
+      if (!dupeCheck.length) {
+        // Crea prossimo intervento pianificato
+        nextPianoId = 'PM_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
+        await sb(env, 'piano', 'POST', {
+          id: nextPianoId, tenant_id: tid,
+          macchina_id: cmId,
+          cliente_id: macRow?.[0]?.cliente_id || null,
+          data: prossimaData, stato: 'pianificato',
+          tipo_intervento_id: 'TAGLIANDO',
+          note: `[PM Auto] ${prossimoTipo} — Prossimo dopo ${tipoCompletato}`,
+          obsoleto: false, created_at: now
+        }).catch(() => {});
+      }
+
+      await wlog('pm_complete', cmId, tipoCompletato, body.userId || 'admin',
+        `Completato ${tipoCompletato}, prossimo ${prossimoTipo} il ${prossimaData}`);
+
+      return ok({
+        completato: { tipo: tipoCompletato, data: dataComp },
+        prossimo: { tipo: prossimoTipo, data: prossimaData, piano_id: nextPianoId || (dupeCheck[0]?.id) },
+        posizione: cs[cmId].posizione,
+        macchina_id: cmId
+      });
+    }
+
+    case 'bulkGeneratePMCalendar': {
+      // Genera interventi PM futuri per tutte le macchine per N mesi
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+
+      const { mesi_avanti = 3 } = body;
+      const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+      const now = new Date().toISOString();
+      const today2 = now.split('T')[0];
+      const endDate2 = addDays(today2, mesi_avanti * 30);
+
+      // Carica tutto
+      const [macchine2, cycleR, defR, existingPM] = await Promise.all([
+        sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,nome,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,data_installazione&limit=1000').catch(() => []),
+        sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_state&limit=1').catch(() => []),
+        sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_definitions&limit=1').catch(() => []),
+        sb(env, 'piano', 'GET', null, `?obsoleto=eq.false&tipo_intervento_id=eq.TAGLIANDO&stato=eq.pianificato&data=gte.${today2}&order=data.asc&limit=1000`).catch(() => [])
+      ]);
+
+      const cs2 = cycleR?.[0]?.valore ? JSON.parse(cycleR[0].valore) : {};
+      const defs2 = defR?.[0]?.valore ? JSON.parse(defR[0].valore) : getDefaultCycleDefs();
+
+      // Set di chiavi esistenti per anti-duplicato
+      const existingKeys = new Set(existingPM.map(p => `${p.macchina_id}_${p.data}`));
+
+      let created2 = 0, skipped = 0, errors2 = [];
+
+      for (const mac of macchine2) {
+        const modKey2 = (mac.modello || mac.tipo || '').toUpperCase();
+        const def2 = findCycleDef(defs2, modKey2);
+        const seq2 = def2 ? def2.sequenza : ['A1', 'B2', 'A3', 'C4', 'A5', 'B6', 'A7', 'D8'];
+        const intervallo2 = def2 ? def2.intervallo_giorni : 112;
+        const state2 = cs2[mac.id] || {};
+        let pos2 = state2.posizione || 0;
+        let nextDate = mac.prossimo_tagliando;
+        if (!nextDate) continue;
+
+        // Genera fino a endDate
+        let safety = 0;
+        while (nextDate <= endDate2 && safety < 10) {
+          safety++;
+          const key = `${mac.id}_${nextDate}`;
+          if (existingKeys.has(key)) {
+            skipped++;
+            nextDate = addDays(nextDate, intervallo2);
+            pos2 = (pos2 + 1) % seq2.length;
+            continue;
+          }
+
+          const tipo2 = seq2[pos2 % seq2.length];
+          try {
+            const pianoId = 'PM_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
+            await sb(env, 'piano', 'POST', {
+              id: pianoId, tenant_id: tid,
+              macchina_id: mac.id,
+              cliente_id: mac.cliente_id,
+              data: nextDate, stato: 'pianificato',
+              tipo_intervento_id: 'TAGLIANDO',
+              note: `[PM Auto] ${tipo2} — ${mac.nome || mac.id} (${mac.modello || '?'})`,
+              obsoleto: false, created_at: now
+            });
+            existingKeys.add(key);
+            created2++;
+          } catch (e) { errors2.push({ macchina: mac.id, err: e.message }); }
+
+          nextDate = addDays(nextDate, intervallo2);
+          pos2 = (pos2 + 1) % seq2.length;
+        }
+      }
+
+      await wlog('pm_bulk_generate', 'all', 'generated', body.userId || 'admin',
+        `${created2} interventi PM generati, ${skipped} già esistenti`);
+
+      return ok({ created: created2, skipped, errors: errors2, mesi_avanti, total_macchine: macchine2.length });
+    }
+
     default:
       return err(`Azione POST non trovata: ${action}`, 404);
   }
 }
 
 // ============ UTILITIES ============
+
+// ============ PM CYCLE HELPERS ============
+
+function addDays(dateStr, days) {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
+function getDefaultCycleDefs() {
+  return [
+    {
+      nome: 'Astronaut A5',
+      modelli: ['ASTRONAUT A5', 'ASTRONAUT', 'A5'],
+      sequenza: ['A1', 'B2', 'A3', 'C4', 'A5', 'B6', 'A7', 'D8'],
+      intervallo_giorni: 112, // 16 settimane
+      desc: 'Ciclo standard Astronaut A5 — 8 step, intervallo 16 settimane'
+    },
+    {
+      nome: 'Astronaut A3/A3N',
+      modelli: ['ASTRONAUT A3', 'ASTRONAUT A3 NEXT', 'A3', 'A3N', 'A3 NEXT'],
+      sequenza: ['A1', 'B2', 'A3', 'C4', 'A5', 'B6', 'A7', 'D8'],
+      intervallo_giorni: 105, // 15 settimane
+      desc: 'Ciclo Astronaut A3/A3 Next — 8 step, intervallo 15 settimane'
+    },
+    {
+      nome: 'Vector',
+      modelli: ['VECTOR', 'LELY VECTOR'],
+      sequenza: ['A1', 'B2'],
+      intervallo_giorni: 365, // 12 mesi
+      desc: 'Ciclo Vector — 2 step, intervallo annuale'
+    },
+    {
+      nome: 'Juno',
+      modelli: ['JUNO', 'LELY JUNO'],
+      sequenza: ['A1', 'B2'],
+      intervallo_giorni: 365,
+      desc: 'Ciclo Juno — 2 step, intervallo annuale'
+    },
+    {
+      nome: 'Discovery/Collector',
+      modelli: ['DISCOVERY', 'DISCOVERY COLLECTOR', 'COLLECTOR', 'DISCOVERY 120', 'DISCOVERY 90'],
+      sequenza: ['A1', 'B2'],
+      intervallo_giorni: 365,
+      desc: 'Ciclo Discovery/Collector — 2 step, intervallo annuale'
+    },
+    {
+      nome: 'Calm',
+      modelli: ['CALM', 'LELY CALM'],
+      sequenza: ['A1'],
+      intervallo_giorni: 365,
+      desc: 'Ciclo Calm — 1 step, annuale'
+    },
+    {
+      nome: 'Grazeway',
+      modelli: ['GRAZEWAY', 'LELY GRAZEWAY'],
+      sequenza: ['A1'],
+      intervallo_giorni: 365,
+      desc: 'Ciclo Grazeway — 1 step, annuale'
+    },
+    {
+      nome: 'Cosmix',
+      modelli: ['COSMIX', 'LELY COSMIX'],
+      sequenza: ['A1'],
+      intervallo_giorni: 365,
+      desc: 'Ciclo Cosmix — 1 step, annuale'
+    }
+  ];
+}
+
+function findCycleDef(defs, modelloKey) {
+  if (!modelloKey || !defs) return null;
+  const up = modelloKey.toUpperCase().trim();
+  // Cerca match esatto nei modelli
+  for (const d of defs) {
+    if (d.modelli && d.modelli.some(m => up.includes(m.toUpperCase()))) return d;
+  }
+  // Fallback: cerca nel nome
+  for (const d of defs) {
+    if (up.includes(d.nome.toUpperCase())) return d;
+  }
+  return null;
+}
 
 // ============ WEB PUSH (VAPID) ============
 
