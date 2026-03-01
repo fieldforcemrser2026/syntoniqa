@@ -7203,7 +7203,7 @@ function renderMonthPlan(){
       html += `<td class="${cellClass}" style="${isSat?'border-right:2px solid #6366F1':''}" ondragover="event.preventDefault()" ondrop="onMonthDrop(event,'${tec.ID}','${d.ds}')">`;
 
       // Rep badge
-      if(rep) html += `<div class="month-cell-rep" draggable="true" ondragstart="onMonthDragStart(event,'reperibilita','${rep.ID}')" onclick="showDetail('reperibilita','${rep.ID}')" title="Reperibilità: ${rep.Turno||'24h'} — ${rep.Tipo||''}\nDa: ${rep.DataInizio||'?'} A: ${rep.DataFine||'?'}\nClick per dettaglio, trascina per spostare">${rep.Turno==='notturno'?'🌙':'📞'}${(rep.Tipo||'').substring(0,3)}</div>`;
+      if(rep) html += `<div class="month-cell-rep" onclick="showDetail('reperibilita','${rep.ID}')" title="Reperibilità 18-08\nTecnico: ${getName(DATA.utenti||[],rep.TecnicoID)}\nDa: ${rep.DataInizio||'?'} A: ${rep.DataFine||'?'}\nClick per dettaglio">🌙</div>`;
 
       // Ferie marker
       if(isFerie) html += `<div style="font-size:.55rem;color:#92400E;text-align:center">🏖️</div>`;
@@ -7250,18 +7250,8 @@ async function onMonthDrop(e, tecnicoId, data){
       await apiCall('updatePiano',{id,data:{TecnicoID:tecnicoId,Data:data}},'POST');
       toast('Intervento spostato','ok');
     }else if(type==='reperibilita'){
-      // Per la reperibilità, aggiorna tecnico e date (sposta di N giorni)
-      const rep=(DATA.reperibilita||[]).find(r=>r.ID===id);
-      if(rep){
-        const oldStart=rep.DataInizio||data;
-        const diffDays=Math.round((new Date(data)-new Date(oldStart))/86400000);
-        const newStart=data;
-        const oldEnd=rep.DataFine||oldStart;
-        const endDate=new Date(oldEnd);endDate.setDate(endDate.getDate()+diffDays);
-        const newEnd=endDate.toISOString().split('T')[0];
-        await apiCall('updateReperibilita',{id,data:{TecnicoID:tecnicoId,DataInizio:newStart,DataFine:newEnd}},'POST');
-        toast('Reperibilità spostata','ok');
-      }
+      // Reperibilità NON si sposta via drag & drop (è settimanale, creerebbe buchi)
+      toast('La reperibilità si modifica dal dettaglio, non con drag & drop','info');
     }
     await refreshData(true);
     renderMonthPlan();

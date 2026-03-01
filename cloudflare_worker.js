@@ -1284,7 +1284,9 @@ async function handlePost(action, body, env) {
       const adminErr = await requireAdmin(env, body);
       if (adminErr) return err(adminErr, 403);
       const id = 'REP_' + Date.now();
-      const result = await sb(env, 'reperibilita', 'POST', { id, ...getFields(body), created_at: new Date().toISOString() });
+      const fields_rep = getFields(body);
+      delete fields_rep.created_at; delete fields_rep.updated_at;
+      const result = await sb(env, 'reperibilita', 'POST', { id, ...fields_rep });
       await wlog('reperibilita', id, 'created', body.operatoreId);
       return ok({ reperibilita: pascalizeRecord(result[0]) });
     }
@@ -1295,8 +1297,7 @@ async function handlePost(action, body, env) {
       const id = body.id || body.ID;
       if (!id) return err('ID reperibilita mancante');
       const fields = getFields(body);
-      delete fields.id; delete fields.created_at;
-      fields.updated_at = new Date().toISOString();
+      delete fields.id; delete fields.created_at; delete fields.updated_at;
       const result = await sb(env, 'reperibilita', 'PATCH', fields, `?id=eq.${id}&select=*`);
       await wlog('reperibilita', id, 'updated', body.operatoreId);
       return ok({ reperibilita: pascalizeRecord(result[0]) });
@@ -1307,7 +1308,7 @@ async function handlePost(action, body, env) {
       if (adminErr) return err(adminErr, 403);
       const id = body.id || body.ID;
       if (!id) return err('ID reperibilita mancante');
-      await sb(env, 'reperibilita', 'PATCH', { obsoleto: true, updated_at: new Date().toISOString() }, `?id=eq.${id}`);
+      await sb(env, 'reperibilita', 'PATCH', { obsoleto: true }, `?id=eq.${id}`);
       await wlog('reperibilita', id, 'deleted', body.operatoreId);
       return ok({ deleted: true });
     }
