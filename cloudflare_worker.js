@@ -4685,20 +4685,11 @@ Rispondi SOLO con JSON valido:
       const rows = body.rows || [];
       if (!rows.length) return err('rows richiesto (array)');
       if (rows.length > 2000) return err('Massimo 2000 righe per importazione anagrafica.');
-      // Known columns in anagrafica_clienti table
-      const KNOWN_CLI_COLS = new Set(['id','tenant_id','created_at','updated_at',
-        'id_account','account_number','codice_danea','codice_m3','partita_iva',
-        'nome_account','nome_danea','nome_interno','lat','lng',
-        'titolare_account','telefono','email','stato_cliente','status',
-        'tipo_cliente','data_creazione','via_fatturazione','citta_fatturazione',
-        'provincia_fatturazione','cap_fatturazione','via_spedizioni','citta_spedizioni',
-        'provincia_spedizioni','cap_spedizioni','service_area','contratto_assistenza']);
       const results = { inserted: 0, errors: [] };
       for (const row of rows) {
         const fields = {};
         for (const [k, v] of Object.entries(row)) {
           const sk = toSnake(k);
-          if (!KNOWN_CLI_COLS.has(sk)) continue; // Skip unknown columns
           if (v !== null && v !== undefined && v !== '') fields[sk] = v;
         }
         try {
@@ -4714,11 +4705,8 @@ Rispondi SOLO con JSON valido:
     case 'importAnagraficaAssets': {
       const rows = body.rows || [];
       if (!rows.length) return err('rows richiesto (array)');
-      // Known columns in anagrafica_assets table
-      const KNOWN_COLS = new Set(['id','tenant_id','created_at','updated_at',
-        'id_account','id_asset','codice_m3','nome_account','titolare_account',
-        'nome_asset','numero_serie','modello','gruppo_attrezzatura','descrizione',
-        'data_installazione','data_creazione','data_ultima_modifica','status','tipo_foglio']);
+      // Fields to SKIP (not in DB table)
+      const SKIP_ASSET_FIELDS = new Set(['rh_lh','ind','sales_advisor','provincia','note','rhlh']);
       // Verify existing codice_m3
       const clienti = await sb(env, 'anagrafica_clienti?select=codice_m3', 'GET');
       const validM3 = new Set(clienti.filter(c => c.codice_m3).map(c => c.codice_m3));
@@ -4730,7 +4718,7 @@ Rispondi SOLO con JSON valido:
         const fields = {};
         for (const [k, v] of Object.entries(row)) {
           const sk = toSnake(k);
-          if (!KNOWN_COLS.has(sk)) continue; // Skip unknown columns
+          if (SKIP_ASSET_FIELDS.has(sk)) continue; // Skip fields not in DB
           fields[sk] = (v !== null && v !== undefined && v !== '') ? v : null;
           allKeys.add(sk);
         }
@@ -4765,6 +4753,8 @@ Rispondi SOLO con JSON valido:
           }
         }
       }
+      // Include first 5 errors for debug
+      results.sampleErrors = results.errors.slice(0, 5);
       return ok(results);
     }
 

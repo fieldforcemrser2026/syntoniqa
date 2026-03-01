@@ -4780,14 +4780,6 @@ async function importAnagXlsx(file){
       // Normalize dates
       assets.forEach(a=>{a.DataInstallazione=formatAnagDate(a.DataInstallazione)});
 
-      // Strip fields that may not exist in DB (keep only known columns)
-      const KNOWN_ASSET_FIELDS=['IdAccount','IdAsset','CodiceM3','NomeAccount','TitolareAccount',
-        'NomeAsset','NumeroSerie','Modello','GruppoAttrezzatura','Descrizione',
-        'DataInstallazione','DataCreazione','DataUltimaModifica','Status','TipoFoglio'];
-      assets.forEach(a=>{
-        Object.keys(a).forEach(k=>{if(!KNOWN_ASSET_FIELDS.includes(k))delete a[k]});
-      });
-
       toast(`Parsati: ${clienti.length} clienti, ${assets.length} assets. Importazione...`,'info');
 
       // 5. Clear existing + import
@@ -4795,7 +4787,8 @@ async function importAnagXlsx(file){
       const r1=await apiCall('importAnagraficaClienti',{rows:clienti},'POST');
       toast(`Clienti: ${r1.inserted} importati`,'ok');
       const r2=await apiCall('importAnagraficaAssets',{rows:assets},'POST');
-      toast(`Assets: ${r2.inserted} importati, ${r2.skipped||0} skipped`,'ok');
+      if(r2.sampleErrors?.length) console.error('Import errors sample:',JSON.stringify(r2.sampleErrors));
+      toast(`Assets: ${r2.inserted} importati, ${r2.skipped||0} skipped${r2.sampleErrors?.length?' — apri Console per errori':''}`,r2.skipped>0?'warn':'ok');
 
       loadAnagClients();
     }catch(ex){
