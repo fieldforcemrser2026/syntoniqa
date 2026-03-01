@@ -1780,6 +1780,15 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="field"><label>Squadra</label><select id="nuSquadra"><option value="">Seleziona squadra</option></select></div>
 </div>
 <div class="field-row">
+<div class="field"><label>Stato Tecnico</label>
+<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 0">
+<input type="checkbox" id="nuAttivo" checked style="width:18px;height:18px;accent-color:var(--ok)">
+<span id="nuAttivoLabel" style="font-weight:600;color:var(--ok)">✅ Attivo</span>
+</label>
+<script>document.getElementById('nuAttivo').addEventListener('change',function(){const l=document.getElementById('nuAttivoLabel');if(this.checked){l.textContent='✅ Attivo';l.style.color='var(--ok)'}else{l.textContent='⬜ Inattivo';l.style.color='var(--gray)'}})</script>
+</div>
+</div>
+<div class="field-row">
 <div class="field"><label>Automezzo</label><select id="nuAutomezzo"><option value="">Nessuno</option></select></div>
 <div class="field"><label>Base</label><input type="text" id="nuBase" placeholder="Sede principale"></div>
 </div>
@@ -1868,6 +1877,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="modal-head"><h2>🚐 Nuovo Automezzo</h2><button class="close" onclick="closeModal('modalAutomezzo')">✕</button></div>
 <div class="modal-body">
 <div class="field-row">
+<div class="field" style="flex:0 0 100px"><label>Codice</label><input type="text" id="naCodice" placeholder="F1" maxlength="5" style="font-weight:700;font-size:1.2rem;text-align:center"></div>
 <div class="field"><label>Targa</label><input type="text" id="naTarga" placeholder="AB123CD"></div>
 <div class="field"><label>Descrizione</label><input type="text" id="naDesc" placeholder="Furgone Mertz bianco"></div>
 </div>
@@ -2121,6 +2131,23 @@ function populateSelects(){
   // Filtri
   fillSel('filtPianoTec',tecs,tecFmt);fillSel('calFiltroTec',tecs,tecFmt);fillSel('mapFiltroTec',tecs,tecFmt);fillSel('kpiTecnico',tecs,tecFmt);
   // filtMacchCli will be populated by renderMacchine from anagrafica
+
+  // ---- PICKLIST DINAMICHE DA CONFIG ----
+  const cfg=DATA.config||{};
+
+  // Ruoli utente (da config o default)
+  const ruoliDefault=[{v:'admin',l:'Admin'},{v:'caposquadra',l:'Caposquadra'},{v:'tecnico',l:'Tecnico'},{v:'magazziniere',l:'Magazziniere'},{v:'commerciale',l:'Commerciale'}];
+  let ruoli=ruoliDefault;
+  try{if(cfg.ruoli_utente)ruoli=JSON.parse(cfg.ruoli_utente)}catch(e){}
+  const ruoloSel=$('nuRuolo');
+  if(ruoloSel){const cur=ruoloSel.value;ruoloSel.innerHTML='<option value="">Seleziona ruolo</option>';ruoli.forEach(r=>{const o=document.createElement('option');o.value=r.v||r.value||r;o.textContent=r.l||r.label||r;ruoloSel.appendChild(o)});if(cur)ruoloSel.value=cur}
+
+  // Status automezzi (da config o default)
+  const statusAutoDefault=[{v:'disponibile',l:'Disponibile'},{v:'in_uso',l:'In Uso'},{v:'in_officina',l:'In Officina'},{v:'dismesso',l:'Dismesso'}];
+  let statusAuto=statusAutoDefault;
+  try{if(cfg.status_automezzi)statusAuto=JSON.parse(cfg.status_automezzi)}catch(e){}
+  const statusSel=$('naStatus');
+  if(statusSel){const cur=statusSel.value;statusSel.innerHTML='<option value="">Seleziona stato</option>';statusAuto.forEach(s=>{const o=document.createElement('option');o.value=s.v||s.value||s;o.textContent=s.l||s.label||s;statusSel.appendChild(o)});if(cur)statusSel.value=cur}
 }
 
 // Sincronizza Tecnici Aggiuntivi: disabilita il tecnico già scelto come principale
@@ -3205,7 +3232,7 @@ function renderAutomezzi(){
     return `<div class="card" style="border-left:4px solid ${f.Status==='attivo'?'var(--ok)':'var(--warn)'}">
       <div class="card-body">
         <div style="display:flex;justify-content:space-between;align-items:start">
-          <div><h4 style="font-size:1rem;margin-bottom:4px">🚐 ${f.Nome||f.Descrizione||(()=>{const m=(f.ID||'').match(/FURG_(\d+)/i);return m?'Furgone '+m[1]:f.ID})()}</h4><p style="font-size:.8125rem;color:var(--gray)">${f.Targa?'🏷️ '+f.Targa:''} ${f.ID?'('+f.ID+')':''}</p></div>
+          <div><h4 style="font-size:1rem;margin-bottom:4px">🚐 <span style="background:var(--primary);color:#fff;padding:2px 8px;border-radius:6px;font-size:.9rem;margin-right:6px">${f.Nome||(()=>{const m=(f.ID||'').match(/FURG_(\d+)/i);return m?'F'+m[1]:f.ID})()}</span>${f.Descrizione||''}</h4><p style="font-size:.8125rem;color:var(--gray)">${f.Targa?'🏷️ '+f.Targa:''}</p></div>
           ${statusTag(f.Status)}
         </div>
         <div style="margin-top:12px;font-size:.8125rem">
@@ -4664,6 +4691,10 @@ function editUtente(id){
   $('nuRuolo').value=u.Ruolo||'tecnico';
   $('nuSquadra').value=u.SquadraID||'';$('nuAutomezzo').value=u.AutomezzoID||'';
   $('nuBase').value=u.Base||'';$('nuTelefono').value=u.Telefono||'';$('nuEmail').value=u.Email||'';
+  // Attivo toggle
+  const isAttivo=u.Attivo&&u.Attivo!=='false';
+  $('nuAttivo').checked=isAttivo;
+  const lbl=$('nuAttivoLabel');if(lbl){lbl.textContent=isAttivo?'✅ Attivo':'⬜ Inattivo';lbl.style.color=isAttivo?'var(--ok)':'var(--gray)'}
   document.querySelector('#modalUtente .modal-head h2').textContent='✏️ Modifica Utente';
   $('resetPwdBox').style.display='block';$('nuResetPwd').value='';
   openModal('modalUtente');
@@ -4692,6 +4723,7 @@ function editMacchina(id){
 function editAutomezzo(id){
   const f=(DATA.automezzi||[]).find(x=>x.ID===id);if(!f)return;
   EDITING.automezzo=id;
+  $('naCodice').value=f.Nome||'';
   $('naTarga').value=f.Targa||'';$('naDesc').value=f.Descrizione||'';
   $('naAllestimento').value=f.Allestimento||'';$('naStatus').value=f.Status||'disponibile';
   $('naControllo').value=f.ProssimoControllo||'';$('naAssegnatario').value=f.AssegnatarioID||'';
@@ -4704,7 +4736,12 @@ function editAutomezzo(id){
 function openNewUtente(){EDITING.utente=null;['nuNome','nuCognome','nuUsername','nuPassword','nuBase','nuTelefono','nuEmail'].forEach(id=>{if($(id))$(id).value=''});$('nuRuolo').value='tecnico';$('nuSquadra').value='';$('nuAutomezzo').value='';$('resetPwdBox').style.display='none';document.querySelector('#modalUtente .modal-head h2').textContent='👤 Nuovo Utente';openModal('modalUtente')}
 function openNewCliente(){EDITING.cliente=null;['ncNome','ncCitta','ncProv','ncIndirizzo','ncCap','ncTelefono','ncEmail','ncContratto','ncNote'].forEach(id=>{if($(id))$(id).value=''});document.querySelector('#modalCliente .modal-head h2').textContent='🏢 Nuovo Cliente';openModal('modalCliente')}
 function openNewMacchina(){EDITING.macchina=null;['nmTipo','nmModello','nmSeriale','nmAnno','nmOre','nmUltimoTag','nmProssTag','nmGaranzia','nmNote'].forEach(id=>{if($(id))$(id).value=''});$('nmCliente').value='';document.querySelector('#modalMacchina .modal-head h2').textContent='⚙️ Nuova Macchina';openModal('modalMacchina')}
-function openNewAutomezzo(){EDITING.automezzo=null;['naTarga','naDesc','naAllestimento','naKm','naControllo','naNote'].forEach(id=>{if($(id))$(id).value=''});$('naStatus').value='disponibile';$('naAssegnatario').value='';document.querySelector('#modalAutomezzo .modal-head h2').textContent='🚐 Nuovo Automezzo';openModal('modalAutomezzo')}
+function openNewAutomezzo(){EDITING.automezzo=null;['naCodice','naTarga','naDesc','naAllestimento','naKm','naControllo','naNote'].forEach(id=>{if($(id))$(id).value=''});$('naStatus').value='disponibile';$('naAssegnatario').value='';
+  // Auto-suggest prossimo codice F
+  const existing=(DATA.automezzi||[]).filter(f=>!f.Obsoleto).map(f=>{const m=(f.Nome||'').match(/^F(\d+)$/i);return m?parseInt(m[1]):0});
+  const next=existing.length?Math.max(...existing)+1:1;
+  $('naCodice').value='F'+next;
+  document.querySelector('#modalAutomezzo .modal-head h2').textContent='🚐 Nuovo Automezzo';openModal('modalAutomezzo')}
 
 // ============ SAVE FUNCTIONS (CREATE + UPDATE) ============
 async function saveUtente(){
@@ -4718,6 +4755,7 @@ async function saveUtente(){
     Base:$('nuBase').value||null,
     Telefono:$('nuTelefono').value||null,
     Email:$('nuEmail').value||null,
+    Attivo:$('nuAttivo').checked,
     TenantID:(DATA.utenti&&DATA.utenti[0])?DATA.utenti[0].TenantID:null
   };
   if(!data.Nome||!data.Cognome){toast('Compila nome e cognome','warn');return}
@@ -4810,7 +4848,9 @@ async function saveMacchina(){
 }
 
 async function saveAutomezzo(){
+  const codice=$('naCodice').value.trim();
   const data={
+    Nome:codice||null,
     Targa:$('naTarga').value,Descrizione:$('naDesc').value,
     Allestimento:$('naAllestimento').value||null,Status:$('naStatus').value,
     ProssimoControllo:$('naControllo').value||null,
@@ -4819,7 +4859,8 @@ async function saveAutomezzo(){
     Note:$('naNote').value||null,
     TenantID:(DATA.utenti&&DATA.utenti[0])?DATA.utenti[0].TenantID:null
   };
-  if(!data.Targa||!data.Descrizione||!data.Status){toast('Compila targa, descrizione e status','warn');return}
+  if(!codice){toast('Inserisci un codice (es. F1, F2...)','warn');return}
+  if(!data.Status){toast('Seleziona uno stato','warn');return}
   try{
     if(EDITING.automezzo){
       data.id=EDITING.automezzo;
@@ -5037,7 +5078,8 @@ async function deleteTrasf(id){
   try{await apiCall('deleteTrasferta',{id},'POST');toast('Trasferta eliminata','ok');await refreshData(true)}catch(e){toast(e.message,'err')}
 }
 async function toggleTecnicoAttivo(id,newVal){
-  try{await apiCall('updateUser',{id,attivo:newVal,userId:USER?.ID},'POST');toast(newVal?'Tecnico attivato':'Tecnico disattivato','ok');await refreshData(true)}catch(e){toast(e.message,'err')}
+  if(!newVal&&!confirm('Disattivare il tecnico? Non verrà più assegnato a nuovi interventi.')){return}
+  try{await apiCall('updateUtente',{id,Attivo:newVal,userId:USER?.ID},'POST');toast(newVal?'Tecnico attivato':'Tecnico disattivato','ok');await refreshData(true)}catch(e){toast(e.message,'err')}
 }
 
 async function saveTrasf(){
