@@ -5003,7 +5003,7 @@ function renderAIFileList(){
 }
 
 async function readFileAsText(file){
-  // Per Excel: parse con SheetJS e restituisci come testo leggibile
+  // Per Excel: parse con SheetJS, estrai contenuto strutturato
   if(file.name.match(/\.xlsx?$/i)){
     return new Promise(async(resolve)=>{
       if(!window.XLSX){
@@ -5018,25 +5018,26 @@ async function readFileAsText(file){
         try{
           const wb=XLSX.read(r.result,{type:'array',cellDates:true});
           let out='';
-          wb.SheetNames.forEach(sn=>{
+          wb.SheetNames.slice(0,3).forEach(sn=>{
             const ws=wb.Sheets[sn];
             const csv=XLSX.utils.sheet_to_csv(ws,{FS:';',dateNF:'YYYY-MM-DD'});
-            // Limita a 4000 chars per sheet per non esplodere il prompt
-            out+=`\n--- FOGLIO: ${sn} ---\n${csv.substring(0,4000)}\n`;
+            // Rimuovi righe completamente vuote per compattare
+            const lines=csv.split('\n').filter(l=>l.replace(/;/g,'').trim().length>0);
+            out+=`\n--- ${sn} (${lines.length} righe) ---\n${lines.slice(0,60).join('\n')}\n`;
           });
-          resolve(out);
+          resolve(out||'[File vuoto]');
         }catch(e){resolve('[Errore parsing: '+e.message+']')}
       };
       r.readAsArrayBuffer(file);
     });
   }
-  return new Promise((resolve)=>{
-    if(file.name.match(/\.csv$/i)||file.name.match(/\.txt$/i)){
-      const r=new FileReader();r.onload=()=>resolve(r.result);r.readAsText(file);
-    } else {
-      const r=new FileReader();r.onload=()=>resolve(r.result.split(',')[1]);r.readAsDataURL(file);
-    }
-  });
+  if(file.name.match(/\.csv$/i)||file.name.match(/\.txt$/i)){
+    return new Promise((resolve)=>{
+      const r=new FileReader();r.onload=()=>resolve((r.result||'').substring(0,4000));r.readAsText(file);
+    });
+  }
+  // Per PDF/immagini: non inclusi nel prompt testuale
+  return `[${file.name}: formato non testuale — per file PDF/immagini usa la sezione "Importa Piano da Excel"]`;
 }
 
 let EXCEL_PLAN_ROWS=[];

@@ -1662,7 +1662,7 @@ async function handlePost(action, body, env) {
         const urgenti = tagItems.filter(t => t.giorniScadenza >= 0 && t.giorniScadenza <= 7);
         const prossimi = tagItems.filter(t => t.giorniScadenza > 7 && t.giorniScadenza <= 30);
         const programmati = tagItems.filter(t => t.giorniScadenza > 30);
-        const fmtItem = t => `- [${t.urgenza}] ${t.tipo.toUpperCase()} ${t.macchina} @ ${t.cliente}(${t.clienteId}) — data prevista: ${t.data} (${t.giorniScadenza < 0 ? Math.abs(t.giorniScadenza)+'gg SCADUTO' : t.giorniScadenza+'gg'})${t.oreLavoro ? ' ore:'+t.oreLavoro : ''}`;
+        const fmtItem = t => `- [${t.urgenza}] ${t.tipo.toUpperCase()} ${t.macchina} @ ${t.cliente}(${t.clienteId}) — ${t.data} (${t.giorniScadenza < 0 ? Math.abs(t.giorniScadenza)+'gg SCADUTO' : t.giorniScadenza+'gg'})${t.oreLavoro ? ' ore:'+t.oreLavoro : ''}`;
         tagliandiContext = '\nTAGLIANDI E SERVICE IN SCADENZA (pianifica PRIMA i piu urgenti):';
         if (scaduti.length) tagliandiContext += '\n⚠️ SCADUTI:\n' + scaduti.slice(0,15).map(fmtItem).join('\n');
         if (urgenti.length) tagliandiContext += '\n🔴 URGENTI (entro 7gg):\n' + urgenti.slice(0,10).map(fmtItem).join('\n');
@@ -1692,7 +1692,7 @@ async function handlePost(action, body, env) {
         }
       }
 
-      // File context (max 3000 chars)
+      // File context — include tutto il contenuto testuale (già compattato dal frontend)
       let fileContext = '';
       for (const f of files) {
         const content = typeof f.content === 'string' ? f.content : '';
@@ -1705,10 +1705,10 @@ async function handlePost(action, body, env) {
       const isoOggi = oggi; // reuse
       const oggiIt = new Intl.DateTimeFormat('it-IT', { weekday:'long', year:'numeric', month:'long', day:'numeric', timeZone:'Europe/Rome' }).format(new Date());
 
-      // Compact data
+      // Compact data — tutti i dati disponibili
       const tecList = allTecnici.filter(t=>t.ruolo!=='admin').map(t => `${t.nome} ${t.cognome}(${t.id},${t.ruolo},${t.base||'?'})`).join('; ');
-      const urgList = ctx.urgenze ? allUrgenze.slice(0,15).map(u => `${u.id}:${(u.problema||'').substring(0,30)}|${u.cliente_id}|pri:${u.priorita_id}`).join('; ') : '';
-      const cliList = allClienti.slice(0,80).map(c => `${c.codice_m3}:${c.nome_interno||c.nome_account||'?'}(${c.citta_fatturazione||''})`).join(', ');
+      const urgList = ctx.urgenze ? allUrgenze.slice(0,20).map(u => `${u.id}:${(u.problema||'').substring(0,40)}|${u.cliente_id}|pri:${u.priorita_id}`).join('; ') : '';
+      const cliList = allClienti.slice(0,100).map(c => `${c.codice_m3}:${c.nome_interno||c.nome_account||'?'}(${c.citta_fatturazione||''})`).join(', ');
 
       const prompt = `PLANNER FSM — Pianificazione intelligente interventi
 OGGI: ${oggiIt} (${isoOggi})
@@ -1743,32 +1743,48 @@ ${periodoIstruzione || '1. Genera piano per OGNI giorno lavorativo (lun-sab) del
 Rispondi SOLO JSON:
 {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|service|urgenza|installazione|ispezione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"..."}],"warnings":["..."]}`;
 
-      // ─── AI Call with week-by-week chunking for full months ───
-      const models = ['@cf/meta/llama-3.1-70b-instruct', '@cf/meta/llama-3.1-8b-instruct'];
+      // ─── AI Call — single fast call, no chunking ───
       const validIds = new Set(allTecnici.map(t => t.id));
 
-      // Helper: call AI with fallback chain
+      // Helper: call AI with 25s timeout — use 8B for speed (70B often times out)
       async function callAI(promptText) {
-        for (const model of models) {
-          try {
-            const res = await env.AI.run(model, {
-              messages: [
-                { role: 'system', content: 'Sei un pianificatore FSM. Rispondi SOLO JSON valido. Zero testo extra.' },
-                { role: 'user', content: promptText }
-              ],
-              max_tokens: 4096
-            });
-            if (res && res.response) return res.response;
-          } catch (aiErr) {
-            if (model === models[models.length - 1]) throw new Error(aiErr.message || 'timeout');
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 25000);
+        try {
+          const res = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+            messages: [
+              { role: 'system', content: 'Sei un pianificatore FSM esperto. Rispondi SOLO in JSON valido, nessun testo prima o dopo. Il JSON deve contenere: {"summary":"breve riepilogo","piano":[array di interventi],"warnings":[eventuali avvisi]}' },
+              { role: 'user', content: promptText }
+            ],
+            max_tokens: 4096
+          }, { signal: controller.signal });
+          clearTimeout(timer);
+          if (res && res.response) return res.response;
+          return null;
+        } catch (aiErr) {
+          clearTimeout(timer);
+          // Retry once with shorter prompt if timeout
+          if (aiErr.name === 'AbortError' || (aiErr.message || '').includes('timeout')) {
+            const shortPrompt = promptText.substring(0, Math.floor(promptText.length * 0.6)) + '\n\n[PROMPT RIDOTTO PER TIMEOUT — genera comunque il piano completo]\n' + promptText.substring(promptText.lastIndexOf('ISTRUZIONI GENERAZIONE:'));
+            try {
+              const res2 = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+                messages: [
+                  { role: 'system', content: 'Rispondi SOLO JSON valido: {"summary":"...","piano":[...],"warnings":[...]}' },
+                  { role: 'user', content: shortPrompt }
+                ],
+                max_tokens: 4096
+              });
+              if (res2 && res2.response) return res2.response;
+            } catch { /* ignore retry failure */ }
           }
+          throw new Error(aiErr.message || 'AI non disponibile');
         }
-        return null;
       }
 
-      // Helper: parse AI response JSON
+      // Helper: parse AI response JSON (robust)
       function parseAIResponse(rawText) {
-        let clean = (rawText || '{}').replace(/```json\n?|\n?```/g, '').trim();
+        if (!rawText) return null;
+        let clean = rawText.replace(/```json\n?|\n?```/g, '').trim();
         const js = clean.indexOf('{'), je = clean.lastIndexOf('}');
         if (js >= 0 && je > js) clean = clean.substring(js, je + 1);
         try { return JSON.parse(clean); } catch {
@@ -1789,71 +1805,19 @@ Rispondi SOLO JSON:
         }).filter(p => p.tecnicoId && validIds.has(p.tecnicoId));
       }
 
-      // Determine if chunking is needed (full month = 4-5 weeks)
-      const needsChunking = modalita === 'mese' && meseTarget;
-      if (needsChunking) {
-        // Split month into weeks
-        const [yy, mm] = meseTarget.split('-').map(Number);
-        const weeks = [];
-        let d = new Date(yy, mm - 1, 1);
-        const lastDay = new Date(yy, mm, 0).getDate();
-        let weekNum = 1;
-        while (d.getDate() <= lastDay && d.getMonth() === mm - 1) {
-          const weekStart = new Date(d);
-          const weekEnd = new Date(d);
-          weekEnd.setDate(weekEnd.getDate() + 6);
-          if (weekEnd.getMonth() !== mm - 1) weekEnd.setDate(lastDay);
-          if (weekEnd.getMonth() !== mm - 1) { weekEnd.setMonth(mm - 1); weekEnd.setDate(lastDay); }
-          const fmtD = dt => dt.toISOString().split('T')[0];
-          weeks.push({ num: weekNum, start: fmtD(weekStart), end: fmtD(weekEnd) });
-          d.setDate(d.getDate() + 7);
-          weekNum++;
-        }
-
-        const allPiano = [];
-        const allWarnings = [];
-        let allSummary = '';
-        let prevWeekSummary = '';
-
-        for (const week of weeks) {
-          const weekPrompt = prompt
-            .replace(periodoIstruzione, `GENERA PIANO per SETTIMANA ${week.num}: dal ${week.start} al ${week.end}`)
-            + (prevWeekSummary ? `\n\nSETTIMANE PRECEDENTI GIA GENERATE:\n${prevWeekSummary}` : '');
-
-          try {
-            const raw = await callAI(weekPrompt);
-            if (!raw) { allWarnings.push(`Settimana ${week.num}: nessuna risposta AI`); continue; }
-            const parsed = parseAIResponse(raw);
-            if (!parsed) { allWarnings.push(`Settimana ${week.num}: risposta non parsabile`); continue; }
-            const weekPiano = postProcess(parsed.piano);
-            allPiano.push(...weekPiano);
-            if (parsed.warnings) allWarnings.push(...parsed.warnings);
-            if (parsed.summary) allSummary += (allSummary ? ' | ' : '') + `S${week.num}: ${parsed.summary}`;
-            // Build context for next weeks
-            prevWeekSummary += weekPiano.slice(0, 10).map(p => `${p.data} ${p.tecnico}: ${p.cliente}`).join('; ') + '\n';
-          } catch (e) {
-            allWarnings.push(`Settimana ${week.num}: errore ${e.message}`);
-          }
-        }
-
-        return ok({
-          summary: allSummary || `Piano ${meseTarget} generato in ${weeks.length} chunk settimanali`,
-          piano: allPiano,
-          warnings: allWarnings.length ? allWarnings : undefined,
-          chunks: weeks.length
-        });
-      }
-
-      // Single call (settimana or vuoti mode, or no meseTarget)
+      // Single AI call for ALL modes (mese/settimana/vuoti) — no chunking, faster
       try {
         const rawText = await callAI(prompt);
-        if (!rawText) return err('Workers AI non ha generato risposta. Riprova.');
+        if (!rawText) return err('Workers AI non ha generato risposta. Riprova (il servizio potrebbe essere sovraccarico).');
         const result = parseAIResponse(rawText);
-        if (!result) return ok({ summary: 'Errore formato', piano: [], warnings: ['Risposta AI non parsabile. Riprova.'], raw: rawText.substring(0, 1500) });
+        if (!result) return ok({ summary: 'Errore formato risposta', piano: [], warnings: ['Risposta AI non parsabile. Riprova con meno file allegati.'], raw: rawText.substring(0, 1500) });
         result.piano = postProcess(result.piano);
         return ok(result);
       } catch (e) {
-        return err(`Workers AI errore: ${e.message}. Riprova con prompt più breve.`);
+        const msg = (e.message || '').includes('timeout') || (e.message || '').includes('abort')
+          ? 'Timeout — il prompt è troppo lungo. Prova con meno file allegati o seleziona "Singola settimana" come modalità.'
+          : `Workers AI errore: ${e.message}`;
+        return err(msg);
       }
     }
 
