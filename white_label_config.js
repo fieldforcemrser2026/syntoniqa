@@ -16,12 +16,12 @@ window.SYNTONIQA_CONFIG = {
     versione:   'v1.0',
   },
 
-  // ─── PALETTE COLORI (Lely Brand Guidelines) ─────────────────────
+  // ─── PALETTE COLORI ─────────────────────────────────────────────
   colors: {
-    primary:    '#C30A14',   // Lely Red – bottoni, link attivi, accenti principali
-    primary2:   '#A00810',   // Lely Red scuro – hover bottoni
+    primary:    '#C30A14',   // Brand Red – bottoni, link attivi, accenti principali
+    primary2:   '#A00810',   // Brand Red scuro – hover bottoni
     secondary:  '#3B7EF7',   // Blu indigo – accento secondario
-    bg:         '#050505',   // Sfondo principale (Lely Black)
+    bg:         '#050505',   // Sfondo principale
     surface:    '#1A1A1A',   // Superfici (sidebar, header)
     card:       '#2A2A2A',   // Sfondo card e pannelli
     border:     '#3A3A3A',   // Bordi e separatori
@@ -52,8 +52,8 @@ window.SYNTONIQA_CONFIG = {
     checklist:     true,    // Checklist interventi
     documenti:     true,    // Gestione documenti
     piano_mensile: true,    // Piano mensile intelligente con vincoli dinamici
-    pm_scheduling: true,    // PM Scheduling automatico con cicli Lely
-    catalogo_parti: true,  // Catalogo ricambi Lely searchable
+    pm_scheduling: true,    // PM Scheduling automatico con cicli manutenzione
+    catalogo_parti: true,  // Catalogo ricambi searchable
   },
 
   // ─── VINCOLI TEMPLATES (suggerimenti categorie per nuovo tenant) ───

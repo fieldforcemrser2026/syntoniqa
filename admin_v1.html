@@ -1145,7 +1145,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <!-- ========== SEC: CATALOGO PARTI ========== -->
 <section class="sec" id="secCatalogo">
 <div class="card">
-<div class="card-head"><h3>🔍 Catalogo Ricambi Lely</h3></div>
+<div class="card-head"><h3>🔍 Catalogo Ricambi</h3></div>
 <div class="card-body">
 <div class="field-row" style="margin-bottom:16px;gap:12px;flex-wrap:wrap">
 <div class="field" style="flex:2;min-width:200px"><label>Cerca (codice, nome, descrizione)</label>
@@ -1464,7 +1464,13 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <!-- ========== SEC: CONFIGURAZIONE ========== -->
 <section class="sec" id="secConfig">
 <div class="card">
-<div class="card-head"><h3>🔧 Configurazione Sistema</h3><button class="btn btn-ok btn-sm" onclick="saveConfig()">💾 Salva</button></div>
+<div class="card-head"><h3>🔧 Configurazione Sistema</h3>
+<div style="display:flex;gap:6px">
+<button class="btn btn-outline btn-sm" onclick="addConfigKey()">➕ Nuova Chiave</button>
+<button class="btn btn-ok btn-sm" onclick="saveConfig()">💾 Salva Tutto</button>
+</div>
+</div>
+<div style="display:flex;gap:4px;padding:0 16px;border-bottom:1px solid var(--gray3);overflow-x:auto" id="cfgTabs"></div>
 <div class="card-body" id="configBody"></div>
 </div>
 </section>
@@ -1849,7 +1855,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="field"><label>Cliente</label><select id="nmCliente"></select></div>
 <div class="field-row">
 <div class="field"><label>Tipo</label><input type="text" id="nmTipo" placeholder="Robot da mungitura"></div>
-<div class="field"><label>Modello</label><input type="text" id="nmModello" placeholder="Lely A4"></div>
+<div class="field"><label>Modello</label><input type="text" id="nmModello" placeholder="es. Astronaut A5"></div>
 </div>
 <div class="field-row">
 <div class="field"><label>Numero Seriale</label><input type="text" id="nmSeriale" placeholder="SN123456"></div>
@@ -1863,6 +1869,13 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="field"><label>Prossimo Tagliando</label><input type="date" id="nmProssTag"></div>
 </div>
 <div class="field"><label>Garanzia Fino A</label><input type="date" id="nmGaranzia"></div>
+<div class="field"><label>Foto Macchina</label>
+<div style="display:flex;gap:8px;align-items:center">
+<input type="text" id="nmFotoUrl" placeholder="URL immagine o carica file..." style="flex:1">
+<label class="btn btn-outline btn-sm" style="cursor:pointer;white-space:nowrap">📷 Carica<input type="file" accept="image/*" style="display:none" onchange="uploadFotoMacchina(this)"></label>
+</div>
+<div id="nmFotoPreview" style="margin-top:6px"></div>
+</div>
 <div class="field"><label>Note</label><textarea id="nmNote" rows="2" placeholder="Informazioni aggiuntive..."></textarea></div>
 </div>
 <div class="modal-foot">
@@ -2700,7 +2713,7 @@ async function runAIVision(urgId){
     const res=await apiCall('analyzeImage',{
       image_base64:base64,
       urgenza_id:urgId,
-      contesto:`${macchina||'macchina agricola Lely'} presso ${cliente||'cliente'} - Problema: ${urg?.Problema||'non specificato'}`
+      contesto:`${macchina||'macchina/attrezzatura'} presso ${cliente||'cliente'} - Problema: ${urg?.Problema||'non specificato'}`
     },'POST');
     document.getElementById('aiVisionLoading_'+urgId).style.display='none';
     const r=document.getElementById('aiVisionResult_'+urgId);
@@ -3305,6 +3318,24 @@ async function uploadFotoTec(tecId,input){
       const r=await apiCall('uploadFotoProfilo',{base64,mimeType:file.type,userId:tecId});
       if(r.success){toast('Foto caricata!','ok');await refreshData(true);renderTecnici()}
       else toast('Errore: '+(r.error||'sconosciuto'),'err');
+    }catch(e){toast('Errore upload: '+e.message,'err')}
+  };
+  reader.readAsDataURL(file);
+}
+async function uploadFotoMacchina(input){
+  const file=input.files[0];if(!file)return;
+  if(file.size>5*1024*1024){toast('Foto troppo grande (max 5MB)','warn');return}
+  toast('Caricamento foto...','info');
+  const reader=new FileReader();
+  reader.onload=async function(){
+    try{
+      const base64=reader.result.split(',')[1];
+      const r=await apiCall('uploadFile',{base64Data:base64,mimeType:file.type,fileName:'macchina_'+Date.now()+'.'+file.name.split('.').pop(),uploaderId:USER?.ID||'',riferimentoTipo:'macchina',riferimentoId:EDITING.macchina||'new'},'POST');
+      if(r.url){
+        $('nmFotoUrl').value=r.url;
+        $('nmFotoPreview').innerHTML=`<img src="${r.url}" style="max-width:120px;max-height:80px;border-radius:6px;border:1px solid var(--gray3)">`;
+        toast('Foto caricata!','ok');
+      }else toast('Errore upload','err');
     }catch(e){toast('Errore upload: '+e.message,'err')}
   };
   reader.readAsDataURL(file);
@@ -3970,47 +4001,105 @@ function renderPowerBI(){
 }
 
 // ============ CONFIG ============
+var CFG_ACTIVE_TAB='general';
+const CFG_TABS=[
+  {id:'general',label:'⚙️ Generale',prefix:[''],desc:'Impostazioni generali dell\'applicazione'},
+  {id:'interventi',label:'📋 Interventi',prefix:['tipo_','priorita_','durata_','stato_'],desc:'Tipi intervento, priorità, durate, stati'},
+  {id:'tecnici',label:'👥 Tecnici',prefix:['ruoli_','squadre_','affiancamento_'],desc:'Ruoli utenti, regole squadre e affiancamento'},
+  {id:'sla',label:'⏱️ SLA',prefix:['sla_'],desc:'Soglie SLA: warning, critical, breach'},
+  {id:'pm',label:'🔧 PM Scheduling',prefix:['pm_'],desc:'Cicli manutenzione, modelli, intervalli servizio'},
+  {id:'notifiche',label:'🔔 Notifiche',prefix:['telegram_','email_','push_','notif_'],desc:'Telegram, Email, Push notifications'},
+  {id:'mappa',label:'🗺️ Mappa',prefix:['mappa_','geo_'],desc:'Centro mappa, zoom, tile provider'},
+  {id:'chat',label:'💬 Chat',prefix:['chat_','canale_'],desc:'Canali chat, configurazione messaggistica'},
+  {id:'features',label:'🎛️ Feature',prefix:['feature_'],desc:'Toggle funzionalità attive/disattive'}
+];
+
 function renderConfig(){
   const cfg=DATA.config||{};
   const keys=Object.keys(cfg);
-  // Group by prefix
-  const categories={pm_:{label:'🔧 PM Scheduling',items:{}},sla_:{label:'⏱️ SLA',items:{}},telegram_:{label:'📱 Telegram',items:{}},email_:{label:'📧 Email',items:{}},general:{label:'⚙️ Generali',items:{}}};
-  keys.forEach(k=>{
-    const prefix=Object.keys(categories).find(p=>p!=='general'&&k.startsWith(p));
-    if(prefix)categories[prefix].items[k]=cfg[k];
-    else categories.general.items[k]=cfg[k];
-  });
-  let html='';
-  // Feature toggles from WL_CONFIG
-  if(typeof WL_CONFIG!=='undefined'&&WL_CONFIG.features){
-    html+=`<div style="margin-bottom:20px"><h4 style="margin-bottom:8px">🎛️ Feature Toggles</h4><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">`;
-    Object.entries(WL_CONFIG.features).forEach(([k,v])=>{
-      const color=v?'#10B981':'#9CA3AF';
-      html+=`<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:var(--radius-sm);background:${v?'#F0FDF4':'#F9FAFB'};font-size:.8125rem"><span style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0"></span>${k}</div>`;
-    });
-    html+=`</div></div>`;
+  // Build tabs
+  const tabsEl=$('cfgTabs');
+  if(tabsEl){
+    tabsEl.innerHTML=CFG_TABS.map(t=>{
+      const active=t.id===CFG_ACTIVE_TAB;
+      return `<button onclick="CFG_ACTIVE_TAB='${t.id}';renderConfig()" style="padding:8px 14px;font-size:.8rem;border:none;background:none;cursor:pointer;white-space:nowrap;border-bottom:2px solid ${active?'var(--primary)':'transparent'};color:${active?'var(--primary)':'var(--gray)'};font-weight:${active?'600':'400'}">${t.label}</button>`;
+    }).join('');
   }
-  // Config categories
-  Object.values(categories).forEach(cat=>{
-    const catKeys=Object.keys(cat.items);
-    if(!catKeys.length)return;
-    html+=`<div style="margin-bottom:16px"><h4 style="margin-bottom:8px;font-size:.875rem">${cat.label}</h4>`;
-    catKeys.forEach(k=>{
-      const val=cat.items[k]||'';
-      const isJson=val.startsWith('{')||val.startsWith('[');
-      html+=`<div class="field-row mb-sm"><div class="field"><label style="font-size:.75rem;font-family:var(--mono)">${k}</label>${isJson?`<textarea class="cfg-input" data-key="${k}" rows="3" style="width:100%;font-size:.75rem;font-family:var(--mono)">${val}</textarea>`:`<input type="text" class="cfg-input" data-key="${k}" value="${val}" style="font-size:.8125rem">`}</div></div>`;
+  const tab=CFG_TABS.find(t=>t.id===CFG_ACTIVE_TAB)||CFG_TABS[0];
+  let html=`<p style="font-size:.8rem;color:var(--muted);margin-bottom:12px">${tab.desc}</p>`;
+
+  if(tab.id==='features'){
+    // Feature toggles — show WL_CONFIG features + config feature_ keys
+    html+=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">`;
+    if(typeof WL_CONFIG!=='undefined'&&WL_CONFIG.features){
+      Object.entries(WL_CONFIG.features).forEach(([k,v])=>{
+        const color=v?'#10B981':'#9CA3AF';
+        html+=`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:var(--radius-sm);background:${v?'#F0FDF4':'#F9FAFB'};border:1px solid ${v?'#BBF7D0':'#E5E7EB'}">
+          <span style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0"></span>
+          <div><div style="font-size:.8125rem;font-weight:500">${k.replace(/_/g,' ')}</div>
+          <div style="font-size:.65rem;color:var(--muted)">white_label_config.js</div></div>
+        </div>`;
+      });
+    }
+    // Anche feature_ dal DB config
+    keys.filter(k=>k.startsWith('feature_')).forEach(k=>{
+      const val=cfg[k]||'';
+      html+=`<div style="padding:10px 14px;border-radius:var(--radius-sm);background:#F9FAFB;border:1px solid #E5E7EB">
+        <label style="font-size:.75rem;font-family:var(--mono);font-weight:600">${k}</label>
+        <input type="text" class="cfg-input" data-key="${k}" value="${esc(val)}" style="font-size:.8rem;margin-top:4px;width:100%">
+      </div>`;
     });
     html+=`</div>`;
-  });
-  if(!html)html='<p class="empty">Nessuna configurazione trovata</p>';
+  }else{
+    // Regular config keys for this tab
+    const tabKeys=keys.filter(k=>{
+      if(tab.id==='general'){
+        // General = everything that doesn't match other tabs
+        return !CFG_TABS.some(t=>t.id!=='general'&&t.prefix.some(p=>p&&k.startsWith(p)));
+      }
+      return tab.prefix.some(p=>k.startsWith(p));
+    });
+    if(tabKeys.length){
+      html+=`<div style="display:grid;gap:10px">`;
+      tabKeys.sort().forEach(k=>{
+        const val=cfg[k]||'';
+        const isJson=val.startsWith('{')||val.startsWith('[');
+        const isBool=val==='true'||val==='false';
+        const label=k.replace(/^(sla_|pm_|telegram_|email_|tipo_|ruoli_|mappa_|chat_|push_|notif_)/,'').replace(/_/g,' ');
+        html+=`<div style="padding:10px 14px;background:#FAFAFA;border:1px solid #E5E7EB;border-radius:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <label style="font-size:.75rem;font-family:var(--mono);font-weight:600;color:var(--primary)">${k}</label>
+            <button class="btn btn-ghost btn-xs" onclick="if(confirm('Eliminare chiave ${k}?')){this.closest('div[style]').remove();toast('Chiave rimossa (salva per confermare)','info')}" title="Elimina" style="color:#EF4444;font-size:.7rem">🗑️</button>
+          </div>
+          <div style="font-size:.65rem;color:var(--muted);margin-bottom:4px;text-transform:capitalize">${label}</div>
+          ${isJson?`<textarea class="cfg-input" data-key="${k}" rows="4" style="width:100%;font-size:.75rem;font-family:var(--mono);border:1px solid #D1D5DB;border-radius:6px;padding:8px">${val}</textarea>`:
+          isBool?`<select class="cfg-input" data-key="${k}" style="font-size:.8125rem;padding:6px 10px;border:1px solid #D1D5DB;border-radius:6px"><option value="true" ${val==='true'?'selected':''}>✅ Attivo (true)</option><option value="false" ${val==='false'?'selected':''}>⬜ Disattivo (false)</option></select>`:
+          `<input type="text" class="cfg-input" data-key="${k}" value="${esc(val)}" style="font-size:.8125rem;padding:6px 10px;border:1px solid #D1D5DB;border-radius:6px;width:100%">`}
+        </div>`;
+      });
+      html+=`</div>`;
+    }else{
+      html+=`<div style="text-align:center;padding:32px;color:var(--gray)"><p>Nessuna configurazione in questa sezione.</p><p style="font-size:.75rem">Usa "➕ Nuova Chiave" per aggiungere configurazioni con prefisso <code>${tab.prefix.filter(p=>p).join(', ')||'qualsiasi'}</code></p></div>`;
+    }
+  }
   $('configBody').innerHTML=html;
+}
+function addConfigKey(){
+  const tab=CFG_TABS.find(t=>t.id===CFG_ACTIVE_TAB)||CFG_TABS[0];
+  const suggestedPrefix=tab.prefix.find(p=>p)||'';
+  const key=prompt('Nome chiave configurazione:',suggestedPrefix);
+  if(!key)return;
+  if(!DATA.config)DATA.config={};
+  DATA.config[key]='';
+  renderConfig();
+  toast(`Chiave "${key}" aggiunta — inserisci il valore e salva`,'info');
 }
 function saveConfig(){
   const configObj={};
   document.querySelectorAll('.cfg-input').forEach(input=>{
     const key=input.getAttribute('data-key');
-    const val=input.value;
-    if(key&&val) configObj[key]=val;
+    const val=input.tagName==='SELECT'?input.value:input.value;
+    if(key) configObj[key]=val;
   });
   if(Object.keys(configObj).length===0){toast('Nessuna configurazione da salvare','warn');return}
   apiCall('saveConfig',{config:configObj},'POST')
@@ -4745,6 +4834,9 @@ function editMacchina(id){
   $('nmOre').value=m.OreLavoro||'';$('nmUltimoTag').value=m.UltimoTagliando||'';
   $('nmProssTag').value=m.ProssimoTagliando||'';$('nmGaranzia').value=m.GaranziaFino||'';
   $('nmNote').value=m.Note||'';
+  $('nmFotoUrl').value=m.FotoUrl||'';
+  const prev=$('nmFotoPreview');
+  if(prev) prev.innerHTML=m.FotoUrl?`<img src="${m.FotoUrl}" style="max-width:120px;max-height:80px;border-radius:6px;border:1px solid var(--gray3)">`:''
   document.querySelector('#modalMacchina .modal-head h2').textContent='✏️ Modifica Macchina';
   openModal('modalMacchina');
 }
@@ -4763,7 +4855,7 @@ function editAutomezzo(id){
 // ============ RESET MODAL ON NEW ============
 function openNewUtente(){EDITING.utente=null;['nuNome','nuCognome','nuUsername','nuPassword','nuBase','nuTelefono','nuEmail'].forEach(id=>{if($(id))$(id).value=''});$('nuRuolo').value='tecnico';$('nuSquadra').value='';$('nuAutomezzo').value='';$('resetPwdBox').style.display='none';document.querySelector('#modalUtente .modal-head h2').textContent='👤 Nuovo Utente';openModal('modalUtente')}
 function openNewCliente(){EDITING.cliente=null;['ncNome','ncCitta','ncProv','ncIndirizzo','ncCap','ncTelefono','ncEmail','ncContratto','ncNote'].forEach(id=>{if($(id))$(id).value=''});document.querySelector('#modalCliente .modal-head h2').textContent='🏢 Nuovo Cliente';openModal('modalCliente')}
-function openNewMacchina(){EDITING.macchina=null;['nmTipo','nmModello','nmSeriale','nmAnno','nmOre','nmUltimoTag','nmProssTag','nmGaranzia','nmNote'].forEach(id=>{if($(id))$(id).value=''});$('nmCliente').value='';document.querySelector('#modalMacchina .modal-head h2').textContent='⚙️ Nuova Macchina';openModal('modalMacchina')}
+function openNewMacchina(){EDITING.macchina=null;['nmTipo','nmModello','nmSeriale','nmAnno','nmOre','nmUltimoTag','nmProssTag','nmGaranzia','nmNote','nmFotoUrl'].forEach(id=>{if($(id))$(id).value=''});$('nmCliente').value='';const prev=$('nmFotoPreview');if(prev)prev.innerHTML='';document.querySelector('#modalMacchina .modal-head h2').textContent='⚙️ Nuova Macchina';openModal('modalMacchina')}
 function openNewAutomezzo(){EDITING.automezzo=null;['naCodice','naTarga','naDesc','naAllestimento','naKm','naControllo','naNote'].forEach(id=>{if($(id))$(id).value=''});$('naStatus').value='disponibile';$('naAssegnatario').value='';
   // Auto-suggest prossimo codice F
   const existing=(DATA.automezzi||[]).filter(f=>!f.Obsoleto).map(f=>{const m=(f.Nome||'').match(/^F(\d+)$/i);return m?parseInt(m[1]):0});
@@ -4858,6 +4950,7 @@ async function saveMacchina(){
     OreLavoro:$('nmOre').value?parseInt($('nmOre').value):null,
     UltimoTagliando:$('nmUltimoTag').value||null,ProssimoTagliando:$('nmProssTag').value||null,
     GaranziaFino:$('nmGaranzia').value||null,Note:$('nmNote').value||null,
+    FotoUrl:$('nmFotoUrl').value||null,
     TenantID:(DATA.utenti&&DATA.utenti[0])?DATA.utenti[0].TenantID:null
   };
   if(!data.ClienteID||!data.Tipo||!data.Modello){toast('Compila cliente, tipo e modello','warn');return}
@@ -6790,7 +6883,19 @@ async function loadVincoliCategories(){
 }
 
 function renderVincoliTemplates(){
-  const cfg = window.SYNTONIQA_CONFIG?.vincoli_templates || [];
+  // Template vincoli: prima da config DB, poi da white_label_config, poi default generici
+  const dbTemplates=(DATA.config?.vincoli_templates)?JSON.parse(DATA.config.vincoli_templates):null;
+  const defaultTemplates=[
+    {nome:'Regole Team',icona:'👥',desc:'Coppie, affiancamenti, esclusioni'},
+    {nome:'Disponibilita e Ferie',icona:'📅',desc:'Ferie, malattia, permessi, formazione'},
+    {nome:'Veicoli e Attrezzature',icona:'🚐',desc:'Assegnazione furgoni, rotazione'},
+    {nome:'Reperibilita e Turni',icona:'📞',desc:'Turni reperibilità, riposo post-notturna'},
+    {nome:'Competenze',icona:'🎓',desc:'Certificazioni, specializzazioni per tipo macchina'},
+    {nome:'Priorita e SLA',icona:'⭐',desc:'Clienti VIP, contratti SLA, urgenze'},
+    {nome:'Carico Lavoro e Riposo',icona:'⏱️',desc:'Max ore/giorno, giorni consecutivi, riposo'},
+    {nome:'Zone Geografiche',icona:'📍',desc:'Clustering per zona, basi tecnici, viaggi'}
+  ];
+  const cfg = dbTemplates || window.SYNTONIQA_CONFIG?.vincoli_templates || defaultTemplates;
   const existing = VINCOLI_CAT.categories.map(c => c.nome.toLowerCase());
   const el = $('vincoliTemplates');
   if(!el) return;
