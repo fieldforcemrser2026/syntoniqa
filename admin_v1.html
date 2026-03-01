@@ -2286,6 +2286,7 @@ const SEC_RENDERERS = {
   powerbi: renderPowerBI,
   config: renderConfig,
   pagellini: renderPagellini,
+  pianomensile: renderMonthPlan,
   calendario: renderCal,
   documenti: renderDocumenti,
   checklist: renderChecklist,
@@ -6099,6 +6100,24 @@ function showDetail(type,id){
       if(item.Stato==='bozza')foot=`<button class="btn btn-ok" onclick="approvePagellino('${id}');closeModal('modalDetail')">✅ Approva</button>`;
       break;
 
+    case 'reperibilita': {
+      item=(DATA.reperibilita||[]).find(r=>r.ID===id);if(!item)return;
+      title='🌙 Reperibilità '+id;
+      const repTecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'||u.Ruolo==='admin'));
+      html=`<div class="grid-2 mb">
+        <div><strong>Tecnico:</strong> <select id="edRepTecnico" class="inp" style="display:inline;width:auto">
+          ${repTecnici.map(t=>`<option value="${t.ID}" ${t.ID===item.TecnicoID?'selected':''}>${t.Nome} ${t.Cognome||''}</option>`).join('')}
+        </select></div>
+        <div><strong>Turno:</strong> 18:00 — 08:00</div>
+        <div><strong>Dal:</strong> <input type="date" id="edRepDal" class="inp" style="display:inline;width:auto" value="${(item.DataInizio||'').split('T')[0]}"></div>
+        <div><strong>Al:</strong> <input type="date" id="edRepAl" class="inp" style="display:inline;width:auto" value="${(item.DataFine||'').split('T')[0]}"></div>
+      </div>
+      <div class="mb"><strong>Note:</strong><br><textarea id="edRepNote" class="inp" rows="2" style="width:100%">${item.Note||''}</textarea></div>`;
+      foot=`<button class="btn btn-primary" onclick="saveRepEdit('${id}')">💾 Salva</button>
+        <button class="btn" style="background:#FEE2E2;color:#DC2626;border:1px solid #FECACA" onclick="if(confirm('Eliminare questa reperibilità?')){deleteRep('${id}');closeModal('modalDetail')}">🗑️ Elimina</button>`;
+      break;
+    }
+
     case 'cliente':
       item=(DATA.clienti||[]).find(c=>c.ID===id);if(!item)return;
       const macchCli=(DATA.macchine||[]).filter(m=>!m.Obsoleto&&m.ClienteID===id);
@@ -6127,6 +6146,14 @@ function showDetail(type,id){
   $('detailBody').innerHTML=html;
   $('detailFoot').innerHTML=foot+`<button class="btn btn-outline" onclick="closeModal('modalDetail')">Chiudi</button>`;
   openModal('modalDetail');
+}
+
+async function saveRepEdit(id){
+  try{
+    await apiCall('updateReperibilita',{id,TecnicoID:$('edRepTecnico').value,DataInizio:$('edRepDal').value,DataFine:$('edRepAl').value,Note:$('edRepNote').value},'POST');
+    toast('Reperibilità aggiornata','ok');closeModal('modalDetail');
+    await refreshData(true);renderMonthPlan();
+  }catch(e){toast(e.message,'err')}
 }
 
 function renderOrdineWorkflow(statoCorrente){
