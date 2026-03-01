@@ -1743,55 +1743,67 @@ ${periodoIstruzione || '1. Genera piano per OGNI giorno lavorativo (lun-sab) del
 Rispondi SOLO JSON:
 {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|service|urgenza|installazione|ispezione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"..."}],"warnings":["..."]}`;
 
-      // ─── AI Call — single fast call, no chunking ───
+      // ─── AI Call — single call, Promise.race timeout ───
       const validIds = new Set(allTecnici.map(t => t.id));
 
-      // Helper: call AI with 25s timeout — use 8B for speed (70B often times out)
       async function callAI(promptText) {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 25000);
-        try {
-          const res = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
-            messages: [
-              { role: 'system', content: 'Sei un pianificatore FSM esperto. Rispondi SOLO in JSON valido, nessun testo prima o dopo. Il JSON deve contenere: {"summary":"breve riepilogo","piano":[array di interventi],"warnings":[eventuali avvisi]}' },
-              { role: 'user', content: promptText }
-            ],
-            max_tokens: 4096
-          }, { signal: controller.signal });
-          clearTimeout(timer);
-          if (res && res.response) return res.response;
-          return null;
-        } catch (aiErr) {
-          clearTimeout(timer);
-          // Retry once with shorter prompt if timeout
-          if (aiErr.name === 'AbortError' || (aiErr.message || '').includes('timeout')) {
-            const shortPrompt = promptText.substring(0, Math.floor(promptText.length * 0.6)) + '\n\n[PROMPT RIDOTTO PER TIMEOUT — genera comunque il piano completo]\n' + promptText.substring(promptText.lastIndexOf('ISTRUZIONI GENERAZIONE:'));
-            try {
-              const res2 = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
-                messages: [
-                  { role: 'system', content: 'Rispondi SOLO JSON valido: {"summary":"...","piano":[...],"warnings":[...]}' },
-                  { role: 'user', content: shortPrompt }
-                ],
-                max_tokens: 4096
-              });
-              if (res2 && res2.response) return res2.response;
-            } catch { /* ignore retry failure */ }
-          }
-          throw new Error(aiErr.message || 'AI non disponibile');
-        }
+        const aiPromise = env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+          messages: [
+            { role: 'system', content: 'Sei un pianificatore FSM. Rispondi SOLO JSON. Note max 15 char. Formato compatto: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice","tipo":"tagliando|service|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"breve"}],"warnings":[]}' },
+            { role: 'user', content: promptText }
+          ],
+          max_tokens: 8192
+        });
+        const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 55000));
+        const res = await Promise.race([aiPromise, timeout]);
+        return res?.response || null;
       }
 
-      // Helper: parse AI response JSON (robust)
+      // Parser robusto — gestisce JSON troncati (risposta tagliata a max_tokens)
       function parseAIResponse(rawText) {
         if (!rawText) return null;
         let clean = rawText.replace(/```json\n?|\n?```/g, '').trim();
+        // Tentativo 1: JSON completo
         const js = clean.indexOf('{'), je = clean.lastIndexOf('}');
-        if (js >= 0 && je > js) clean = clean.substring(js, je + 1);
-        try { return JSON.parse(clean); } catch {
-          const m = rawText.match(/\{[\s\S]*\}/);
-          if (m) { try { return JSON.parse(m[0]); } catch {} }
-          return null;
+        if (js >= 0 && je > js) {
+          try { return JSON.parse(clean.substring(js, je + 1)); } catch {}
         }
+        // Tentativo 2: JSON troncato — chiudi brackets aperti
+        if (js >= 0) {
+          let attempt = clean.substring(js);
+          const lastBrace = attempt.lastIndexOf('}');
+          if (lastBrace > 0) attempt = attempt.substring(0, lastBrace + 1);
+          // Bilancia brackets
+          let ob = 0, cb = 0, os = 0, cs = 0;
+          for (const c of attempt) { if(c==='{')ob++;if(c==='}')cb++;if(c==='[')os++;if(c===']')cs++; }
+          // Chiudi stringhe aperte: rimuovi ultimo elemento parziale
+          const lastComma = attempt.lastIndexOf(',');
+          if (ob > cb && lastComma > 0) attempt = attempt.substring(0, lastComma);
+          for (let i = 0; i < os - cs; i++) attempt += ']';
+          for (let i = 0; i < ob - cb; i++) attempt += '}';
+          try {
+            const parsed = JSON.parse(attempt);
+            if (!parsed.warnings) parsed.warnings = [];
+            parsed.warnings.push('Piano parziale (risposta AI troncata) — riprova per risultato completo');
+            return parsed;
+          } catch {}
+        }
+        // Tentativo 3: estrai solo array piano
+        const pm = rawText.match(/"piano"\s*:\s*\[/);
+        if (pm) {
+          const start = pm.index + pm[0].length - 1;
+          let arrStr = rawText.substring(start);
+          // Trova ultimo } completo e chiudi array
+          const lastObj = arrStr.lastIndexOf('}');
+          if (lastObj > 0) {
+            arrStr = arrStr.substring(0, lastObj + 1) + ']';
+            try {
+              const piano = JSON.parse(arrStr);
+              return { summary: 'Piano parziale estratto', piano, warnings: ['Estratti ' + piano.length + ' interventi da risposta troncata'] };
+            } catch {}
+          }
+        }
+        return null;
       }
 
       // Helper: validate and fix tecnicoId
