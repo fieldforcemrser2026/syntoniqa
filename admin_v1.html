@@ -1400,20 +1400,20 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <table class="tbl" id="anagClientiTable">
 <thead><tr>
   <th style="width:30px"></th>
-  <th>Cliente</th>
-  <th>Città</th>
-  <th>Prov.</th>
-  <th>Stato</th>
-  <th>Titolare</th>
-  <th title="Astronaut" style="font-size:.7rem;text-align:center">🤖<br>Robot</th>
-  <th title="Juno" style="font-size:.7rem;text-align:center">🔄<br>Juno</th>
-  <th title="Vector" style="font-size:.7rem;text-align:center">🚜<br>Vector</th>
-  <th title="Discovery+Collector" style="font-size:.7rem;text-align:center">🧹<br>Disc+Col</th>
-  <th title="Central Unit" style="font-size:.7rem;text-align:center">🖥️<br>CU</th>
-  <th title="Cosmix" style="font-size:.7rem;text-align:center">🥣<br>Cosmix</th>
-  <th title="Nautilus" style="font-size:.7rem;text-align:center">🔧<br>Nautilus</th>
-  <th title="Altri: Luna, Meteor, Calm, Compressori, L4C, Grazeway" style="font-size:.7rem;text-align:center">📦<br>Altri</th>
-  <th style="font-size:.7rem;text-align:center">Tot</th>
+  <th style="cursor:pointer" onclick="anagSort('nome')">Cliente <span id="anagSortNome" style="font-size:.6rem">⇅</span></th>
+  <th style="cursor:pointer" onclick="anagSort('citta')">Città <span id="anagSortCitta" style="font-size:.6rem">⇅</span></th>
+  <th style="cursor:pointer" onclick="anagSort('prov')">Prov. <span id="anagSortProv" style="font-size:.6rem">⇅</span></th>
+  <th style="cursor:pointer" onclick="anagSort('stato')">Stato <span id="anagSortStato" style="font-size:.6rem">⇅</span></th>
+  <th style="cursor:pointer" onclick="anagSort('titolare')">Titolare <span id="anagSortTitolare" style="font-size:.6rem">⇅</span></th>
+  <th title="Astronaut" style="font-size:.7rem;text-align:center;cursor:pointer" onclick="anagSort('ROBOT')"><span id="anagSortROBOT" style="font-size:.55rem">⇅</span><br>Robot</th>
+  <th title="Juno" style="font-size:.7rem;text-align:center;cursor:pointer" onclick="anagSort('JUNO')"><span id="anagSortJUNO" style="font-size:.55rem">⇅</span><br>Juno</th>
+  <th title="Vector" style="font-size:.7rem;text-align:center;cursor:pointer" onclick="anagSort('VECTOR')"><span id="anagSortVECTOR" style="font-size:.55rem">⇅</span><br>Vector</th>
+  <th title="Discovery+Collector" style="font-size:.7rem;text-align:center;cursor:pointer" onclick="anagSort('DISC')"><span id="anagSortDISC" style="font-size:.55rem">⇅</span><br>Disc+Col</th>
+  <th title="Central Unit" style="font-size:.7rem;text-align:center;cursor:pointer" onclick="anagSort('CU')"><span id="anagSortCU" style="font-size:.55rem">⇅</span><br>CU</th>
+  <th title="Cosmix" style="font-size:.7rem;text-align:center;cursor:pointer" onclick="anagSort('COSMIX')"><span id="anagSortCOSMIX" style="font-size:.55rem">⇅</span><br>Cosmix</th>
+  <th title="Nautilus" style="font-size:.7rem;text-align:center;cursor:pointer" onclick="anagSort('NAUTILUS')"><span id="anagSortNAUTILUS" style="font-size:.55rem">⇅</span><br>Nautilus</th>
+  <th title="Altri: Luna, Meteor, Calm, Compressori, L4C, Grazeway" style="font-size:.7rem;text-align:center;cursor:pointer" onclick="anagSort('ALTRI')"><span id="anagSortALTRI" style="font-size:.55rem">⇅</span><br>Altri</th>
+  <th style="font-size:.7rem;text-align:center;cursor:pointer" onclick="anagSort('tot')">Tot <span id="anagSortTot" style="font-size:.55rem">⇅</span></th>
   <th style="width:80px"></th>
 </tr></thead>
 <tbody id="anagClientiBody"></tbody>
@@ -4385,11 +4385,11 @@ function assetType(a){
   return t;
 }
 // ============ FILTRO CONDIVISO ASSET (usato sia in Clienti che Macchine) ============
-const VALID_ASSET_STATUS=['attivo','da installare','da_installare','venduto'];
+const EXCLUDED_ASSET_STATUS=['dismesso','reso','eliminato','cancellato','disattivato','fuori servizio'];
 function isCountableAsset(a){
   const s=(a.Status||'').toLowerCase().trim();
-  if(!s)return false;
-  if(!VALID_ASSET_STATUS.some(v=>s.includes(v)))return false;
+  // Escludi SOLO gli asset con stato esplicitamente dismesso/reso/eliminato
+  if(s && EXCLUDED_ASSET_STATUS.some(v=>s.includes(v))) return false;
   return assetType(a)!=='ALTRI';
 }
 // Get ALL anagrafica assets — filtered=true applica stessi criteri di Clienti
@@ -4432,6 +4432,17 @@ async function loadAnagClients(){
   }catch(e){toast('Errore caricamento anagrafica: '+e.message,'err')}
 }
 
+let anagSortCol='nome', anagSortDir='asc';
+function anagSort(col){
+  if(anagSortCol===col) anagSortDir=anagSortDir==='asc'?'desc':'asc';
+  else { anagSortCol=col; anagSortDir='asc'; }
+  // Reset all arrows
+  document.querySelectorAll('[id^="anagSort"]').forEach(el=>el.textContent='⇅');
+  const arrow=$('anagSort'+col.charAt(0).toUpperCase()+col.slice(1)) || $('anagSort'+col);
+  if(arrow) arrow.textContent=anagSortDir==='asc'?'↑':'↓';
+  filterAnagClients();
+}
+
 function filterAnagClients(){
   const q=($('anagSearch')?.value||'').toLowerCase();
   const typeFilter=$('anagFilterType')?.value||'';
@@ -4448,6 +4459,31 @@ function filterAnagClients(){
     // Filter clients that have assets of this type (check _assetCounts)
     list=list.filter(c=>c._assetCounts&&c._assetCounts[typeFilter]>0);
   }
+  // Sort
+  const dir=anagSortDir==='asc'?1:-1;
+  const getAC=(c,k)=>(c._assetCounts&&c._assetCounts[k])||0;
+  list=[...list].sort((a,b)=>{
+    let va,vb;
+    switch(anagSortCol){
+      case 'nome': va=(a.NomeInterno||a.NomeAccount||'').toLowerCase();vb=(b.NomeInterno||b.NomeAccount||'').toLowerCase();break;
+      case 'citta': va=(a.CittaFatturazione||'').toLowerCase();vb=(b.CittaFatturazione||'').toLowerCase();break;
+      case 'prov': va=(a.ProvinciaFatturazione||'').toLowerCase();vb=(b.ProvinciaFatturazione||'').toLowerCase();break;
+      case 'stato': va=(a.StatoCliente||'').toLowerCase();vb=(b.StatoCliente||'').toLowerCase();break;
+      case 'titolare': va=(a.TitolareAccount||'').toLowerCase();vb=(b.TitolareAccount||'').toLowerCase();break;
+      case 'ROBOT':case 'JUNO':case 'VECTOR':case 'CU':case 'COSMIX':case 'NAUTILUS':
+        return (getAC(a,anagSortCol)-getAC(b,anagSortCol))*dir;
+      case 'DISC': return ((getAC(a,'DISCOVERY')+getAC(a,'COLLECTOR'))-(getAC(b,'DISCOVERY')+getAC(b,'COLLECTOR')))*dir;
+      case 'ALTRI': {
+        const altriA=(getAC(a,'LUNA')+getAC(a,'METEOR')+getAC(a,'CALM')+getAC(a,'COMPRESSORI')+getAC(a,'L4C LED')+getAC(a,'GRAZEWAY'));
+        const altriB=(getAC(b,'LUNA')+getAC(b,'METEOR')+getAC(b,'CALM')+getAC(b,'COMPRESSORI')+getAC(b,'L4C LED')+getAC(b,'GRAZEWAY'));
+        return (altriA-altriB)*dir;
+      }
+      case 'tot': return (getAC(a,'_total')-getAC(b,'_total'))*dir;
+      default: va='';vb='';
+    }
+    if(typeof va==='string') return va<vb?-dir:va>vb?dir:0;
+    return 0;
+  });
   ANAG_FILTERED=list;
   renderAnagClients(ANAG_FILTERED);
 }
@@ -4460,15 +4496,23 @@ function renderAnagClients(list){
     const a=list.filter(c=>c.StatoCliente==='Attivo').length;
     const geo=list.filter(c=>c.Lat&&c.Lng).length;
     const totAssets=list.reduce((t,c)=>t+((c._assetCounts&&c._assetCounts._total)||0),0);
-    const typeFilter=$('anagFilterType')?.value||'';
     const mainTypes=['ROBOT','JUNO','VECTOR','DISCOVERY','COLLECTOR','CU','COSMIX','NAUTILUS','LUNA','CALM','COMPRESSORI','METEOR','GRAZEWAY','L4C LED'];
-    let statCards=[[list.length,'Clienti'],[a,'Attivi'],[geo,'📍 Geo'],[totAssets,'Assets Attivi']];
+    // Row 1: General stats
+    let html=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">`;
+    html+=`<div class="stat-card" style="min-width:65px;padding:5px 8px;text-align:center"><div class="stat-val" style="font-size:1rem">${list.length}</div><div class="stat-lbl" style="font-size:.6rem">Clienti</div></div>`;
+    html+=`<div class="stat-card" style="min-width:65px;padding:5px 8px;text-align:center"><div class="stat-val" style="font-size:1rem">${a}</div><div class="stat-lbl" style="font-size:.6rem">Attivi</div></div>`;
+    html+=`<div class="stat-card" style="min-width:65px;padding:5px 8px;text-align:center"><div class="stat-val" style="font-size:1rem">${geo}</div><div class="stat-lbl" style="font-size:.6rem">📍 Geo</div></div>`;
+    html+=`<div class="stat-card" style="min-width:65px;padding:5px 8px;text-align:center"><div class="stat-val" style="font-size:1rem;font-weight:700">${totAssets}</div><div class="stat-lbl" style="font-size:.6rem">Assets Attivi</div></div>`;
+    html+=`</div>`;
+    // Row 2: Product type counts in a compact grid
+    html+=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:4px">`;
     mainTypes.forEach(t=>{
       const cfg=PROD_CFG[t]||{};
       const v=sumType(t);
-      if(v>0) statCards.push([v, prodIcon(t,20)+' '+(cfg.label||t)]);
+      if(v>0) html+=`<div style="display:flex;align-items:center;gap:4px;padding:3px 6px;background:${cfg.color||'#6b7280'}10;border:1px solid ${cfg.color||'#6b7280'}25;border-radius:6px;font-size:.7rem;cursor:pointer" onclick="$('anagFilterType').value='${t}';filterAnagClients()" title="Filtra per ${cfg.label||t}"><strong style="color:${cfg.color||'inherit'};font-size:.85rem">${v}</strong> <span style="white-space:nowrap">${cfg.label||t}</span></div>`;
     });
-    s.innerHTML=statCards.map(([v,l])=>`<div class="stat-card" style="min-width:75px;padding:6px 10px;text-align:center"><div class="stat-val" style="font-size:1.1rem">${v}</div><div class="stat-lbl" style="font-size:.65rem">${l}</div></div>`).join('');
+    html+=`</div>`;
+    s.innerHTML=html;
   }
 
   if(anagView==='map'){renderAnagMap();return}
