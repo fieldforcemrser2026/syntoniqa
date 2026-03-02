@@ -17,13 +17,13 @@
 // ─── WHITE-LABEL: tutte le stringhe brand derivate da env ───
 function brand(env) {
   return {
-    name:      env.BRAND_NAME      || 'MRS Lely Center Emilia Romagna',
-    shortName: env.BRAND_SHORT     || 'MRS Lely Center',
+    name:      env.BRAND_NAME      || 'Syntoniqa FSM',
+    shortName: env.BRAND_SHORT     || 'Syntoniqa',
     email:     env.BRAND_EMAIL     || 'noreply@syntoniqa.app',
     emailFrom: env.BRAND_EMAIL_FROM || `Syntoniqa <${env.BRAND_EMAIL || 'noreply@syntoniqa.app'}>`,
-    adminUrl:  env.BRAND_ADMIN_URL || 'https://fieldforcemrser2026.github.io/syntoniqa/admin_v1.html',
-    techUrl:   env.BRAND_TECH_URL  || 'https://fieldforcemrser2026.github.io/syntoniqa/index_v2.html',
-    color:     env.BRAND_COLOR     || '#C30A14',
+    adminUrl:  env.BRAND_ADMIN_URL || '',
+    techUrl:   env.BRAND_TECH_URL  || '',
+    color:     env.BRAND_COLOR     || '#1E40AF',
   };
 }
 
@@ -2658,7 +2658,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId
 
       // ─── AI Call — Gemini 2.0 Flash (primary) con fallback Workers AI ───
       const validIds = new Set(allTecnici.map(t => t.id));
-      const sysPrompt = 'Sei un pianificatore FSM per Lely Center (manutenzione robot mungitura). Rispondi SOLO JSON valido. Note=modello macchina. tipo=tagliando o urgenza. Formato: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome cognome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina"}],"warnings":["..."]}';
+      const sysPrompt = `Sei un pianificatore FSM per ${brand(env).shortName} (manutenzione robot mungitura). Rispondi SOLO JSON valido. Note=modello macchina. tipo=tagliando o urgenza. Formato: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome cognome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina"}],"warnings":["..."]}`;
 
       // Helper: costruisce prompt compatto per Workers AI (rimuove file e comprime dati)
       function buildCompactPrompt() {
@@ -3170,7 +3170,7 @@ ${instructions}`;
       try {
         visionRes = await env.AI.run('@cf/llava-hf/llava-1.5-7b-hf', {
           image: [...Uint8Array.from(atob(image_base64), c => c.charCodeAt(0))],
-          prompt: `Sei un tecnico esperto di macchine agricole Lely (robot mungitura Astronaut, alimentatori Vector, spingivacca Juno, Discovery).
+          prompt: `Sei un tecnico esperto di macchine agricole ${brand(env).shortName} (robot mungitura Astronaut, alimentatori Vector, spingivacca Juno, Discovery).
 Analizza questa foto di un guasto. Contesto macchina: ${contesto || 'non specificato'}
 ${partiContext}
 
@@ -4387,7 +4387,7 @@ Rispondi SOLO con JSON valido:
         const byChatId = await sb(env, 'utenti', 'GET', null, `?telegram_chat_id=eq.${fromId}&attivo=eq.true&obsoleto=eq.false`).catch(()=>[]);
         utente = byChatId[0] || null;
       }
-      // In gruppo MRS noto: se non troviamo utente, usa il nome Telegram per match fuzzy
+      // In gruppo noto: se non troviamo utente, usa il nome Telegram per match fuzzy
       if (!utente) {
         const firstName = (msg.from?.first_name || '').toLowerCase();
         const lastName = (msg.from?.last_name || '').toLowerCase();
@@ -4652,7 +4652,7 @@ Rispondi SOLO con JSON valido:
           const regStatus = utente
             ? `✅ *Registrato come:* ${utente.nome||''} ${utente.cognome||''} (${utente.ruolo||''})\n\n`
             : `⚠️ Non ti ho trovato nel sistema. Chiedi all'admin di aggiungere il tuo Telegram ID: \`${fromId}\`\n\n`;
-          reply = `👋 *Benvenuto in Syntoniqa MRS!*\n\n${regStatus}` +
+          reply = `👋 *Benvenuto in Syntoniqa ${brand(env).shortName}!*\n\n${regStatus}` +
             `🚨 *SEGNALARE UN PROBLEMA:*\n` +
             `Scrivi direttamente il problema, es:\n` +
             `"Bondioli robot fermo errore laser"\n` +
@@ -4669,7 +4669,7 @@ Rispondi SOLO con JSON valido:
           break;
         }
         case '/help':
-          reply = `📋 *Comandi Syntoniqa MRS*\n\n` +
+          reply = `📋 *Comandi Syntoniqa ${brand(env).shortName}*\n\n` +
             `💡 *COSA PIU' IMPORTANTE:*\n` +
             `Per segnalare un problema NON serve nessun comando.\n` +
             `Scrivi direttamente il messaggio e l'AI crea l'urgenza!\n\n` +
@@ -4942,7 +4942,7 @@ Rispondi SOLO con JSON valido:
           // Cerca nel catalogo parti Lely
           const searchTerm = parts.slice(1).join(' ').trim();
           if (!searchTerm) {
-            reply = `🔍 *Catalogo Ricambi Lely*\n\n\`/catalogo [ricerca]\`\n\nEsempi:\n• \`/catalogo laser\`\n• \`/catalogo tilt sensor\`\n• \`/catalogo 9.1189\`\n• \`/catalogo milk pump\``;
+            reply = `🔍 *Catalogo Ricambi ${brand(env).shortName}*\n\n\`/catalogo [ricerca]\`\n\nEsempi:\n• \`/catalogo laser\`\n• \`/catalogo tilt sensor\`\n• \`/catalogo 9.1189\`\n• \`/catalogo milk pump\``;
             break;
           }
           // Search in anagrafica_assets and item catalog (tagliandi table)
@@ -4959,7 +4959,7 @@ Rispondi SOLO con JSON valido:
               reply = `❌ Nessun risultato per "${searchTerm}". Prova con un termine diverso.`;
             }
           } else {
-            reply = `🔍 *Catalogo Lely — "${searchTerm}":*\n\n` + results.map(r => `📦 \`${r.codice||r.id}\`\n   ${(r.nome||r.descrizione||'').substring(0,60)}`).join('\n\n');
+            reply = `🔍 *Catalogo ${brand(env).shortName} — "${searchTerm}":*\n\n` + results.map(r => `📦 \`${r.codice||r.id}\`\n   ${(r.nome||r.descrizione||'').substring(0,60)}`).join('\n\n');
           }
           break;
         }
