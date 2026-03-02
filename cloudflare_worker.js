@@ -4018,31 +4018,44 @@ Rispondi SOLO con JSON valido:
       // ---- SLASH COMMANDS ----
       switch (cmd) {
         case '/start':
-          reply = `👋 *Benvenuto in Syntoniqa MRS!*\n\n🤖 Il tuo assistente intelligente per il Field Service.\n\n📤 Puoi inviarmi:\n• ✍️ Testo con problemi/ordini\n• 📷 Foto di guasti → AI identifica pezzo\n• 📄 Documenti (PDF, Excel)\n• 🎤 Audio/Video\n\n⚡ L'AI analizza tutto e crea urgenze, ordini, interventi!\n\nInvia /help per tutti i comandi.`;
+          reply = `👋 *Benvenuto in Syntoniqa MRS!*\n\n` +
+            `🚨 *SEGNALARE UN PROBLEMA:*\n` +
+            `Scrivi direttamente il problema, es:\n` +
+            `"Bondioli robot fermo errore laser"\n` +
+            `"Da Rossi A5 non munge, codice 45"\n` +
+            `→ L'AI crea l'urgenza automaticamente!\n\n` +
+            `📷 *INVIA UNA FOTO:*\n` +
+            `Foto del guasto → l'AI identifica il problema\n\n` +
+            `⚡ *COMANDI RAPIDI:*\n` +
+            `/stato — Urgenze aperte\n` +
+            `/vado — Prendi un'urgenza\n` +
+            `/oggi — Interventi di oggi\n` +
+            `/help — Tutti i comandi\n\n` +
+            `💡 Non servono comandi speciali: scrivi e basta!`;
           break;
         case '/help':
           reply = `📋 *Comandi Syntoniqa MRS*\n\n` +
-            `▶️ *COME INIZIARE:*\n` +
-            `1️⃣ Scrivi /stato per vedere le urgenze\n` +
-            `2️⃣ Scrivi /vado per prendere un'urgenza\n` +
-            `3️⃣ Scrivi /incorso quando arrivi\n` +
-            `4️⃣ Scrivi /risolto quando finisci\n\n` +
-            `🚨 *URGENZE:*\n` +
+            `💡 *COSA PIU' IMPORTANTE:*\n` +
+            `Per segnalare un problema NON serve nessun comando.\n` +
+            `Scrivi direttamente il messaggio e l'AI crea l'urgenza!\n\n` +
+            `Esempi di testo libero:\n` +
+            `• "Bondioli 102 fermo errore laser"\n` +
+            `• "Da Rossi il robot non munge"\n` +
+            `• "Serve intervento urgente da Bianchi"\n` +
+            `• Oppure manda una FOTO del guasto!\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━\n\n` +
+            `🚨 *GESTIRE URGENZE:*\n` +
             `/stato → Elenco urgenze aperte\n` +
             `/vado → Mostra urgenze disponibili\n` +
             `/vado 2 → Prendi l'urgenza n.2\n` +
-            `/incorso → Inizia lavoro\n` +
+            `/incorso → Segna "sono arrivato, lavoro"\n` +
             `/risolto note → Chiudi (es: /risolto sostituito laser)\n\n` +
-            `📅 *PIANO:*\n` +
+            `📅 *VEDERE IL PIANO:*\n` +
             `/oggi → I tuoi interventi di oggi\n` +
             `/settimana → Piano della settimana\n\n` +
-            `📦 *ORDINI:*\n` +
-            `/ordine codice qt cliente → Ordine ricambio\n` +
-            `Esempio: /ordine 1234567 2 Bondioli\n\n` +
-            `📤 *AI SMART:*\n` +
-            `Scrivi un messaggio libero o invia una foto!\n` +
-            `Es: "Bondioli 102 fermo errore laser"\n` +
-            `Es: Foto del guasto → AI identifica il problema`;
+            `📦 *ORDINARE RICAMBI:*\n` +
+            `/ordine codice qt cliente\n` +
+            `Es: /ordine 1234567 2 Bondioli`;
           break;
         case '/stato': {
           const urg = await sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,in_corso)&order=data_segnalazione.desc&limit=10');
