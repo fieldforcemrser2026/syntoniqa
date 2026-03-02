@@ -179,16 +179,27 @@ function pascalizeArrays(data) {
 }
 
 // FIX CRIT-04: Extract data from frontend's {data:{...}} wrapping and convert PascalCase → snake_case
+const INTERNAL_KEYS = new Set(['action', 'userId', 'operatoreId', 'token', 'method', '_authRole', '_authUserId', '_isJWT', '_clientIP', '_isSuperToken']);
+
 function getFields(body) {
   const source = (body.data && typeof body.data === 'object' && !Array.isArray(body.data)) ? body.data : body;
-  const skip = new Set(['action', 'userId', 'operatoreId', 'token', 'method']);
   const result = {};
   for (const [k, v] of Object.entries(source)) {
-    if (skip.has(k)) continue;
+    if (INTERNAL_KEYS.has(k) || k.startsWith('_auth') || k.startsWith('_client') || k.startsWith('_is')) continue;
     if (v === undefined) continue; // skip undefined only — null/'' allowed to clear fields
     result[toSnake(k)] = v;
   }
   return result;
+}
+
+// Strip internal keys from a body spread (for handlers that do {...body})
+function stripInternal(obj) {
+  const clean = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (INTERNAL_KEYS.has(k) || k.startsWith('_')) continue;
+    clean[k] = v;
+  }
+  return clean;
 }
 
 // Pre-processing globale body POST: flatten wrapper, PascalCase→snake_case, strip meta
@@ -221,6 +232,15 @@ function normalizeBody(raw) {
 
 // Supabase REST helper
 async function sb(env, table, method = 'GET', body = null, params = '', extraHeaders = {}) {
+  // Strip internal keys injected by auth middleware — never send to Supabase
+  if (body && typeof body === 'object' && !Array.isArray(body)) {
+    const cleaned = {};
+    for (const [k, v] of Object.entries(body)) {
+      if (k.startsWith('_') || INTERNAL_KEYS.has(k)) continue;
+      cleaned[k] = v;
+    }
+    body = cleaned;
+  }
   const url = `${env.SUPABASE_URL}/rest/v1/${table}${params || ''}`;
   const res = await fetch(url, {
     method,
@@ -228,7 +248,7 @@ async function sb(env, table, method = 'GET', body = null, params = '', extraHea
       'apikey': env.SUPABASE_SERVICE_KEY,
       'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
       'Content-Type': 'application/json',
-      'Prefer': method === 'POST' ? 'return=representation' : 'return=minimal',
+      'Prefer': (method === 'POST' || method === 'PATCH') ? 'return=representation' : 'return=minimal',
       ...extraHeaders,
     },
     body: body ? JSON.stringify(body) : null,
@@ -1346,7 +1366,7 @@ async function handlePost(action, body, env) {
       if (adminErr) return err(adminErr, 403);
       const id = body.id || body.ID;
       if (!id) return err('ID macchina mancante');
-      await sb(env, `macchine?id=eq.${id}`, 'PATCH', { obsoleto: true, updated_at: new Date().toISOString() });
+      await sb(env, `macchine?id=eq.${id}`, 'PATCH', { obsoleto: true });
       await wlog('macchina', id, 'deleted', body.operatoreId || body.userId);
       return ok({ deleted: true });
     }
@@ -1521,7 +1541,6 @@ async function handlePost(action, body, env) {
       if (!id) return err('ID trasferta mancante');
       const fields = getFields(body);
       delete fields.id; delete fields.created_at;
-      fields.updated_at = new Date().toISOString();
       const result = await sb(env, 'trasferte', 'PATCH', fields, `?id=eq.${id}&select=*`);
       await wlog('trasferta', id, 'updated', body.operatoreId);
       return ok({ trasferta: pascalizeRecord(result[0]) });
@@ -1532,7 +1551,7 @@ async function handlePost(action, body, env) {
       if (adminErr) return err(adminErr, 403);
       const id = body.id || body.ID;
       if (!id) return err('ID trasferta mancante');
-      await sb(env, 'trasferte', 'PATCH', { obsoleto: true, updated_at: new Date().toISOString() }, `?id=eq.${id}`);
+      await sb(env, 'trasferte', 'PATCH', { obsoleto: true }, `?id=eq.${id}`);
       await wlog('trasferta', id, 'deleted', body.operatoreId);
       return ok({ deleted: true });
     }
@@ -1566,7 +1585,7 @@ async function handlePost(action, body, env) {
     case 'deleteNotifica': {
       const { id } = body;
       if (!id) return err('id notifica richiesto');
-      await sb(env, `notifiche?id=eq.${id}`, 'PATCH', { obsoleto: true, updated_at: new Date().toISOString() });
+      await sb(env, `notifiche?id=eq.${id}`, 'PATCH', { obsoleto: true });
       return ok();
     }
 
@@ -1706,7 +1725,6 @@ async function handlePost(action, body, env) {
     case 'updateDocumento': {
       const { id, userId: _u, operatoreId: _op, tenant_id: _t, action: _a, ...updates } = body;
       if (!id) return err('ID documento mancante');
-      updates.updated_at = new Date().toISOString();
       await sb(env, `documenti?id=eq.${id}`, 'PATCH', updates);
       return ok();
     }
