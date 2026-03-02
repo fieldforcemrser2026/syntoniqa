@@ -6206,8 +6206,7 @@ function showDetail(type,id){
         </select></div>
         <div><strong>Macchina:</strong> <select id="edUrgMacchina" class="inp" style="display:inline;width:auto;min-width:180px">
           <option value="">— Nessuna —</option>
-          ${(DATA.macchine||[]).filter(m=>!m.Obsoleto&&(!item.ClienteID||m.ClienteID===item.ClienteID)).map(m=>`<option value="${m.ID}" ${m.ID===item.MacchinaID?'selected':''}>${m.Tipo||m.Modello||m.ID}${m.NumeroSerie?' ('+m.NumeroSerie+')':''}</option>`).join('')}
-          ${item.MacchinaID&&!(DATA.macchine||[]).find(m=>m.ID===item.MacchinaID)?`<option value="${item.MacchinaID}" selected>${item.MacchinaID}</option>`:''}
+          ${(()=>{const cid=item.ClienteID;const all=(DATA.macchine||[]).filter(m=>!m.Obsoleto);const cliRec=cid?(DATA.clienti||[]).find(c=>(c.CodiceM3||c.ID)===cid||c.ID===cid):null;const cliIds=cliRec?[cliRec.ID,cliRec.CodiceM3].filter(Boolean):[cid].filter(Boolean);const forCli=cliIds.length?all.filter(m=>cliIds.includes(m.ClienteID)):[];const rest=forCli.length?all.filter(m=>!cliIds.includes(m.ClienteID)):all;let o='';if(forCli.length)o+=forCli.map(m=>`<option value="${m.ID}" ${m.ID===item.MacchinaID?'selected':''}>${m.Tipo||m.Modello||m.ID}${m.NumeroSerie?' ('+m.NumeroSerie+')':''}</option>`).join('');if(rest.length&&forCli.length)o+=`<option disabled>── Altre ──</option>`;o+=rest.map(m=>`<option value="${m.ID}" ${m.ID===item.MacchinaID?'selected':''}>${m.Tipo||m.Modello||m.ID} [${getName(DATA.clienti||[],m.ClienteID)}]</option>`).join('');if(item.MacchinaID&&!all.find(m=>m.ID===item.MacchinaID))o+=`<option value="${item.MacchinaID}" selected>${item.MacchinaID}</option>`;return o})()}
         </select></div>
         <div><strong>Priorità:</strong> <select id="edUrgPriorita" class="inp" style="display:inline;width:auto">
           <option value="">—</option>
@@ -6229,6 +6228,7 @@ function showDetail(type,id){
       <div class="mb"><strong>SLA:</strong> ${slaTag(item.SLAStatus)} ${item.SLAScadenza?'— Scadenza: '+fmtDateTime(item.SLAScadenza):''}</div>
       ${item.NoteAi?`<div class="mb" style="background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:12px"><strong>🤖 Analisi AI:</strong><br>${item.NoteAi}${item.AiConfidence?` <span style="color:var(--gray);font-size:.8em">(Confidenza: ${Math.round((item.AiConfidence||0)*100)}%)</span>`:''}</div>`:''}
       ${item.InterventoID?`<div class="mb"><strong>Intervento collegato:</strong> ${item.InterventoID}</div>`:''}
+      ${(()=>{const urlMatch=(item.Note||'').match(/https?:\/\/\S+\.(jpg|jpeg|png|gif|webp|mp4|pdf)/i);const allegatoUrl=urlMatch?urlMatch[0]:null;if(!allegatoUrl)return '';const isImg=/\.(jpg|jpeg|png|gif|webp)/i.test(allegatoUrl);return `<div class="mb" style="border:1px solid #E5E7EB;border-radius:8px;padding:12px;background:#F9FAFB"><strong>📎 Allegato Telegram:</strong><br>${isImg?`<img src="${allegatoUrl}" style="max-width:400px;max-height:300px;border-radius:8px;margin-top:8px;cursor:pointer" onclick="window.open('${allegatoUrl}','_blank')">`:`<a href="${allegatoUrl}" target="_blank" style="margin-top:8px;display:inline-block">📄 Apri allegato</a>`}</div>`})()}
       <div class="mb" id="aiVisionBlock_${id}" style="border:1px dashed rgba(124,58,237,0.4);border-radius:8px;padding:12px;background:rgba(124,58,237,0.05)">
         <strong>📷 Analisi Guasto con AI Vision</strong><br>
         <input type="file" id="aiVisionFile_${id}" accept="image/*" capture="environment" style="display:none" onchange="previewAIPhoto('${id}')">
