@@ -1624,11 +1624,16 @@ function renderRep(){
 // ============ RICHIESTE ============
 function renderRich(){
   const items=(DATA.richieste||[]).filter(r=>!r.Obsoleto&&r.TecnicoID===USER?.ID).sort((a,b)=>(b.DataRichiesta||'').localeCompare(a.DataRichiesta||''));
-  $('richList').innerHTML=items.length?items.map(r=>'<div class="card"><div class="card-body">'+
-    '<div style="display:flex;justify-content:space-between;margin-bottom:4px"><strong>'+(r.Tipo||'—')+'</strong>'+statusTag(r.Stato)+'</div>'+
-    '<div style="font-size:.875rem">📅 '+fmtDate(r.DataInizio)+(r.DataFine?' → '+fmtDate(r.DataFine):'')+'</div>'+
+  const tipoIco={ferie:'🏖️',permesso:'🕐',malattia:'🤒',cambio_turno:'🔄',generico:'📝'};
+  $('richList').innerHTML=items.length?items.map(r=>{
+    const borderColor=r.Stato==='approvata'?'var(--ok)':r.Stato==='rifiutata'?'var(--err)':'var(--warn)';
+    return '<div class="card" style="border-left:4px solid '+borderColor+'"><div class="card-body">'+
+    '<div style="display:flex;justify-content:space-between;margin-bottom:4px"><strong>'+(tipoIco[r.Tipo]||'📝')+' '+(r.Tipo||'—')+'</strong>'+statusTag(r.Stato)+'</div>'+
+    '<div style="font-size:.875rem">📅 '+fmtDate(r.DataInizio)+(r.DataFine&&r.DataFine!==r.DataInizio?' → '+fmtDate(r.DataFine):'')+'</div>'+
     '<div style="font-size:.8125rem;color:var(--gray);margin-top:4px">'+(r.Motivo||'—')+'</div>'+
-    '</div></div>').join(''):'<div class="empty"><div class="ico">📝</div><p>Nessuna richiesta</p></div>';
+    (r.NoteAdmin?'<div style="font-size:.75rem;color:var(--c1);margin-top:4px;border-top:1px solid var(--gray4);padding-top:4px">💬 Admin: '+r.NoteAdmin+'</div>':'')+
+    '</div></div>';
+  }).join(''):'<div class="empty"><div class="ico">📝</div><p>Nessuna richiesta</p></div>';
 }
 
 async function saveRichiesta(){

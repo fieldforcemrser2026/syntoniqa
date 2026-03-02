@@ -1408,7 +1408,7 @@ async function handlePost(action, body, env) {
     case 'createRichiesta': {
       const id = 'RIC_' + Date.now();
       const fields = getFields(body);
-      // Writable: id,tenant_id,tipo,stato,data_richiesta,data_risposta,tecnico_id,motivo,data_inizio,obsoleto
+      // Writable: id,tenant_id,tipo,stato,data_richiesta,data_risposta,tecnico_id,motivo,data_inizio,data_fine,note_admin,obsoleto
       const row = {
         id,
         tenant_id: fields.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
@@ -1417,17 +1417,61 @@ async function handlePost(action, body, env) {
         motivo: fields.motivo || fields.testo || fields.messaggio || fields.descrizione || '',
         tecnico_id: fields.tecnico_id || null,
         data_inizio: fields.data_inizio || new Date().toISOString().slice(0,10),
+        data_fine: fields.data_fine || fields.data_inizio || new Date().toISOString().slice(0,10),
         data_richiesta: new Date().toISOString()
       };
       const result = await sb(env, 'richieste', 'POST', row);
+
+      // Notifica admin: nuova richiesta ricevuta
+      const tecnico = fields.tecnico_id ? (await sb(env, 'utenti', 'GET', null, `?id=eq.${fields.tecnico_id}&select=nome,cognome`).catch(()=>[]))[0] : null;
+      const tecNome = tecnico ? `${tecnico.nome} ${tecnico.cognome}` : 'Tecnico';
+      const tipoLabel = { ferie:'Ferie', permesso:'Permesso', malattia:'Malattia', cambio_turno:'Cambio Turno', generico:'Generico' }[row.tipo] || row.tipo;
+      try {
+        // Notifica in-app a tutti gli admin
+        const admins = await sb(env, 'utenti', 'GET', null, `?ruolo=eq.admin&obsoleto=eq.false&select=id`).catch(()=>[]);
+        for (const adm of admins) {
+          const notId = 'NOT_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+          await sb(env, 'notifiche', 'POST', {
+            id: notId, tenant_id: row.tenant_id,
+            tipo: 'richiesta_nuova',
+            oggetto: `📝 Nuova richiesta ${tipoLabel} — ${tecNome}`,
+            testo: `${tecNome} ha richiesto ${tipoLabel} dal ${row.data_inizio} al ${row.data_fine}. Motivo: ${row.motivo || '—'}`,
+            destinatario_id: adm.id, priorita: 'media', data_invio: new Date().toISOString()
+          }).catch(()=>{});
+        }
+        // Telegram gruppo
+        await sendTelegramNotification(env, 'richiesta_nuova', { id, tecnico: tecNome, tipo: tipoLabel, data_inizio: row.data_inizio, data_fine: row.data_fine, motivo: row.motivo });
+      } catch(e) { console.error('[createRichiesta] notifica errore:', e.message); }
+
       return ok({ richiesta: pascalizeRecord(result[0]) });
     }
 
     case 'updateRichiesta': {
-      const { id, userId: _u, operatoreId: _op, ...updates } = body;
+      const { id, userId: _u, operatoreId: _op, action: _a, ...updates } = body;
       if (updates.stato && updates.stato !== 'in_attesa') updates.data_risposta = new Date().toISOString();
-      updates.updated_at = new Date().toISOString();
+      // NB: richieste potrebbe non avere updated_at/created_at — non includerli
+      delete updates.updated_at; delete updates.created_at; delete updates.tenant_id;
       await sb(env, `richieste?id=eq.${id}`, 'PATCH', updates);
+
+      // Notifica tecnico dell'esito
+      if (updates.stato && updates.stato !== 'in_attesa') {
+        try {
+          const ric = (await sb(env, 'richieste', 'GET', null, `?id=eq.${id}&select=tecnico_id,tipo,data_inizio,data_fine`).catch(()=>[]))[0];
+          if (ric?.tecnico_id) {
+            const esito = updates.stato === 'approvata' ? '✅ Approvata' : '❌ Rifiutata';
+            const tipoLabel = { ferie:'Ferie', permesso:'Permesso', malattia:'Malattia', cambio_turno:'Cambio Turno', generico:'Generico' }[ric.tipo] || ric.tipo;
+            const notId = 'NOT_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+            await sb(env, 'notifiche', 'POST', {
+              id: notId, tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
+              tipo: 'richiesta_risposta',
+              oggetto: `${esito}: ${tipoLabel} dal ${ric.data_inizio||'?'} al ${ric.data_fine||'?'}`,
+              testo: `La tua richiesta di ${tipoLabel} è stata ${updates.stato}. ${updates.note_admin ? 'Note: ' + updates.note_admin : ''}`,
+              destinatario_id: ric.tecnico_id, priorita: 'alta', data_invio: new Date().toISOString()
+            }).catch(()=>{});
+          }
+        } catch(e) { console.error('[updateRichiesta] notifica errore:', e.message); }
+      }
+
       await sendTelegramNotification(env, 'richiesta_risposta', { id, stato: updates.stato });
       return ok();
     }
@@ -5504,6 +5548,7 @@ async function sendTelegramNotification(env, event, data) {
       nuovo_intervento:   `📅 <b>NUOVO INTERVENTO</b> ${data.id}\nData: ${data.data||'?'} | Tecnico: ${data.tecnico_id||'?'}`,
       urgenza_assegnata:  `✅ Urgenza <b>${data.id}</b> assegnata a ${data.tecnicoAssegnato||'?'}`,
       richiesta_risposta: `📋 Richiesta <b>${data.id}</b> → ${data.stato||'?'}`,
+      richiesta_nuova:    `📝 <b>NUOVA RICHIESTA</b>\n👤 ${data.tecnico||'?'}\n📌 ${data.tipo||'?'}\n📅 ${data.data_inizio||'?'} → ${data.data_fine||'?'}\n💬 ${(data.motivo||'—').replace(/</g,'&lt;')}`,
     };
     const msg = messages[event];
     if (msg) await sendTelegram(env, group, msg);
@@ -5517,6 +5562,7 @@ async function sendTelegramNotification(env, event, data) {
         nuovo_intervento:   { title: '📅 Nuovo Intervento', body: `Intervento ${data.id} pianificato`, tag: 'intervento-' + data.id },
         urgenza_assegnata:  { title: '✅ Urgenza Assegnata', body: `Urgenza ${data.id} assegnata a te`, tag: 'assegnazione-' + data.id },
         richiesta_risposta: { title: '📋 Risposta Richiesta', body: `Richiesta ${data.id}: ${data.stato}`, tag: 'richiesta-' + data.id },
+        richiesta_nuova:    { title: '📝 Nuova Richiesta', body: `${data.tecnico||'?'}: ${data.tipo||'?'} dal ${data.data_inizio||'?'} al ${data.data_fine||'?'}`, tag: 'richiesta-' + data.id },
       };
       const pushMsg = pushMessages[event];
       if (pushMsg) {

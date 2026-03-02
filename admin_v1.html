@@ -707,11 +707,14 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <!-- ========== SEC: RICHIESTE ========== -->
 <section class="sec" id="secRichieste">
 <div class="card">
-<div class="card-head"><h3>📝 Richieste</h3>
-<div class="btn-group"><button class="btn btn-ok btn-sm" onclick="openNewRichiesta()">+ Nuova Richiesta</button></div>
+<div class="card-head"><h3>📝 Richieste Ferie / Permessi</h3>
+<div class="btn-group">
+<select id="filtRichStato" onchange="renderRichieste()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti gli stati</option><option value="in_attesa">⏳ In Attesa</option><option value="approvata">✅ Approvata</option><option value="rifiutata">❌ Rifiutata</option></select>
+<button class="btn btn-ok btn-sm" onclick="openNewRichiesta()">+ Nuova Richiesta</button>
+</div>
 </div>
 <div class="card-body np" style="max-height:500px;overflow-y:auto">
-<table class="tbl"><thead><tr><th>Tecnico</th><th>Tipo</th><th>Motivo</th><th>Stato</th><th>Data</th><th></th></tr></thead><tbody id="tblRich"></tbody></table>
+<table class="tbl"><thead><tr><th>Tecnico</th><th>Tipo</th><th>Periodo</th><th>Motivo</th><th>Stato</th><th></th></tr></thead><tbody id="tblRich"></tbody></table>
 </div>
 </div>
 </section>
@@ -2961,22 +2964,85 @@ async function markAllRead(){try{await apiCall('markAllRead',{},'POST');toast('T
 
 // ============ RICHIESTE ============
 function renderRichieste(){
-  const items=(DATA.richieste||[]).filter(r=>!r.Obsoleto).sort((a,b)=>(b.DataRichiesta||'').localeCompare(a.DataRichiesta||''));
-  $('tblRich').innerHTML=items.length?items.map(r=>`<tr>
+  const filtStato=$('filtRichStato')?.value||'';
+  let items=(DATA.richieste||[]).filter(r=>!r.Obsoleto).sort((a,b)=>(b.DataRichiesta||'').localeCompare(a.DataRichiesta||''));
+  if(filtStato) items=items.filter(r=>r.Stato===filtStato);
+
+  // Stats badge
+  const pend=items.filter(r=>r.Stato==='in_attesa').length;
+  const badge=$('badgeRich');
+  if(badge){badge.textContent=pend;badge.style.display=pend?'':'none'}
+
+  const tipoIcons={ferie:'🏖️',permesso:'🕐',malattia:'🤒',cambio_turno:'🔄',generico:'📝'};
+  $('tblRich').innerHTML=items.length?items.map(r=>`<tr style="${r.Stato==='in_attesa'?'background:#FEF3C7':''}">
     <td>${getName(DATA.utenti||[],r.TecnicoID)}</td>
-    <td><span class="tag">${r.Tipo||'generico'}</span></td>
-    <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.Motivo||'—'}</td>
+    <td><span class="tag">${tipoIcons[r.Tipo]||'📝'} ${r.Tipo||'generico'}</span></td>
+    <td style="font-size:.8rem">${fmtDate(r.DataInizio)}${r.DataFine&&r.DataFine!==r.DataInizio?' → '+fmtDate(r.DataFine):''}</td>
+    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.8rem">${r.Motivo||'—'}</td>
     <td>${statusTag(r.Stato)}</td>
-    <td>${fmtDate(r.DataRichiesta)}</td>
-    <td>${r.Stato==='in_attesa'?`<button class="btn btn-ok btn-xs" onclick="approveRich('${r.ID}','approvata')">✅</button><button class="btn btn-err btn-xs" onclick="approveRich('${r.ID}','rifiutata')" style="margin-left:4px">❌</button>`:''}</td>
+    <td style="white-space:nowrap">${r.Stato==='in_attesa'?`<button class="btn btn-ok btn-xs" onclick="openApproveRich('${r.ID}','approvata')">✅ Approva</button><button class="btn btn-err btn-xs" onclick="openApproveRich('${r.ID}','rifiutata')" style="margin-left:4px">❌ Rifiuta</button>`:`<button class="btn btn-ghost btn-xs" onclick="showRichDetail('${r.ID}')">👁️</button>`}</td>
   </tr>`).join(''):'<tr><td colspan="6" class="empty"><p>Nessuna richiesta</p></td></tr>';
 }
-async function approveRich(id,stato){try{await apiCall('updateRichiesta',{id,stato},'POST');toast('Richiesta '+stato,'ok');await refreshData(true)}catch(e){toast(e.message,'err')}}
-function openNewRichiesta(){
-  const tecOpts=(DATA.utenti||[]).filter(u=>!u.Obsoleto).map(u=>`<option value="${u.ID}">${u.Nome} ${u.Cognome||''}</option>`).join('');
+
+function openApproveRich(id,statoTarget){
+  const r=(DATA.richieste||[]).find(x=>x.ID===id);if(!r)return;
+  const tipoIcons={ferie:'🏖️',permesso:'🕐',malattia:'🤒',cambio_turno:'🔄',generico:'📝'};
+  const tecNome=getName(DATA.utenti||[],r.TecnicoID);
+  const isApprove=statoTarget==='approvata';
   const html=`<div style="display:flex;flex-direction:column;gap:12px;padding:8px">
-    <label>Tipo<select id="nrTipo" class="inp"><option value="ferie">Ferie</option><option value="permesso">Permesso</option><option value="malattia">Malattia</option><option value="cambio_turno">Cambio Turno</option><option value="generico">Generico</option></select></label>
+    <div class="grid-2 mb">
+      <div><strong>Tecnico:</strong> ${tecNome}</div>
+      <div><strong>Tipo:</strong> ${tipoIcons[r.Tipo]||'📝'} ${r.Tipo||'generico'}</div>
+      <div><strong>Dal:</strong> ${fmtDate(r.DataInizio)}</div>
+      <div><strong>Al:</strong> ${fmtDate(r.DataFine||r.DataInizio)}</div>
+    </div>
+    <div><strong>Motivo:</strong> ${r.Motivo||'—'}</div>
+    <label>Note admin (opzionale)<textarea id="arNoteAdmin" class="inp" rows="2" placeholder="Note per il tecnico..."></textarea></label>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn ${isApprove?'btn-ok':'btn-err'}" onclick="confirmApproveRich('${id}','${statoTarget}')" style="flex:1">${isApprove?'✅ Conferma Approvazione':'❌ Conferma Rifiuto'}</button>
+      <button class="btn btn-ghost" onclick="closeModal('modalDetail')" style="flex:1">Annulla</button>
+    </div>
+  </div>`;
+  openModal('modalDetail',`${isApprove?'✅ Approva':'❌ Rifiuta'} Richiesta ${id}`,html);
+}
+
+async function confirmApproveRich(id,stato){
+  try{
+    const noteAdmin=$('arNoteAdmin')?.value||'';
+    await apiCall('updateRichiesta',{id,stato,noteAdmin},'POST');
+    toast('Richiesta '+stato,'ok');closeModal('modalDetail');await refreshData(true);
+  }catch(e){toast(e.message,'err')}
+}
+
+function showRichDetail(id){
+  const r=(DATA.richieste||[]).find(x=>x.ID===id);if(!r)return;
+  const tipoIcons={ferie:'🏖️',permesso:'🕐',malattia:'🤒',cambio_turno:'🔄',generico:'📝'};
+  const html=`<div style="display:flex;flex-direction:column;gap:10px;padding:8px">
+    <div class="grid-2">
+      <div><strong>Tecnico:</strong> ${getName(DATA.utenti||[],r.TecnicoID)}</div>
+      <div><strong>Tipo:</strong> ${tipoIcons[r.Tipo]||'📝'} ${r.Tipo||'generico'}</div>
+      <div><strong>Dal:</strong> ${fmtDate(r.DataInizio)}</div>
+      <div><strong>Al:</strong> ${fmtDate(r.DataFine||r.DataInizio)}</div>
+      <div><strong>Stato:</strong> ${statusTag(r.Stato)}</div>
+      <div><strong>Richiesta:</strong> ${fmtDate(r.DataRichiesta)}</div>
+    </div>
+    <div><strong>Motivo:</strong> ${r.Motivo||'—'}</div>
+    ${r.NoteAdmin?`<div><strong>Note admin:</strong> ${r.NoteAdmin}</div>`:''}
+    ${r.DataRisposta?`<div><strong>Data risposta:</strong> ${fmtDate(r.DataRisposta)}</div>`:''}
+  </div>`;
+  openModal('modalDetail',`📝 Richiesta ${id}`,html);
+}
+
+function openNewRichiesta(){
+  const tecOpts=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Attivo).map(u=>`<option value="${u.ID}">${u.Nome} ${u.Cognome||''}</option>`).join('');
+  const oggi=new Date().toISOString().split('T')[0];
+  const html=`<div style="display:flex;flex-direction:column;gap:12px;padding:8px">
+    <label>Tipo<select id="nrTipo" class="inp"><option value="ferie">🏖️ Ferie</option><option value="permesso">🕐 Permesso</option><option value="malattia">🤒 Malattia</option><option value="cambio_turno">🔄 Cambio Turno</option><option value="generico">📝 Generico</option></select></label>
     <label>Tecnico<select id="nrTecnico" class="inp"><option value="">— Seleziona —</option>${tecOpts}</select></label>
+    <div style="display:flex;gap:12px">
+      <label style="flex:1">Dal<input type="date" id="nrDal" class="inp" value="${oggi}"></label>
+      <label style="flex:1">Al<input type="date" id="nrAl" class="inp" value="${oggi}"></label>
+    </div>
     <label>Motivo<textarea id="nrMotivo" class="inp" rows="3" placeholder="Descrizione richiesta..."></textarea></label>
     <button class="btn btn-ok" onclick="submitRichiesta()">📝 Invia Richiesta</button>
   </div>`;
@@ -2985,10 +3051,14 @@ function openNewRichiesta(){
 async function submitRichiesta(){
   const tipo=$('nrTipo')?.value||'generico';
   const tecnico=$('nrTecnico')?.value||null;
+  const dataInizio=$('nrDal')?.value||'';
+  const dataFine=$('nrAl')?.value||dataInizio;
   const motivo=$('nrMotivo')?.value||'';
+  if(!tecnico){toast('Seleziona un tecnico','err');return}
+  if(!dataInizio){toast('Inserisci data inizio','err');return}
   if(!motivo.trim()){toast('Inserisci un motivo','err');return}
   try{
-    await apiCall('createRichiesta',{tipo,tecnicoId:tecnico,motivo},'POST');
+    await apiCall('createRichiesta',{tipo,tecnicoId:tecnico,dataInizio,dataFine,motivo},'POST');
     toast('Richiesta creata!','ok');closeModal('modalDetail');await refreshData(true);
   }catch(e){toast('Errore: '+e.message,'err')}
 }
@@ -7197,6 +7267,9 @@ function renderMonthPlan(){
   const ferieCat = (VINCOLI_CAT.categories||[]).find(c=>c.attiva!==false&&(c.nome||'').toLowerCase().includes('ferie'));
   const ferieRules = ferieCat ? (ferieCat.regole||[]).filter(r=>r.data_inizio&&r.data_fine) : [];
 
+  // Richieste approvate (ferie, permesso, malattia, cambio_turno)
+  const richAppr = (DATA.richieste||[]).filter(r=>!r.Obsoleto&&r.Stato==='approvata'&&r.DataInizio);
+
   // Stato colori
   const statoCol={'pianificato':'#6366F1','in_corso':'#2563EB','completato':'#10B981','annullato':'#EF4444','da_rivedere':'#F59E0B'};
 
@@ -7224,20 +7297,32 @@ function renderMonthPlan(){
       const isSat = d.dow === 6;
       const dayItems = piano.filter(p=>p.Data===d.ds&&(p.TecnicoID===tec.ID||(p.TecniciIDs||'').includes(tec.ID)));
 
-      // Check ferie
-      const isFerie = showFerie && ferieRules.some(r=>r.soggetti?.includes(tec.ID)&&r.data_inizio<=d.ds&&r.data_fine>=d.ds);
+      // Check ferie da vincoli
+      const isFerieVincoli = showFerie && ferieRules.some(r=>r.soggetti?.includes(tec.ID)&&r.data_inizio<=d.ds&&r.data_fine>=d.ds);
+
+      // Check richieste approvate (ferie, permesso, malattia, cambio_turno)
+      const richDay = showFerie ? richAppr.find(r=>r.TecnicoID===tec.ID&&r.DataInizio<=d.ds&&(r.DataFine||r.DataInizio)>=d.ds) : null;
+      const isFerie = isFerieVincoli || (richDay && ['ferie','malattia'].includes(richDay.Tipo));
+      const isPermesso = richDay && ['permesso','cambio_turno','generico'].includes(richDay.Tipo);
 
       // Check reperibilita
       const rep = reps.find(r=>r.TecnicoID===tec.ID&&r.DataInizio<=d.ds&&r.DataFine>=d.ds);
 
-      let cellClass = isSat ? 'weekend' : isFerie ? 'ferie' : '';
-      html += `<td class="${cellClass}" style="${isSat?'border-right:2px solid #6366F1':''}" ondragover="event.preventDefault()" ondrop="onMonthDrop(event,'${tec.ID}','${d.ds}')">`;
+      let cellClass = isSat ? 'weekend' : isFerie ? 'ferie' : isPermesso ? 'ferie' : '';
+      const cellBg = isPermesso ? 'background:#FEF3C7;' : '';
+      html += `<td class="${cellClass}" style="${cellBg}${isSat?'border-right:2px solid #6366F1':''}" ondragover="event.preventDefault()" ondrop="onMonthDrop(event,'${tec.ID}','${d.ds}')">`;
 
       // Rep badge
       if(rep) html += `<div class="month-cell-rep" onclick="showDetail('reperibilita','${rep.ID}')" title="Reperibilità 18-08\nTecnico: ${getName(DATA.utenti||[],rep.TecnicoID)}\nDa: ${rep.DataInizio||'?'} A: ${rep.DataFine||'?'}\nClick per dettaglio">🌙</div>`;
 
-      // Ferie marker
-      if(isFerie) html += `<div style="font-size:.55rem;color:#92400E;text-align:center">🏖️</div>`;
+      // Richiesta approvata marker
+      if(richDay) {
+        const richIco = {ferie:'🏖️',malattia:'🤒',permesso:'🕐',cambio_turno:'🔄',generico:'📝'}[richDay.Tipo]||'📝';
+        html += `<div style="font-size:.55rem;color:#92400E;text-align:center;cursor:pointer" onclick="showRichDetail('${richDay.ID}')" title="${richDay.Tipo}: ${richDay.Motivo||'—'}\nDal ${richDay.DataInizio} al ${richDay.DataFine||richDay.DataInizio}">${richIco}</div>`;
+      } else if(isFerieVincoli) {
+        // Ferie da vincoli (vecchio sistema)
+        html += `<div style="font-size:.55rem;color:#92400E;text-align:center">🏖️</div>`;
+      }
 
       // Interventi
       dayItems.forEach(p => {
