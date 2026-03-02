@@ -355,8 +355,8 @@ async function handleGet(action, url, env) {
         sb(env, 'reperibilita',       'GET', null, `?select=*&obsoleto=eq.false&order=data_inizio.desc&limit=200${tecFilter}`),
         sb(env, 'trasferte',          'GET', null, `?select=*&obsoleto=eq.false&order=data_inizio.desc&limit=100${tecFilter}`),
         sb(env, 'notifiche',          'GET', null, isTecnico ? `?select=*&obsoleto=eq.false&destinatario_id=eq.${reqUserId}&order=data_invio.desc&limit=100` : '?select=*&obsoleto=eq.false&order=data_invio.desc&limit=200'),
-        sb(env, 'richieste',          'GET', null, '?select=*&obsoleto=eq.false&order=data_richiesta.desc'),
-        sb(env, 'installazioni',      'GET', null, '?select=*&obsoleto=eq.false'),
+        sb(env, 'richieste',          'GET', null, `?select=*&obsoleto=eq.false&tenant_id=eq.${TENANT}&order=data_richiesta.desc&limit=500`),
+        sb(env, 'installazioni',      'GET', null, `?select=*&obsoleto=eq.false&tenant_id=eq.${TENANT}`),
         sb(env, 'pagellini',          'GET', null, isTecnico ? `?select=*&obsoleto=eq.false&tecnico_id=eq.${reqUserId}&order=data_creazione.desc` : '?select=*&obsoleto=eq.false&order=data_creazione.desc'),
         sb(env, 'automezzi',          'GET', null, '?select=*&obsoleto=eq.false'),
         sb(env, 'tipi_intervento',    'GET', null, '?select=*&attivo=eq.true'),
@@ -3157,13 +3157,16 @@ Rispondi SOLO con JSON valido:
           const id = 'INT_AI_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
           const tid = item.tecnicoId || item.tecnico_id || item.TecnicoID;
           const cid = item.clienteId || item.cliente_id || item.ClienteID || null;
+          const itemData = item.data || item.Data;
+          if (!tid) { applyErrors.push({ item: `${itemData} ${item.tecnico||'?'}`, err: 'tecnico_id mancante' }); continue; }
+          if (!itemData) { applyErrors.push({ item: `${item.tecnico||tid}`, err: 'data mancante' }); continue; }
           const durata = item.durataOre || item.durata_ore || '';
           const noteParts = [item.tipo || '', item.note || '', durata ? durata+'h' : ''].filter(Boolean);
           await sb(env, 'piano', 'POST', {
             id,
             tecnico_id: tid,
             cliente_id: cid,
-            data: item.data || item.Data,
+            data: itemData,
             ora_inizio: item.oraInizio || item.ora_inizio || null,
             automezzo_id: item.furgone || item.automezzo_id || null,
             stato: 'pianificato',

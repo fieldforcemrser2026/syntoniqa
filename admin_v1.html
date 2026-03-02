@@ -107,6 +107,9 @@
 --c1:#00C9A7;--c2:#009B83;--c3:#33D4B5;--c4:#3B7EF7;
 --ok:#10B981;--ok2:#059669;--warn:#F59E0B;--warn2:#D97706;--err:#EF4444;--err2:#DC2626;
 --info:#3B82F6;--info2:#2563EB;--purple:#8B5CF6;
+--ai:#6366F1;--ai2:#4F46E5;--success:#22C55E;--success2:#16A34A;
+--amber:#F59E0B;--amber2:#D97706;
+--err-light:#FEE2E2;--info-light:#DBEAFE;--ok-light:#D1FAE5;--warn-light:#FEF3C7;--purple-light:#EDE9FE;
 --gray:#6B7280;--gray2:#9CA3AF;--gray3:#D1D5DB;--gray4:#F3F4F6;--gray5:#F9FAFB;
 --dark:#050C14;--dark2:#0A1628;--dark3:#1A2B3C;
 --white:#FFFFFF;--sidebar:240px;--header:56px;
@@ -185,6 +188,52 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 .btn-outline:hover{border-color:var(--c1);color:var(--c1)}
 .btn-ghost{background:transparent;color:var(--gray);padding:6px 10px}
 .btn-ghost:hover{background:var(--gray4);color:var(--dark)}
+.btn-ai{background:var(--ai);color:var(--white)}
+.btn-ai:hover{background:var(--ai2)}
+.btn-success{background:var(--success);color:var(--white)}
+.btn-success:hover{background:var(--success2)}
+.btn-delete{background:var(--err-light);color:var(--err2);border:1px solid #FECACA}
+.btn-delete:hover{background:#FECACA;color:var(--err2)}
+.btn-close-action{background:var(--info-light);color:var(--info2);border:1px solid #BFDBFE}
+.btn-close-action:hover{background:#BFDBFE}
+.btn-amber{background:var(--amber);color:var(--white)}
+.btn-amber:hover{background:var(--amber2)}
+.btn-purple{background:var(--purple);color:var(--white)}
+.btn-purple:hover{background:#7C3AED}
+.btn-filter{padding:6px 16px;border-radius:20px;border:1.5px solid var(--gray3);background:var(--white);color:var(--text);cursor:pointer;font-size:.8rem;font-weight:500;transition:all .15s}
+.btn-filter:hover{border-color:var(--c1);background:rgba(0,201,167,.06)}
+.btn-filter.active{border-color:var(--c1);background:var(--c1);color:var(--white)}
+.badge-ok{background:var(--ok-light);color:#065F46;padding:3px 10px;border-radius:10px;font-size:.7rem;font-weight:600;border:none;cursor:pointer}
+.badge-ok:hover{background:#A7F3D0}
+.badge-off{background:var(--gray4);color:var(--gray);padding:3px 10px;border-radius:10px;font-size:.7rem;font-weight:600;border:none;cursor:pointer}
+.badge-off:hover{background:var(--gray3)}
+.badge-warn{background:var(--warn-light);color:#92400E;padding:3px 10px;border-radius:10px;font-size:.7rem;font-weight:600}
+.badge-err{background:var(--err-light);color:#991B1B;padding:3px 10px;border-radius:10px;font-size:.7rem;font-weight:600}
+.badge-info{background:var(--info-light);color:#1E40AF;padding:3px 10px;border-radius:10px;font-size:.7rem;font-weight:600}
+.badge-purple{background:var(--purple-light);color:#5B21B6;padding:3px 10px;border-radius:10px;font-size:.7rem;font-weight:600}
+.btn-urgent{padding:10px 22px;font-size:.9rem;animation:pulse 2s infinite}
+.alert-ok{padding:12px;background:var(--ok-light);border:1px solid var(--ok);border-radius:var(--radius-sm);font-size:.8125rem}
+.alert-warn{padding:12px;background:var(--warn-light);border:1px solid var(--warn);border-radius:var(--radius-sm);font-size:.8125rem}
+.alert-err{padding:12px;background:var(--err-light);border:1px solid var(--err);border-radius:var(--radius-sm);font-size:.8125rem}
+.counter-ai{background:var(--ai);color:var(--white);border-radius:10px;padding:1px 6px;font-size:.6rem;font-weight:600}
+.counter-err{background:var(--err2);color:var(--white);border-radius:10px;padding:1px 6px;font-size:.6rem;font-weight:600}
+.tag-code{background:var(--gray4);padding:2px 6px;border-radius:4px;font-size:.75rem;font-family:var(--mono)}
+.icon-action-err{color:var(--err)}
+.icon-action-info{color:var(--info)}
+.icon-action-purple{color:var(--purple)}
+.icon-action-warn{color:var(--warn)}
+.sort-arrow{font-size:.55rem}
+.stat-micro{min-width:70px;padding:4px 8px;text-align:center;background:var(--gray5);border-radius:6px}
+.stat-micro .stat-val{font-size:1rem;font-weight:700;color:var(--c1)}
+.stat-micro .stat-lbl{font-size:.6rem;color:var(--gray)}
+.cal-micro{font-size:.55rem;padding:1px 3px;margin:1px 0;border-radius:2px;cursor:pointer}
+.cal-micro-trasferta{background:var(--info-light);border-left:2px solid var(--info);color:#1E40AF}
+.cal-micro-install{background:var(--warn-light);border-left:2px solid var(--amber2);color:#92400E}
+.cal-micro-pm{border-left:2px solid var(--amber2);cursor:pointer}
+.cal-micro-pm.overdue{background:var(--err-light);border-left-color:var(--err2);color:#991B1B}
+.cal-micro-pm.upcoming{background:var(--warn-light);color:#92400E}
+.planner-item{padding:4px 8px;border-left:3px solid var(--ai);margin-bottom:3px;background:var(--gray5);border-radius:0 4px 4px 0;font-size:.8125rem;cursor:pointer}
+.planner-urgenza{padding:8px 12px;border-left:3px solid var(--err2);margin-bottom:4px;background:var(--err-light);border-radius:0 6px 6px 0;display:flex;justify-content:space-between;align-items:center}
 .btn-sm{padding:6px 12px;font-size:0.75rem}
 .btn-xs{padding:4px 8px;font-size:0.6875rem}
 .btn-lg{padding:12px 24px;font-size:0.875rem}
@@ -253,12 +302,12 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 
 /* ===== BADGES/TAGS ===== */
 .tag{display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:20px;font-size:0.6875rem;font-weight:600;letter-spacing:0.01em}
-.tag-ok{background:#D1FAE5;color:#065F46}
-.tag-warn{background:#FEF3C7;color:#92400E}
-.tag-err{background:#FEE2E2;color:#991B1B}
-.tag-info{background:#DBEAFE;color:#1E40AF}
-.tag-purple{background:#EDE9FE;color:#5B21B6}
-.tag-gray{background:#F3F4F6;color:#374151}
+.tag-ok{background:var(--ok-light);color:#065F46}
+.tag-warn{background:var(--warn-light);color:#92400E}
+.tag-err{background:var(--err-light);color:#991B1B}
+.tag-info{background:var(--info-light);color:#1E40AF}
+.tag-purple{background:var(--purple-light);color:#5B21B6}
+.tag-gray{background:var(--gray4);color:#374151}
 
 /* ===== SLA BAR ===== */
 .sla-bar{height:6px;background:var(--gray3);border-radius:3px;overflow:hidden;margin-top:4px}
@@ -613,7 +662,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <input type="date" id="filtUrgDataA" onchange="renderUrgenze()" style="padding:5px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem" title="A data">
 <select id="filtUrgStato" onchange="renderUrgenze()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti</option><option value="aperta">🔴 Aperte</option><option value="assegnata">👤 Assegnate</option><option value="schedulata">📅 Schedulate</option><option value="in_corso">⚡ In Corso</option><option value="risolta">✅ Risolte</option><option value="chiusa">📁 Chiuse</option></select>
 <button class="btn btn-ghost btn-sm" onclick="exportUrgenzeCSV()" title="Esporta CSV">📥</button>
-<button class="btn btn-err" onclick="openModal('modalUrgenza')" style="font-size:.9rem;padding:10px 20px;animation:pulse 2s infinite">🚨 + NUOVA URGENZA</button>
+<button class="btn btn-err btn-urgent" onclick="openModal('modalUrgenza')">🚨 + NUOVA URGENZA</button>
 </div>
 </div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
@@ -855,7 +904,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <button class="btn btn-sm btn-outline" onclick="monthNav(-1)">&#9664; Prec</button>
 <span id="monthTitle" style="font-size:.875rem;font-weight:600;padding:0 6px"></span>
 <button class="btn btn-sm btn-outline" onclick="monthNav(1)">Succ &#9654;</button>
-<button class="btn btn-sm" style="background:#6366F1;color:white" onclick="showSec('ai')">🤖 Genera con AI</button>
+<button class="btn btn-sm btn-ai" onclick="showSec('ai')">🤖 Genera con AI</button>
 <button class="btn btn-sm btn-ok" onclick="downloadMonthPlanXlsx()">📥 Export Excel</button>
 </div>
 </div>
@@ -916,7 +965,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 <div id="aiFileList" style="display:none;margin-bottom:12px"></div>
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-<label class="btn btn-sm" style="background:#22c55e;color:white;cursor:pointer">📊 Importa Piano da Excel <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importPlanFromExcel(this.files[0])"></label>
+<label class="btn btn-sm btn-success" style="cursor:pointer">📊 Importa Piano da Excel <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importPlanFromExcel(this.files[0])"></label>
 <span style="font-size:.75rem;color:rgba(255,255,255,.5);align-self:center">Carica il file Programmazione Mensile come base di partenza</span>
 </div>
 <div id="excelImportPreview" style="display:none;margin-bottom:12px"></div>
@@ -967,8 +1016,8 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 
 <div style="display:flex;gap:8px;flex-wrap:wrap">
-<button class="btn btn-lg" style="background:#818CF8;color:white" onclick="aiPreviewStep()">👁️ Anteprima Vincoli →</button>
-<button class="btn btn-lg" style="background:#6366F1;color:white" onclick="runAI()">🤖 Genera Piano (diretto)</button>
+<button class="btn btn-lg btn-ai" style="opacity:.85" onclick="aiPreviewStep()">👁️ Anteprima Vincoli →</button>
+<button class="btn btn-lg btn-ai" onclick="runAI()">🤖 Genera Piano (diretto)</button>
 </div>
 </div><!-- end aiStep1 -->
 
@@ -980,7 +1029,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 <div style="display:flex;gap:8px;flex-wrap:wrap">
 <button class="btn btn-lg" style="background:rgba(255,255,255,.15);color:white" onclick="aiGoToStep(1)">← Indietro</button>
-<button class="btn btn-lg" style="background:#6366F1;color:white" onclick="aiGenerateFromPreview()">🤖 Genera Piano →</button>
+<button class="btn btn-lg btn-ai" onclick="aiGenerateFromPreview()">🤖 Genera Piano →</button>
 </div>
 </div>
 
@@ -992,8 +1041,8 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="ai-result" id="aiResult" style="display:none"></div>
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
 <button class="btn btn-lg" style="background:rgba(255,255,255,.15);color:white" onclick="aiGoToStep(1)">← Riconfigura</button>
-<button class="btn btn-lg" style="background:#22c55e;color:white" onclick="downloadAIPlanXlsx()" id="btnDownloadPlan" disabled>📥 Scarica Excel</button>
-<button class="btn btn-lg" style="background:#10B981;color:white" onclick="aiGoToStep(4)" id="btnGoStep4" disabled>Anteprima Piano →</button>
+<button class="btn btn-lg btn-success" onclick="downloadAIPlanXlsx()" id="btnDownloadPlan" disabled>📥 Scarica Excel</button>
+<button class="btn btn-lg btn-ok" onclick="aiGoToStep(4)" id="btnGoStep4" disabled>Anteprima Piano →</button>
 </div>
 </div>
 
@@ -1005,8 +1054,8 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 <div style="display:flex;gap:8px;flex-wrap:wrap">
 <button class="btn btn-lg" style="background:rgba(255,255,255,.15);color:white" onclick="aiGoToStep(3)">← Indietro</button>
-<button class="btn btn-lg" style="background:#10B981;color:white" onclick="applyAI()" id="btnApplyAI" disabled>✅ Applica al Sistema</button>
-<button class="btn btn-lg" style="background:#3B82F6;color:white" onclick="submitAIPlanForApproval()" id="btnSubmitPlan" disabled>📤 Invia per Approvazione</button>
+<button class="btn btn-lg btn-ok" onclick="applyAI()" id="btnApplyAI" disabled>✅ Applica al Sistema</button>
+<button class="btn btn-lg" style="background:var(--info);color:white" onclick="submitAIPlanForApproval()" id="btnSubmitPlan" disabled>📤 Invia per Approvazione</button>
 </div>
 </div>
 </div>
@@ -1048,7 +1097,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card-head"><h3>🗺️ Mappa Operativa</h3>
 <div class="btn-group">
 <button class="btn btn-sm btn-ok" onclick="geocodeAllClienti()">&#x1F30D; Geocodifica Clienti</button>
-<button class="btn btn-sm" style="background:#2563EB;color:white" onclick="openGoogleMaps()">&#x1F4CD; Google Maps</button>
+<button class="btn btn-sm" style="background:var(--info2);color:white" onclick="openGoogleMaps()">&#x1F4CD; Google Maps</button>
 </div>
 </div>
 <div class="card-body">
@@ -1062,7 +1111,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 <select id="mapFiltroGiorno" onchange="updateMap()" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem"><option value="tutti_clienti">🏠 Tutti i clienti</option><option value="oggi">📋 Oggi</option><option value="domani">📅 Domani</option><option value="settimana">📆 Settimana</option></select>
 <label class="field-check" style="font-size:.8125rem"><input type="checkbox" id="mapPercorso" onchange="updateMap()" checked> Percorso</label>
-<button id="btnGiroVisita" class="btn btn-sm" style="background:#F59E0B;color:white;font-weight:600" onclick="startGiroVisita()" title="Anima il furgone lungo il percorso">🚐 Avvia Giro</button>
+<button id="btnGiroVisita" class="btn btn-sm btn-amber" onclick="startGiroVisita()" title="Anima il furgone lungo il percorso">🚐 Avvia Giro</button>
 <button class="btn btn-sm btn-ok" onclick="openGoogleMaps()">📍 Google Maps</button>
 </div>
 <div id="mapLegenda" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;font-size:.75rem"></div>
@@ -1125,7 +1174,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <span id="plannerTitle" style="font-size:.875rem;font-weight:600;padding:0 8px"></span>
 <button class="btn btn-sm btn-outline" onclick="plannerNav(1)">Succ &#9654;</button>
 <button class="btn btn-sm btn-primary" onclick="openModal('modalPiano')">+ Intervento</button>
-<button class="btn btn-sm" style="background:#6366F1;color:white" onclick="runAIPlanner()">&#x1F916; AI Genera Piano</button>
+<button class="btn btn-sm btn-ai" onclick="runAIPlanner()">&#x1F916; AI Genera Piano</button>
 </div>
 </div>
 <div class="card-body">
@@ -1217,7 +1266,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card">
 <div class="card-head"><h3>🔧 PM Scheduling</h3>
 <div class="btn-group">
-<button class="btn btn-sm" style="background:#6366F1;color:white" onclick="bulkGeneratePM()">⚡ Genera PM 3 mesi</button>
+<button class="btn btn-sm btn-ai" onclick="bulkGeneratePM()">⚡ Genera PM 3 mesi</button>
 <button class="btn btn-sm btn-outline" onclick="togglePMSettings()">⚙️ Cicli</button>
 </div>
 </div>
@@ -1752,7 +1801,7 @@ Installation date → data_installazione
 <div class="card-head" style="flex-shrink:0;display:flex;align-items:center;gap:8px">
 <h3 id="chatTitle" style="flex:1">Seleziona un canale</h3>
 <span id="chatMembri" style="font-size:.75rem;color:var(--gray)"></span>
-<span id="chatOnline" style="font-size:.7rem;padding:2px 8px;background:#D1FAE5;color:#10B981;border-radius:10px;display:none">● Live</span>
+<span id="chatOnline" class="badge-ok" style="display:none">● Live</span>
 </div>
 <div id="chatMessages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px;background:var(--gray5)">
 <div class="empty" style="margin:auto"><p>👈 Seleziona un canale per iniziare</p></div>
@@ -3070,11 +3119,11 @@ function prefillOrdineFromAI(urgId,ricambio,codice){
   closeModal('modalDetail');
   openModal('modalOrdine');
   setTimeout(()=>{
-    if($('ordCodice'))$('ordCodice').value=codice||'';
-    if($('ordDescrizione'))$('ordDescrizione').value=ricambio||'';
-    if($('ordQuantita'))$('ordQuantita').value='1';
-    if($('ordCliente')&&urg)$('ordCliente').value=urg.ClienteID||'';
-    if($('ordNote'))$('ordNote').value=`[AI Vision] Suggerito per urgenza ${urgId}`;
+    if($('moCodice'))$('moCodice').value=codice||'';
+    if($('moDesc'))$('moDesc').value=ricambio||'';
+    if($('moQta'))$('moQta').value='1';
+    if($('moCliente')&&urg)$('moCliente').value=urg.ClienteID||'';
+    if($('moNote'))$('moNote').value=`[AI Vision] Suggerito per urgenza ${urgId}`;
   },200);
 }
 
@@ -3460,7 +3509,7 @@ function renderMacchine(){
     Object.entries(typeCounts).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>{
       cards.push([v,prodIcon(k,18)+' '+(PROD_CFG[k]?.label||k)]);
     });
-    statsDiv.innerHTML=cards.map(([v,l])=>`<div style="min-width:70px;padding:4px 8px;text-align:center;background:#f8f9fa;border-radius:6px"><div style="font-size:1rem;font-weight:700;color:var(--primary)">${v}</div><div style="font-size:.6rem;color:var(--muted)">${l}</div></div>`).join('');
+    statsDiv.innerHTML=cards.map(([v,l])=>`<div class="stat-micro"><div class="stat-val">${v}</div><div class="stat-lbl">${l}</div></div>`).join('');
   }
 
   // Helper: escape quotes for onclick attrs
@@ -3510,10 +3559,10 @@ function renderMacchine(){
           <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${cliName}">${a.NomeAccount||'—'}</td>
           <td>${statoTag}</td>
           <td style="white-space:nowrap">
-            <button class="btn btn-ghost btn-xs" onclick="openAssetAction('urgenza','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Crea Urgenza" style="color:#ef4444">🚨</button>
-            <button class="btn btn-ghost btn-xs" onclick="openAssetAction('piano','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Crea Intervento/Tagliando" style="color:#3b82f6">📋</button>
-            <button class="btn btn-ghost btn-xs" onclick="openAssetAction('ordine','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Ordine Ricambi" style="color:#8b5cf6">📦</button>
-            <button class="btn btn-ghost btn-xs" onclick="openAssetAction('notifica','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Invia Notifica" style="color:#f59e0b">🔔</button>
+            <button class="btn btn-ghost btn-xs icon-action-err" onclick="openAssetAction('urgenza','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Crea Urgenza">🚨</button>
+            <button class="btn btn-ghost btn-xs icon-action-info" onclick="openAssetAction('piano','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Crea Intervento/Tagliando">📋</button>
+            <button class="btn btn-ghost btn-xs icon-action-purple" onclick="openAssetAction('ordine','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Ordine Ricambi">📦</button>
+            <button class="btn btn-ghost btn-xs icon-action-warn" onclick="openAssetAction('notifica','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Invia Notifica">🔔</button>
             <button class="btn btn-ghost btn-xs" onclick="showAssetOnMap('${esc(a.CodiceM3)}','${esc(a.NomeAsset)}')" title="Mappa">📍</button>
           </td>
         </tr>`;
@@ -3539,10 +3588,10 @@ function renderMacchine(){
       <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${cliName}">${a.NomeAccount||'—'}</td>
       <td>${statoTag}</td>
       <td style="white-space:nowrap">
-        <button class="btn btn-ghost btn-xs" onclick="openAssetAction('urgenza','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Urgenza" style="color:#ef4444">🚨</button>
-        <button class="btn btn-ghost btn-xs" onclick="openAssetAction('piano','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Intervento" style="color:#3b82f6">📋</button>
-        <button class="btn btn-ghost btn-xs" onclick="openAssetAction('ordine','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Ordine" style="color:#8b5cf6">📦</button>
-        <button class="btn btn-ghost btn-xs" onclick="openAssetAction('notifica','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Notifica" style="color:#f59e0b">🔔</button>
+        <button class="btn btn-ghost btn-xs icon-action-err" onclick="openAssetAction('urgenza','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Urgenza">🚨</button>
+        <button class="btn btn-ghost btn-xs icon-action-info" onclick="openAssetAction('piano','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Intervento">📋</button>
+        <button class="btn btn-ghost btn-xs icon-action-purple" onclick="openAssetAction('ordine','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Ordine">📦</button>
+        <button class="btn btn-ghost btn-xs icon-action-warn" onclick="openAssetAction('notifica','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Notifica">🔔</button>
         <button class="btn btn-ghost btn-xs" onclick="showAssetOnMap('${esc(a.CodiceM3)}','${esc(a.NomeAsset)}')" title="Mappa">📍</button>
       </td>
     </tr>`}).join(''):'<tr><td colspan="7" class="empty"><p>Nessuna macchina trovata</p></td></tr>';
@@ -3603,8 +3652,8 @@ function openAssetAction(action, codiceM3, assetInfo, clienteName){
     const note=$('moNote');if(note)note.value='M3: '+codiceM3;
   }else if(action==='notifica'){
     openModal('modalNotifica');
-    const tit=$('mnTitolo');if(tit)tit.value='Notifica per asset';
-    const msg=$('mnMessaggio');if(msg)msg.value='Cliente: '+clienteName.replace(/'/g,"'")+' (M3: '+codiceM3+')\nAsset: '+assetInfo.replace(/'/g,"'");
+    const tit=$('mnOgg');if(tit)tit.value='Notifica per asset';
+    const msg=$('mnMsg');if(msg)msg.value='Cliente: '+clienteName.replace(/'/g,"'")+' (M3: '+codiceM3+')\nAsset: '+assetInfo.replace(/'/g,"'");
   }
 }
 
@@ -3683,8 +3732,8 @@ function renderTecnici(){
     <td>${t.Base||'—'}</td>
     <td>${t.Telefono?`<a href="tel:${t.Telefono}">${t.Telefono}</a>`:'—'}</td>
     <td>${t.Email||'—'}</td>
-    <td><button onclick="toggleTecnicoAttivo('${t.ID}',${!t.Attivo})" class="badge" style="background:${t.Attivo&&t.Attivo!=='false'?'#D1FAE5':'#F3F4F6'};color:${t.Attivo&&t.Attivo!=='false'?'#065F46':'#6B7280'};border:none;cursor:pointer;padding:3px 10px;border-radius:10px;font-size:.7rem">${t.Attivo&&t.Attivo!=='false'?'✅ Attivo':'⬜ Inattivo'}</button></td>
-    <td><button class="btn btn-ghost btn-xs" onclick="editUtente('${t.ID}')">✏️</button><label class="btn btn-outline" style="font-size:.75rem;padding:4px 8px;cursor:pointer;margin-left:2px">📷<input type="file" accept="image/*" style="display:none" onchange="uploadFotoTec('${t.ID}',this)"></label></td>
+    <td><button onclick="toggleTecnicoAttivo('${t.ID}',${!t.Attivo})" class="${t.Attivo&&t.Attivo!=='false'?'badge-ok':'badge-off'}">${t.Attivo&&t.Attivo!=='false'?'✅ Attivo':'⬜ Inattivo'}</button></td>
+    <td><button class="btn btn-ghost btn-xs" onclick="editUtente('${t.ID}')">✏️</button><label class="btn btn-outline btn-xs" style="cursor:pointer;margin-left:2px">📷<input type="file" accept="image/*" style="display:none" onchange="uploadFotoTec('${t.ID}',this)"></label></td>
   </tr>`}).join('');
 }
 async function uploadFotoTec(tecId,input){
@@ -3986,7 +4035,7 @@ async function updateMap(){
       if(techPts.length>0)
         legendaParts.push(`<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:${tecColor}22;border:1px solid ${tecColor};border-radius:12px"><span style="width:10px;height:10px;border-radius:50%;background:${tecColor};display:inline-block"></span>👤 ${tecNome} — ${techPiano.length} int.${infoExtra}</span>`);
       else
-        legendaParts.push(`<span style="padding:4px 10px;background:#FEE2E2;border:1px solid #EF4444;border-radius:12px;font-size:.8rem">⚠️ ${tecNome} — nessun intervento nel piano</span>`);
+        legendaParts.push(`<span style="padding:4px 10px;background:var(--err-light);border:1px solid var(--err);border-radius:12px;font-size:.8rem">⚠️ ${tecNome} — nessun intervento nel piano</span>`);
     }
     if(stale())return;
     MAP._ffWaypoints=MAP_WAYPOINTS;
@@ -4478,7 +4527,7 @@ function renderCfgSlaGrid(){
     {lv:5,label:'Programmabile',sla:0}
   ];
   let html=`<div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr 1fr;gap:8px;font-size:.8rem;align-items:center">
-    <div style="font-weight:600">Priorità</div><div style="font-weight:600">SLA (ore)</div><div style="font-weight:600;color:#F59E0B">Warning (min)</div><div style="font-weight:600;color:#EF4444">Critical (min)</div><div style="font-weight:600;color:#7C3AED">Breach (min)</div>`;
+    <div style="font-weight:600">Priorità</div><div style="font-weight:600">SLA (ore)</div><div style="font-weight:600;color:var(--warn)">Warning (min)</div><div style="font-weight:600;color:var(--err)">Critical (min)</div><div style="font-weight:600;color:var(--purple)">Breach (min)</div>`;
   priorities.forEach(p=>{
     const w=c['sla_p'+p.lv+'_warning']||'';
     const cr=c['sla_p'+p.lv+'_critical']||'';
@@ -4532,7 +4581,7 @@ function renderCfgAdvanced(){
     html+=`<div style="padding:8px 12px;background:#FAFAFA;border:1px solid #E5E7EB;border-radius:6px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
         <label style="font-size:.7rem;font-family:var(--mono);font-weight:600;color:var(--primary)">${k}</label>
-        <button class="btn btn-ghost btn-xs" onclick="if(confirm('Eliminare ${k}?')){delete DATA.config['${k}'];renderCfgAdvanced()}" style="color:#EF4444;font-size:.65rem">🗑️</button>
+        <button class="btn btn-ghost btn-xs icon-action-err" onclick="if(confirm('Eliminare ${k}?')){delete DATA.config['${k}'];renderCfgAdvanced()}">🗑️</button>
       </div>
       ${isJson?`<textarea class="cfg-input" data-key="${k}" rows="3" style="width:100%;font-size:.7rem;font-family:var(--mono);border:1px solid #D1D5DB;border-radius:4px;padding:6px">${val}</textarea>`:
       isBool?`<select class="cfg-input" data-key="${k}" style="font-size:.75rem;padding:4px 8px;border:1px solid #D1D5DB;border-radius:4px"><option value="true" ${val==='true'?'selected':''}>true</option><option value="false" ${val==='false'?'selected':''}>false</option></select>`:
@@ -5114,7 +5163,7 @@ function renderAnagClients(list){
       <td><strong>${esc(c.NomeInterno||c.NomeAccount||'-')}</strong><br><small style="color:var(--muted)">${esc(c.NomeInterno?c.NomeAccount||'':'')} ${geo}</small></td>
       <td>${esc(c.CittaFatturazione||'')}</td>
       <td>${esc(c.ProvinciaFatturazione||'')}</td>
-      <td><span class="badge ${c.StatoCliente==='Attivo'?'badge-ok':'badge-warn'}" style="font-size:.7rem">${esc(c.StatoCliente||'-')}</span></td>
+      <td><span class="badge ${c.StatoCliente==='Attivo'?'badge-ok':'badge-warn'}">${esc(c.StatoCliente||'-')}</span></td>
       <td style="font-size:.8rem">${esc(c.TitolareAccount||'')}</td>
       <td>${hi(ac.ROBOT,'ROBOT')}</td><td>${hi(ac.JUNO,'JUNO')}</td><td>${hi(ac.VECTOR,'VECTOR')}</td>
       <td>${hi(disc,'DISCOVERY')}</td><td>${hi(ac.CU,'CU')}</td><td>${hi(ac.COSMIX,'COSMIX')}</td>
@@ -5186,12 +5235,12 @@ async function toggleAnagTree(m3){
           <td>${dt}</td>
           <td>${a.Provincia||''}</td>
           <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(a.Note||'').replace(/"/g,'&quot;')}">${a.Note||''}</td>
-          <td><span class="badge ${(a.Status||'').toLowerCase().includes('attiv')?'badge-ok':'badge-warn'}" style="font-size:.65rem">${a.Status||''}</span></td>
+          <td><span class="badge ${(a.Status||'').toLowerCase().includes('attiv')?'badge-ok':'badge-warn'}">${a.Status||''}</span></td>
           <td style="white-space:nowrap">
-            <button class="btn btn-ghost btn-xs" onclick="openAssetAction('urgenza','${m3}','${assetEsc}','${cliEsc}')" title="Urgenza" style="color:#ef4444">🚨</button>
-            <button class="btn btn-ghost btn-xs" onclick="openAssetAction('piano','${m3}','${assetEsc}','${cliEsc}')" title="Intervento" style="color:#3b82f6">📋</button>
-            <button class="btn btn-ghost btn-xs" onclick="openAssetAction('ordine','${m3}','${assetEsc}','${cliEsc}')" title="Ordine" style="color:#8b5cf6">📦</button>
-            <button class="btn btn-ghost btn-xs" onclick="openAssetAction('notifica','${m3}','${assetEsc}','${cliEsc}')" title="Notifica" style="color:#f59e0b">🔔</button>
+            <button class="btn btn-ghost btn-xs icon-action-err" onclick="openAssetAction('urgenza','${m3}','${assetEsc}','${cliEsc}')" title="Urgenza">🚨</button>
+            <button class="btn btn-ghost btn-xs icon-action-info" onclick="openAssetAction('piano','${m3}','${assetEsc}','${cliEsc}')" title="Intervento">📋</button>
+            <button class="btn btn-ghost btn-xs icon-action-purple" onclick="openAssetAction('ordine','${m3}','${assetEsc}','${cliEsc}')" title="Ordine">📦</button>
+            <button class="btn btn-ghost btn-xs icon-action-warn" onclick="openAssetAction('notifica','${m3}','${assetEsc}','${cliEsc}')" title="Notifica">🔔</button>
             <button class="btn btn-ghost btn-xs" onclick="showAssetOnMap('${m3}','${(a.NomeAsset||'').replace(/'/g,"\\'")}')" title="Mappa">📍</button>
           </td>
         </tr>`;
@@ -6245,15 +6294,15 @@ async function aiPreviewStep(){
 
     let html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px">
       <div style="text-align:center;padding:12px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:10px">
-        <div style="font-size:1.8rem;font-weight:700;color:#818CF8">${s.tecnici_disponibili||0}</div>
+        <div style="font-size:1.8rem;font-weight:700;color:var(--ai)">${s.tecnici_disponibili||0}</div>
         <div style="font-size:.7rem;color:rgba(255,255,255,.5)">Tecnici Disponibili</div>
       </div>
       <div style="text-align:center;padding:12px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);border-radius:10px">
-        <div style="font-size:1.8rem;font-weight:700;color:#F59E0B">${s.tecnici_vincolati||0}</div>
+        <div style="font-size:1.8rem;font-weight:700;color:var(--warn)">${s.tecnici_vincolati||0}</div>
         <div style="font-size:.7rem;color:rgba(255,255,255,.5)">Tecnici Vincolati</div>
       </div>
       <div style="text-align:center;padding:12px;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);border-radius:10px">
-        <div style="font-size:1.8rem;font-weight:700;color:#10B981">${s.vincoli_auto||0}</div>
+        <div style="font-size:1.8rem;font-weight:700;color:var(--ok)">${s.vincoli_auto||0}</div>
         <div style="font-size:.7rem;color:rgba(255,255,255,.5)">Vincoli Automatici</div>
       </div>
       <div style="text-align:center;padding:12px;background:rgba(129,140,248,.15);border:1px solid rgba(129,140,248,.3);border-radius:10px">
@@ -6261,11 +6310,11 @@ async function aiPreviewStep(){
         <div style="font-size:.7rem;color:rgba(255,255,255,.5)">Regole Manuali</div>
       </div>
       <div style="text-align:center;padding:12px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:10px">
-        <div style="font-size:1.8rem;font-weight:700;color:#3B82F6">${s.piano_esistente||0}</div>
+        <div style="font-size:1.8rem;font-weight:700;color:var(--info)">${s.piano_esistente||0}</div>
         <div style="font-size:.7rem;color:rgba(255,255,255,.5)">Piano Esistente</div>
       </div>
       <div style="text-align:center;padding:12px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);border-radius:10px">
-        <div style="font-size:1.8rem;font-weight:700;color:#EF4444">${s.urgenze_aperte||0}</div>
+        <div style="font-size:1.8rem;font-weight:700;color:var(--err)">${s.urgenze_aperte||0}</div>
         <div style="font-size:.7rem;color:rgba(255,255,255,.5)">Urgenze Aperte</div>
       </div>
     </div>`;
@@ -6298,13 +6347,13 @@ async function aiPreviewStep(){
       html += '</div></details>';
     }
 
-    html += `<div style="padding:10px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:8px;font-size:.8rem;color:#10B981">
+    html += `<div style="padding:10px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:8px;font-size:.8rem;color:var(--ok)">
       ✅ Pronto per generare. L'AI considererà ${s.vincoli_auto||0} vincoli auto + ${s.regole_manuali||0} regole manuali per il mese <strong>${meseVal}</strong>.
     </div>`;
 
     container.innerHTML = html;
   } catch(e){
-    container.innerHTML = `<div style="padding:20px;text-align:center;color:#EF4444">❌ Errore caricamento anteprima: ${e.message}</div>`;
+    container.innerHTML = `<div style="padding:20px;text-align:center;color:var(--err)">❌ Errore caricamento anteprima: ${e.message}</div>`;
   }
 }
 
@@ -6355,7 +6404,7 @@ function updateAIVincoliStatus(){
       const tipoIcons = { assenza:'🏖️', reperibilita:'📞', trasferta:'🧳', installazione:'🏗️' };
       const badges = Object.entries(perTipo).map(([t,n])=>`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.25);border-radius:12px;font-size:.7rem">${tipoIcons[t]||'📌'} ${n} ${t}</span>`).join(' ');
       html+=`<div style="padding:10px 14px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:8px;font-size:.8rem;margin-bottom:8px">
-        <strong style="color:#10B981">✅ ${autoAttivi.length} vincoli automatici</strong> (derivati dal DB)<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${badges}</div>
+        <strong style="color:var(--ok)">✅ ${autoAttivi.length} vincoli automatici</strong> (derivati dal DB)<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${badges}</div>
       </div>`;
     }
     // Regole manuali
@@ -6366,7 +6415,7 @@ function updateAIVincoliStatus(){
     }
   } else {
     html+=`<div style="padding:10px 14px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:.8rem;margin-bottom:8px">
-      <strong style="color:#F59E0B">⚠️ Nessun vincolo configurato</strong> — vai alla sezione <a href="#" onclick="event.preventDefault();showSec('vincoli')" style="color:#818CF8;text-decoration:underline">📐 Vincoli Piano</a> per caricare vincoli e aggiungere regole.
+      <strong style="color:var(--warn)">⚠️ Nessun vincolo configurato</strong> — vai alla sezione <a href="#" onclick="event.preventDefault();showSec('vincoli')" style="color:var(--ai);text-decoration:underline">📐 Vincoli Piano</a> per caricare vincoli e aggiungere regole.
     </div>`;
   }
 
@@ -6510,7 +6559,7 @@ async function runAI(){
     }
     // Quick action: view in monthly calendar
     html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:12px;border-top:1px solid var(--gray4)">
-      <button class="btn btn-sm" style="background:#3B82F6;color:white" onclick="showAIPlanInCalendar()">📅 Mostra nel Calendario Mensile</button>
+      <button class="btn btn-sm" style="background:var(--info);color:white" onclick="showAIPlanInCalendar()">📅 Mostra nel Calendario Mensile</button>
       ${result.chunks?`<span style="font-size:.75rem;color:var(--gray);align-self:center">Generato in ${result.chunks} chunk settimanali</span>`:''}
     </div>`;
     $('aiResult').innerHTML=html;
@@ -6649,7 +6698,7 @@ async function applyAI(forceOverwrite){
     if(result.has_conflicts){
       const conflDiv=$('aiResult');
       let html=`<div style="background:rgba(245,158,11,.1);border:1.5px solid rgba(245,158,11,.4);border-radius:var(--radius);padding:20px;margin-top:16px">
-        <h4 style="margin:0 0 12px;color:#F59E0B">⚠️ ${result.conflicts_count} Conflitti Trovati</h4>
+        <h4 style="margin:0 0 12px;color:var(--warn)">⚠️ ${result.conflicts_count} Conflitti Trovati</h4>
         <p style="font-size:.85rem;margin-bottom:12px;color:var(--gray)">Interventi esistenti nello stesso giorno per lo stesso tecnico. Scegli come procedere:</p>
         <div style="max-height:300px;overflow-y:auto;margin-bottom:16px">
         <table class="tbl" style="font-size:.8rem"><thead><tr><th>Data</th><th>Tecnico</th><th>Nuovo</th><th>Esistente</th></tr></thead><tbody>`;
@@ -6658,7 +6707,7 @@ async function applyAI(forceOverwrite){
       }
       html+=`</tbody></table></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-lg" style="background:#EF4444;color:white" onclick="applyAI(true)">🔄 Sovrascrivi Tutto (${result.conflicts_count} conflitti)</button>
+          <button class="btn btn-lg btn-err" onclick="applyAI(true)">🔄 Sovrascrivi Tutto (${result.conflicts_count} conflitti)</button>
           <button class="btn btn-lg btn-ghost" onclick="toast('Applicazione annullata','info')">❌ Annulla</button>
         </div>
       </div>`;
@@ -6865,7 +6914,7 @@ function showDetail(type,id){
       foot=`<button class="btn btn-primary" onclick="saveInterventoEdit('${id}')">💾 Salva</button> `;
       if(item.Stato==='pianificato')foot+=`<button class="btn btn-warn" onclick="updatePianoStato('${id}','in_corso')">⚡ Inizia</button> `;
       if(item.Stato==='in_corso')foot+=`<button class="btn btn-ok" onclick="updatePianoStato('${id}','completato')">✅ Completa</button> `;
-      foot+=`<button class="btn" style="background:#FEE2E2;color:#DC2626;border:1px solid #FECACA" onclick="if(confirm('Cancellare questo intervento?')){deletePlannerItem('piano','${id}');closeModal('modalDetail')}">🗑️ Cancella</button>`;
+      foot+=`<button class="btn btn-delete" onclick="if(confirm('Cancellare questo intervento?')){deletePlannerItem('piano','${id}');closeModal('modalDetail')}">🗑️ Cancella</button>`;
       break;
 
     case 'urgenza':
@@ -6922,8 +6971,8 @@ function showDetail(type,id){
       if(item.Stato==='aperta')foot+=`<button class="btn btn-outline" onclick="closeModal('modalDetail');openAssegna('${id}')">👤 Approva+Assegna</button> `;
       if(item.Stato==='assegnata'||item.Stato==='schedulata')foot+=`<button class="btn btn-warn" onclick="urgAction('${id}','startUrgenza');closeModal('modalDetail')">⚡ Inizia</button> `;
       if(item.Stato==='in_corso')foot+=`<button class="btn btn-ok" onclick="urgAction('${id}','resolveUrgenza');closeModal('modalDetail')">✅ Risolvi</button> `;
-      if(item.Stato==='risolta')foot+=`<button class="btn" style="background:#E0F2FE;color:#0369A1" onclick="closeUrgenza('${id}')">📁 Chiudi Urgenza</button> `;
-      foot+=`<button class="btn" style="background:#FEE2E2;color:#DC2626;border:1px solid #FECACA" onclick="if(confirm('Cancellare questa urgenza?')){deletePlannerItem('urgenza','${id}');closeModal('modalDetail')}">🗑️ Cancella</button>`;
+      if(item.Stato==='risolta')foot+=`<button class="btn btn-close-action" onclick="closeUrgenza('${id}')">📁 Chiudi Urgenza</button> `;
+      foot+=`<button class="btn btn-delete" onclick="if(confirm('Cancellare questa urgenza?')){deletePlannerItem('urgenza','${id}');closeModal('modalDetail')}">🗑️ Cancella</button>`;
       break;
 
     case 'ordine':
@@ -6982,7 +7031,7 @@ function showDetail(type,id){
       </div>
       <div class="mb"><strong>Note:</strong><br><textarea id="edRepNote" class="inp" rows="2" style="width:100%">${item.Note||''}</textarea></div>`;
       foot=`<button class="btn btn-primary" onclick="saveRepEdit('${id}')">💾 Salva</button>
-        <button class="btn" style="background:#FEE2E2;color:#DC2626;border:1px solid #FECACA" onclick="if(confirm('Eliminare questa reperibilità?')){deleteRep('${id}');closeModal('modalDetail')}">🗑️ Elimina</button>`;
+        <button class="btn btn-delete" onclick="if(confirm('Eliminare questa reperibilità?')){deleteRep('${id}');closeModal('modalDetail')}">🗑️ Elimina</button>`;
       break;
     }
 
@@ -7411,9 +7460,9 @@ function renderPMTable(){
   const scadutiN=allData.filter(m=>{const s=getPMStatus(m.prossimo_tagliando);return s.days!==null&&s.days<0}).length;
   const prossimiN=allData.filter(m=>{const s=getPMStatus(m.prossimo_tagliando);return s.days!==null&&s.days>=0&&s.days<=30}).length;
   $('pmStatusBar').innerHTML=`
-    <button onclick="filterPM('scaduti')" style="padding:6px 16px;border-radius:20px;border:1.5px solid ${PM_FILTER==='scaduti'?'#DC2626':'var(--gray3)'};background:${PM_FILTER==='scaduti'?'#FEE2E2':'white'};color:${PM_FILTER==='scaduti'?'#DC2626':'var(--text)'};cursor:pointer;font-size:.8rem;font-weight:600">🔴 Scaduti (${scadutiN})</button>
-    <button onclick="filterPM('prossimi')" style="padding:6px 16px;border-radius:20px;border:1.5px solid ${PM_FILTER==='prossimi'?'#D97706':'var(--gray3)'};background:${PM_FILTER==='prossimi'?'#FEF3C7':'white'};color:${PM_FILTER==='prossimi'?'#D97706':'var(--text)'};cursor:pointer;font-size:.8rem;font-weight:600">🟠 Prossimi 30gg (${prossimiN})</button>
-    <button onclick="filterPM('tutti')" style="padding:6px 16px;border-radius:20px;border:1.5px solid ${PM_FILTER==='tutti'?'var(--c1)':'var(--gray3)'};background:${PM_FILTER==='tutti'?'rgba(0,155,131,.1)':'white'};color:${PM_FILTER==='tutti'?'var(--c1)':'var(--text)'};cursor:pointer;font-size:.8rem;font-weight:600">📋 Tutti (${allData.length})</button>`;
+    <button onclick="filterPM('scaduti')" class="btn-filter" style="${PM_FILTER==='scaduti'?'border-color:var(--err);background:var(--err-light);color:var(--err2)':''}">🔴 Scaduti (${scadutiN})</button>
+    <button onclick="filterPM('prossimi')" class="btn-filter" style="${PM_FILTER==='prossimi'?'border-color:var(--warn2);background:var(--warn-light);color:var(--warn2)':''}">🟠 Prossimi 30gg (${prossimiN})</button>
+    <button onclick="filterPM('tutti')" class="btn-filter" style="${PM_FILTER==='tutti'?'border-color:var(--c1);background:rgba(0,201,167,.1);color:var(--c1)':''}">📋 Tutti (${allData.length})</button>`;
   // Sort: scaduti first, then by date
   data.sort((a,b)=>{const sa=getPMStatus(a.prossimo_tagliando);const sb=getPMStatus(b.prossimo_tagliando);return(sa.days||999)-(sb.days||999)});
   if(!data.length){$('pmListContainer').innerHTML='<p style="color:var(--gray);text-align:center;padding:24px">Nessuna macchina trovata con i filtri selezionati</p>';return}
@@ -7424,7 +7473,7 @@ function renderPMTable(){
     const seqArr=Array.isArray(m.ciclo_sequenza)?m.ciclo_sequenza:(m.ciclo_sequenza||'A1,B2,A3,C4,A5,B6,A7,D8').split(',');
     const ciclo=m.posizione_nome||seqArr[m.posizione_corrente]||'A1';
     const isOpen=PM_OPEN_ROW===m.macchina_id;
-    html+=`<tr onclick="togglePMRow('${m.macchina_id}')" style="cursor:pointer;${st.cls==='overdue'?'background:#FEF2F2;':''}">
+    html+=`<tr onclick="togglePMRow('${m.macchina_id}')" style="cursor:pointer;${st.cls==='overdue'?'background:var(--err-light);':''}">
       <td style="width:20px">${isOpen?'▼':'▶'}</td>
       <td style="font-weight:500">${m.cliente_nome||'—'}</td>
       <td>${m.seriale||m.macchina_nome||'—'}</td>
@@ -7560,10 +7609,10 @@ async function searchCatalog(){
     let html='<table class="data-table"><thead><tr><th>Codice</th><th>Nome</th><th>Descrizione</th><th>Gruppo</th><th>Modello</th></tr></thead><tbody>';
     items.forEach(p=>{
       html+=`<tr>
-        <td><code style="background:#F1F5F9;padding:2px 6px;border-radius:4px;font-size:.75rem">${p.Codice||'—'}</code></td>
+        <td><code class="tag-code">${p.Codice||'—'}</code></td>
         <td style="font-weight:500">${p.Nome||'—'}</td>
         <td style="font-size:.8rem;color:var(--gray)">${(p.Descrizione||'').substring(0,80)}</td>
-        <td><span style="padding:2px 8px;border-radius:12px;font-size:.7rem;background:#EEF2FF;color:#4338CA">${p.Gruppo||'—'}</span></td>
+        <td><span class="badge-purple">${p.Gruppo||'—'}</span></td>
         <td style="font-size:.8rem">${p.ModelloMacchina||'—'}</td>
       </tr>`;
     });
@@ -7617,11 +7666,11 @@ async function autoDetectTelegramIds(){
     });
     const userList=Object.values(users);
     if(!userList.length){
-      resultEl.innerHTML='<div style="padding:12px;background:#FEF3C7;border:1px solid #F59E0B;border-radius:var(--radius-sm);font-size:.8125rem">⚠️ Nessun utente trovato. Assicurati che i tecnici abbiano inviato <code>/start</code> al bot, poi riprova.</div>';
+      resultEl.innerHTML='<div class="alert-warn">⚠️ Nessun utente trovato. Assicurati che i tecnici abbiano inviato <code>/start</code> al bot, poi riprova.</div>';
       return;
     }
     // Show found users
-    let html='<div style="padding:12px;background:#D1FAE5;border:1px solid #10B981;border-radius:var(--radius-sm);font-size:.8125rem">';
+    let html='<div class="alert-ok">';
     html+=`<div style="font-weight:600;margin-bottom:8px">🎉 Trovati ${userList.length} utenti Telegram:</div>`;
     html+='<table class="tbl" style="font-size:.8rem"><thead><tr><th>Nome TG</th><th>Username</th><th>Chat ID</th><th>Assegna a</th></tr></thead><tbody>';
     const tecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&u.Attivo!=='false'&&['tecnico','team_leader'].includes(u.Ruolo));
@@ -7637,7 +7686,7 @@ async function autoDetectTelegramIds(){
     html+='</div>';
     resultEl.innerHTML=html;
   }catch(e){
-    resultEl.innerHTML='<div style="padding:12px;background:#FEE2E2;border:1px solid #EF4444;border-radius:var(--radius-sm);font-size:.8125rem">❌ Errore: '+e.message+'</div>';
+    resultEl.innerHTML='<div class="alert-err">❌ Errore: '+e.message+'</div>';
   }
 }
 
@@ -7759,7 +7808,7 @@ function renderTelegramExtras(){
 // ============ FEATURE 34: BACKUP ============
 async function loadBackupHistory(){
   const config=DATA.config||{};
-  $('cfgBackupFolder').value=config.backup_folder_id||'';
+  $('cfg_backup_folder_id').value=config.backup_folder_id||'';
   try{
     const hist=await apiCall('getBackupHistory');
     if(!hist||!hist.length){$('tblBackupHistory').innerHTML='<div class="empty"><p>Nessun backup trovato. Configura la cartella e fai il primo backup.</p></div>';return}
@@ -7773,7 +7822,7 @@ async function loadBackupHistory(){
 }
 
 async function saveBackupConfig(){
-  toast('Salva backup_folder_id nel foglio Config: '+$('cfgBackupFolder').value,'ok');
+  toast('Salva backup_folder_id nel foglio Config: '+$('cfg_backup_folder_id').value,'ok');
 }
 
 async function runBackupNow(){
@@ -8271,13 +8320,13 @@ function renderMonthPlan(){
       // Trasferta badge
       if(trasDay){
         const cliName=getName(DATA.clienti||[],trasDay.ClienteID);
-        html += `<div style="font-size:.55rem;background:#DBEAFE;border-left:2px solid #3B82F6;padding:1px 3px;margin:1px 0;border-radius:2px;color:#1E40AF;cursor:pointer" onclick="showDetail('trasferta','${trasDay.ID}')" title="Trasferta: ${cliName}\nDal ${trasDay.DataInizio} al ${trasDay.DataFine||'?'}">🧳 ${(cliName||'').substring(0,compact?8:14)}</div>`;
+        html += `<div class="cal-micro cal-micro-trasferta" onclick="showDetail('trasferta','${trasDay.ID}')" title="Trasferta: ${cliName}\nDal ${trasDay.DataInizio} al ${trasDay.DataFine||'?'}">🧳 ${(cliName||'').substring(0,compact?8:14)}</div>`;
       }
 
       // Installazione badge
       if(instDay){
         const cliName=getName(DATA.clienti||[],instDay.ClienteID);
-        html += `<div style="font-size:.55rem;background:#FEF3C7;border-left:2px solid #D97706;padding:1px 3px;margin:1px 0;border-radius:2px;color:#92400E;cursor:pointer" onclick="showDetail('installazione','${instDay.ID}')" title="Installazione: ${cliName}\nDal ${instDay.DataInizio} al ${instDay.DataFinePrevista||'?'}\nStato: ${instDay.Stato||''}">🏗️ ${(cliName||'').substring(0,compact?8:14)}</div>`;
+        html += `<div class="cal-micro cal-micro-install" onclick="showDetail('installazione','${instDay.ID}')" title="Installazione: ${cliName}\nDal ${instDay.DataInizio} al ${instDay.DataFinePrevista||'?'}\nStato: ${instDay.Stato||''}">🏗️ ${(cliName||'').substring(0,compact?8:14)}</div>`;
       }
 
       // Interventi
@@ -8303,7 +8352,7 @@ function renderMonthPlan(){
   const pmScaduti = pmMacchine.filter(mc => mc.ProssimoTagliando < today());
   const pmProssimi = pmMacchine.filter(mc => mc.ProssimoTagliando >= today() && mc.ProssimoTagliando.startsWith(mStr));
   if(pmScaduti.length || pmProssimi.length){
-    html += `<tr class="month-pm-row" style="border-top:2px solid #F59E0B"><td class="month-tec-label" style="background:#FFFBEB;color:#92400E;font-weight:600;font-size:.7rem" title="${pmScaduti.length} tagliandi scaduti, ${pmProssimi.length} in scadenza questo mese">🔧 PM (${pmScaduti.length+pmProssimi.length})</td>`;
+    html += `<tr class="month-pm-row" style="border-top:2px solid var(--warn)"><td class="month-tec-label" style="background:var(--warn-light);color:#92400E;font-weight:600;font-size:.7rem" title="${pmScaduti.length} tagliandi scaduti, ${pmProssimi.length} in scadenza questo mese">🔧 PM (${pmScaduti.length+pmProssimi.length})</td>`;
     days.forEach(d => {
       const isSat = d.dow === 6;
       // Tagliandi con prossimo_tagliando in questo giorno
@@ -8312,11 +8361,11 @@ function renderMonthPlan(){
       pmDay.forEach(mc => {
         const cli = getName(DATA.clienti||[], mc.ClienteID);
         const isOverdue = mc.ProssimoTagliando < today();
-        html += `<div style="font-size:.55rem;background:${isOverdue?'#FEE2E2':'#FEF3C7'};border-left:2px solid ${isOverdue?'#DC2626':'#D97706'};padding:1px 3px;margin:1px 0;border-radius:2px;color:${isOverdue?'#991B1B':'#92400E'};cursor:pointer" title="${isOverdue?'SCADUTO':'In scadenza'}: ${mc.Modello||mc.ID}\nCliente: ${cli}\nData: ${mc.ProssimoTagliando}" onclick="showSec('tagliandi')">🔧 ${(cli||'').substring(0,compact?8:12)}</div>`;
+        html += `<div class="cal-micro cal-micro-pm ${isOverdue?'overdue':'upcoming'}" title="${isOverdue?'SCADUTO':'In scadenza'}: ${mc.Modello||mc.ID}\nCliente: ${cli}\nData: ${mc.ProssimoTagliando}" onclick="showSec('tagliandi')">🔧 ${(cli||'').substring(0,compact?8:12)}</div>`;
       });
       // Mostra conteggio scaduti generici se non cadono in questo giorno
       if(!pmDay.length && d.ds === days[0]?.ds && pmScaduti.length) {
-        html += `<div style="font-size:.55rem;color:#DC2626;text-align:center;cursor:pointer" onclick="showSec('tagliandi')" title="${pmScaduti.length} tagliandi scaduti da schedulare">🔴 ${pmScaduti.length} scad.</div>`;
+        html += `<div style="font-size:.55rem;color:var(--err2);text-align:center;cursor:pointer" onclick="showSec('tagliandi')" title="${pmScaduti.length} tagliandi scaduti da schedulare">🔴 ${pmScaduti.length} scad.</div>`;
       }
       html += '</td>';
     });
@@ -8326,11 +8375,11 @@ function renderMonthPlan(){
   html += '</tbody></table>';
 
   // Legenda
-  html += '<div style="margin-top:10px;padding:10px 14px;background:#F8FAFC;border-radius:6px;border:1px solid #E2E8F0;display:flex;gap:14px;flex-wrap:wrap;font-size:.7rem">';
+  html += '<div style="margin-top:10px;padding:10px 14px;background:var(--gray5);border-radius:6px;border:1px solid var(--gray3);display:flex;gap:14px;flex-wrap:wrap;font-size:.7rem">';
   Object.entries(statoCol).forEach(([k,v]) => { html += `<span><span style="display:inline-block;width:10px;height:10px;background:${v};border-radius:2px;vertical-align:middle"></span> ${k.replace('_',' ')}</span>`; });
   const hasPreview = piano.some(p=>p._aiPreview);
   html += ' · <span>🌙 Reperibilità</span> · <span>🏖️ Ferie</span> · <span>🧳 Trasferte</span> · <span>🏗️ Installazioni</span>';
-  if(hasPreview) html += ' · <span style="border-left:2px dashed #8B5CF6;padding-left:4px">🤖 Anteprima AI</span> · <button class="btn btn-xs" style="background:#EF4444;color:white;font-size:.65rem" onclick="clearAIPreview()">✕ Rimuovi Anteprima</button>';
+  if(hasPreview) html += ' · <span style="border-left:2px dashed #8B5CF6;padding-left:4px">🤖 Anteprima AI</span> · <button class="btn btn-xs btn-err" onclick="clearAIPreview()">✕ Rimuovi Anteprima</button>';
   html += ' · <span>Drag & drop per spostare</span></div>';
 
   grid.innerHTML = html;
@@ -8379,7 +8428,7 @@ function showMonthWeek(weekStart){
       items.forEach(p => {
         const tec = getName(DATA.utenti||[], p.TecnicoID);
         const cli = getName(DATA.clienti||[], p.ClienteID);
-        html += `<div style="padding:4px 8px;border-left:3px solid #6366F1;margin-bottom:3px;background:#F8FAFC;border-radius:0 4px 4px 0;font-size:.8125rem;cursor:pointer" onclick="showDetail('piano','${p.ID}')">
+        html += `<div class="planner-item" onclick="showDetail('piano','${p.ID}')">
           <strong>${p.OraInizio||'—'}</strong> ${tec} → ${cli} <span style="color:var(--gray)">(${p.Stato||''})</span>
         </div>`;
       });
@@ -8508,16 +8557,16 @@ function renderPlanner(){
   const todayStr = today();
 
   let html = '<table style="width:100%;border-collapse:collapse;table-layout:fixed"><thead><tr>';
-  html += '<th style="width:120px;padding:8px;background:#F9FAFB;border:1px solid #E5E7EB;font-size:.75rem;font-weight:600;color:#6B7280">Tecnico</th>';
+  html += '<th style="width:120px;padding:8px;background:var(--gray5);border:1px solid var(--gray3);font-size:.75rem;font-weight:600;color:var(--gray)">Tecnico</th>';
 
   week.forEach((d, i) => {
     const ds = d.toISOString().split('T')[0];
     const isToday = ds === todayStr;
     const cnt = piano.filter(p => p.Data === ds).length;
     const cntU = urgenze.filter(u => (u.DataPrevista||u.DataScadenzaSLA||'').split('T')[0]===ds).length;
-    html += '<th style="padding:8px 4px;background:' + (isToday?'#FEF3C7':'#F9FAFB') + ';border:1px solid #E5E7EB;font-size:.75rem;font-weight:600;color:' + (isToday?'#92400E':'#374151') + ';cursor:pointer" onclick="showPlannerDay(\''+ds+'\')"><div>' + dayNames[i] + ' ' + d.getDate() + '/' + (d.getMonth()+1) + '</div>';
-    if(cnt>0) html += '<span style="background:#6366F1;color:white;border-radius:10px;padding:1px 6px;font-size:.6rem">' + cnt + '</span> ';
-    if(cntU>0) html += '<span style="background:#DC2626;color:white;border-radius:10px;padding:1px 6px;font-size:.6rem">' + cntU + ' urg</span>';
+    html += '<th style="padding:8px 4px;background:' + (isToday?'var(--warn-light)':'var(--gray5)') + ';border:1px solid var(--gray3);font-size:.75rem;font-weight:600;color:' + (isToday?'#92400E':'var(--dark)') + ';cursor:pointer" onclick="showPlannerDay(\''+ds+'\')"><div>' + dayNames[i] + ' ' + d.getDate() + '/' + (d.getMonth()+1) + '</div>';
+    if(cnt>0) html += '<span class="counter-ai">' + cnt + '</span> ';
+    if(cntU>0) html += '<span class="counter-err">' + cntU + ' urg</span>';
     html += '</th>';
   });
   html += '</tr></thead><tbody>';
@@ -8525,7 +8574,7 @@ function renderPlanner(){
   tecnici.forEach(tec => {
     const totWeek = piano.filter(p => p.TecnicoID===tec.ID||(p.TecniciIDs||'').includes(tec.ID)).length;
     const nome = (tec.Nome||'') + ' ' + (tec.Cognome||'').substring(0,1) + '.';
-    html += '<tr><td style="padding:6px 8px;border:1px solid #E5E7EB;font-size:.75rem;font-weight:500;background:#F9FAFB"><div style="display:flex;align-items:center;gap:6px"><div style="width:28px;height:28px;border-radius:50%;background:#00C9A7;color:#050C14;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;flex-shrink:0">' + (tec.Nome||'?').substring(0,1) + (tec.Cognome||'').substring(0,1) + '</div><div><div style="white-space:nowrap">' + nome + '</div><div style="color:#9CA3AF;font-size:.6rem">' + totWeek + ' int/sett</div></div></div></td>';
+    html += '<tr><td style="padding:6px 8px;border:1px solid var(--gray3);font-size:.75rem;font-weight:500;background:var(--gray5)"><div style="display:flex;align-items:center;gap:6px"><div style="width:28px;height:28px;border-radius:50%;background:var(--c1);color:var(--dark);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;flex-shrink:0">' + (tec.Nome||'?').substring(0,1) + (tec.Cognome||'').substring(0,1) + '</div><div><div style="white-space:nowrap">' + nome + '</div><div style="color:var(--gray2);font-size:.6rem">' + totWeek + ' int/sett</div></div></div></td>';
 
     week.forEach(d => {
       const ds = d.toISOString().split('T')[0];
@@ -8534,7 +8583,7 @@ function renderPlanner(){
       const isEmpty = dayItems.length === 0 && dayUrg.length === 0;
       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
 
-      html += '<td style="padding:4px;border:1px solid #E5E7EB;vertical-align:top;min-height:70px;background:' + (isWeekend?'#F3F4F6':isEmpty&&showLiberi?'#F0FDF4':'white') + '" ondragover="event.preventDefault()" ondrop="onPlannerDrop(event,\'' + tec.ID + '\',\'' + ds + '\')">';
+      html += '<td style="padding:4px;border:1px solid var(--gray3);vertical-align:top;min-height:70px;background:' + (isWeekend?'var(--gray4)':isEmpty&&showLiberi?'#F0FDF4':'var(--white)') + '" ondragover="event.preventDefault()" ondrop="onPlannerDrop(event,\'' + tec.ID + '\',\'' + ds + '\')">';
 
       dayUrg.forEach(u => {
         const prio = getName(DATA.priorita||[],u.PrioritaID);
@@ -8624,7 +8673,7 @@ function showPlannerDay(ds){
       const tec = getName(DATA.utenti||[],p.TecnicoID);
       const cli = getName(DATA.clienti||[],p.ClienteID);
       const tipo = getName(DATA.tipiIntervento||[],p.TipoInterventoID);
-      return '<div style="padding:8px 12px;border-left:3px solid #6366F1;margin-bottom:6px;background:#F5F3FF;border-radius:0 6px 6px 0;display:flex;justify-content:space-between;align-items:center"><div><strong>'+(p.OraInizio||'--:--')+'</strong> '+tec+' → '+cli+' <span style="color:#6B7280;font-size:.75rem">('+tipo+')</span> '+statusTag(p.Stato)+'</div><div style="display:flex;gap:4px"><button class="btn btn-sm btn-outline" onclick="showPlannerItem(\'piano\',\''+p.ID+'\')" title="Modifica">✏️</button><button class="btn btn-sm" style="color:#EF4444;background:transparent;border:1px solid #FECACA" onclick="deletePlannerItem(\'piano\',\''+p.ID+'\')" title="Cancella">🗑️</button></div></div>';
+      return '<div style="padding:8px 12px;border-left:3px solid var(--ai);margin-bottom:6px;background:var(--purple-light);border-radius:0 6px 6px 0;display:flex;justify-content:space-between;align-items:center"><div><strong>'+(p.OraInizio||'--:--')+'</strong> '+tec+' → '+cli+' <span style="color:var(--gray);font-size:.75rem">('+tipo+')</span> '+statusTag(p.Stato)+'</div><div style="display:flex;gap:4px"><button class="btn btn-sm btn-outline" onclick="showPlannerItem(\'piano\',\''+p.ID+'\')" title="Modifica">✏️</button><button class="btn btn-sm btn-delete" onclick="deletePlannerItem(\'piano\',\''+p.ID+'\')" title="Cancella">🗑️</button></div></div>';
     }).join('');
     html += '</div>';
   }
@@ -8633,7 +8682,7 @@ function showPlannerDay(ds){
     html += urgs.map(u=>{
       const prio = getName(DATA.priorita||[],u.PrioritaID);
       const cli = getName(DATA.clienti||[],u.ClienteID);
-      return '<div style="padding:8px 12px;border-left:3px solid #DC2626;margin-bottom:4px;background:#FEF2F2;border-radius:0 6px 6px 0;display:flex;justify-content:space-between;align-items:center"><div>&#x1F6A8; <strong>'+prio+'</strong> — '+(u.Problema||'')+' — '+cli+'</div><div><button class="btn btn-sm btn-outline" onclick="showPlannerItem(\'urgenza\',\''+u.ID+'\')" title="Dettagli">👁️</button></div></div>';
+      return '<div class="planner-urgenza"><div>&#x1F6A8; <strong>'+prio+'</strong> — '+(u.Problema||'')+' — '+cli+'</div><div><button class="btn btn-sm btn-outline" onclick="showPlannerItem(\'urgenza\',\''+u.ID+'\')" title="Dettagli">👁️</button></div></div>';
     }).join('');
   }
   if(!items.length && !urgs.length) html = '<p style="color:var(--gray)">Nessun intervento pianificato per questo giorno. Usa \"+ Intervento\" per aggiungerne uno.</p>';
