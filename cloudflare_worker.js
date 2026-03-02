@@ -3733,6 +3733,7 @@ Rispondi SOLO con JSON valido:
 
     case 'telegramWebhook': {
       const update = body;
+      console.log('[TG-WEBHOOK] Ricevuto update:', JSON.stringify({ msg_id: update.message?.message_id, from: update.message?.from?.first_name, chat_id: update.message?.chat?.id, text: (update.message?.text||'').substring(0,50) }));
       if (!update.message && !update.callback_query) return ok();
       try {
 
@@ -3767,7 +3768,7 @@ Rispondi SOLO con JSON valido:
       // Trova utente: prima per telegram_chat_id (= Telegram user from.id), poi match fuzzy per nome
       let utente = null;
       if (fromId) {
-        const byChatId = await sb(env, 'utenti', 'GET', null, `?telegram_chat_id=eq.${fromId}&attivo=eq.true`).catch(()=>[]);
+        const byChatId = await sb(env, 'utenti', 'GET', null, `?telegram_chat_id=eq.${fromId}&attivo=eq.true&obsoleto=eq.false`).catch(()=>[]);
         utente = byChatId[0] || null;
       }
       // In gruppo MRS noto: se non troviamo utente, usa il nome Telegram per match fuzzy
@@ -3775,7 +3776,7 @@ Rispondi SOLO con JSON valido:
         const firstName = (msg.from?.first_name || '').toLowerCase();
         const lastName = (msg.from?.last_name || '').toLowerCase();
         if (firstName) {
-          const allUtenti = await sb(env, 'utenti', 'GET', null, '?attivo=eq.true&select=id,nome,cognome,ruolo').catch(()=>[]);
+          const allUtenti = await sb(env, 'utenti', 'GET', null, '?attivo=eq.true&obsoleto=eq.false&select=id,nome,cognome,ruolo,telegram_chat_id').catch(()=>[]);
           utente = allUtenti.find(u => (u.nome||'').toLowerCase() === firstName && (!lastName || (u.cognome||'').toLowerCase().startsWith(lastName))) || null;
           // Auto-save telegram user id in telegram_chat_id for future fast lookups
           if (utente && fromId) {
@@ -3802,10 +3803,24 @@ Rispondi SOLO con JSON valido:
         } catch(e) { console.error('Early mirror error:', e.message); }
       }
 
-      // /start è permesso anche senza utente registrato
+      // /start è permesso anche senza utente registrato — tenta auto-registrazione
+      if (!utente && cmd === '/start') {
+        // Tenta match fuzzy nome per auto-registrazione
+        const firstName = (msg.from?.first_name || '').toLowerCase();
+        const lastName = (msg.from?.last_name || '').toLowerCase();
+        if (firstName && fromId) {
+          const allU = await sb(env, 'utenti', 'GET', null, '?attivo=eq.true&obsoleto=eq.false&select=id,nome,cognome,ruolo').catch(()=>[]);
+          const match = allU.find(u => (u.nome||'').toLowerCase() === firstName && (!lastName || (u.cognome||'').toLowerCase().startsWith(lastName)));
+          if (match) {
+            await sb(env, `utenti?id=eq.${match.id}`, 'PATCH', { telegram_chat_id: String(fromId) }).catch(()=>{});
+            utente = match;
+            console.log(`[TG] Auto-registrato ${match.id} (${firstName}) con chat_id=${fromId}`);
+          }
+        }
+      }
       if (!utente && cmd !== '/start') {
         const nome = msg.from?.first_name || 'utente';
-        await sendTelegram(env, chatId, `❌ Ciao ${nome}, non ti trovo nel sistema. Chiedi all'admin di aggiungere il tuo Telegram ID (${fromId}) nel profilo Syntoniqa.`);
+        await sendTelegram(env, chatId, `❌ Ciao ${nome}, non ti trovo nel sistema.\n\nProva con /start oppure chiedi all'admin di aggiungere il tuo Telegram ID (${fromId}) nel profilo Syntoniqa.`);
         return ok();
       }
 
@@ -4017,8 +4032,11 @@ Rispondi SOLO con JSON valido:
 
       // ---- SLASH COMMANDS ----
       switch (cmd) {
-        case '/start':
-          reply = `👋 *Benvenuto in Syntoniqa MRS!*\n\n` +
+        case '/start': {
+          const regStatus = utente
+            ? `✅ *Registrato come:* ${utente.nome||''} ${utente.cognome||''} (${utente.ruolo||''})\n\n`
+            : `⚠️ Non ti ho trovato nel sistema. Chiedi all'admin di aggiungere il tuo Telegram ID: \`${fromId}\`\n\n`;
+          reply = `👋 *Benvenuto in Syntoniqa MRS!*\n\n${regStatus}` +
             `🚨 *SEGNALARE UN PROBLEMA:*\n` +
             `Scrivi direttamente il problema, es:\n` +
             `"Bondioli robot fermo errore laser"\n` +
@@ -4033,6 +4051,7 @@ Rispondi SOLO con JSON valido:
             `/help — Tutti i comandi\n\n` +
             `💡 Non servono comandi speciali: scrivi e basta!`;
           break;
+        }
         case '/help':
           reply = `📋 *Comandi Syntoniqa MRS*\n\n` +
             `💡 *COSA PIU' IMPORTANTE:*\n` +
