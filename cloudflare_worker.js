@@ -14,23 +14,39 @@
 
 // ============ HELPERS ============
 
+// ─── WHITE-LABEL: tutte le stringhe brand derivate da env ───
+function brand(env) {
+  return {
+    name:      env.BRAND_NAME      || 'MRS Lely Center Emilia Romagna',
+    shortName: env.BRAND_SHORT     || 'MRS Lely Center',
+    email:     env.BRAND_EMAIL     || 'noreply@syntoniqa.app',
+    emailFrom: env.BRAND_EMAIL_FROM || `Syntoniqa <${env.BRAND_EMAIL || 'noreply@syntoniqa.app'}>`,
+    adminUrl:  env.BRAND_ADMIN_URL || 'https://fieldforcemrser2026.github.io/syntoniqa/admin_v1.html',
+    color:     env.BRAND_COLOR     || '#C30A14',
+  };
+}
+
+// CORS origins: produzione + dev locale (env CORS_EXTRA per aggiungere white-label origins)
 const ALLOWED_ORIGINS = [
   'https://fieldforcemrser2026.github.io',
   'https://app.syntoniqa.app',
-  'http://localhost:3000',
-  'http://localhost:8787'
 ];
+const DEV_ORIGINS = ['http://localhost:3000', 'http://localhost:8787'];
 
-// Dynamic CORS - aggiornato per request
+// Dynamic CORS - default sicuro (nessun wildcard)
 let corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://app.syntoniqa.app',
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Token',
 };
 
-function setCorsForRequest(request) {
+function setCorsForRequest(request, env) {
   const origin = request?.headers?.get('Origin') || '';
-  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  // In dev (no SUPABASE_URL settata = locale) accetta anche localhost
+  const extras = (env?.CORS_EXTRA || '').split(',').filter(Boolean);
+  const isDev = !env?.SUPABASE_URL || env.SUPABASE_URL.includes('localhost');
+  const allOrigins = [...ALLOWED_ORIGINS, ...extras, ...(isDev ? DEV_ORIGINS : [])];
+  const allowed = allOrigins.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   corsHeaders = {
     'Access-Control-Allow-Origin': allowed,
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
@@ -67,7 +83,9 @@ function validateTransition(validMap, currentStato, newStato, entityType) {
 async function requireAdmin(env, body) {
   const uid = body.operatoreId || body.userId;
   if (!uid) return 'operatoreId richiesto';
-  const caller = await sb(env, 'utenti', 'GET', null, `?id=eq.${uid}&select=ruolo`).catch(()=>[]);
+  // SECURITY: sanitize ID per prevenire PostgREST injection
+  if (!/^[A-Za-z0-9_-]{1,50}$/.test(uid)) return 'operatoreId formato non valido';
+  const caller = await sb(env, 'utenti', 'GET', null, `?id=eq.${encodeURIComponent(uid)}&select=ruolo`).catch(()=>[]);
   if (!caller?.[0]) return 'Utente non trovato';
   if (caller[0].ruolo !== 'admin') return 'Solo admin può eseguire questa azione';
   return null; // ok
@@ -95,6 +113,14 @@ function err(msg, status = 400) {
 
 function ok(data = {}) {
   return json({ success: true, data });
+}
+
+// ============ SECURE ID GENERATION ============
+// Collision-safe: timestamp + random hex (no more Date.now() only)
+function secureId(prefix) {
+  const ts = Date.now().toString(36);
+  const rnd = toHex(crypto.getRandomValues(new Uint8Array(4)));
+  return `${prefix}_${ts}${rnd}`;
 }
 
 // ============ PostgREST SANITIZER (CRIT-01: prevent filter injection) ============
@@ -208,11 +234,47 @@ async function sb(env, table, method = 'GET', body = null, params = '', extraHea
   try { return JSON.parse(text); } catch { return text; }
 }
 
-// Hash SHA-256 (Web Crypto API disponibile in CF Workers)
+// Password hashing — PBKDF2-SHA256 con salt (CF Workers Web Crypto)
+const PW_ITERATIONS = 100000;
+const PW_SALT_LEN = 16;
+const PW_HASH_LEN = 32;
+
+async function hashPasswordPBKDF2(password, salt) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: PW_ITERATIONS, hash: 'SHA-256' }, keyMaterial, PW_HASH_LEN * 8);
+  return new Uint8Array(bits);
+}
+function toHex(buf) { return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join(''); }
+function fromHex(hex) { return new Uint8Array(hex.match(/.{2}/g).map(b => parseInt(b, 16))); }
+
 async function hashPassword(password) {
-  const data = new TextEncoder().encode(password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+  // Genera salt random + hash PBKDF2
+  const salt = crypto.getRandomValues(new Uint8Array(PW_SALT_LEN));
+  const hash = await hashPasswordPBKDF2(password, salt);
+  return `pbkdf2:${toHex(salt)}:${toHex(hash)}`; // formato: pbkdf2:salt:hash
+}
+
+async function verifyPassword(password, stored) {
+  if (!stored) return false;
+  if (stored.startsWith('pbkdf2:')) {
+    // Nuovo formato PBKDF2
+    const parts = stored.split(':');
+    if (parts.length !== 3) return false;
+    const salt = fromHex(parts[1]);
+    const expectedHash = parts[2];
+    const actualHash = toHex(await hashPasswordPBKDF2(password, salt));
+    return actualHash === expectedHash;
+  }
+  // Legacy SHA-256 (senza salt) — verifica + migra al login
+  const enc = new TextEncoder();
+  const hashBuffer = await crypto.subtle.digest('SHA-256', enc.encode(password));
+  const sha256 = toHex(hashBuffer);
+  return stored === sha256;
+}
+
+function isLegacyHash(stored) {
+  return stored && !stored.startsWith('pbkdf2:');
 }
 
 // Auth check
@@ -227,6 +289,7 @@ const RATE_LIMITS = {
   default:   { max: 120, windowSec: 60 },   // 120 req/min per IP
   login:     { max: 5,   windowSec: 60 },   // 5 login/min
   ai:        { max: 10,  windowSec: 60 },   // 10 AI calls/min
+  telegram:  { max: 100, windowSec: 60 },   // 100 webhook/min (anti-spam)
 };
 const _rateStore = new Map(); // key: "ip:bucket" → [timestamps]
 
@@ -256,7 +319,7 @@ function rateLimit(ip, bucket = 'default') {
 
 export default {
   async fetch(request, env) {
-    setCorsForRequest(request);
+    setCorsForRequest(request, env);
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
@@ -266,14 +329,20 @@ export default {
     const action = url.searchParams.get('action') || url.pathname.split('/').pop();
     const clientIP = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
 
-    // Telegram webhook bypassa rate limit e token check ma valida secret se configurato
+    // Telegram webhook: bypassa token check ma RICHIEDE secret + rate limit
     if (action === 'telegramWebhook') {
-      if (env.TELEGRAM_WEBHOOK_SECRET) {
-        const webhookSecret = request.headers.get('X-Telegram-Bot-Api-Secret-Token') || '';
-        if (webhookSecret !== env.TELEGRAM_WEBHOOK_SECRET) {
-          return new Response('Unauthorized', { status: 401 });
-        }
+      // SECURITY: secret obbligatorio — se non configurato, rifiuta
+      if (!env.TELEGRAM_WEBHOOK_SECRET) {
+        console.error('TELEGRAM_WEBHOOK_SECRET non configurato! Webhook disabilitato.');
+        return new Response('Webhook not configured', { status: 503 });
       }
+      const webhookSecret = request.headers.get('X-Telegram-Bot-Api-Secret-Token') || '';
+      if (webhookSecret !== env.TELEGRAM_WEBHOOK_SECRET) {
+        return new Response('Unauthorized', { status: 401 });
+      }
+      // Rate limit anche per webhook (100 req/min)
+      const rlTg = rateLimit(clientIP, 'telegram');
+      if (rlTg.limited) return new Response('Too Many Requests', { status: 429 });
       const body = await request.json().catch(() => ({}));
       return await handlePost(action, body, env);
     }
@@ -302,6 +371,7 @@ export default {
         if (!checkToken(request, env, rawBody.token)) return err('Token non valido', 401);
         const postAction = action || rawBody.action || '';
         const body = normalizeBody(rawBody);
+        body._clientIP = clientIP; // per audit log
         return await handlePost(postAction, body, env);
       }
       return err('Metodo non supportato', 405);
@@ -490,7 +560,7 @@ async function handlePost(action, body, env) {
   const TENANT = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
   async function wlog(entityType, entityId, action, userId, note = '') {
     await sb(env, 'workflow_log', 'POST', {
-      id: `WL_${Date.now()}`,
+      id: secureId('WL'),
       entity_type: entityType, entity_id: entityId,
       action, user_id: userId, note,
       tenant_id: TENANT,
@@ -512,15 +582,18 @@ async function handlePost(action, body, env) {
       if (!utenti.length) return err('Credenziali non valide', 401);
       const utente = utenti[0];
       
-      const hashed = await hashPassword(password);
-      const validHash  = utente.password_hash === hashed;
-      const validPlain = utente.password_hash === password; // fallback legacy
-      
-      if (!validHash && !validPlain) return err('Credenziali non valide', 401);
-      
-      // Migra a hash se era plain
-      if (validPlain && !validHash) {
-        await sb(env, `utenti?id=eq.${utente.id}`, 'PATCH', { password_hash: hashed });
+      // Verifica password (supporta PBKDF2 e legacy SHA-256, NO plaintext)
+      const valid = await verifyPassword(password, utente.password_hash);
+      if (!valid) {
+        // Log tentativo fallito con IP (audit)
+        await wlog('auth', utente.id, 'login_failed', utente.id, `IP: ${body._clientIP || 'unknown'}`);
+        return err('Credenziali non valide', 401);
+      }
+
+      // Migra automaticamente da SHA-256 legacy → PBKDF2
+      if (isLegacyHash(utente.password_hash)) {
+        const upgraded = await hashPassword(password);
+        await sb(env, `utenti?id=eq.${utente.id}`, 'PATCH', { password_hash: upgraded });
       }
       
       const { password_hash, ...utenteSafe } = utente;
@@ -544,12 +617,13 @@ async function handlePost(action, body, env) {
       const { old_password, new_password } = body;
       if (!uid || !old_password || !new_password) return err('userId, old_password e new_password richiesti');
       if (new_password.length < 6) return err('La nuova password deve avere almeno 6 caratteri');
+      if (new_password.length > 128) return err('Password troppo lunga (max 128 caratteri)');
       // Verifica vecchia password
       const users = await sb(env, 'utenti', 'GET', null, `?id=eq.${uid}&select=id,password_hash`);
       if (!users?.length) return err('Utente non trovato');
-      const oldHash = await hashPassword(old_password);
-      if (users[0].password_hash !== oldHash) return err('Password attuale non corretta');
-      // Aggiorna
+      const oldValid = await verifyPassword(old_password, users[0].password_hash);
+      if (!oldValid) return err('Password attuale non corretta');
+      // Aggiorna (sempre PBKDF2)
       const newHash = await hashPassword(new_password);
       await sb(env, `utenti?id=eq.${uid}`, 'PATCH', { password_hash: newHash, updated_at: new Date().toISOString() });
       await wlog('utente', uid, 'change_password', uid);
@@ -567,7 +641,7 @@ async function handlePost(action, body, env) {
       const admins = await sb(env, 'utenti', 'GET', null, '?ruolo=eq.admin&attivo=eq.true&select=id,tenant_id&limit=1').catch(()=>[]);
       const adminId = admins?.[0]?.id || 'USR001';
       const tenantId = admins?.[0]?.tenant_id || u.tenant_id || null;
-      const notifId = 'NOT_RST_' + Date.now();
+      const notifId = secureId('NOT_RST');
       await sb(env, 'notifiche', 'POST', {
         id: notifId, tipo: 'reset_password', oggetto: '🔑 Richiesta Reset Password',
         testo: `L'utente ${u.nome} ${u.cognome} (${u.username}) ha richiesto il reset della password. Vai su Gestione Utenti per resettarla.`,
@@ -576,7 +650,7 @@ async function handlePost(action, body, env) {
       });
       // Manda anche su chat admin
       try {
-        const msgId = 'MSG_RST_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+        const msgId = secureId('MSG_RST');
         await sb(env, 'chat_messaggi', 'POST', {
           id: msgId, canale_id: 'CH_ADMIN', mittente_id: 'TELEGRAM',
           testo: `🔑 RICHIESTA RESET PASSWORD\n👤 ${u.nome} ${u.cognome} (${u.username})\n📧 ${u.email || 'nessuna email'}\n\n→ Vai su Gestione Utenti > Modifica > Reset Password`,
@@ -600,7 +674,7 @@ async function handlePost(action, body, env) {
     // -------- PIANO (INTERVENTI) --------
 
     case 'createPiano': {
-      const id = 'INT_' + Date.now();
+      const id = secureId('INT');
       const fields = getFields(body);
       if (!fields.data) return err('Campo data obbligatorio per createPiano');
       if (!fields.cliente_id) return err('Campo cliente_id obbligatorio per createPiano');
@@ -686,7 +760,7 @@ async function handlePost(action, body, env) {
     // -------- URGENZE --------
 
     case 'createUrgenza': {
-      const id = 'URG_' + Date.now();
+      const id = secureId('URG');
       // FIX CRIT-04: Estrai e converti campi PascalCase → snake_case
       const fields = getFields(body);
       // Calcola SLA scadenza
@@ -765,7 +839,7 @@ async function handlePost(action, body, env) {
         <p><strong>Problema:</strong> ${(row.problema || '').substring(0, 200)}</p>
         <p><strong>SLA:</strong> ${slaScadenza ? slaScadenza.substring(0,16).replace('T',' ') : 'N/D'}</p>
         ${smartSuggestion ? '<p><strong>💡 Tecnici disponibili oggi:</strong> ' + smartSuggestion.tecnici_disponibili.map(t=>t.nome).join(', ') + '</p>' : ''}
-        <p style="margin-top:16px"><a href="https://fieldforcemrser2026.github.io/syntoniqa/admin_v1.html" style="background:#C30A14;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">Vai alla Dashboard</a></p>`
+        <p style="margin-top:16px"><a href="${brand(env).adminUrl}" style="background:${brand(env).color};color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">Vai alla Dashboard</a></p>`
       ).catch(e=>console.error('[SYNC]',e.message));
       return ok({ urgenza: pascalizeRecord(result[0]), smartDispatch: smartSuggestion });
     }
@@ -797,7 +871,7 @@ async function handlePost(action, body, env) {
         const cliId = urgDet?.[0]?.cliente_id || '';
         const cliName = cliId ? await getEntityName(env, 'clienti', cliId).catch(()=>'') : '';
         await sb(env, 'notifiche', 'POST', {
-          id: 'NOT_ASS_' + Date.now(), tipo: 'urgenza', oggetto: '🚨 Urgenza assegnata a te',
+          id: secureId('NOT_ASS'), tipo: 'urgenza', oggetto: '🚨 Urgenza assegnata a te',
           testo: `Urgenza ${id}: ${prob.substring(0,80)}${cliName?' · '+cliName:''}`,
           destinatario_id: tecId, stato: 'inviata', priorita: 'alta',
           riferimento_id: id, riferimento_tipo: 'urgenza',
@@ -830,7 +904,7 @@ async function handlePost(action, body, env) {
       const tecName = userId ? await getEntityName(env, 'utenti', userId).catch(()=>userId) : userId;
       for (const a of (admins||[])) {
         await sb(env, 'notifiche', 'POST', {
-          id: 'NOT_REJ_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+          id: secureId('NOT_REJ'),
           tipo: 'urgenza', oggetto: '⚠️ Urgenza RIFIUTATA',
           testo: `${tecName} ha rifiutato urgenza ${id}: ${motivo}`,
           destinatario_id: a.id, stato: 'inviata', priorita: 'alta',
@@ -840,7 +914,7 @@ async function handlePost(action, body, env) {
       }
       // Chat + Telegram
       try {
-        const msgId = 'MSG_URG_REJ_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+        const msgId = secureId('MSG_URG_REJ');
         await sb(env, 'chat_messaggi', 'POST', {
           id: msgId, canale_id: 'CH_URGENZE', mittente_id: userId || 'SYSTEM',
           testo: `⚠️ Urgenza ${id} RIFIUTATA da ${tecName}\n📝 Motivo: ${motivo}`, tipo: 'testo', created_at: new Date().toISOString()
@@ -869,7 +943,7 @@ async function handlePost(action, body, env) {
       }
       // Notifica chat admin
       try {
-        const msgId = 'MSG_URG_START_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+        const msgId = secureId('MSG_URG_START');
         await sb(env, 'chat_messaggi', 'POST', {
           id: msgId, canale_id: 'CH_URGENZE', mittente_id: body.operatoreId || body.userId || 'SYSTEM',
           testo: `⚡ Urgenza ${id} INIZIATA`, tipo: 'testo', created_at: new Date().toISOString()
@@ -901,7 +975,7 @@ async function handlePost(action, body, env) {
       }
       // Notifica chat
       try {
-        const msgId = 'MSG_URG_RESOL_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+        const msgId = secureId('MSG_URG_RESOL');
         await sb(env, 'chat_messaggi', 'POST', {
           id: msgId, canale_id: 'CH_URGENZE', mittente_id: body.operatoreId || body.userId || 'SYSTEM',
           testo: `✅ Urgenza ${id} RISOLTA` + (noteRisoluzione ? `\n📝 ${noteRisoluzione}` : ''), tipo: 'testo', created_at: new Date().toISOString()
@@ -912,7 +986,7 @@ async function handlePost(action, body, env) {
         const admins = await sb(env, 'utenti', 'GET', null, '?ruolo=eq.admin&attivo=eq.true&select=id&limit=3').catch(()=>[]);
         for (const a of (admins||[])) {
           await sb(env, 'notifiche', 'POST', {
-            id: 'NOT_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+            id: secureId('NOT'),
             tipo: 'urgenza', oggetto: '✅ Urgenza risolta',
             testo: `Urgenza ${id} è stata risolta dal tecnico`,
             destinatario_id: a.id, stato: 'inviata', priorita: 'normale',
@@ -948,7 +1022,7 @@ async function handlePost(action, body, env) {
     // -------- ORDINI --------
 
     case 'createOrdine': {
-      const id = 'ORD_' + Date.now();
+      const id = secureId('ORD');
       const fields = getFields(body);
       const qty = fields.quantita || fields.qty;
       if (qty !== undefined && qty !== null && (isNaN(qty) || Number(qty) <= 0)) {
@@ -993,7 +1067,7 @@ async function handlePost(action, body, env) {
         if (ord?.[0]?.tecnico_id) {
           const labels = { preso_in_carico: '👋 Preso in carico', ordinato: '📦 Ordinato al fornitore', in_arrivo: '🚚 In arrivo', arrivato: '✅ Arrivato in magazzino' };
           await sb(env, 'notifiche', 'POST', {
-            id: 'NOT_ORD_' + Date.now(), tipo: 'ordine',
+            id: secureId('NOT_ORD'), tipo: 'ordine',
             oggetto: labels[stato] || `Ordine ${stato}`,
             testo: `Il tuo ordine ${ord[0].codice || id} (${(ord[0].descrizione || '').substring(0, 50)}) è stato aggiornato: ${labels[stato] || stato}`,
             destinatario_id: ord[0].tecnico_id, stato: 'inviata', priorita: 'normale',
@@ -1042,7 +1116,7 @@ async function handlePost(action, body, env) {
       }
       const pwd = body.password;
       if (!pwd || pwd.length < 8) return err('Password richiesta (min 8 caratteri)');
-      const id = 'TEC_' + String(Date.now()).slice(-3);
+      const id = secureId('TEC');
       const hashed = await hashPassword(pwd);
       const row = { id, ...getFields(body), password_hash: hashed, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       delete row.password;
@@ -1118,7 +1192,7 @@ async function handlePost(action, body, env) {
     case 'createCliente': {
       const adminErr = await requireAdmin(env, body);
       if (adminErr) return err(adminErr, 403);
-      const id = 'CLI_' + Date.now();
+      const id = secureId('CLI');
       const row = { id, ...getFields(body), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       const result = await sb(env, 'clienti', 'POST', row);
       await wlog('cliente', id, 'created', body.operatoreId);
@@ -1151,7 +1225,7 @@ async function handlePost(action, body, env) {
     case 'createMacchina': {
       const adminErr = await requireAdmin(env, body);
       if (adminErr) return err(adminErr, 403);
-      const id = 'MAC_' + Date.now();
+      const id = secureId('MAC');
       const result = await sb(env, 'macchine', 'POST', { id, ...getFields(body), created_at: new Date().toISOString() });
       await wlog('macchina', id, 'created', body.operatoreId);
       return ok({ macchina: pascalizeRecord(result[0]) });
@@ -1182,7 +1256,7 @@ async function handlePost(action, body, env) {
     case 'createAutomezzo': {
       const adminErr = await requireAdmin(env, body);
       if (adminErr) return err(adminErr, 403);
-      const id = 'AUT_' + Date.now();
+      const id = secureId('AUT');
       const fields = getFields(body);
       const result = await sb(env, 'automezzi', 'POST', { id, ...fields });
       // SYNC: se ha assegnatario_id, aggiorna automezzo_id nell'utente
@@ -1241,7 +1315,7 @@ async function handlePost(action, body, env) {
     case 'createInstallazione': {
       const adminErr = await requireAdmin(env, body);
       if (adminErr) return err(adminErr, 403);
-      const id = 'INS_' + Date.now();
+      const id = secureId('INS');
       const fields = getFields(body);
       // Writable: id,tenant_id,cliente_id,macchina_id,stato,data_inizio,note,obsoleto
       const row = {
@@ -1284,7 +1358,7 @@ async function handlePost(action, body, env) {
     case 'createReperibilita': {
       const adminErr = await requireAdmin(env, body);
       if (adminErr) return err(adminErr, 403);
-      const id = 'REP_' + Date.now();
+      const id = secureId('REP');
       const fields_rep = getFields(body);
       delete fields_rep.created_at; delete fields_rep.updated_at;
       const result = await sb(env, 'reperibilita', 'POST', { id, ...fields_rep });
@@ -1319,7 +1393,7 @@ async function handlePost(action, body, env) {
     case 'createTrasferta': {
       const adminErr = await requireAdmin(env, body);
       if (adminErr) return err(adminErr, 403);
-      const id = 'TRA_' + Date.now();
+      const id = secureId('TRA');
       const fields = getFields(body);
       // Writable: id,tenant_id,cliente_id,tecnico_id,automezzo_id,motivo,stato,note,data_inizio,obsoleto
       const row = {
@@ -1366,7 +1440,7 @@ async function handlePost(action, body, env) {
     // -------- NOTIFICHE --------
 
     case 'createNotifica': {
-      const id = 'NOT_' + Date.now();
+      const id = secureId('NOT');
       const fields = getFields(body);
       const testo = fields.messaggio || fields.testo || fields.contenuto || '';
       const oggetto = fields.oggetto || fields.titolo || null;
@@ -1407,7 +1481,7 @@ async function handlePost(action, body, env) {
     // -------- RICHIESTE --------
 
     case 'createRichiesta': {
-      const id = 'RIC_' + Date.now();
+      const id = secureId('RIC');
       const fields = getFields(body);
       // Writable: id,tenant_id,tipo,stato,data_richiesta,data_risposta,tecnico_id,motivo,data_inizio,data_fine,note_admin,obsoleto
       const row = {
@@ -1431,7 +1505,7 @@ async function handlePost(action, body, env) {
         // Notifica in-app a tutti gli admin
         const admins = await sb(env, 'utenti', 'GET', null, `?ruolo=eq.admin&obsoleto=eq.false&select=id`).catch(()=>[]);
         for (const adm of admins) {
-          const notId = 'NOT_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+          const notId = secureId('NOT');
           await sb(env, 'notifiche', 'POST', {
             id: notId, tenant_id: row.tenant_id,
             tipo: 'richiesta_nuova',
@@ -1461,7 +1535,7 @@ async function handlePost(action, body, env) {
           if (ric?.tecnico_id) {
             const esito = updates.stato === 'approvata' ? '✅ Approvata' : '❌ Rifiutata';
             const tipoLabel = { ferie:'Ferie', permesso:'Permesso', malattia:'Malattia', cambio_turno:'Cambio Turno', generico:'Generico' }[ric.tipo] || ric.tipo;
-            const notId = 'NOT_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+            const notId = secureId('NOT');
             await sb(env, 'notifiche', 'POST', {
               id: notId, tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
               tipo: 'richiesta_risposta',
@@ -1480,7 +1554,7 @@ async function handlePost(action, body, env) {
     // -------- PAGELLINI --------
 
     case 'createPagellino': {
-      const id = 'PAG_' + Date.now();
+      const id = secureId('PAG');
       const result = await sb(env, 'pagellini', 'POST', { id, ...getFields(body), stato: 'bozza', data_creazione: new Date().toISOString() });
       return ok({ pagellino: pascalizeRecord(result[0]) });
     }
@@ -1494,7 +1568,7 @@ async function handlePost(action, body, env) {
     // -------- CHECKLIST --------
 
     case 'createChecklistTemplate': {
-      const id = 'CHK_' + Date.now();
+      const id = secureId('CHK');
       const result = await sb(env, 'checklist_template', 'POST', { id, ...getFields(body), created_at: new Date().toISOString() });
       return ok({ template: result[0] });
     }
@@ -1512,7 +1586,7 @@ async function handlePost(action, body, env) {
     }
 
     case 'compileChecklist': {
-      const id = 'CKC_' + Date.now();
+      const id = secureId('CKC');
       const result = await sb(env, 'checklist_compilata', 'POST', { id, ...getFields(body), data_compilazione: new Date().toISOString() });
       // Aggiorna intervento con checklist_id
       if (body.intervento_id) {
@@ -1524,7 +1598,7 @@ async function handlePost(action, body, env) {
     // -------- DOCUMENTI & ALLEGATI --------
 
     case 'createDocumento': {
-      const id = 'DOC_' + Date.now();
+      const id = secureId('DOC');
       const result = await sb(env, 'documenti', 'POST', { id, ...getFields(body), data_caricamento: new Date().toISOString() });
       return ok({ documento: pascalizeRecord(result[0]) });
     }
@@ -1544,7 +1618,7 @@ async function handlePost(action, body, env) {
     }
 
     case 'createAllegato': {
-      const id = 'ALL_' + Date.now();
+      const id = secureId('ALL');
       const result = await sb(env, 'allegati', 'POST', { id, ...getFields(body), data_upload: new Date().toISOString() });
       return ok({ allegato: pascalizeRecord(result[0]) });
     }
@@ -1586,7 +1660,7 @@ async function handlePost(action, body, env) {
       }
 
       const fileUrl = `${env.SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
-      const id = 'ALL_' + Date.now();
+      const id = secureId('ALL');
       await sb(env, 'allegati', 'POST', {
         id, nome: fileName, file_url: fileUrl, mime_type: mimeType,
         uploader_id: uploaderId, riferimento_tipo: riferimentoTipo, riferimento_id: riferimentoId,
@@ -1618,7 +1692,7 @@ async function handlePost(action, body, env) {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: 'Syntoniqa <noreply@syntoniqa.app>', to, subject, html, text })
+        body: JSON.stringify({ from: brand(env).emailFrom, to, subject, html, text })
       });
       const result = await res.json();
       return ok({ result });
@@ -1674,7 +1748,7 @@ async function handlePost(action, body, env) {
       const sub = body.subscription || body;
       if (!sub.endpoint) return err('Subscription endpoint richiesto');
       const keys = sub.keys || {};
-      const id = 'PUSH_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+      const id = secureId('PUSH');
       
       // Upsert: remove old subscription for same endpoint
       await sb(env, `push_subscriptions?user_id=eq.${encodeURIComponent(userId)}&endpoint=eq.${encodeURIComponent(sub.endpoint)}`, 'DELETE');
@@ -3154,7 +3228,7 @@ Rispondi SOLO con JSON valido:
       const now = new Date().toISOString();
       for (const item of toCreate) {
         try {
-          const id = 'INT_AI_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+          const id = secureId('INT_AI');
           const tid = item.tecnicoId || item.tecnico_id || item.TecnicoID;
           const cid = item.clienteId || item.cliente_id || item.ClienteID || null;
           const itemData = item.data || item.Data;
@@ -3211,7 +3285,7 @@ Rispondi SOLO con JSON valido:
       for (const row of rows) {
         try {
           const tecId = tecMap[(row.tecnico_nome || '').toLowerCase()] || null;
-          const id = 'INT_XLS_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+          const id = secureId('INT_XLS');
           // Build note with all details
           const noteParts = [row.cliente, row.service_detail, row.reperibilita ? 'REP: ' + row.reperibilita : ''].filter(Boolean);
           await sb(env, 'piano', 'POST', {
@@ -3291,7 +3365,7 @@ Rispondi SOLO con JSON valido:
               created.push(codice_m3);
             }
           } else {
-            record.codice_m3 = 'CLI_IMP_' + Date.now() + '_' + i;
+            record.codice_m3 = secureId('CLI_IMP');
             record.created_at = now;
             await sb(env, 'anagrafica_clienti', 'POST', record);
             created.push(record.codice_m3);
@@ -3349,7 +3423,7 @@ Rispondi SOLO con JSON valido:
             await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(numero_serie)}`, 'PATCH', record);
             updated.push(numero_serie);
           } else {
-            record.id = 'AST_' + Date.now() + '_' + i;
+            record.id = secureId('AST');
             record.created_at = now;
             await sb(env, 'anagrafica_assets', 'POST', record);
             created.push(numero_serie);
@@ -3673,7 +3747,7 @@ Rispondi SOLO con JSON valido:
     }
 
     case 'logKPISnapshot': {
-      const id = 'KSN_' + Date.now();
+      const id = secureId('KSN');
       await sb(env, 'kpi_snapshot', 'POST', { id, ...getFields(body), data: new Date().toISOString().split('T')[0], ora: new Date().toTimeString().split(' ')[0] });
       return ok({ id });
     }
@@ -3996,7 +4070,7 @@ Rispondi SOLO con JSON valido:
     case 'createApproval': {
       const adminErr2 = await requireAdmin(env, body);
       if (adminErr2) return err(adminErr2, 403);
-      const aprId = body.id || ('APR_' + Date.now());
+      const aprId = body.id || secureId('APR');
       const pianoData2 = body.piano;
       if (!pianoData2) return err('Piano mancante');
       const aprKey = `approval_${aprId}`;
@@ -4090,7 +4164,7 @@ Rispondi SOLO con JSON valido:
         sb(env, 'urgenze', 'GET', null, '?obsoleto=eq.false&stato=in.(aperta,assegnata,in_corso)'),
         sb(env, 'ordini',  'GET', null, '?obsoleto=eq.false&stato=in.(richiesto,preso_in_carico,ordinato)'),
       ]);
-      const id = 'BAK_' + Date.now();
+      const id = secureId('BAK');
       await sb(env, 'kpi_snapshot', 'POST', {
         id, tipo_snapshot: 'backup',
         data: new Date().toISOString().split('T')[0],
@@ -4232,7 +4306,7 @@ Rispondi SOLO con JSON valido:
       if (text) {
         try {
           const senderNameEarly = (msg.from?.first_name || '') + (msg.from?.last_name ? ' ' + msg.from.last_name : '');
-          const earlyMsgId = 'TG_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+          const earlyMsgId = secureId('TG');
           const urgKwEarly = ['urgenza','fermo','guasto','errore','rotto','emergenza','allarme'];
           const isUrgEarly = urgKwEarly.some(k => text.toLowerCase().includes(k));
           const earlyCanale = isUrgEarly ? 'CH_URGENZE' : 'CH_GENERALE';
@@ -4346,7 +4420,7 @@ Rispondi SOLO con JSON valido:
         const macchinaHint = (text || '').match(/astronaut|vector|juno|discovery|calm|grazeway|cosmix/i)?.[0] || null;
         const partiCatalogo = isPhoto ? await loadPartsCatalog(env, macchinaHint) : '';
 
-        const systemPrompt = `Sei l'assistente AI di Syntoniqa, il sistema FSM di MRS Lely Center.
+        const systemPrompt = `Sei l'assistente AI di Syntoniqa, il sistema FSM di ${brand(env).shortName}.
 Analizza il messaggio e determina il tipo di azione da creare.
 
 CLIENTI DISPONIBILI (usa il NOME INTERNO per riconoscerli, es. BONDIOLI, OREFICI, ecc.):
@@ -4613,7 +4687,7 @@ Rispondi SOLO con JSON valido:
             reply = '📦 Formato: /ordine [codice] [quantità] [cliente]\nEs: /ordine 9.1189.0283.0 2 Bondioli';
             break;
           }
-          const ordId = 'ORD_TG_' + Date.now();
+          const ordId = secureId('ORD_TG');
           const ordTid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
           await sb(env, 'ordini', 'POST', { id: ordId, tenant_id: ordTid, tecnico_id: utente?.id || null, codice, descrizione: `${codice} x${qt} - ${cliente}`, quantita: qt, stato: 'richiesto', data_richiesta: new Date().toISOString() });
           reply = `📦 Ordine *${ordId}* creato:\nCodice: \`${codice}\` x${qt}\nCliente: ${cliente}`;
@@ -4622,7 +4696,7 @@ Rispondi SOLO con JSON valido:
         case '/servepezz': {
           const desc2 = parts.slice(1).join(' ');
           if (!desc2) { reply = 'Usa: /servepezz [descrizione ricambio]'; break; }
-          const spId = 'ORD_TG_' + Date.now();
+          const spId = secureId('ORD_TG');
           const spTid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
           await sb(env, 'ordini', 'POST', { id: spId, tenant_id: spTid, tecnico_id: utente?.id || null, descrizione: desc2, stato: 'richiesto', data_richiesta: new Date().toISOString() });
           reply = `📦 Ordine ricambio *${spId}* creato:\n_${desc2}_`;
@@ -4663,7 +4737,7 @@ Rispondi SOLO con JSON valido:
           const cliSearch = clienteArg.toLowerCase();
           const allCli = await sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_interno,nome_account&limit=300').catch(()=>[]);
           const matchCli = allCli.find(c => (c.nome_interno||'').toLowerCase().includes(cliSearch) || (c.nome_account||'').toLowerCase().includes(cliSearch));
-          const pId = 'INT_TG_' + Date.now();
+          const pId = secureId('INT_TG');
           const pTid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
           await sb(env, 'piano', 'POST', {
             id: pId, tenant_id: pTid, tecnico_id: utente.id, cliente_id: matchCli?.codice_m3 || null,
@@ -4722,7 +4796,7 @@ Rispondi SOLO con JSON valido:
           // Segna il tecnico come disponibile per urgenze oggi
           const oggi2 = new Date().toISOString().split('T')[0];
           const dispTipo = (parts[1] || 'urgenze').toLowerCase();
-          const dispId = 'INT_DISP_' + Date.now();
+          const dispId = secureId('INT_DISP');
           const dispTid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
           await sb(env, 'piano', 'POST', {
             id: dispId, tenant_id: dispTid, tecnico_id: utente.id,
@@ -4867,7 +4941,7 @@ Rispondi SOLO con JSON valido:
           }
 
           reply += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-          reply += `_MRS Lely Center · Syntoniqa_`;
+          reply += `_${brand(env).shortName} · Syntoniqa_`;
           break;
         }
 
@@ -4922,7 +4996,7 @@ Rispondi SOLO con JSON valido:
           reply += `\n── *Score* ───────────────\n`;
           reply += `${scoreEmoji} *${score}/100* — ${score >= 80 ? 'Eccellente!' : score >= 50 ? 'Buono' : 'Da migliorare'}\n\n`;
           reply += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-          reply += `_MRS Lely Center · Syntoniqa_`;
+          reply += `_${brand(env).shortName} · Syntoniqa_`;
           break;
         }
 
@@ -5024,7 +5098,7 @@ Rispondi SOLO con JSON valido:
               }
             }
             payload = {
-              id: 'URG_TG_' + Date.now(),
+              id: secureId('URG_TG'),
               tenant_id: tid,
               problema: aiResult.problema,
               cliente_id: aiResult.codice_m3 || null,
@@ -5039,7 +5113,7 @@ Rispondi SOLO con JSON valido:
               await sb(env, 'urgenze', 'POST', payload);
               // Salva foto/documento come allegato collegato all'urgenza
               if (mediaUrl) {
-                const docId = 'DOC_TG_' + Date.now();
+                const docId = secureId('DOC_TG');
                 await sb(env, 'documenti', 'POST', {
                   id: docId, tenant_id: tid,
                   entita_tipo: 'urgenza', entita_id: payload.id,
@@ -5087,7 +5161,7 @@ Rispondi SOLO con JSON valido:
           } else if (aiResult.tipo === 'ordine') {
             const ricambiDesc = (aiResult.ricambi || []).map(r => `${r.codice} x${r.quantita}`).join(', ') || aiResult.problema;
             payload = {
-              id: 'ORD_TG_' + Date.now(),
+              id: secureId('ORD_TG'),
               tenant_id: tid,
               tecnico_id: utente?.id || null,
               cliente_id: aiResult.codice_m3 || null,
@@ -5102,7 +5176,7 @@ Rispondi SOLO con JSON valido:
             } catch(e) { actionReply = '❌ Errore creazione ordine: ' + e.message; }
           } else if (aiResult.tipo === 'intervento') {
             payload = {
-              id: 'INT_TG_' + Date.now(),
+              id: secureId('INT_TG'),
               tenant_id: tid,
               cliente_id: aiResult.codice_m3 || null,
               tecnico_id: utente?.id || null,
@@ -5169,7 +5243,7 @@ Rispondi SOLO con JSON valido:
           const tecLabel = utente ? `${utente.nome || ''} ${(utente.cognome || '').charAt(0)}.` : 'TG';
 
           // Mirror messaggio originale utente nel canale tematico
-          const userMsgId = 'TG_USR_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+          const userMsgId = secureId('TG_USR');
           if (text && text.length > 2) {
             await sb(env, 'chat_messaggi', 'POST', {
               id: userMsgId, canale_id: botCanale, mittente_id: utente?.id || 'TELEGRAM',
@@ -5178,14 +5252,14 @@ Rispondi SOLO con JSON valido:
           }
 
           // Mirror risposta bot nel canale tematico
-          const botMsgId = 'TG_BOT_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+          const botMsgId = secureId('TG_BOT');
           await sb(env, 'chat_messaggi', 'POST', {
             id: botMsgId, canale_id: botCanale, mittente_id: 'TELEGRAM',
             testo: `🤖 [Bot] ${cleanReply}`, tipo: 'testo', created_at: ts
           }).catch(() => {});
           // Mirror ANCHE in CH_ADMIN per visibilità completa
           if (botCanale !== 'CH_ADMIN') {
-            const botMsgId2 = 'TG_BOT_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+            const botMsgId2 = secureId('TG_BOT');
             await sb(env, 'chat_messaggi', 'POST', {
               id: botMsgId2, canale_id: 'CH_ADMIN', mittente_id: 'TELEGRAM',
               testo: `🤖 [Bot→TG] ${cleanReply}`, tipo: 'testo', created_at: ts
@@ -5243,7 +5317,7 @@ Rispondi SOLO con JSON valido:
       const { canale_id, testo, tipo, rispondi_a } = body;
       const mittente = body.userId || body.user_id || body.mittente_id;
       if (!canale_id || !testo) return err('canale_id e testo richiesti');
-      const id = 'MSG_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+      const id = secureId('MSG');
       const msg = { id, canale_id, mittente_id: mittente, testo, tipo: tipo || 'testo', rispondi_a: rispondi_a || null, created_at: new Date().toISOString() };
       const result = await sb(env, 'chat_messaggi', 'POST', msg);
 
@@ -5306,7 +5380,7 @@ Rispondi SOLO con JSON valido:
               const qt = parseInt(parts[2]) || 1;
               const cliente = parts.slice(3).join(' ') || '';
               if (!codice) { botReply = '📦 Formato: /ordine [codice] [quantità] [cliente]'; break; }
-              const ordId = 'ORD_APP_' + Date.now();
+              const ordId = secureId('ORD_APP');
               const ordTid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
               await sb(env, 'ordini', 'POST', { id: ordId, tenant_id: ordTid, tecnico_id: mittente, codice, descrizione: `${codice} x${qt}${cliente ? ' - ' + cliente : ''}`, quantita: qt, stato: 'richiesto', data_richiesta: new Date().toISOString() });
               botReply = `📦 Ordine ${ordId} creato: ${codice} x${qt}${cliente ? ' – ' + cliente : ''}`;
@@ -5317,7 +5391,7 @@ Rispondi SOLO con JSON valido:
           }
 
           if (botReply) {
-            const botMsgId = 'MSG_BOT_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+            const botMsgId = secureId('MSG_BOT');
             await sb(env, 'chat_messaggi', 'POST', {
               id: botMsgId, canale_id, mittente_id: 'TELEGRAM',
               testo: `🤖 ${botReply}`, tipo: 'testo', created_at: new Date(Date.now() + 500).toISOString()
@@ -5362,7 +5436,7 @@ Rispondi SOLO con JSON valido:
     case 'createChatCanale': {
       const { nome, tipo, descrizione, icona, solo_admin, membri_ids } = body;
       if (!nome) return err('nome richiesto');
-      const id = 'CH_' + Date.now();
+      const id = secureId('CH');
       const canale = { id, nome, tipo: tipo || 'gruppo', descrizione: descrizione || null, icona: icona || '💬', solo_admin: solo_admin || false, creato_da: body.userId || null, created_at: new Date().toISOString() };
       // Cerca tenant_id
       const utenti = await sb(env, 'utenti', 'GET', null, '?select=tenant_id&limit=1');
@@ -5717,7 +5791,7 @@ Rispondi SOLO con JSON valido:
         let created = 0, errors = [];
         for (const s of scheduled) {
           try {
-            const intId = 'PM_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
+            const intId = secureId('PM');
             await sb(env, 'piano', 'POST', {
               id: intId, tenant_id: tid,
               cliente_id: s.cliente_id, macchina_id: s.macchina_id,
@@ -5989,7 +6063,7 @@ Rispondi SOLO con JSON valido:
       let nextPianoId = null;
       if (!dupeCheck.length) {
         // Crea prossimo intervento pianificato
-        nextPianoId = 'PM_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
+        nextPianoId = secureId('PM');
         await sb(env, 'piano', 'POST', {
           id: nextPianoId, tenant_id: tid,
           macchina_id: cmId,
@@ -6064,7 +6138,7 @@ Rispondi SOLO con JSON valido:
 
           const tipo2 = seq2[pos2 % seq2.length];
           try {
-            const pianoId = 'PM_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
+            const pianoId = secureId('PM');
             await sb(env, 'piano', 'POST', {
               id: pianoId, tenant_id: tid,
               macchina_id: mac.id,
@@ -6270,7 +6344,7 @@ async function sendEmailAlert(env, to, subject, bodyHtml) {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: 'Syntoniqa <noreply@syntoniqa.app>',
+        from: brand(env).emailFrom,
         to: Array.isArray(to) ? to : [to],
         subject,
         html: `<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:20px">
@@ -6280,7 +6354,7 @@ async function sendEmailAlert(env, to, subject, bodyHtml) {
           <div style="background:#fff;padding:20px;border:1px solid #E5E7EB;border-radius:0 0 12px 12px">
             ${bodyHtml}
           </div>
-          <p style="text-align:center;font-size:.75rem;color:#9CA3AF;margin-top:12px">MRS Lely Center Emilia Romagna</p>
+          <p style="text-align:center;font-size:.75rem;color:#9CA3AF;margin-top:12px">${brand(env).name}</p>
         </div>`
       })
     });
@@ -6391,7 +6465,7 @@ async function triggerKPISnapshot(env, interventoId, tecnicoId) {
   const mese = oggi.slice(0, 7);
   const completati = await sb(env, 'piano', 'GET', null, `?tecnico_id=eq.${tecnicoId}&stato=in.(completato,chiuso)&data=gte.${mese}-01`);
   await sb(env, 'kpi_log', 'POST', {
-    id: 'KPI_' + Date.now(),
+    id: secureId('KPI'),
     data: oggi, tecnico_id: tecnicoId,
     metrica: 'interventi_completati_mese', valore: completati.length, unita: 'n', periodo: mese
   }).catch(() => {});
@@ -6442,7 +6516,7 @@ async function checkInterventoReminders(env) {
       }
       // Notifica anche su chat admin
       await sb(env, 'chat_messaggi', 'POST', {
-        id: 'MSG_REM_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+        id: secureId('MSG_REM'),
         canale_id: 'CH_ADMIN', mittente_id: 'TELEGRAM',
         testo: `⏰ REMINDER: Intervento ${p.id} (${cliNome}, ore ${p.ora_inizio}) — il tecnico ${tec?.[0]?.nome || ''} ${tec?.[0]?.cognome || ''} non ha ancora iniziato. +1h di ritardo.`,
         tipo: 'testo', created_at: new Date().toISOString()
@@ -6513,7 +6587,7 @@ async function checkSLAUrgenze(env) {
             const label = newStatus === 'breach' ? 'SLA SCADUTO' : 'SLA CRITICO';
             // Notifica admin via chat
             await sb(env, 'chat_messaggi', 'POST', {
-              id: 'MSG_SLA_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+              id: secureId('MSG_SLA'),
               canale_id: 'CH_URGENZE', mittente_id: 'TELEGRAM',
               testo: `${emoji} ${label}: Urgenza ${u.id}\n🏢 ${cliNome}\n📝 ${(u.problema || '').substring(0, 60)}\n⏱️ Scadenza: ${u.sla_scadenza?.substring(0, 16)?.replace('T', ' ')}`,
               tipo: 'testo', created_at: new Date().toISOString()
@@ -6527,7 +6601,7 @@ async function checkSLAUrgenze(env) {
                 <p><strong>Problema:</strong> ${(u.problema || '').substring(0, 120)}</p>
                 <p><strong>Scadenza SLA:</strong> ${u.sla_scadenza?.substring(0, 16)?.replace('T', ' ')}</p>
                 <p><strong>Tecnico:</strong> ${u.tecnico_assegnato || 'Non assegnato'}</p>
-                <p style="margin-top:16px"><a href="https://fieldforcemrser2026.github.io/syntoniqa/admin_v1.html" style="background:#DC2626;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">Apri Admin Dashboard</a></p>`
+                <p style="margin-top:16px"><a href="${brand(env).adminUrl}" style="background:#DC2626;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none">Apri Admin Dashboard</a></p>`
               );
             }
             // Notifica tecnico assegnato
@@ -6583,7 +6657,7 @@ async function checkSLAUrgenze(env) {
           );
           // Chat
           await sb(env, 'chat_messaggi', 'POST', {
-            id: 'MSG_ESC_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+            id: secureId('MSG_ESC'),
             canale_id: 'CH_URGENZE', mittente_id: 'SYSTEM',
             testo: `⏰ ESCALATION: Urgenza ${ua.id} assegnata a ${tecName} da ${Math.floor(oreAssegnata)}h, non iniziata!`,
             tipo: 'testo', created_at: new Date().toISOString()
