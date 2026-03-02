@@ -11,5 +11,15 @@ crons = ["*/15 * * * *"]
 binding = "AI"
 
 [vars]
-# NON mettere valori reali qui — usa i secrets di Cloudflare (passo 4 del runbook)
-# I secrets si configurano con: wrangler secret put NOME_SECRET
+# Brand white-label (NON sono secrets — testo pubblico)
+BRAND_NAME = "MRS Lely Center Emilia Romagna"
+BRAND_SHORT = "MRS Lely Center"
+BRAND_EMAIL = "noreply@syntoniqa.app"
+BRAND_EMAIL_FROM = "MRS Lely Center <noreply@syntoniqa.app>"
+BRAND_ADMIN_URL = "https://fieldforcemrser2026.github.io/syntoniqa/admin_v1.html"
+BRAND_TECH_URL = "https://fieldforcemrser2026.github.io/syntoniqa/index_v2.html"
+BRAND_COLOR = "#C30A14"
+
+# Secrets (NON mettere valori reali qui — usa wrangler secret put NOME_SECRET)
+# SUPABASE_URL, SUPABASE_SERVICE_KEY, SQ_TOKEN, TELEGRAM_BOT_TOKEN,
+# TELEGRAM_WEBHOOK_SECRET, RESEND_API_KEY, GEMINI_KEY, JWT_SECRET
