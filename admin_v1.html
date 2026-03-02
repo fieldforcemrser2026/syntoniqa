@@ -832,6 +832,8 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <select id="monthFiltroTec" onchange="renderMonthPlan()" style="padding:5px 8px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti i tecnici</option></select>
 <label style="font-size:.75rem;display:flex;align-items:center;gap:4px"><input type="checkbox" id="monthShowRep" onchange="renderMonthPlan()" checked> Reperibilita</label>
 <label style="font-size:.75rem;display:flex;align-items:center;gap:4px"><input type="checkbox" id="monthShowFerie" onchange="renderMonthPlan()" checked> Ferie</label>
+<label style="font-size:.75rem;display:flex;align-items:center;gap:4px"><input type="checkbox" id="monthShowTrasf" onchange="renderMonthPlan()" checked> Trasferte</label>
+<label style="font-size:.75rem;display:flex;align-items:center;gap:4px"><input type="checkbox" id="monthShowInst" onchange="renderMonthPlan()" checked> Installazioni</label>
 <label style="font-size:.75rem;display:flex;align-items:center;gap:4px"><input type="checkbox" id="monthCompact" onchange="renderMonthPlan()"> Compatto</label>
 </div>
 <div style="overflow-x:auto"><div id="monthGrid" style="min-width:900px"></div></div>
@@ -871,7 +873,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <!-- Mese Target -->
 <div>
 <label style="font-size:.75rem;font-weight:600;margin-bottom:6px;display:block;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.04em">📅 Mese Target</label>
-<input type="month" id="aiMeseTarget" style="width:100%;padding:10px 14px;border:1.5px solid rgba(255,255,255,.2);border-radius:8px;font-size:.9rem;background:rgba(255,255,255,.12);color:#fff;font-family:inherit;-webkit-appearance:none;appearance:none" onfocus="this.style.borderColor='#818CF8';this.style.boxShadow='0 0 0 3px rgba(129,140,248,.25)'" onblur="this.style.borderColor='rgba(255,255,255,.2)';this.style.boxShadow='none'">
+<input type="month" id="aiMeseTarget" style="width:100%;padding:10px 14px;border:1.5px solid rgba(255,255,255,.2);border-radius:8px;font-size:.9rem;background:rgba(255,255,255,.12);color:#fff;font-family:inherit;-webkit-appearance:none;appearance:none" onchange="updateAIVincoliStatus()" onfocus="this.style.borderColor='#818CF8';this.style.boxShadow='0 0 0 3px rgba(129,140,248,.25)'" onblur="this.style.borderColor='rgba(255,255,255,.2)';this.style.boxShadow='none'">
 </div>
 
 <!-- Modalità -->
@@ -1959,7 +1961,7 @@ function showSec(id,btn){
   if(id==='planner')setTimeout(()=>initPlanner(),100);
   if(id==='vincoli')loadVincoliCategories();
   if(id==='pianomensile')setTimeout(()=>initMonthPlan(),100);
-  if(id==='ai'){renderApprovalQueue();renderTecnicoPlan();updateAIVincoliStatus()}
+  if(id==='ai'){if(!$('aiMeseTarget').value)$('aiMeseTarget').value=today().substring(0,7);renderApprovalQueue();renderTecnicoPlan();updateAIVincoliStatus()}
   if(id==='chat')loadChatCanali();
   if(id==='backup')loadBackupHistory();
   if(id==='anagrafica'){loadAnagClients()}
@@ -4376,11 +4378,19 @@ function assetType(a){
   if(t==='ALTRI') t=normAssetType(a.GruppoAttrezzatura||'');
   return t;
 }
-// Get ALL anagrafica assets as flat array - tutti gli asset, nessun filtro
-function getAllAnagAssets(){
+// ============ FILTRO CONDIVISO ASSET (usato sia in Clienti che Macchine) ============
+const VALID_ASSET_STATUS=['attivo','da installare','da_installare','venduto'];
+function isCountableAsset(a){
+  const s=(a.Status||'').toLowerCase().trim();
+  if(!s)return false;
+  if(!VALID_ASSET_STATUS.some(v=>s.includes(v)))return false;
+  return assetType(a)!=='ALTRI';
+}
+// Get ALL anagrafica assets — filtered=true applica stessi criteri di Clienti
+function getAllAnagAssets(filtered){
   let all=[];
   Object.values(ANAG_ASSETS_CACHE).forEach(arr=>all=all.concat(arr));
-  return all;
+  return filtered!==false ? all.filter(isCountableAsset) : all;
 }
 
 async function loadAnagClients(){
@@ -4398,21 +4408,12 @@ async function loadAnagClients(){
         if(!byM3[m3])byM3[m3]=[];
         byM3[m3].push(a);
       });
-      // Compute _assetCounts per client — SOLO assets con Status "Attivo" o "Venduto – da installare"
-      const VALID_ASSET_STATUS=['attivo','da installare','da_installare','venduto'];
+      // Compute _assetCounts per client — usa isCountableAsset (condiviso con Macchine)
       ANAG_CLIENTI.forEach(c=>{
         const m3=c.CodiceM3;
         const myAssets=byM3[m3]||[];
         ANAG_ASSETS_CACHE[m3]=myAssets;
-        // Filtra: DEVE avere un Status valido (no null, no Disattivato/Ritirato/Sospeso)
-        // E deve essere un tipo prodotto reale (non Customer Item, Accessories, ecc.)
-        const activeAssets=myAssets.filter(a=>{
-          const s=(a.Status||'').toLowerCase().trim();
-          if(!s)return false; // Nessuno status = non contare
-          if(!VALID_ASSET_STATUS.some(v=>s.includes(v)))return false; // Status non valido
-          // TipoFoglio (foglio prodotto) è la fonte primaria del tipo, GruppoAttrezzatura come fallback
-          return assetType(a)!=='ALTRI'; // Escludi Customer Item, Accessories, Whole Goods ecc.
-        });
+        const activeAssets=myAssets.filter(isCountableAsset);
         const counts={_total:activeAssets.length,_totalAll:myAssets.length};
         activeAssets.forEach(a=>{
           const key=assetType(a);
@@ -5580,17 +5581,52 @@ function updateAIVincoliStatus(){
   if(!el)return;
   const cats=(VINCOLI_CAT.categories||[]).filter(c=>c.attiva!==false);
   const totalRules=cats.reduce((s,c)=>(s+(c.regole||[]).filter(r=>r.testo).length),0);
+
+  // Riepilogo vincoli noti
+  const meseTarget=$('aiMeseTarget')?.value||'';
+  const d=today();
+  const tecnici=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Ruolo!=='admin');
+  const nTec=tecnici.length;
+
+  // Conteggi eventi futuri per il mese target (o mese corrente)
+  const mFilter = meseTarget || d.substring(0,7);
+  const mStart=mFilter+'-01', mEnd=mFilter+'-31';
+  const richAppr=(DATA.richieste||[]).filter(r=>!r.Obsoleto&&r.Stato==='approvata'&&r.DataInizio&&r.DataInizio<=mEnd&&(r.DataFine||r.DataInizio)>=mStart);
+  const trasf=(DATA.trasferte||[]).filter(t=>!t.Obsoleto&&t.DataInizio&&t.DataInizio<=mEnd&&(t.DataFine||t.DataInizio)>=mStart);
+  const inst=(DATA.installazioni||[]).filter(i=>!i.Obsoleto&&['pianificato','in_corso','pianificata','in corso'].includes((i.Stato||'').toLowerCase())&&i.DataInizio&&i.DataInizio<=mEnd);
+  const pianoExist=(DATA.piano||[]).filter(p=>!p.Obsoleto&&p.Data&&p.Data>=mStart&&p.Data<=mEnd&&p.Stato!=='annullato');
+  const urgAperte=(DATA.urgenze||[]).filter(u=>!u.Obsoleto&&['aperta','assegnata','schedulata'].includes(u.Stato));
+
+  // Build summary HTML
+  let summaryItems=[];
+  summaryItems.push(`<span>👥 ${nTec} tecnici attivi</span>`);
+  if(richAppr.length) summaryItems.push(`<span>🏖️ ${richAppr.length} ferie/permessi approvati</span>`);
+  if(trasf.length) summaryItems.push(`<span>🧳 ${trasf.length} trasferte</span>`);
+  if(inst.length) summaryItems.push(`<span>🏗️ ${inst.length} installazioni</span>`);
+  if(pianoExist.length) summaryItems.push(`<span>📋 ${pianoExist.length} interventi già pianificati</span>`);
+  if(urgAperte.length) summaryItems.push(`<span>🚨 ${urgAperte.length} urgenze aperte</span>`);
+
+  let html='';
   if(totalRules>0){
     const catNames=cats.filter(c=>(c.regole||[]).some(r=>r.testo)).map(c=>`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(129,140,248,.15);border:1px solid rgba(129,140,248,.25);border-radius:12px;font-size:.7rem">${c.icona||'📌'} ${c.nome}</span>`).join(' ');
-    el.innerHTML=`<div style="padding:10px 14px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:8px;font-size:.8rem">
+    html+=`<div style="padding:10px 14px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:8px;font-size:.8rem;margin-bottom:8px">
       <strong style="color:#10B981">✅ ${totalRules} vincoli attivi</strong> da ${cats.length} categorie — verranno inclusi automaticamente nel prompt AI
       <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${catNames}</div>
     </div>`;
   } else {
-    el.innerHTML=`<div style="padding:10px 14px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:.8rem">
+    html+=`<div style="padding:10px 14px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:.8rem;margin-bottom:8px">
       <strong style="color:#F59E0B">⚠️ Nessun vincolo configurato</strong> — vai alla sezione <a href="#" onclick="event.preventDefault();showSec('vincoli')" style="color:#818CF8;text-decoration:underline">📐 Vincoli Piano</a> per aggiungere regole che l'AI rispetterà.
     </div>`;
   }
+
+  // Constraint summary box
+  html+=`<div style="padding:10px 14px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);border-radius:8px;font-size:.8rem">
+    <strong style="color:#A5B4FC">📊 Riepilogo contesto ${mFilter}</strong>
+    <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:8px;font-size:.75rem;color:rgba(255,255,255,.7)">${summaryItems.join(' · ')}</div>
+    <div style="margin-top:4px;font-size:.7rem;color:rgba(255,255,255,.4)">Ferie, trasferte e installazioni saranno usate come vincoli hard (post-processing deterministico)</div>
+  </div>`;
+
+  el.innerHTML=html;
 }
 
 async function runAI(){
@@ -7242,6 +7278,8 @@ function renderMonthPlan(){
   const filtTec = $('monthFiltroTec')?.value || '';
   const showRep = $('monthShowRep')?.checked !== false;
   const showFerie = $('monthShowFerie')?.checked !== false;
+  const showTrasf = $('monthShowTrasf')?.checked !== false;
+  const showInst = $('monthShowInst')?.checked !== false;
   const compact = $('monthCompact')?.checked;
 
   // Calcola giorni del mese (Lun-Sab, no Dom)
@@ -7269,6 +7307,12 @@ function renderMonthPlan(){
 
   // Richieste approvate (ferie, permesso, malattia, cambio_turno)
   const richAppr = (DATA.richieste||[]).filter(r=>!r.Obsoleto&&r.Stato==='approvata'&&r.DataInizio);
+
+  // Trasferte attive
+  const trasferte = showTrasf ? (DATA.trasferte||[]).filter(t=>!t.Obsoleto) : [];
+
+  // Installazioni attive (pianificato o in_corso)
+  const installazioni = showInst ? (DATA.installazioni||[]).filter(i=>!i.Obsoleto&&['pianificato','in_corso','pianificata','in corso'].includes((i.Stato||'').toLowerCase())) : [];
 
   // Stato colori
   const statoCol={'pianificato':'#6366F1','in_corso':'#2563EB','completato':'#10B981','annullato':'#EF4444','da_rivedere':'#F59E0B'};
@@ -7308,8 +7352,20 @@ function renderMonthPlan(){
       // Check reperibilita
       const rep = reps.find(r=>r.TecnicoID===tec.ID&&r.DataInizio<=d.ds&&r.DataFine>=d.ds);
 
+      // Check trasferta
+      const trasDay = trasferte.find(t=>{
+        const tecIds=(t.TecniciIDs||t.TecnicoID||'').split(',').filter(Boolean);
+        return tecIds.includes(tec.ID)&&t.DataInizio<=d.ds&&(t.DataFine||t.DataInizio)>=d.ds;
+      });
+
+      // Check installazione
+      const instDay = installazioni.find(i=>{
+        const tecIds=(i.TecniciIDs||'').split(',').filter(Boolean);
+        return tecIds.includes(tec.ID)&&i.DataInizio<=d.ds&&(i.DataFinePrevista||i.DataInizio)>=d.ds;
+      });
+
       let cellClass = isSat ? 'weekend' : isFerie ? 'ferie' : isPermesso ? 'ferie' : '';
-      const cellBg = isPermesso ? 'background:#FEF3C7;' : '';
+      const cellBg = isPermesso ? 'background:#FEF3C7;' : isFerie ? '' : trasDay ? 'background:#EFF6FF;' : instDay ? 'background:#FFFBEB;' : '';
       html += `<td class="${cellClass}" style="${cellBg}${isSat?'border-right:2px solid #6366F1':''}" ondragover="event.preventDefault()" ondrop="onMonthDrop(event,'${tec.ID}','${d.ds}')">`;
 
       // Rep badge
@@ -7320,8 +7376,19 @@ function renderMonthPlan(){
         const richIco = {ferie:'🏖️',malattia:'🤒',permesso:'🕐',cambio_turno:'🔄',generico:'📝'}[richDay.Tipo]||'📝';
         html += `<div style="font-size:.55rem;color:#92400E;text-align:center;cursor:pointer" onclick="showRichDetail('${richDay.ID}')" title="${richDay.Tipo}: ${richDay.Motivo||'—'}\nDal ${richDay.DataInizio} al ${richDay.DataFine||richDay.DataInizio}">${richIco}</div>`;
       } else if(isFerieVincoli) {
-        // Ferie da vincoli (vecchio sistema)
         html += `<div style="font-size:.55rem;color:#92400E;text-align:center">🏖️</div>`;
+      }
+
+      // Trasferta badge
+      if(trasDay){
+        const cliName=getName(DATA.clienti||[],trasDay.ClienteID);
+        html += `<div style="font-size:.55rem;background:#DBEAFE;border-left:2px solid #3B82F6;padding:1px 3px;margin:1px 0;border-radius:2px;color:#1E40AF;cursor:pointer" onclick="showDetail('trasferta','${trasDay.ID}')" title="Trasferta: ${cliName}\nDal ${trasDay.DataInizio} al ${trasDay.DataFine||'?'}">🧳 ${(cliName||'').substring(0,compact?8:14)}</div>`;
+      }
+
+      // Installazione badge
+      if(instDay){
+        const cliName=getName(DATA.clienti||[],instDay.ClienteID);
+        html += `<div style="font-size:.55rem;background:#FEF3C7;border-left:2px solid #D97706;padding:1px 3px;margin:1px 0;border-radius:2px;color:#92400E;cursor:pointer" onclick="showDetail('installazione','${instDay.ID}')" title="Installazione: ${cliName}\nDal ${instDay.DataInizio} al ${instDay.DataFinePrevista||'?'}\nStato: ${instDay.Stato||''}">🏗️ ${(cliName||'').substring(0,compact?8:14)}</div>`;
       }
 
       // Interventi
@@ -7347,7 +7414,7 @@ function renderMonthPlan(){
   html += '<div style="margin-top:10px;padding:10px 14px;background:#F8FAFC;border-radius:6px;border:1px solid #E2E8F0;display:flex;gap:14px;flex-wrap:wrap;font-size:.7rem">';
   Object.entries(statoCol).forEach(([k,v]) => { html += `<span><span style="display:inline-block;width:10px;height:10px;background:${v};border-radius:2px;vertical-align:middle"></span> ${k.replace('_',' ')}</span>`; });
   const hasPreview = piano.some(p=>p._aiPreview);
-  html += ' · <span>📞 Reperibilita</span> · <span>🏖️ Ferie</span>';
+  html += ' · <span>🌙 Reperibilità</span> · <span>🏖️ Ferie</span> · <span>🧳 Trasferte</span> · <span>🏗️ Installazioni</span>';
   if(hasPreview) html += ' · <span style="border-left:2px dashed #8B5CF6;padding-left:4px">🤖 Anteprima AI</span> · <button class="btn btn-xs" style="background:#EF4444;color:white;font-size:.65rem" onclick="clearAIPreview()">✕ Rimuovi Anteprima</button>';
   html += ' · <span>Drag & drop per spostare</span></div>';
 

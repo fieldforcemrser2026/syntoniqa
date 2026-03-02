@@ -315,7 +315,8 @@ export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(Promise.all([
       checkInterventoReminders(env),
-      checkSLAUrgenze(env)
+      checkSLAUrgenze(env),
+      checkPMExpiry(env)
     ]));
   }
 };
@@ -2119,7 +2120,11 @@ async function handlePost(action, body, env) {
       // Load data context + vincoli dinamici (lean queries to avoid timeout)
       const meseTarget = vincoli.mese_target || '';
       const repFilter = meseTarget ? `&data_inizio=lte.${meseTarget}-31&data_fine=gte.${meseTarget}-01` : '';
-      const [allTecnici, allUrgenze, allClienti, vincoliCfg, allRep, allAutomezzi, allMacchine, allAssets] = await Promise.all([
+      // Filtri date per mese target
+      const meseStart = meseTarget ? `${meseTarget}-01` : '';
+      const meseEnd = meseTarget ? `${meseTarget}-31` : '';
+
+      const [allTecnici, allUrgenze, allClienti, vincoliCfg, allRep, allAutomezzi, allMacchine, allAssets, allRichieste, allTrasferte, allInstallazioni, allPianoDb] = await Promise.all([
         sb(env, 'utenti', 'GET', null, '?attivo=eq.true&obsoleto=eq.false&select=id,nome,cognome,base,ruolo,automezzo_id').catch(()=>[]),
         sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,schedulata)&order=data_segnalazione.desc&limit=20&select=id,problema,cliente_id,priorita_id').catch(()=>[]),
         sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno,citta_fatturazione&limit=150').catch(()=>[]),
@@ -2127,7 +2132,12 @@ async function handlePost(action, body, env) {
         sb(env, 'reperibilita', 'GET', null, `?obsoleto=eq.false${repFilter}&select=id,tecnico_id,data_inizio,data_fine,turno,tipo&order=data_inizio.asc&limit=100`).catch(()=>[]),
         sb(env, 'automezzi', 'GET', null, '?obsoleto=eq.false&select=id,targa,modello,stato&limit=20').catch(()=>[]),
         sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,seriale,note,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&order=prossimo_tagliando.asc&limit=50').catch(()=>[]),
-        sb(env, 'anagrafica_assets', 'GET', null, '?prossimo_controllo=not.is.null&select=id,nome_asset,numero_serie,modello,gruppo_attrezzatura,codice_m3,nome_account,prossimo_controllo&order=prossimo_controllo.asc&limit=50').catch(()=>[])
+        sb(env, 'anagrafica_assets', 'GET', null, '?prossimo_controllo=not.is.null&select=id,nome_asset,numero_serie,modello,gruppo_attrezzatura,codice_m3,nome_account,prossimo_controllo&order=prossimo_controllo.asc&limit=50').catch(()=>[]),
+        // NUOVI: richieste approvate, trasferte, installazioni, piano da DB
+        meseTarget ? sb(env, 'richieste', 'GET', null, `?stato=eq.approvata&obsoleto=eq.false&data_inizio=lte.${meseEnd}&data_fine=gte.${meseStart}&select=id,tecnico_id,tipo,data_inizio,data_fine,motivo&limit=100`).catch(()=>[]) : Promise.resolve([]),
+        meseTarget ? sb(env, 'trasferte', 'GET', null, `?obsoleto=eq.false&data_inizio=lte.${meseEnd}&data_fine=gte.${meseStart}&select=id,tecnico_id,tecnici_ids,cliente_id,data_inizio,data_fine&limit=50`).catch(()=>[]) : Promise.resolve([]),
+        meseTarget ? sb(env, 'installazioni', 'GET', null, `?obsoleto=eq.false&stato=in.(pianificato,in_corso,pianificata)&data_inizio=lte.${meseEnd}&select=id,tecnici_ids,cliente_id,data_inizio,data_fine_prevista,stato&limit=50`).catch(()=>[]) : Promise.resolve([]),
+        meseTarget ? sb(env, 'piano', 'GET', null, `?obsoleto=eq.false&stato=neq.annullato&data=gte.${meseStart}&data=lte.${meseEnd}&select=id,tecnico_id,tecnici_ids,cliente_id,data,ora_inizio,tipo_intervento_id,note,stato&limit=500`).catch(()=>[]) : Promise.resolve([])
       ]);
 
       // Parse vincoli dinamici dalla config (only if ctx.vincoli)
@@ -2168,11 +2178,52 @@ async function handlePost(action, body, env) {
         }).join('\n');
       }
 
-      // Piano esistente context (only if ctx.piano)
+      // Piano esistente context (from DB, not frontend) — always load if available
       let pianoEsistente = '';
-      if (ctx.piano && vincoli.piano_esistente?.length) {
-        pianoEsistente = '\nPIANO GIA ESISTENTE (non duplicare, complementa):\n' +
-          vincoli.piano_esistente.slice(0, 30).map(p => `- ${p.data} ${p.tecnico}: ${p.cliente} (${p.note || ''})`).join('\n');
+      if (ctx.piano) {
+        const pianoSrc = allPianoDb.length ? allPianoDb : (vincoli.piano_esistente || []);
+        if (pianoSrc.length) {
+          const getName2 = (id) => { const u = allTecnici.find(t => t.id === id); return u ? `${u.nome} ${u.cognome}` : id; };
+          const getCli2 = (id) => { const c = allClienti.find(x => x.codice_m3 === id); return c ? (c.nome_interno || c.nome_account || id) : id; };
+          pianoEsistente = '\nPIANO GIA ESISTENTE (non duplicare, complementa):\n' +
+            pianoSrc.slice(0, 40).map(p => {
+              const d = p.data || p.Data || '';
+              const tec = p.tecnico || getName2(p.tecnico_id || p.TecnicoID || '');
+              const cli = p.cliente || getCli2(p.cliente_id || p.ClienteID || '');
+              return `- ${d} ${tec}: ${cli} (${p.note || p.Note || ''})`;
+            }).join('\n');
+        }
+      }
+
+      // Indisponibilità context: richieste approvate (ferie/malattia/permesso) + trasferte + installazioni
+      let indispContext = '';
+      {
+        const getName3 = (id) => { const u = allTecnici.find(t => t.id === id); return u ? `${u.nome} ${u.cognome}` : id; };
+        const lines = [];
+        // Richieste approvate (ferie, malattia, permesso)
+        for (const r of allRichieste) {
+          lines.push(`- ${getName3(r.tecnico_id)}: ${r.tipo} dal ${r.data_inizio} al ${r.data_fine || r.data_inizio} (${r.motivo || ''}) [NON SCHEDULARE]`);
+        }
+        // Trasferte (tecnico impegnato fuori)
+        for (const t of allTrasferte) {
+          const tecIds = (t.tecnici_ids || t.tecnico_id || '').split(',').filter(Boolean);
+          const cliT = allClienti.find(c => c.codice_m3 === t.cliente_id);
+          tecIds.forEach(id => {
+            lines.push(`- ${getName3(id)}: TRASFERTA dal ${t.data_inizio} al ${t.data_fine || t.data_inizio} (${cliT ? cliT.nome_interno || cliT.nome_account : t.cliente_id || '?'}) [NON SCHEDULARE]`);
+          });
+        }
+        // Installazioni (tecnico/i occupati)
+        for (const inst of allInstallazioni) {
+          const tecIds = (inst.tecnici_ids || '').split(',').filter(Boolean);
+          if (!tecIds.length) continue;
+          const cliI = allClienti.find(c => c.codice_m3 === inst.cliente_id);
+          tecIds.forEach(id => {
+            lines.push(`- ${getName3(id)}: INSTALLAZIONE dal ${inst.data_inizio} al ${inst.data_fine_prevista || inst.data_inizio} (${cliI ? cliI.nome_interno || cliI.nome_account : inst.cliente_id || '?'}) [NON SCHEDULARE]`);
+          });
+        }
+        if (lines.length) {
+          indispContext = '\nTECNICI NON DISPONIBILI (NON schedulare in queste date):\n' + lines.join('\n');
+        }
       }
 
       // Automezzi context
@@ -2299,6 +2350,7 @@ AUTOMEZZI: ${autoList || 'Nessuno'}
 ${urgList ? 'URGENZE APERTE: ' + urgList : ''}
 CLIENTI: ${cliList}
 ${repContext}
+${indispContext}
 ${pianoEsistente}
 ${tagliandiContext}
 ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}
@@ -2310,7 +2362,7 @@ ${periodoIstruzione || 'Genera piano per OGNI giorno lavorativo (lun-ven)'}
 - Durata: un tagliando puo richiedere 4-8 ore (anche giornata intera). Urgenze 1-3h. Se tagliando=giornata intera, 1 solo intervento per quel tecnico.
 - "tagliando" e "service" sono sinonimi = manutenzione macchina. Nelle note scrivi il MODELLO macchina (es: "Astronaut A5", "Vector 70").
 - Affiancamento junior: se vincolo dice "affianca senior", genera DUE righe separate (una senior + una junior) con STESSO cliente/data/ora/furgone.
-- Tecnici assenti da vincoli: NON inserirli.
+- Tecnici assenti da vincoli o in ferie/malattia/trasferta/installazione: NON inserirli in quei giorni.
 - Usa il FURGONE indicato tra parentesi nel tecnico (es: "furgone:FURG_1"). Junior affiancato usa furgone del senior.
 - Raggruppa per zona (stessa citta per stesso tecnico nello stesso giorno).
 - Urgenze → primi giorni. Tagliandi scaduti → massima priorita.
@@ -2541,7 +2593,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId
         } catch {}
       }
 
-      // Helper: validate tecnicoId, fix furgoni, remove weekends, ENFORCE vincoli
+      // Helper: validate tecnicoId, fix furgoni, remove weekends, ENFORCE vincoli + indisponibilità
+      const postProcessWarnings = [];
       function postProcess(piano) {
         return (piano || []).map(p => {
           // Fix tecnicoId: se non valido, cerca match per nome
@@ -2566,14 +2619,57 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId
           return p;
         }).filter(p => {
           if (!p.tecnicoId || !validIds.has(p.tecnicoId)) return false;
-          // VINCOLO: rimuovi tecnici assenti
+          // VINCOLO: rimuovi tecnici assenti (da config vincoli)
           if (vincoliRules.assenti.has(p.tecnicoId)) return false;
           // Rimuovi sab/dom (tipo tagliando) — tieni solo urgenze di reperibilita
           try {
             const d = new Date(p.data);
-            const dow = d.getDay(); // 0=dom, 6=sab
+            const dow = d.getDay();
             if ((dow === 0 || dow === 6) && p.tipo !== 'urgenza') return false;
           } catch {}
+
+          // ── POST-PROCESSING DETERMINISTICO: verifica indisponibilità ──
+          const pData = (p.data || '').substring(0, 10);
+          if (!pData) return true;
+
+          // Check richieste approvate (ferie, malattia, permesso)
+          const conflictRich = allRichieste.find(r =>
+            r.tecnico_id === p.tecnicoId &&
+            r.data_inizio <= pData &&
+            (r.data_fine || r.data_inizio) >= pData
+          );
+          if (conflictRich) {
+            const tName = p.tecnico || p.tecnicoId;
+            postProcessWarnings.push(`${tName} in ${conflictRich.tipo} il ${pData} — rimosso`);
+            return false;
+          }
+
+          // Check trasferte
+          const conflictTrasf = allTrasferte.find(t => {
+            const tecIds = (t.tecnici_ids || t.tecnico_id || '').split(',').filter(Boolean);
+            return tecIds.includes(p.tecnicoId) &&
+              t.data_inizio <= pData &&
+              (t.data_fine || t.data_inizio) >= pData;
+          });
+          if (conflictTrasf) {
+            const tName = p.tecnico || p.tecnicoId;
+            postProcessWarnings.push(`${tName} in trasferta il ${pData} — rimosso`);
+            return false;
+          }
+
+          // Check installazioni
+          const conflictInst = allInstallazioni.find(i => {
+            const tecIds = (i.tecnici_ids || '').split(',').filter(Boolean);
+            return tecIds.includes(p.tecnicoId) &&
+              i.data_inizio <= pData &&
+              (i.data_fine_prevista || i.data_inizio) >= pData;
+          });
+          if (conflictInst) {
+            const tName = p.tecnico || p.tecnicoId;
+            postProcessWarnings.push(`${tName} in installazione il ${pData} — rimosso`);
+            return false;
+          }
+
           return true;
         });
       }
@@ -2594,6 +2690,7 @@ AUTOMEZZI: ${autoList || 'Nessuno'}
 ${urgList ? 'URGENZE APERTE: ' + urgList : ''}
 CLIENTI: ${cliList}
 ${repContext}
+${indispContext}
 ${pianoEsistente}
 ${tagliandiContext}
 ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}`;
@@ -2604,7 +2701,7 @@ ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}`;
 - Durata: un tagliando puo richiedere 4-8 ore (anche giornata intera). Urgenze 1-3h.
 - "tagliando" e "service" = sinonimi. Nelle note scrivi il MODELLO macchina (es: "Astronaut A5", "Vector 70").
 - Affiancamento junior+senior: genera DUE righe (una per senior, una per junior) con STESSO cliente/data/ora/furgone.
-- Tecnici marcati come assenti nei vincoli: NON inserirli.
+- Tecnici assenti da vincoli o in ferie/malattia/trasferta/installazione: NON inserirli in quei giorni.
 - Usa il FURGONE indicato tra parentesi nel tecnico.
 - Raggruppa per zona (stessa citta per stesso tecnico nello stesso giorno).
 - Urgenze → primi giorni. Tagliandi scaduti → massima priorita.
@@ -2677,6 +2774,7 @@ TECNICI (${nTecAttivi}): ${tecList}
 ${urgList ? 'URGENZE: ' + urgList : ''}
 CLIENTI: ${cliListShort}
 ${repContext ? repContext.substring(0, 500) : ''}
+${indispContext ? indispContext.substring(0, 800) : ''}
 ${chunkFileCtx ? 'FILE: ' + chunkFileCtx : ''}
 
 GENERA PIANO per ${targetDays.length} GIORNI: ${targetDays.join(', ')}
@@ -2715,10 +2813,11 @@ ${instructions}`;
           if (!allPiano.length) return err('AI non ha generato nessun intervento. Verifica le API key (GEMINI_KEY / GROQ_KEY).');
 
           const processed = postProcess(allPiano);
+          const allWarnArr = [...allWarnings, ...postProcessWarnings];
           return ok({
-            summary: `Piano ${meseTarget}: ${processed.length} interventi su ${[...new Set(processed.map(p=>p.data))].length} giorni (${chunksDone}/${chunks.length} parti)`,
+            summary: `Piano ${meseTarget}: ${processed.length} interventi su ${[...new Set(processed.map(p=>p.data))].length} giorni (${chunksDone}/${chunks.length} parti)${postProcessWarnings.length ? ` — ${postProcessWarnings.length} conflitti rimossi` : ''}`,
             piano: processed,
-            warnings: [...allWarnings],
+            warnings: allWarnArr,
             chunks: chunksDone
           });
 
@@ -2736,6 +2835,10 @@ ${instructions}`;
           const result = parseAIResponse(rawText);
           if (!result) return ok({ summary: 'Errore formato risposta', piano: [], warnings: ['Risposta AI non parsabile. Riprova.'], raw: rawText.substring(0, 1500) });
           result.piano = postProcess(result.piano);
+          if (postProcessWarnings.length) {
+            result.warnings = [...(result.warnings || []), ...postProcessWarnings];
+            result.summary = (result.summary || '') + ` — ${postProcessWarnings.length} conflitti rimossi`;
+          }
           return ok(result);
         }
       } catch (e) {
@@ -3318,6 +3421,120 @@ Rispondi SOLO con JSON valido:
       } catch {
         return ok({ categories: [], meta: {}, raw: rows[0].valore });
       }
+    }
+
+    // ──────── AVAILABILITY MAP (mappa disponibilità tecnici) ─────────
+    case 'getAvailabilityMap': {
+      const { mese_target: avMese } = body;
+      if (!avMese) return err('mese_target richiesto (YYYY-MM)');
+      const avStart = avMese + '-01';
+      const avLastDay = new Date(parseInt(avMese.split('-')[0]), parseInt(avMese.split('-')[1]), 0).getDate();
+      const avEnd = avMese + '-' + avLastDay;
+
+      const [avTecnici, avPiano, avRep, avRich, avTras, avInst, avUrg, avMacch, avVincoli] = await Promise.all([
+        sb(env, 'utenti', 'GET', null, '?attivo=eq.true&obsoleto=eq.false&ruolo=neq.admin&select=id,nome,cognome,ruolo,base,automezzo_id').catch(()=>[]),
+        sb(env, 'piano', 'GET', null, `?obsoleto=eq.false&stato=neq.annullato&data=gte.${avStart}&data=lte.${avEnd}&select=id,data,tecnico_id,tecnici_ids,cliente_id,tipo_intervento_id,stato,note&order=data.asc&limit=500`).catch(()=>[]),
+        sb(env, 'reperibilita', 'GET', null, `?obsoleto=eq.false&data_inizio=lte.${avEnd}&data_fine=gte.${avStart}&select=id,tecnico_id,data_inizio,data_fine,turno,tipo`).catch(()=>[]),
+        sb(env, 'richieste', 'GET', null, `?stato=eq.approvata&obsoleto=eq.false&data_inizio=lte.${avEnd}&data_fine=gte.${avStart}&select=id,tecnico_id,tipo,data_inizio,data_fine,motivo`).catch(()=>[]),
+        sb(env, 'trasferte', 'GET', null, `?obsoleto=eq.false&data_inizio=lte.${avEnd}&data_fine=gte.${avStart}&select=id,tecnico_id,tecnici_ids,data_inizio,data_fine,cliente_id,motivo`).catch(()=>[]),
+        sb(env, 'installazioni', 'GET', null, `?obsoleto=eq.false&stato=in.(pianificato,in_corso)&data_inizio=lte.${avEnd}&select=id,tecnico_id,tecnici_ids,data_inizio,data_fine,cliente_id,stato`).catch(()=>[]),
+        sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,schedulata)&obsoleto=eq.false&select=id,problema,priorita_id,tecnico_assegnato,cliente_id&order=data_segnalazione.desc&limit=30').catch(()=>[]),
+        sb(env, 'macchine', 'GET', null, `?obsoleto=eq.false&prossimo_tagliando=not.is.null&prossimo_tagliando=lte.${addDays(avEnd,60)}&select=id,seriale,modello,prossimo_tagliando,cliente_id,ore_lavoro&order=prossimo_tagliando.asc&limit=200`).catch(()=>[]),
+        sb(env, 'config', 'GET', null, '?chiave=eq.vincoli_categories&limit=1').catch(()=>[])
+      ]);
+
+      // Genera giorni lavorativi del mese (lun-sab, esclusa dom)
+      const giorni = [];
+      for (let d = 1; d <= avLastDay; d++) {
+        const dt = new Date(parseInt(avMese.split('-')[0]), parseInt(avMese.split('-')[1]) - 1, d);
+        if (dt.getDay() !== 0) { // escludi domenica
+          giorni.push(avMese + '-' + String(d).padStart(2, '0'));
+        }
+      }
+
+      // Costruisci mappa per tecnico
+      const tecnici = avTecnici.map(t => {
+        const gg = {};
+        for (const ds of giorni) {
+          const isSab = new Date(ds).getDay() === 6;
+          const entry = { stato: isSab ? 'sabato' : 'disponibile', eventi: [] };
+
+          // Piano
+          const pianoDay = avPiano.filter(p => p.data === ds && (p.tecnico_id === t.id || (p.tecnici_ids || '').includes(t.id)));
+          if (pianoDay.length) { entry.eventi.push(...pianoDay.map(p => ({ tipo: 'piano', id: p.id, tipoInt: p.tipo_intervento_id }))); }
+
+          // Reperibilità
+          const repDay = avRep.find(r => r.tecnico_id === t.id && r.data_inizio <= ds && r.data_fine >= ds);
+          if (repDay) { entry.eventi.push({ tipo: 'reperibilita', id: repDay.id }); }
+
+          // Richieste approvate (ferie/malattia/permesso)
+          const richDay = avRich.find(r => r.tecnico_id === t.id && r.data_inizio <= ds && (r.data_fine || r.data_inizio) >= ds);
+          if (richDay) {
+            entry.stato = richDay.tipo === 'malattia' ? 'malattia' : richDay.tipo === 'ferie' ? 'ferie' : 'permesso';
+            entry.eventi.push({ tipo: 'richiesta', id: richDay.id, sottotipo: richDay.tipo });
+          }
+
+          // Trasferte
+          const trasDay = avTras.find(tr => (tr.tecnico_id === t.id || (tr.tecnici_ids || '').includes(t.id)) && tr.data_inizio <= ds && (tr.data_fine || tr.data_inizio) >= ds);
+          if (trasDay) {
+            entry.stato = 'trasferta';
+            entry.eventi.push({ tipo: 'trasferta', id: trasDay.id, cliente_id: trasDay.cliente_id });
+          }
+
+          // Installazioni
+          const instDay = avInst.find(i => (i.tecnico_id === t.id || (i.tecnici_ids || '').includes(t.id)) && i.data_inizio <= ds && (i.data_fine || i.data_inizio) >= ds);
+          if (instDay) {
+            entry.stato = 'installazione';
+            entry.eventi.push({ tipo: 'installazione', id: instDay.id, cliente_id: instDay.cliente_id });
+          }
+
+          gg[ds] = entry;
+        }
+        return { id: t.id, nome: `${t.nome} ${t.cognome || ''}`.trim(), ruolo: t.ruolo, base: t.base, automezzo_id: t.automezzo_id, giorni: gg };
+      });
+
+      // Tagliandi pendenti con urgenza
+      const today4 = new Date().toISOString().split('T')[0];
+      const tagliandiPendenti = avMacch.map(m => {
+        const ggDiff = Math.round((new Date(m.prossimo_tagliando) - new Date(today4)) / 86400000);
+        return {
+          macchina_id: m.id, seriale: m.seriale, modello: m.modello,
+          cliente_id: m.cliente_id, prossimo: m.prossimo_tagliando,
+          ore_lavoro: m.ore_lavoro,
+          urgenza: ggDiff < 0 ? 'SCADUTO' : ggDiff <= 7 ? 'URGENTE' : ggDiff <= 30 ? 'PROSSIMO' : 'PROGRAMMATO',
+          giorni: ggDiff
+        };
+      }).sort((a, b) => a.giorni - b.giorni);
+
+      // Vincoli noti
+      let vincoliNoti = '';
+      try {
+        if (avVincoli?.[0]?.valore) {
+          const vc = JSON.parse(avVincoli[0].valore);
+          vincoliNoti = (vc.categories || []).filter(c => c.attiva !== false).map(c =>
+            `[${c.icona || '📌'} ${c.nome}]\n` + (c.regole || []).filter(r => r.testo).map(r => `- ${r.testo}`).join('\n')
+          ).join('\n\n');
+        }
+      } catch {}
+
+      // Summary stats
+      const summary = {
+        total_tecnici: avTecnici.length,
+        ferie_days: avRich.filter(r => r.tipo === 'ferie').length,
+        malattia_days: avRich.filter(r => r.tipo === 'malattia').length,
+        permessi: avRich.filter(r => !['ferie', 'malattia'].includes(r.tipo)).length,
+        trasferte: avTras.length,
+        installazioni: avInst.length,
+        tagliandi_scaduti: tagliandiPendenti.filter(t => t.urgenza === 'SCADUTO').length,
+        tagliandi_urgenti: tagliandiPendenti.filter(t => t.urgenza === 'URGENTE').length,
+        urgenze_aperte: avUrg.length,
+        piano_esistenti: avPiano.length
+      };
+
+      return ok(pascalizeArrays({
+        mese: avMese, tecnici, tagliandi_pendenti: tagliandiPendenti,
+        urgenze_aperte: avUrg, vincoli_noti: vincoliNoti, summary
+      }));
     }
 
     // ──────── APPROVAL WORKFLOW ─────────────────────────────────────
@@ -5166,8 +5383,8 @@ Rispondi SOLO con JSON valido:
       cs[cmId].posizione = (pos + 1) % seq.length;
       cs[cmId].ultimo_completato = dataComp;
 
-      // 6. Calcola prossima data
-      const prossimaData = addDays(dataComp, intervallo);
+      // 6. Calcola prossima data (skip weekend)
+      const prossimaData = skipWeekend(addDays(dataComp, Math.max(intervallo, 1)));
       const prossimoTipo = seq[cs[cmId].posizione];
 
       // 7. Aggiorna prossimo_tagliando nella macchina
@@ -5258,10 +5475,11 @@ Rispondi SOLO con JSON valido:
         let safety = 0;
         while (nextDate <= endDate2 && safety < 10) {
           safety++;
+          nextDate = skipWeekend(nextDate); // Skip sabato/domenica
           const key = `${mac.id}_${nextDate}`;
           if (existingKeys.has(key)) {
             skipped++;
-            nextDate = addDays(nextDate, intervallo2);
+            nextDate = skipWeekend(addDays(nextDate, intervallo2));
             pos2 = (pos2 + 1) % seq2.length;
             continue;
           }
@@ -5282,7 +5500,7 @@ Rispondi SOLO con JSON valido:
             created2++;
           } catch (e) { errors2.push({ macchina: mac.id, err: e.message }); }
 
-          nextDate = addDays(nextDate, intervallo2);
+          nextDate = skipWeekend(addDays(nextDate, intervallo2));
           pos2 = (pos2 + 1) % seq2.length;
         }
       }
@@ -5797,6 +6015,71 @@ async function checkSLAUrgenze(env) {
       }
     }
   } catch (e) { console.error('[CRON] checkSLAUrgenze error:', e.message); }
+}
+
+// ============ CRON: PM EXPIRY — Tagliandi scaduti/urgenti ============
+async function checkPMExpiry(env) {
+  try {
+    const now = new Date();
+    const itFormatter = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' });
+    const today3 = itFormatter.format(now);
+    const warning7 = addDays(today3, 7);
+
+    const macchine3 = await sb(env, 'macchine', 'GET', null,
+      `?obsoleto=eq.false&prossimo_tagliando=not.is.null&prossimo_tagliando=lte.${warning7}&select=id,seriale,modello,prossimo_tagliando,cliente_id&order=prossimo_tagliando.asc&limit=200`
+    ).catch(() => []);
+
+    if (!macchine3.length) { console.log('[CRON] checkPMExpiry: 0 tagliandi critici'); return; }
+
+    const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+    const group = env.TELEGRAM_GROUP || '-5236723213';
+    let scaduti = 0, urgenti = 0;
+
+    for (const m of macchine3) {
+      const gg = Math.round((new Date(m.prossimo_tagliando) - new Date(today3)) / 86400000);
+      const isScaduto = gg < 0;
+      const cliNome = await getEntityName(env, 'clienti', m.cliente_id);
+
+      // Anti-duplicato: 1 notifica per macchina per giorno
+      const notifId = `PM_${isScaduto ? 'SCAD' : 'URG'}_${m.id}_${today3}`;
+      const existing = await sb(env, 'notifiche', 'GET', null, `?id=eq.${notifId}&limit=1`).catch(() => []);
+      if (existing?.length) continue;
+
+      const emoji = isScaduto ? '🔴' : '🟡';
+      const label = isScaduto ? 'SCADUTO' : 'URGENTE';
+      const msg = `${emoji} PM ${label}: ${m.modello || m.id} (${m.seriale || '?'}) presso ${cliNome} — ${isScaduto ? 'scaduto da ' + Math.abs(gg) + 'gg' : 'tra ' + gg + 'gg'} (${m.prossimo_tagliando})`;
+
+      // Notifica in-app admin
+      const admins = await sb(env, 'utenti', 'GET', null, '?ruolo=eq.admin&obsoleto=eq.false&select=id').catch(() => []);
+      for (const adm of admins) {
+        await sb(env, 'notifiche', 'POST', {
+          id: notifId + '_' + adm.id.slice(-3), tenant_id: tid,
+          tipo: isScaduto ? 'pm_scaduto' : 'pm_urgente',
+          oggetto: `${emoji} Tagliando ${label} — ${m.modello || m.id}`,
+          testo: `${m.modello || m.id} (S/N: ${m.seriale || '?'}) presso ${cliNome}. Tagliando ${isScaduto ? 'scaduto da ' + Math.abs(gg) + ' giorni' : 'in scadenza tra ' + gg + ' giorni'} (${m.prossimo_tagliando}).`,
+          destinatario_id: adm.id, priorita: isScaduto ? 'alta' : 'media', data_invio: now.toISOString()
+        }).catch(() => {});
+      }
+
+      // TG gruppo (solo scaduti, per non spammare)
+      if (isScaduto && env.TELEGRAM_BOT_TOKEN) {
+        await sendTelegram(env, group, msg).catch(() => {});
+      }
+
+      if (isScaduto) scaduti++; else urgenti++;
+    }
+
+    console.log(`[CRON] checkPMExpiry: ${scaduti} scaduti, ${urgenti} urgenti (<7gg)`);
+  } catch (e) { console.error('[CRON] checkPMExpiry error:', e.message); }
+}
+
+// Fix bulkGeneratePMCalendar: skip sabato/domenica nelle date generate
+function skipWeekend(dateStr) {
+  const d = new Date(dateStr);
+  const dow = d.getDay();
+  if (dow === 0) return addDays(dateStr, 1); // dom → lun
+  if (dow === 6) return addDays(dateStr, 2); // sab → lun
+  return dateStr;
 }
 
 // Helper per nome entità
