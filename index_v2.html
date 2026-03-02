@@ -118,7 +118,9 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 .btn-outline{background:var(--white);border:1.5px solid var(--gray3);color:var(--dark)}
 .btn-ghost{background:transparent;color:var(--gray);padding:8px}
 .btn-sm{padding:8px 14px;font-size:.8125rem}
+.btn-xs{padding:6px 10px;font-size:.75rem}
 .btn-block{width:100%}
+.sel-filter{padding:6px 10px;font-size:.8125rem;border:1px solid var(--gray3);border-radius:var(--radius-sm);background:var(--white);font-family:var(--font);cursor:pointer;color:var(--dark)}
 
 /* HEADER */
 .hdr{position:fixed;top:0;left:0;right:0;height:var(--hh);background:var(--c1);color:var(--white);display:flex;align-items:center;justify-content:space-between;padding:0 16px;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.15)}
@@ -283,7 +285,7 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <p style="font-size:.8125rem;color:var(--gray);margin-bottom:12px">Inserisci il tuo username. L'admin riceverà una notifica per resettare la tua password.</p>
 <div class="field"><label>Username</label><input type="text" id="forgotUsername" placeholder="nome.cognome"></div>
 <div id="forgotMsg" style="font-size:.8125rem;margin-bottom:8px;display:none"></div>
-<button class="btn btn-primary btn-block btn-sm" onclick="sendForgotPwd()">📤 Invia richiesta reset</button>
+<button class="btn btn-primary btn-block" onclick="sendForgotPwd()">📤 Invia richiesta reset</button>
 <a href="#" onclick="hideForgotPwd();return false" style="display:block;text-align:center;margin-top:8px;font-size:.8125rem;color:var(--gray)">← Torna al login</a>
 </div>
 </div>
@@ -354,7 +356,7 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 
 <!-- PAGE: ORDINI -->
 <div class="page" id="pgOrdini">
-<button class="btn btn-primary btn-block" style="margin-bottom:12px" onclick="openSheet('shOrdine')">+ Nuovo Ordine Ricambi</button>
+<button class="btn btn-primary btn-block" style="margin-bottom:12px" onclick="openSheet('shOrdine')">📦 + Nuovo Ordine Ricambi</button>
 <div id="ordList"></div>
 </div>
 
@@ -528,7 +530,7 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <div class="field"><label>Password attuale</label><input type="password" id="cpOld" placeholder="••••••"></div>
 <div class="field"><label>Nuova password</label><input type="password" id="cpNew" placeholder="••••••"></div>
 <div class="field"><label>Conferma nuova password</label><input type="password" id="cpConf" placeholder="••••••"></div>
-<button class="btn btn-primary btn-block btn-sm" onclick="doChangePassword()">🔑 Cambia Password</button>
+<button class="btn btn-primary btn-block" onclick="doChangePassword()">🔑 Cambia Password</button>
 </div>
 </div>
 <div style="padding:16px"><button class="btn btn-outline btn-block" onclick="logout()">🚪 Esci</button></div>
@@ -550,7 +552,7 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 
 <!-- PAGE: LE MIE KPI -->
 <div class="page" id="pgKpi">
-<div class="card"><div class="card-head"><h3>📊 Le mie KPI</h3><select id="kpiPeriodo" class="btn btn-ghost btn-sm" onchange="renderKpi()" style="font-size:.75rem"><option value="7">Ultimi 7 giorni</option><option value="30">Ultimo mese</option><option value="90">Ultimo trimestre</option></select></div>
+<div class="card"><div class="card-head"><h3>📊 Le mie KPI</h3><select id="kpiPeriodo" class="sel-filter" onchange="renderKpi()"><option value="7">Ultimi 7 giorni</option><option value="30">Ultimo mese</option><option value="90">Ultimo trimestre</option></select></div>
 <div class="card-body">
 <div class="kpi-row" id="kpiCards" style="grid-template-columns:repeat(2,1fr)"></div>
 <div id="kpiCharts" style="margin-top:16px"></div>

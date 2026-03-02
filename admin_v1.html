@@ -488,6 +488,14 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 /* ===== TOOLTIP ===== */
 [data-tip]{position:relative}
 [data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:var(--dark);color:var(--white);padding:4px 10px;border-radius:4px;font-size:0.6875rem;white-space:nowrap;z-index:100}
+
+/* ===== FILTER INPUTS ===== */
+.inp-filter{padding:8px 12px;font-size:.8125rem;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);background:var(--white)}
+.inp-filter:focus{border-color:var(--c1);outline:none}
+
+/* ===== AI PLANNER BUTTONS ===== */
+.btn-ghost-light{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.25)}
+.btn-ghost-light:hover{background:rgba(255,255,255,.25)}
 </style>
 </head>
 <body>
@@ -593,7 +601,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="kpi-grid" id="kpiDash"></div>
 <div class="grid-2 mb">
 <div class="card"><div class="card-head"><h3>📋 Interventi Oggi</h3><button class="btn btn-primary btn-sm" onclick="openModal('modalPiano')">+ Nuovo</button></div><div class="card-body np" style="max-height:360px;overflow-y:auto"><table class="tbl"><thead><tr><th>Ora</th><th>Tecnico</th><th>🚐</th><th>Cliente</th><th>Tipo</th><th>Stato</th><th></th></tr></thead><tbody id="tblOggi"></tbody></table></div></div>
-<div class="card"><div class="card-head"><h3>🚨 Urgenze Aperte</h3><button class="btn btn-err btn-sm" onclick="openModal('modalUrgenza')">+ Nuova</button></div><div class="card-body np" style="max-height:360px;overflow-y:auto"><table class="tbl"><thead><tr><th>Priorità</th><th>Cliente</th><th>Problema</th><th>SLA</th><th>Stato</th><th></th></tr></thead><tbody id="tblUrgDash"></tbody></table></div></div>
+<div class="card"><div class="card-head"><h3>🚨 Urgenze Aperte</h3><button class="btn btn-err btn-sm" onclick="openModal('modalUrgenza')">+ Nuova Urgenza</button></div><div class="card-body np" style="max-height:360px;overflow-y:auto"><table class="tbl"><thead><tr><th>Priorità</th><th>Cliente</th><th>Problema</th><th>SLA</th><th>Stato</th><th></th></tr></thead><tbody id="tblUrgDash"></tbody></table></div></div>
 </div>
 <!-- Alert critici -->
 <div id="dashAlerts" class="mb" style="display:none"></div>
@@ -624,7 +632,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 <div class="card-body">
 <div class="map-controls mb-sm">
-<select id="calFiltroTec" onchange="renderCal()" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem"><option value="">Tutti i tecnici</option></select>
+<select id="calFiltroTec" onchange="renderCal()" class="inp-filter"><option value="">Tutti i tecnici</option></select>
 </div>
 <div class="cal-grid" id="calGrid"></div>
 <div id="calDetail" style="margin-top:16px"></div>
@@ -638,10 +646,10 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card-head">
 <h3>📋 Tutti gli Interventi</h3>
 <div class="btn-group">
-<input type="date" id="filtPianoDataDa" onchange="renderPiano()" style="padding:5px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem" title="Da data">
-<input type="date" id="filtPianoDataA" onchange="renderPiano()" style="padding:5px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem" title="A data">
-<select id="filtPianoStato" onchange="renderPiano()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti gli stati</option><option value="da_confermare">⏳ Da Confermare</option><option value="pianificato">Pianificato</option><option value="in_corso">In Corso</option><option value="completato">Completato</option><option value="annullato">Annullato</option></select>
-<select id="filtPianoTec" onchange="renderPiano()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti i tecnici</option></select>
+<input type="date" id="filtPianoDataDa" onchange="renderPiano()" class="inp-filter" title="Da data">
+<input type="date" id="filtPianoDataA" onchange="renderPiano()" class="inp-filter" title="A data">
+<select id="filtPianoStato" onchange="renderPiano()" class="inp-filter"><option value="">Tutti gli stati</option><option value="da_confermare">⏳ Da Confermare</option><option value="pianificato">Pianificato</option><option value="in_corso">In Corso</option><option value="completato">Completato</option><option value="annullato">Annullato</option></select>
+<select id="filtPianoTec" onchange="renderPiano()" class="inp-filter"><option value="">Tutti i tecnici</option></select>
 <button class="btn btn-ghost btn-sm" onclick="exportPianoCSV()" title="Esporta CSV">📥</button>
 <button class="btn btn-primary btn-sm" onclick="openModal('modalPiano')">+ Nuovo Intervento</button>
 </div>
@@ -658,9 +666,9 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card-head">
 <h3>🚨 Gestione Urgenze</h3>
 <div class="btn-group">
-<input type="date" id="filtUrgDataDa" onchange="renderUrgenze()" style="padding:5px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem" title="Da data">
-<input type="date" id="filtUrgDataA" onchange="renderUrgenze()" style="padding:5px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem" title="A data">
-<select id="filtUrgStato" onchange="renderUrgenze()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti</option><option value="aperta">🔴 Aperte</option><option value="assegnata">👤 Assegnate</option><option value="schedulata">📅 Schedulate</option><option value="in_corso">⚡ In Corso</option><option value="risolta">✅ Risolte</option><option value="chiusa">📁 Chiuse</option></select>
+<input type="date" id="filtUrgDataDa" onchange="renderUrgenze()" class="inp-filter" title="Da data">
+<input type="date" id="filtUrgDataA" onchange="renderUrgenze()" class="inp-filter" title="A data">
+<select id="filtUrgStato" onchange="renderUrgenze()" class="inp-filter"><option value="">Tutti</option><option value="aperta">🔴 Aperte</option><option value="assegnata">👤 Assegnate</option><option value="schedulata">📅 Schedulate</option><option value="in_corso">⚡ In Corso</option><option value="risolta">✅ Risolte</option><option value="chiusa">📁 Chiuse</option></select>
 <button class="btn btn-ghost btn-sm" onclick="exportUrgenzeCSV()" title="Esporta CSV">📥</button>
 <button class="btn btn-err btn-urgent" onclick="openModal('modalUrgenza')">🚨 + NUOVA URGENZA</button>
 </div>
@@ -677,7 +685,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card-head">
 <h3>📦 Gestione Ordini Ricambi</h3>
 <div class="btn-group">
-<select id="filtOrdStato" onchange="renderOrdini()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti</option><option value="richiesto">Richiesto</option><option value="preso_in_carico">Preso in Carico</option><option value="ordinato">Ordinato</option><option value="in_arrivo">In Arrivo</option><option value="arrivato">Arrivato</option></select>
+<select id="filtOrdStato" onchange="renderOrdini()" class="inp-filter"><option value="">Tutti</option><option value="richiesto">Richiesto</option><option value="preso_in_carico">Preso in Carico</option><option value="ordinato">Ordinato</option><option value="in_arrivo">In Arrivo</option><option value="arrivato">Arrivato</option></select>
 <button class="btn btn-ghost btn-sm" onclick="exportOrdiniCSV()" title="Esporta CSV">📥</button>
 <button class="btn btn-info btn-sm" onclick="EDITING.ordine=null;document.querySelector('#modalOrdine .modal-head h2').textContent='📦 Nuovo Ordine';openModal('modalOrdine')">+ Nuovo Ordine</button>
 </div>
@@ -701,7 +709,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <!-- ========== SEC: INSTALLAZIONI ========== -->
 <section class="sec" id="secInstallazioni">
 <div class="card">
-<div class="card-head"><h3>🏗️ Installazioni in Corso</h3><button class="btn btn-primary btn-sm" onclick="EDITING.installazione=null;document.querySelector('#modalInstall .modal-head h2').textContent='🏗️ Nuova Installazione';openModal('modalInstall')">+ Nuova</button></div>
+<div class="card-head"><h3>🏗️ Installazioni in Corso</h3><button class="btn btn-primary btn-sm" onclick="EDITING.installazione=null;document.querySelector('#modalInstall .modal-head h2').textContent='🏗️ Nuova Installazione';openModal('modalInstall')">+ Nuova Installazione</button></div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
 <table class="tbl"><thead><tr><th>Cliente</th><th>Macchina</th><th>Inizio</th><th>Fine Prev.</th><th>Fase</th><th>Tecnici</th><th>Stato</th><th></th></tr></thead><tbody id="tblInstall"></tbody></table>
 </div>
@@ -741,7 +749,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card-head"><h3>🔔 Notifiche</h3>
 <div class="btn-group">
 <button class="btn btn-ghost btn-sm" onclick="markAllRead()">Segna tutte lette</button>
-<button class="btn btn-primary btn-sm" onclick="openModal('modalNotifica')">+ Nuova</button>
+<button class="btn btn-primary btn-sm" onclick="openModal('modalNotifica')">+ Nuova Notifica</button>
 </div>
 </div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
@@ -755,7 +763,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card">
 <div class="card-head"><h3>📝 Richieste Ferie / Permessi</h3>
 <div class="btn-group">
-<select id="filtRichStato" onchange="renderRichieste()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti gli stati</option><option value="in_attesa">⏳ In Attesa</option><option value="approvata">✅ Approvata</option><option value="rifiutata">❌ Rifiutata</option></select>
+<select id="filtRichStato" onchange="renderRichieste()" class="inp-filter"><option value="">Tutti gli stati</option><option value="in_attesa">⏳ In Attesa</option><option value="approvata">✅ Approvata</option><option value="rifiutata">❌ Rifiutata</option></select>
 <button class="btn btn-ok btn-sm" onclick="openNewRichiesta()">+ Nuova Richiesta</button>
 </div>
 </div>
@@ -770,7 +778,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card">
 <div class="card-head"><h3>🏢 Anagrafica Clienti</h3>
 <div class="btn-group">
-<input type="text" id="srcClienti" placeholder="🔍 Cerca..." oninput="renderClienti()" style="padding:6px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem;width:200px">
+<input type="text" id="srcClienti" placeholder="🔍 Cerca..." oninput="renderClienti()" class="inp-filter" style="width:200px">
 <button class="btn btn-ok btn-sm" onclick="apiCall('geocodeAll',{},'POST').then(r=>{toast('Geocodificati '+r.updated+' clienti','ok');refreshData()})">🌍 Geocodifica</button>
 <button class="btn btn-ghost btn-sm" onclick="exportClientiCSV()" title="Esporta CSV">📥</button>
 <button class="btn btn-ok btn-sm" onclick="openNewCliente()">+ Nuovo Cliente</button>
@@ -788,10 +796,10 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card">
 <div class="card-head"><h3>⚙️ Parco Macchine</h3>
 <div class="btn-group" style="flex-wrap:wrap;gap:6px">
-<input type="text" id="srcMacch" placeholder="Cerca macchina..." oninput="renderMacchine()" style="padding:6px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem;width:200px">
-<select id="filtMacchCli" onchange="renderMacchine()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti i clienti</option></select>
-<select id="filtMacchType" onchange="renderMacchine()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti i tipi</option></select>
-<select id="filtMacchView" onchange="renderMacchine()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem">
+<input type="text" id="srcMacch" placeholder="Cerca macchina..." oninput="renderMacchine()" class="inp-filter" style="width:200px">
+<select id="filtMacchCli" onchange="renderMacchine()" class="inp-filter"><option value="">Tutti i clienti</option></select>
+<select id="filtMacchType" onchange="renderMacchine()" class="inp-filter"><option value="">Tutti i tipi</option></select>
+<select id="filtMacchView" onchange="renderMacchine()" class="inp-filter">
   <option value="tree">Vista ad albero</option>
   <option value="list">Vista lista</option>
 </select>
@@ -808,7 +816,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
   <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;max-width:700px;background:white;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eee">
       <h4 id="macchMapTitle" style="margin:0"></h4>
-      <button class="btn btn-xs" onclick="closeMacchMap()">✕</button>
+      <button class="btn btn-sm" onclick="closeMacchMap()">✕</button>
     </div>
     <div id="macchMapContainer" style="height:400px"></div>
   </div>
@@ -874,11 +882,11 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div style="border-top:1px solid #E5E7EB;padding-top:10px;margin-top:8px">
 <div style="font-size:.75rem;color:var(--gray);margin-bottom:6px">Suggerimenti rapidi:</div>
 <div style="display:flex;flex-wrap:wrap;gap:4px" id="vincoliQuickAdd">
-<button class="btn btn-xs btn-outline" onclick="addManualVincolo('👥 Accoppiamento Junior+Senior','Gino/Giuseppe/Emanuele devono lavorare affiancati a un senior (Jacopo/Anton/Giovanni)')">👥 Junior+Senior</button>
-<button class="btn btn-xs btn-outline" onclick="addManualVincolo('🚫 Tecnico non disponibile','[Nome] non disponibile per [motivo]')">🚫 Non disponibile</button>
-<button class="btn btn-xs btn-outline" onclick="addManualVincolo('🔧 Competenza specifica','Solo [Nome] può intervenire su [tipo macchina]')">🔧 Competenza</button>
-<button class="btn btn-xs btn-outline" onclick="addManualVincolo('🚗 Furgone fuori servizio','Furgone [FURG_X] in officina dal [data] al [data]')">🚗 Furgone KO</button>
-<button class="btn btn-xs btn-outline" onclick="addManualVincolo('📍 Zona geografica','[Nome] preferibilmente in zona [città/area]')">📍 Zona</button>
+<button class="btn btn-sm btn-outline" onclick="addManualVincolo('👥 Accoppiamento Junior+Senior','Gino/Giuseppe/Emanuele devono lavorare affiancati a un senior (Jacopo/Anton/Giovanni)')">👥 Junior+Senior</button>
+<button class="btn btn-sm btn-outline" onclick="addManualVincolo('🚫 Tecnico non disponibile','[Nome] non disponibile per [motivo]')">🚫 Non disponibile</button>
+<button class="btn btn-sm btn-outline" onclick="addManualVincolo('🔧 Competenza specifica','Solo [Nome] può intervenire su [tipo macchina]')">🔧 Competenza</button>
+<button class="btn btn-sm btn-outline" onclick="addManualVincolo('🚗 Furgone fuori servizio','Furgone [FURG_X] in officina dal [data] al [data]')">🚗 Furgone KO</button>
+<button class="btn btn-sm btn-outline" onclick="addManualVincolo('📍 Zona geografica','[Nome] preferibilmente in zona [città/area]')">📍 Zona</button>
 </div>
 </div>
 </div>
@@ -910,7 +918,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 <div class="card-body">
 <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-<select id="monthFiltroTec" onchange="renderMonthPlan()" style="padding:5px 8px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutti i tecnici</option></select>
+<select id="monthFiltroTec" onchange="renderMonthPlan()" class="inp-filter"><option value="">Tutti i tecnici</option></select>
 <label style="font-size:.75rem;display:flex;align-items:center;gap:4px"><input type="checkbox" id="monthShowRep" onchange="renderMonthPlan()" checked> Reperibilita</label>
 <label style="font-size:.75rem;display:flex;align-items:center;gap:4px"><input type="checkbox" id="monthShowFerie" onchange="renderMonthPlan()" checked> Ferie</label>
 <label style="font-size:.75rem;display:flex;align-items:center;gap:4px"><input type="checkbox" id="monthShowTrasf" onchange="renderMonthPlan()" checked> Trasferte</label>
@@ -1028,7 +1036,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <p style="color:rgba(255,255,255,.5);text-align:center;padding:20px">Carica l'anteprima dal passo 1...</p>
 </div>
 <div style="display:flex;gap:8px;flex-wrap:wrap">
-<button class="btn btn-lg" style="background:rgba(255,255,255,.15);color:white" onclick="aiGoToStep(1)">← Indietro</button>
+<button class="btn btn-lg btn-ghost-light" onclick="aiGoToStep(1)">← Indietro</button>
 <button class="btn btn-lg btn-ai" onclick="aiGenerateFromPreview()">🤖 Genera Piano →</button>
 </div>
 </div>
@@ -1040,7 +1048,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 <div class="ai-result" id="aiResult" style="display:none"></div>
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
-<button class="btn btn-lg" style="background:rgba(255,255,255,.15);color:white" onclick="aiGoToStep(1)">← Riconfigura</button>
+<button class="btn btn-lg btn-ghost-light" onclick="aiGoToStep(1)">← Riconfigura</button>
 <button class="btn btn-lg btn-success" onclick="downloadAIPlanXlsx()" id="btnDownloadPlan" disabled>📥 Scarica Excel</button>
 <button class="btn btn-lg btn-ok" onclick="aiGoToStep(4)" id="btnGoStep4" disabled>Anteprima Piano →</button>
 </div>
@@ -1053,9 +1061,9 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <p style="color:rgba(255,255,255,.5)">Il piano generato è pronto. Verifica e applica al sistema.</p>
 </div>
 <div style="display:flex;gap:8px;flex-wrap:wrap">
-<button class="btn btn-lg" style="background:rgba(255,255,255,.15);color:white" onclick="aiGoToStep(3)">← Indietro</button>
+<button class="btn btn-lg btn-ghost-light" onclick="aiGoToStep(3)">← Indietro</button>
 <button class="btn btn-lg btn-ok" onclick="applyAI()" id="btnApplyAI" disabled>✅ Applica al Sistema</button>
-<button class="btn btn-lg" style="background:var(--info);color:white" onclick="submitAIPlanForApproval()" id="btnSubmitPlan" disabled>📤 Invia per Approvazione</button>
+<button class="btn btn-lg btn-info" onclick="submitAIPlanForApproval()" id="btnSubmitPlan" disabled>📤 Invia per Approvazione</button>
 </div>
 </div>
 </div>
@@ -1064,7 +1072,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card" style="margin-top:24px">
 <div class="card-head"><h3>📋 Iter Approvativo Piano</h3>
 <div class="btn-group">
-<select id="approvalFilter" onchange="renderApprovalQueue()" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem">
+<select id="approvalFilter" onchange="renderApprovalQueue()" class="inp-filter">
 <option value="">Tutti</option><option value="in_attesa">In attesa</option><option value="approvato">Approvati</option><option value="rifiutato">Rifiutati</option>
 </select>
 </div>
@@ -1080,7 +1088,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card" style="margin-top:16px" id="cardTecnicoPlan">
 <div class="card-head"><h3>👷 Piano Personale</h3>
 <div class="btn-group">
-<select id="tecViewSelect" onchange="renderTecnicoPlan()" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem">
+<select id="tecViewSelect" onchange="renderTecnicoPlan()" class="inp-filter">
 <option value="mio">Il mio piano</option><option value="tutti">Tutti i piani (sola lettura)</option>
 </select>
 </div>
@@ -1109,7 +1117,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
     <div id="mapTecCbList" style="max-height:200px;overflow-y:auto"></div>
   </div>
 </div>
-<select id="mapFiltroGiorno" onchange="updateMap()" style="padding:6px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem"><option value="tutti_clienti">🏠 Tutti i clienti</option><option value="oggi">📋 Oggi</option><option value="domani">📅 Domani</option><option value="settimana">📆 Settimana</option></select>
+<select id="mapFiltroGiorno" onchange="updateMap()" class="inp-filter"><option value="tutti_clienti">🏠 Tutti i clienti</option><option value="oggi">📋 Oggi</option><option value="domani">📅 Domani</option><option value="settimana">📆 Settimana</option></select>
 <label class="field-check" style="font-size:.8125rem"><input type="checkbox" id="mapPercorso" onchange="updateMap()" checked> Percorso</label>
 <button id="btnGiroVisita" class="btn btn-sm btn-amber" onclick="startGiroVisita()" title="Anima il furgone lungo il percorso">🚐 Avvia Giro</button>
 <button class="btn btn-sm btn-ok" onclick="openGoogleMaps()">📍 Google Maps</button>
@@ -1240,7 +1248,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <option value="">Tutte le categorie</option>
 <option>Contratti</option><option>Manuali</option><option>Certificati</option><option>Report</option><option>Altro</option>
 </select>
-<button class="btn btn-primary btn-sm" onclick="EDITING.documento=null;document.querySelector('#modalDocumento .modal-head h2').textContent='📄 Nuovo Documento';openModal('modalDocumento')">+ Documento</button>
+<button class="btn btn-primary btn-sm" onclick="EDITING.documento=null;document.querySelector('#modalDocumento .modal-head h2').textContent='📄 Nuovo Documento';openModal('modalDocumento')">+ Nuovo Documento</button>
 </div></div>
 <div class="card-body"><div id="tblDocumenti"></div></div>
 </div>
@@ -1317,7 +1325,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <option value="">Tutti i tipi</option>
 <option value="piano">Interventi</option><option value="urgenza">Urgenze</option><option value="altro">Altro</option>
 </select>
-<button class="btn btn-primary btn-sm" onclick="openModal('modalAllegato')">+ Allegato</button>
+<button class="btn btn-primary btn-sm" onclick="openModal('modalAllegato')">+ Nuovo Allegato</button>
 </div></div>
 <div class="card-body"><div id="tblAllegati"></div></div>
 </div>
@@ -1630,8 +1638,8 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <div class="card">
 <div class="card-head"><h3>📜 Audit Trail</h3>
 <div class="btn-group">
-<select id="filtLogEntity" onchange="renderAuditLog()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem"><option value="">Tutte le entità</option><option value="piano">Interventi</option><option value="urgenza">Urgenze</option><option value="ordine">Ordini</option><option value="pagellino">Pagellini</option></select>
-<input type="date" id="filtLogData" onchange="renderAuditLog()" style="padding:6px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.75rem">
+<select id="filtLogEntity" onchange="renderAuditLog()" class="inp-filter"><option value="">Tutte le entità</option><option value="piano">Interventi</option><option value="urgenza">Urgenze</option><option value="ordine">Ordini</option><option value="pagellino">Pagellini</option></select>
+<input type="date" id="filtLogData" onchange="renderAuditLog()" class="inp-filter">
 </div>
 </div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
@@ -1793,7 +1801,7 @@ Installation date → data_installazione
 <div style="display:grid;grid-template-columns:280px 1fr;gap:0;height:calc(100vh - var(--header) - 40px)">
 <!-- Lista Canali -->
 <div class="card" style="border-radius:var(--radius) 0 0 var(--radius);border-right:1px solid #E5E7EB;display:flex;flex-direction:column">
-<div class="card-head" style="flex-shrink:0"><h3>💬 Canali</h3><button class="btn btn-primary btn-xs" onclick="openNewCanale()" title="Crea nuovo canale">+ Nuovo</button></div>
+<div class="card-head" style="flex-shrink:0"><h3>💬 Canali</h3><button class="btn btn-primary btn-sm" onclick="openNewCanale()" title="Crea nuovo canale">+ Nuovo Canale</button></div>
 <div id="chatCanaliList" style="flex:1;overflow-y:auto;padding:4px 0"></div>
 </div>
 <!-- Area Messaggi -->
@@ -2022,7 +2030,7 @@ Installation date → data_installazione
 <div class="field mb-sm"><label>Peso</label><input type="number" class="pv-peso" min="1" max="5" value="1"></div>
 </div>
 </div>
-<button class="btn btn-outline btn-sm" onclick="addPagVoce()">+ Aggiungi Voce</button>
+<button class="btn btn-outline btn-sm" onclick="addPagVoce()">+ Nuova Voce</button>
 <div class="field" style="margin-top:16px"><label>Nota Complessiva</label><textarea id="mgNota" rows="3"></textarea></div>
 </div>
 <div class="modal-foot">
@@ -2095,7 +2103,7 @@ Installation date → data_installazione
 <div class="field"><label>Tipo Intervento (associa)</label><select id="mclTipo"><option value="">Nessuno (generico)</option></select></div>
 <div class="field"><label>Voci Checklist</label>
 <div id="mclVociList" style="display:flex;flex-direction:column;gap:6px"></div>
-<button class="btn btn-outline btn-sm" onclick="addChecklistVoce()" style="margin-top:8px">+ Aggiungi Voce</button>
+<button class="btn btn-outline btn-sm" onclick="addChecklistVoce()" style="margin-top:8px">+ Nuova Voce</button>
 </div>
 </div>
 <div class="modal-foot">
