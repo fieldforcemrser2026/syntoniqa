@@ -7507,6 +7507,32 @@ function renderMonthPlan(){
     });
     html += '</tr>';
   });
+  // ── Riga tagliandi PM scaduti/prossimi (da schedulare) ──
+  const pmMacchine = (DATA.macchine||[]).filter(mc => !mc.Obsoleto && mc.ProssimoTagliando);
+  const mStr = y + '-' + String(m+1).padStart(2,'0');
+  const pmScaduti = pmMacchine.filter(mc => mc.ProssimoTagliando < today());
+  const pmProssimi = pmMacchine.filter(mc => mc.ProssimoTagliando >= today() && mc.ProssimoTagliando.startsWith(mStr));
+  if(pmScaduti.length || pmProssimi.length){
+    html += `<tr class="month-pm-row" style="border-top:2px solid #F59E0B"><td class="month-tec-label" style="background:#FFFBEB;color:#92400E;font-weight:600;font-size:.7rem" title="${pmScaduti.length} tagliandi scaduti, ${pmProssimi.length} in scadenza questo mese">🔧 PM (${pmScaduti.length+pmProssimi.length})</td>`;
+    days.forEach(d => {
+      const isSat = d.dow === 6;
+      // Tagliandi con prossimo_tagliando in questo giorno
+      const pmDay = [...pmScaduti, ...pmProssimi].filter(mc => mc.ProssimoTagliando === d.ds);
+      html += `<td style="vertical-align:top;${isSat?'border-right:2px solid #6366F1':''}">`;
+      pmDay.forEach(mc => {
+        const cli = getName(DATA.clienti||[], mc.ClienteID);
+        const isOverdue = mc.ProssimoTagliando < today();
+        html += `<div style="font-size:.55rem;background:${isOverdue?'#FEE2E2':'#FEF3C7'};border-left:2px solid ${isOverdue?'#DC2626':'#D97706'};padding:1px 3px;margin:1px 0;border-radius:2px;color:${isOverdue?'#991B1B':'#92400E'};cursor:pointer" title="${isOverdue?'SCADUTO':'In scadenza'}: ${mc.Modello||mc.ID}\nCliente: ${cli}\nData: ${mc.ProssimoTagliando}" onclick="showSec('tagliandi')">🔧 ${(cli||'').substring(0,compact?8:12)}</div>`;
+      });
+      // Mostra conteggio scaduti generici se non cadono in questo giorno
+      if(!pmDay.length && d.ds === days[0]?.ds && pmScaduti.length) {
+        html += `<div style="font-size:.55rem;color:#DC2626;text-align:center;cursor:pointer" onclick="showSec('tagliandi')" title="${pmScaduti.length} tagliandi scaduti da schedulare">🔴 ${pmScaduti.length} scad.</div>`;
+      }
+      html += '</td>';
+    });
+    html += '</tr>';
+  }
+
   html += '</tbody></table>';
 
   // Legenda

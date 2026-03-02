@@ -4046,13 +4046,30 @@ Rispondi SOLO con JSON valido:
           break;
         case '/stato': {
           const urg = await sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,in_corso)&order=data_segnalazione.desc&limit=10');
-          reply = urg.length ? `🚨 *${urg.length} urgenze attive:*\n` + urg.map(u => `• ${u.id}: ${u.problema} [${u.stato}]`).join('\n') : '✅ Nessuna urgenza attiva';
+          if (!urg.length) { reply = '✅ Nessuna urgenza attiva'; break; }
+          // Risolvi nomi clienti in batch
+          const cliIds4 = [...new Set(urg.map(u => u.cliente_id).filter(Boolean))];
+          const cliNames4 = {};
+          for (const cid of cliIds4) { cliNames4[cid] = await getEntityName(env, 'clienti', cid); }
+          const statoEmoji = { aperta: '🔴', assegnata: '🟡', in_corso: '🟢' };
+          reply = `🚨 *${urg.length} urgenze attive:*\n` + urg.map(u => {
+            const cli = cliNames4[u.cliente_id] || u.cliente_id || '?';
+            return `${statoEmoji[u.stato] || '⚪'} *${cli}*: ${u.problema || 'N/D'} [${u.stato}]`;
+          }).join('\n');
           break;
         }
         case '/oggi': {
           const oggi = new Date().toISOString().split('T')[0];
           const intv = await sb(env, 'piano', 'GET', null, `?data=eq.${oggi}&tecnico_id=eq.${utente.id}&obsoleto=eq.false`);
-          reply = intv.length ? `📅 *Interventi oggi (${intv.length}):*\n` + intv.map(i => `• ${i.id}: ${i.stato} – Cliente ${i.cliente_id}`).join('\n') : '📅 Nessun intervento programmato oggi';
+          if (!intv.length) { reply = '📅 Nessun intervento programmato oggi'; break; }
+          const cliIds5 = [...new Set(intv.map(i => i.cliente_id).filter(Boolean))];
+          const cliNames5 = {};
+          for (const cid of cliIds5) { cliNames5[cid] = await getEntityName(env, 'clienti', cid); }
+          reply = `📅 *Interventi oggi (${intv.length}):*\n` + intv.map(i => {
+            const cli = cliNames5[i.cliente_id] || i.cliente_id || '?';
+            const tipo = i.tipo_intervento_id === 'TAGLIANDO' ? '🔧' : '📋';
+            return `${tipo} *${cli}* — ${i.stato} ${i.note ? '(' + i.note.substring(0, 40) + ')' : ''}`;
+          }).join('\n');
           break;
         }
         case '/settimana': {
@@ -4061,22 +4078,40 @@ Rispondi SOLO con JSON valido:
           const dom = new Date(lun); dom.setDate(lun.getDate() + 6);
           const intv = await sb(env, 'piano', 'GET', null, `?data=gte.${lun.toISOString().split('T')[0]}&data=lte.${dom.toISOString().split('T')[0]}&tecnico_id=eq.${utente.id}&obsoleto=eq.false&order=data.asc`);
           if (!intv.length) { reply = '📅 Nessun intervento questa settimana'; break; }
+          const cliIds6 = [...new Set(intv.map(i => i.cliente_id).filter(Boolean))];
+          const cliNames6 = {};
+          for (const cid of cliIds6) { cliNames6[cid] = await getEntityName(env, 'clienti', cid); }
+          const dayNames = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
           const byDay = {};
           intv.forEach(i => { const d = i.data; if (!byDay[d]) byDay[d] = []; byDay[d].push(i); });
-          reply = `📅 *Piano settimanale (${intv.length} interventi):*\n` + Object.entries(byDay).map(([d, items]) => `\n*${d}:*\n` + items.map(i => `  • ${i.stato} – ${i.cliente_id}`).join('\n')).join('');
+          reply = `📅 *Piano settimanale (${intv.length} interventi):*\n` + Object.entries(byDay).map(([d, items]) => {
+            const dayN = dayNames[new Date(d + 'T00:00:00').getDay()];
+            return `\n*${dayN} ${d.slice(5)}:*\n` + items.map(i => {
+              const cli = cliNames6[i.cliente_id] || i.cliente_id || '?';
+              return `  • ${cli} — ${i.stato}`;
+            }).join('\n');
+          }).join('');
           break;
         }
         case '/vado': {
           const urgList = await sb(env, 'urgenze', 'GET', null, '?stato=eq.aperta&order=priorita.asc,data_segnalazione.asc&limit=5');
           if (!urgList.length) { reply = '✅ Nessuna urgenza da prendere in carico'; break; }
+          // Risolvi nomi clienti
+          const cliIds7 = [...new Set(urgList.map(u => u.cliente_id).filter(Boolean))];
+          const cliNames7 = {};
+          for (const cid of cliIds7) { cliNames7[cid] = await getEntityName(env, 'clienti', cid); }
           const scelta = parseInt(parts[1]);
           if (!scelta || scelta < 1 || scelta > urgList.length) {
-            reply = `🚨 *Urgenze aperte (${urgList.length}):*\n` + urgList.map((u, i) => `*${i + 1}.* ${u.problema || 'N/D'} – P${u.priorita || '?'}\n   📅 ${u.data_segnalazione?.split('T')[0] || '?'} | ID: \`${u.id}\``).join('\n\n') + `\n\n👉 Rispondi */vado N* per prendere in carico (es: /vado 1)`;
+            reply = `🚨 *Urgenze aperte (${urgList.length}):*\n\n` + urgList.map((u, i) => {
+              const cli = cliNames7[u.cliente_id] || u.cliente_id || '?';
+              return `*${i + 1}.* 🏠 ${cli}\n   ${u.problema || 'N/D'} – P${u.priorita || '?'}\n   📅 ${u.data_segnalazione?.split('T')[0] || '?'}`;
+            }).join('\n\n') + `\n\n👉 Rispondi */vado N* per prendere (es: /vado 1)`;
             break;
           }
           const picked = urgList[scelta - 1];
+          const pickedCli = cliNames7[picked.cliente_id] || picked.cliente_id || '?';
           await sb(env, `urgenze?id=eq.${picked.id}`, 'PATCH', { stato: 'assegnata', tecnico_assegnato: utente.id, data_assegnazione: new Date().toISOString() });
-          reply = `✅ Urgenza *${picked.id}* assegnata a te!\nProblema: ${picked.problema}`;
+          reply = `✅ Urgenza *${picked.id}* assegnata a te!\n🏠 Cliente: ${pickedCli}\n📋 Problema: ${picked.problema}`;
           await sendTelegramNotification(env, 'urgenza_assegnata', { id: picked.id, tecnicoAssegnato: utente.id });
           break;
         }
@@ -5417,8 +5452,13 @@ Rispondi SOLO con JSON valido:
       cs[cmId].posizione = (pos + 1) % seq.length;
       cs[cmId].ultimo_completato = dataComp;
 
-      // 6. Calcola prossima data (skip weekend)
-      const prossimaData = skipWeekend(addDays(dataComp, Math.max(intervallo, 1)));
+      // 6. Calcola prossima data (skip weekend) — deve essere futura
+      let prossimaData = skipWeekend(addDays(dataComp, Math.max(intervallo, 1)));
+      const todayStr = now.split('T')[0];
+      if (prossimaData < todayStr) {
+        // Se la data calcolata è nel passato (completamento tardivo), usa oggi + intervallo
+        prossimaData = skipWeekend(addDays(todayStr, Math.max(intervallo, 1)));
+      }
       const prossimoTipo = seq[cs[cmId].posizione];
 
       // 7. Aggiorna prossimo_tagliando nella macchina
