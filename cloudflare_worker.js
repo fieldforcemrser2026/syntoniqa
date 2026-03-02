@@ -2477,12 +2477,85 @@ async function handlePost(action, body, env) {
         vincoliText = vincoli.vincoli_override;
       }
 
+      // ═══════════════════════════════════════════════════════════════
+      // ANONYMIZATION LAYER — nessun dato personale esce verso provider AI
+      // Encode: nomi reali → codici ID prima del prompt
+      // Decode: codici ID → nomi reali dopo la risposta AI
+      // ═══════════════════════════════════════════════════════════════
+      const anonMap = { encode: {}, decode: {} };
+
+      // Tecnici: "Nome Cognome" → TEC_xxx
+      for (const t of allTecnici) {
+        const fullName = `${t.nome||''} ${t.cognome||''}`.trim();
+        if (fullName && t.id) {
+          anonMap.encode[fullName] = t.id;
+          anonMap.decode[t.id] = fullName;
+          // Anche varianti con solo nome o cognome
+          if (t.nome) { anonMap.encode[t.nome] = t.id; }
+          if (t.cognome) { anonMap.encode[t.cognome] = t.id; }
+        }
+      }
+      // Clienti: "Nome Cliente" → codice_m3
+      for (const c of allClienti) {
+        const names = [c.nome_interno, c.nome_account, c.ragione_sociale].filter(Boolean);
+        for (const n of names) {
+          if (n && c.codice_m3) {
+            anonMap.encode[n] = c.codice_m3;
+            anonMap.decode[c.codice_m3] = c.nome_interno || c.nome_account || c.codice_m3;
+          }
+        }
+      }
+      // Macchine: "Modello Seriale" → MAC_xxx
+      for (const m of allMacchine) {
+        const label = m.modello || m.tipo || m.seriale || '';
+        if (label && m.id) {
+          anonMap.encode[label] = m.id;
+          anonMap.decode[m.id] = label;
+        }
+      }
+      // Città: mappa per geoclustering (codice numerico opaco)
+      const cittaSet = new Set();
+      for (const c of allClienti) { if (c.citta_fatturazione) cittaSet.add(c.citta_fatturazione); }
+      for (const t of allTecnici) { if (t.base) cittaSet.add(t.base); }
+      const cittaArr = [...cittaSet].sort();
+      const cittaMap = {};
+      cittaArr.forEach((city, i) => {
+        const code = `Z${String(i+1).padStart(2,'0')}`;
+        cittaMap[city] = code;
+        anonMap.encode[city] = code;
+        anonMap.decode[code] = city;
+      });
+
+      // Funzione encode: sostituisce tutti i nomi reali con codici nel testo
+      function anonEncode(text) {
+        if (!text) return text;
+        let result = text;
+        // Ordina per lunghezza decrescente per evitare match parziali
+        const sorted = Object.entries(anonMap.encode).sort((a,b) => b[0].length - a[0].length);
+        for (const [name, code] of sorted) {
+          if (name.length < 3) continue; // skip nomi troppo corti per evitare falsi positivi
+          result = result.split(name).join(code);
+        }
+        return result;
+      }
+
+      // Funzione decode: sostituisce codici con nomi reali nella risposta AI
+      function anonDecode(text) {
+        if (!text) return text;
+        let result = text;
+        // Ordina per lunghezza codice decrescente
+        const sorted = Object.entries(anonMap.decode).sort((a,b) => b[0].length - a[0].length);
+        for (const [code, name] of sorted) {
+          result = result.split(code).join(name);
+        }
+        return result;
+      }
+
       // Reperibilita context (only if ctx.reperibilita)
       let repContext = '';
       if (ctx.reperibilita && allRep.length) {
         repContext = '\nREPERIBILITA ATTIVE:\n' + allRep.map(r => {
-          const tecName = allTecnici.find(t => t.id === r.tecnico_id);
-          return `- ${tecName ? tecName.nome + ' ' + tecName.cognome : r.tecnico_id}: ${r.turno || '24h'} (${r.tipo || 'rep'}) dal ${r.data_inizio} al ${r.data_fine}`;
+          return `- ${r.tecnico_id}: ${r.turno || '24h'} (${r.tipo || 'rep'}) dal ${r.data_inizio} al ${r.data_fine}`;
         }).join('\n');
       }
 
@@ -2491,14 +2564,12 @@ async function handlePost(action, body, env) {
       if (ctx.piano) {
         const pianoSrc = allPianoDb.length ? allPianoDb : (vincoli.piano_esistente || []);
         if (pianoSrc.length) {
-          const getName2 = (id) => { const u = allTecnici.find(t => t.id === id); return u ? `${u.nome} ${u.cognome}` : id; };
-          const getCli2 = (id) => { const c = allClienti.find(x => x.codice_m3 === id); return c ? (c.nome_interno || c.nome_account || id) : id; };
           pianoEsistente = '\nPIANO GIA ESISTENTE (non duplicare, complementa):\n' +
             pianoSrc.slice(0, 40).map(p => {
               const d = p.data || p.Data || '';
-              const tec = p.tecnico || getName2(p.tecnico_id || p.TecnicoID || '');
-              const cli = p.cliente || getCli2(p.cliente_id || p.ClienteID || '');
-              return `- ${d} ${tec}: ${cli} (${p.note || p.Note || ''})`;
+              const tec = p.tecnico_id || p.TecnicoID || '?';
+              const cli = p.cliente_id || p.ClienteID || '?';
+              return `- ${d} ${tec}: ${cli} (${anonEncode(p.note || p.Note || '')})`;
             }).join('\n');
         }
       }
@@ -2506,27 +2577,24 @@ async function handlePost(action, body, env) {
       // Indisponibilità context: richieste approvate (ferie/malattia/permesso) + trasferte + installazioni
       let indispContext = '';
       {
-        const getName3 = (id) => { const u = allTecnici.find(t => t.id === id); return u ? `${u.nome} ${u.cognome}` : id; };
         const lines = [];
         // Richieste approvate (ferie, malattia, permesso)
         for (const r of allRichieste) {
-          lines.push(`- ${getName3(r.tecnico_id)}: ${r.tipo} dal ${r.data_inizio} al ${r.data_fine || r.data_inizio} (${r.motivo || ''}) [NON SCHEDULARE]`);
+          lines.push(`- ${r.tecnico_id}: ${r.tipo} dal ${r.data_inizio} al ${r.data_fine || r.data_inizio} [NON SCHEDULARE]`);
         }
         // Trasferte (tecnico impegnato fuori)
         for (const t of allTrasferte) {
           const tecIds = (t.tecnici_ids || t.tecnico_id || '').split(',').filter(Boolean);
-          const cliT = allClienti.find(c => c.codice_m3 === t.cliente_id);
           tecIds.forEach(id => {
-            lines.push(`- ${getName3(id)}: TRASFERTA dal ${t.data_inizio} al ${t.data_fine || t.data_inizio} (${cliT ? cliT.nome_interno || cliT.nome_account : t.cliente_id || '?'}) [NON SCHEDULARE]`);
+            lines.push(`- ${id}: TRASFERTA dal ${t.data_inizio} al ${t.data_fine || t.data_inizio} (${t.cliente_id || '?'}) [NON SCHEDULARE]`);
           });
         }
         // Installazioni (tecnico/i occupati)
         for (const inst of allInstallazioni) {
           const tecIds = (inst.tecnici_ids || '').split(',').filter(Boolean);
           if (!tecIds.length) continue;
-          const cliI = allClienti.find(c => c.codice_m3 === inst.cliente_id);
           tecIds.forEach(id => {
-            lines.push(`- ${getName3(id)}: INSTALLAZIONE dal ${inst.data_inizio} al ${inst.data_fine_prevista || inst.data_inizio} (${cliI ? cliI.nome_interno || cliI.nome_account : inst.cliente_id || '?'}) [NON SCHEDULARE]`);
+            lines.push(`- ${id}: INSTALLAZIONE dal ${inst.data_inizio} al ${inst.data_fine_prevista || inst.data_inizio} (${inst.cliente_id || '?'}) [NON SCHEDULARE]`);
           });
         }
         if (lines.length) {
@@ -2549,8 +2617,9 @@ async function handlePost(action, body, env) {
         const ggDiff = Math.round((new Date(m.prossimo_tagliando) - new Date(oggi)) / 86400000);
         tagItems.push({
           tipo: 'tagliando',
-          macchina: `${m.modello||m.tipo||m.seriale||'?'} (${m.id})`,
-          cliente: cli.nome_interno || cli.nome_account || m.cliente_id || '?',
+          macchina: m.id,
+          macchinaLabel: `${m.modello||m.tipo||m.seriale||'?'}`,
+          cliente: m.cliente_id || '?',
           clienteId: m.cliente_id || '',
           data: m.prossimo_tagliando,
           giorniScadenza: ggDiff,
@@ -2564,8 +2633,9 @@ async function handlePost(action, body, env) {
         const ggDiff = Math.round((new Date(a.prossimo_controllo) - new Date(oggi)) / 86400000);
         tagItems.push({
           tipo: 'controllo',
-          macchina: `${a.nome_asset||a.modello||a.gruppo_attrezzatura||'?'} (S/N:${a.numero_serie||'?'})`,
-          cliente: a.nome_account || '',
+          macchina: a.id || `ASSET_${a.numero_serie||'?'}`,
+          macchinaLabel: `${a.nome_asset||a.modello||a.gruppo_attrezzatura||'?'}`,
+          cliente: a.codice_m3 || '?',
           clienteId: a.codice_m3 || '',
           data: a.prossimo_controllo,
           giorniScadenza: ggDiff,
@@ -2579,7 +2649,7 @@ async function handlePost(action, body, env) {
         const urgenti = tagItems.filter(t => t.giorniScadenza >= 0 && t.giorniScadenza <= 7);
         const prossimi = tagItems.filter(t => t.giorniScadenza > 7 && t.giorniScadenza <= 30);
         const programmati = tagItems.filter(t => t.giorniScadenza > 30);
-        const fmtItem = t => `${t.tipo}|${t.macchina}@${t.cliente}(${t.clienteId})${t.data}|${t.giorniScadenza}gg`;
+        const fmtItem = t => `${t.tipo}|${t.macchina}@${t.clienteId}|${t.data}|${t.giorniScadenza}gg`;
         tagliandiContext = '\nTAGLIANDI/SERVICE SCADENZA (pianifica PRIMA i piu urgenti):';
         if (scaduti.length) tagliandiContext += '\nSCADUTI:' + scaduti.slice(0,10).map(fmtItem).join(';');
         if (urgenti.length) tagliandiContext += '\nURGENTI(<7gg):' + urgenti.slice(0,8).map(fmtItem).join(';');
@@ -2635,22 +2705,23 @@ async function handlePost(action, body, env) {
       const isoOggi = oggi; // reuse
       const oggiIt = new Intl.DateTimeFormat('it-IT', { weekday:'long', year:'numeric', month:'long', day:'numeric', timeZone:'Europe/Rome' }).format(new Date());
 
-      // Compact data — budget-aware: riduce clienti se ci sono file allegati (i file contengono info clienti)
+      // Compact data — ANONIMIZZATO: solo codici ID, nessun nome reale
       const tecList = allTecnici.filter(t=>t.ruolo!=='admin').map(t => {
         const furg = t.automezzo_id ? allAutomezzi.find(a=>a.id===t.automezzo_id) : null;
         const furgLabel = furg ? furg.id : (t.automezzo_id || 'nessuno');
-        return `${t.nome} ${t.cognome}(${t.id},${t.ruolo},base:${t.base||'?'},furgone:${furgLabel})`;
+        const baseCode = t.base ? (cittaMap[t.base] || t.base) : '?';
+        return `${t.id}(${t.ruolo},zona:${baseCode},furgone:${furgLabel})`;
       }).join('; ');
-      const urgList = ctx.urgenze ? allUrgenze.slice(0,20).map(u => `${u.id}:${(u.problema||'').substring(0,40)}|${u.cliente_id}|pri:${u.priorita_id}`).join('; ') : '';
-      const cliList = allClienti.slice(0,100).map(c => `${c.codice_m3}:${c.nome_interno||c.nome_account||'?'}(${c.citta_fatturazione||''})`).join(', ');
+      const urgList = ctx.urgenze ? allUrgenze.slice(0,20).map(u => `${u.id}:${anonEncode((u.problema||'').substring(0,40))}|${u.cliente_id}|pri:${u.priorita_id}`).join('; ') : '';
+      const cliList = allClienti.slice(0,100).map(c => `${c.codice_m3}(${cittaMap[c.citta_fatturazione] || c.citta_fatturazione || '?'})`).join(', ');
 
       const nTecAttivi = allTecnici.filter(t=>t.ruolo!=='admin').length;
       const prompt = `PLANNER FSM — ${meseTarget || 'Piano interventi'}
 OGGI: ${oggiIt} (${isoOggi})
 
 ########## VINCOLI CONFIGURATI (INVIOLABILI — rispetta OGNI regola senza eccezioni) ##########
-${vincoliText || '(Nessun vincolo)'}
-${testo ? 'ISTRUZIONI AGGIUNTIVE UTENTE: ' + testo : ''}
+${anonEncode(vincoliText || '(Nessun vincolo)')}
+${testo ? 'ISTRUZIONI AGGIUNTIVE UTENTE: ' + anonEncode(testo) : ''}
 ##########
 
 TECNICI DISPONIBILI (${nTecAttivi}): ${tecList}
@@ -2674,22 +2745,23 @@ ${periodoIstruzione || 'Genera piano per OGNI giorno lavorativo (lun-ven)'}
 - Usa il FURGONE indicato tra parentesi nel tecnico (es: "furgone:FURG_1"). Junior affiancato usa furgone del senior.
 - Raggruppa per zona (stessa citta per stesso tecnico nello stesso giorno).
 - Urgenze → primi giorni. Tagliandi scaduti → massima priorita.
-- Usa SOLO clienti dalla lista con codice_m3 corretto.
+- Usa SOLO codici dalla lista (clienteId, tecnicoId). NON inventare nomi.
 
-JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina"}],"warnings":["..."]}`;
+JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"codice macchina"}],"warnings":["..."]}`;
 
-      // ─── AI Call — Gemini 2.0 Flash (primary) con fallback Workers AI ───
+      // ─── AI Call con ANONYMIZATION layer ───
       const validIds = new Set(allTecnici.map(t => t.id));
-      const sysPrompt = `Sei un pianificatore FSM per ${brand(env).shortName} (manutenzione robot mungitura). Rispondi SOLO JSON valido. Note=modello macchina. tipo=tagliando o urgenza. Formato: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome cognome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina"}],"warnings":["..."]}`;
+      const sysPrompt = `Sei un pianificatore FSM (manutenzione robot). Rispondi SOLO JSON valido. Usa SOLO i codici ID forniti (TEC_xxx, codice_m3, MAC_xxx, FURG_x). NON usare nomi propri. Formato: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"codice macchina"}],"warnings":["..."]}`;
 
       // Helper: costruisce prompt compatto per Workers AI (rimuove file e comprime dati)
       function buildCompactPrompt() {
         const cTec = allTecnici.filter(t=>t.ruolo!=='admin').map(t=>{
           const f = t.automezzo_id ? allAutomezzi.find(a=>a.id===t.automezzo_id) : null;
-          return `${t.nome} ${t.cognome}(${t.id},${t.ruolo},base:${t.base||'?'},furgone:${f?f.id:(t.automezzo_id||'?')})`;
+          const baseCode = t.base ? (cittaMap[t.base] || t.base) : '?';
+          return `${t.id}(${t.ruolo},zona:${baseCode},furgone:${f?f.id:(t.automezzo_id||'?')})`;
         }).join('; ');
-        const cUrg = ctx.urgenze ? allUrgenze.slice(0,8).map(u=>`${u.id}:${(u.problema||'').substring(0,25)}|${u.cliente_id}`).join('; ') : '';
-        const cCli = allClienti.slice(0,40).map(c=>`${c.codice_m3}:${c.nome_interno||c.nome_account||'?'}`).join(', ');
+        const cUrg = ctx.urgenze ? allUrgenze.slice(0,8).map(u=>`${u.id}:${anonEncode((u.problema||'').substring(0,25))}|${u.cliente_id}`).join('; ') : '';
+        const cCli = allClienti.slice(0,40).map(c=>`${c.codice_m3}(${cittaMap[c.citta_fatturazione]||'?'})`).join(', ');
         return `PIANO FSM ${meseTarget||''}
 ##### VINCOLI (INVIOLABILI) #####
 ${vincoliText || '(Nessuno)'}
@@ -2708,9 +2780,9 @@ ${periodoIstruzione || 'Genera piano mese intero'}
 - Tecnici assenti da vincoli: NON inserirli.
 - note = modello macchina (es: Astronaut A5, Vector 70).
 - Usa furgone indicato nel tecnico.
-- Usa SOLO clienti dalla lista con codice_m3.
+- Usa SOLO codici dalla lista. NON inventare nomi.
 
-JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina"}],"warnings":[]}`;
+JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"codice macchina"}],"warnings":[]}`;
       }
 
       // Engine registry: ogni engine ha key env, funzione try, flag disabled
@@ -2966,6 +3038,25 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId
         } catch {}
       }
 
+      // DECODE: converte codici AI → nomi reali nel piano per il frontend
+      function decodePiano(piano) {
+        return (piano || []).map(p => {
+          // Tecnico: da ID a nome completo
+          if (p.tecnicoId) {
+            const tec = allTecnici.find(t => t.id === p.tecnicoId);
+            if (tec) p.tecnico = `${tec.nome} ${tec.cognome}`.trim();
+          }
+          // Cliente: da codice_m3 a nome
+          if (p.clienteId) {
+            const cli = allClienti.find(c => c.codice_m3 === p.clienteId);
+            if (cli) p.cliente = cli.nome_interno || cli.nome_account || p.clienteId;
+          }
+          // Note: decode qualsiasi codice rimasto (macchine, città)
+          if (p.note) p.note = anonDecode(p.note);
+          return p;
+        });
+      }
+
       // Helper: validate tecnicoId, fix furgoni, remove weekends, ENFORCE vincoli + indisponibilità
       const postProcessWarnings = [];
       function postProcess(piano) {
@@ -3054,8 +3145,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId
 OGGI: ${oggiIt} (${isoOggi})
 
 ########## VINCOLI CONFIGURATI (INVIOLABILI — rispetta OGNI regola senza eccezioni) ##########
-${vincoliText || '(Nessun vincolo)'}
-${testo ? 'ISTRUZIONI AGGIUNTIVE UTENTE: ' + testo : ''}
+${anonEncode(vincoliText || '(Nessun vincolo)')}
+${testo ? 'ISTRUZIONI AGGIUNTIVE UTENTE: ' + anonEncode(testo) : ''}
 ##########
 
 TECNICI DISPONIBILI (${nTecAttivi}): ${tecList}
@@ -3072,15 +3163,15 @@ ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}`;
 - Tagliandi/interventi SOLO lun-ven. SABATO e DOMENICA: NIENTE.
 - Lun-ven: TUTTI i ${nTecAttivi} tecnici attivi devono avere interventi OGNI giorno (08:00-17:00) = MINIMO ${nTecAttivi} righe/giorno.
 - Durata: un tagliando puo richiedere 4-8 ore (anche giornata intera). Urgenze 1-3h.
-- "tagliando" e "service" = sinonimi. Nelle note scrivi il MODELLO macchina (es: "Astronaut A5", "Vector 70").
-- Affiancamento junior+senior: genera DUE righe (una per senior, una per junior) con STESSO cliente/data/ora/furgone.
+- "tagliando" e "service" = sinonimi. Nelle note scrivi il CODICE macchina (MAC_xxx).
+- Affiancamento junior+senior: genera DUE righe (una per senior, una per junior) con STESSO clienteId/data/ora/furgone.
 - Tecnici assenti da vincoli o in ferie/malattia/trasferta/installazione: NON inserirli in quei giorni.
 - Usa il FURGONE indicato tra parentesi nel tecnico.
-- Raggruppa per zona (stessa citta per stesso tecnico nello stesso giorno).
+- Raggruppa per zona (stessa zona per stesso tecnico nello stesso giorno).
 - Urgenze → primi giorni. Tagliandi scaduti → massima priorita.
-- Usa SOLO clienti dalla lista con codice_m3 corretto.
+- Usa SOLO codici dalla lista (tecnicoId, clienteId). NON inventare nomi.
 
-JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome cognome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina"}],"warnings":["..."]}`;
+JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"codice macchina"}],"warnings":["..."]}`;
 
         // ── CHUNKING SETTIMANALE: max 5 giorni per chunk = output gestibile ──
         // Sempre chunking per meseTarget (mese/vuoti/settimana)
@@ -3199,10 +3290,12 @@ ${instructions}`;
           if (!allPiano.length) return err('AI non ha generato nessun intervento. Verifica le API key nei Worker secrets.');
 
           const processed = postProcess(allPiano);
-          const allWarnArr = [...allWarnings, ...postProcessWarnings];
+          // DECODE: rimetti nomi reali nelle risposte per il frontend
+          const decoded = decodePiano(processed);
+          const allWarnArr = [...allWarnings, ...postProcessWarnings].map(w => anonDecode(w));
           return ok({
-            summary: `Piano ${meseTarget}: ${processed.length} interventi su ${[...new Set(processed.map(p=>p.data))].length} giorni (${chunksDone}/${chunks.length} parti)${postProcessWarnings.length ? ` — ${postProcessWarnings.length} conflitti rimossi` : ''}`,
-            piano: processed,
+            summary: anonDecode(`Piano ${meseTarget}: ${decoded.length} interventi su ${[...new Set(decoded.map(p=>p.data))].length} giorni (${chunksDone}/${chunks.length} parti)${postProcessWarnings.length ? ` — ${postProcessWarnings.length} conflitti rimossi` : ''}`),
+            piano: decoded,
             warnings: allWarnArr,
             chunks: chunksDone
           });
@@ -3220,10 +3313,12 @@ ${instructions}`;
           if (!rawText) return err('AI non ha generato risposta. Verifica le API key nei Worker secrets.');
           const result = parseAIResponse(rawText);
           if (!result) return ok({ summary: 'Errore formato risposta', piano: [], warnings: ['Risposta AI non parsabile. Riprova.'], raw: rawText.substring(0, 1500) });
-          result.piano = postProcess(result.piano);
+          result.piano = decodePiano(postProcess(result.piano));
+          result.summary = anonDecode(result.summary || '');
+          result.warnings = (result.warnings || []).map(w => anonDecode(w));
           if (postProcessWarnings.length) {
-            result.warnings = [...(result.warnings || []), ...postProcessWarnings];
-            result.summary = (result.summary || '') + ` — ${postProcessWarnings.length} conflitti rimossi`;
+            result.warnings = [...result.warnings, ...postProcessWarnings.map(w => anonDecode(w))];
+            result.summary += ` — ${postProcessWarnings.length} conflitti rimossi`;
           }
           return ok(result);
         }
