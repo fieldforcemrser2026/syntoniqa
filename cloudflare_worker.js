@@ -280,7 +280,7 @@ export default {
 
     // Rate limit check
     const bucket = action === 'login' ? 'login'
-      : (action === 'generateAIPlan' || action === 'analyzeImage') ? 'ai'
+      : (action === 'generateAIPlan' || action === 'analyzeImage' || action === 'previewAIPlan') ? 'ai'
       : 'default';
     const rl = rateLimit(clientIP, bucket);
     if (rl.limited) {
@@ -2107,6 +2107,89 @@ async function handlePost(action, body, env) {
       });
     }
 
+    case 'previewAIPlan': {
+      // Preview: loads context data for AI planner, returns summary WITHOUT generating
+      const pvMese = body.mese_target || '';
+      if (!pvMese) return err('mese_target richiesto');
+      const pvStart = `${pvMese}-01`, pvEnd = `${pvMese}-31`;
+      const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+
+      const [pvTecnici, pvRichieste, pvRep, pvTrasf, pvInst, pvPiano, pvUrg, pvMacchine, pvClienti, pvVincoliCfg] = await Promise.all([
+        sb(env, 'utenti', 'GET', null, '?attivo=eq.true&obsoleto=eq.false&select=id,nome,cognome,base,ruolo,automezzo_id').catch(()=>[]),
+        sb(env, 'richieste', 'GET', null, `?stato=eq.approvata&obsoleto=eq.false&data_inizio=lte.${pvEnd}&data_fine=gte.${pvStart}&select=id,tecnico_id,tipo,data_inizio,data_fine,motivo&limit=100`).catch(()=>[]),
+        sb(env, 'reperibilita', 'GET', null, `?obsoleto=eq.false&data_inizio=lte.${pvEnd}&data_fine=gte.${pvStart}&select=id,tecnico_id,data_inizio,data_fine,turno,tipo&limit=100`).catch(()=>[]),
+        sb(env, 'trasferte', 'GET', null, `?obsoleto=eq.false&data_inizio=lte.${pvEnd}&data_fine=gte.${pvStart}&select=id,tecnico_id,tecnici_ids,cliente_id,data_inizio,data_fine&limit=50`).catch(()=>[]),
+        sb(env, 'installazioni', 'GET', null, `?obsoleto=eq.false&stato=in.(pianificato,in_corso,pianificata)&data_inizio=lte.${pvEnd}&select=id,tecnici_ids,cliente_id,data_inizio,data_fine_prevista,stato&limit=50`).catch(()=>[]),
+        sb(env, 'piano', 'GET', null, `?obsoleto=eq.false&stato=neq.annullato&data=gte.${pvStart}&data=lte.${pvEnd}&select=id,tecnico_id,data,stato,cliente_id,tipo_intervento_id&limit=500`).catch(()=>[]),
+        sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,schedulata)&select=id,problema,cliente_id,priorita_id&limit=20').catch(()=>[]),
+        sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,tipo,modello,cliente_id,prossimo_tagliando&order=prossimo_tagliando.asc&limit=50').catch(()=>[]),
+        sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno,citta_fatturazione&limit=150').catch(()=>[]),
+        sb(env, 'config', 'GET', null, '?chiave=eq.vincoli_categories&limit=1').catch(()=>[])
+      ]);
+
+      const pvGetName = (id) => { const u = pvTecnici.find(t => t.id === id); return u ? `${u.nome} ${u.cognome}` : id; };
+
+      // Build vincoli auto
+      const vincAuto = [];
+      for (const r of pvRichieste) {
+        vincAuto.push({ tipo:'assenza', testo:`${pvGetName(r.tecnico_id)}: ${r.tipo} dal ${r.data_inizio} al ${r.data_fine||r.data_inizio}${r.motivo?' ('+r.motivo+')':''}`, soggetti:[pvGetName(r.tecnico_id)], soggetti_ids:[r.tecnico_id], periodo:`${r.data_inizio} → ${r.data_fine||r.data_inizio}`, data_inizio:r.data_inizio, data_fine:r.data_fine||r.data_inizio, id:'rich_'+r.id, fonte_tabella:'richieste', fonte_record_id:r.id });
+      }
+      for (const r of pvRep) {
+        vincAuto.push({ tipo:'reperibilita', testo:`${pvGetName(r.tecnico_id)}: Reperibilità ${r.turno||'24h'} (${r.tipo||'rep'})`, soggetti:[pvGetName(r.tecnico_id)], soggetti_ids:[r.tecnico_id], periodo:`${r.data_inizio} → ${r.data_fine}`, id:'rep_'+r.id, fonte_tabella:'reperibilita', fonte_record_id:r.id });
+      }
+      for (const t of pvTrasf) {
+        const ids = (t.tecnici_ids||t.tecnico_id||'').split(',').filter(Boolean);
+        ids.forEach(id => {
+          vincAuto.push({ tipo:'trasferta', testo:`${pvGetName(id)}: Trasferta dal ${t.data_inizio} al ${t.data_fine||t.data_inizio}`, soggetti:[pvGetName(id)], soggetti_ids:[id], periodo:`${t.data_inizio} → ${t.data_fine||t.data_inizio}`, id:'trasf_'+t.id+'_'+id, fonte_tabella:'trasferte', fonte_record_id:t.id });
+        });
+      }
+      for (const inst of pvInst) {
+        const ids = (inst.tecnici_ids||'').split(',').filter(Boolean);
+        ids.forEach(id => {
+          vincAuto.push({ tipo:'installazione', testo:`${pvGetName(id)}: Installazione dal ${inst.data_inizio} al ${inst.data_fine_prevista||inst.data_inizio}`, soggetti:[pvGetName(id)], soggetti_ids:[id], periodo:`${inst.data_inizio} → ${inst.data_fine_prevista||inst.data_inizio}`, id:'inst_'+inst.id+'_'+id, fonte_tabella:'installazioni', fonte_record_id:inst.id });
+        });
+      }
+
+      // Manual rules from config
+      let manualRules = [];
+      if (pvVincoliCfg.length) {
+        try {
+          const vc = JSON.parse(pvVincoliCfg[0].valore);
+          manualRules = vc.manual_rules || [];
+          // Fallback legacy
+          if (!manualRules.length && vc.categories?.length) {
+            vc.categories.forEach(cat => (cat.regole||[]).forEach(r => { if(r.testo) manualRules.push({...r, titolo: (cat.icona||'')+' '+(cat.nome||'')}); }));
+          }
+        } catch {}
+      }
+
+      // Tecnici con vincoli
+      const tecVincolati = new Set();
+      vincAuto.forEach(v => (v.soggetti_ids||[]).forEach(id => tecVincolati.add(id)));
+      const totTec = pvTecnici.filter(u=>u.ruolo!=='admin').length;
+
+      // Tagliandi in scadenza
+      const pvOggi = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
+      const taglScad = pvMacchine.filter(m => m.prossimo_tagliando && m.prossimo_tagliando <= pvEnd).length;
+
+      return json({
+        success: true,
+        mese: pvMese,
+        vincoli_auto: vincAuto,
+        regole_manuali: manualRules,
+        summary: {
+          tecnici_totali: totTec,
+          tecnici_disponibili: totTec - tecVincolati.size,
+          tecnici_vincolati: tecVincolati.size,
+          vincoli_auto: vincAuto.length,
+          regole_manuali: manualRules.length,
+          piano_esistente: pvPiano.length,
+          urgenze_aperte: pvUrg.length,
+          tagliandi_scadenza: taglScad
+        }
+      });
+    }
+
     case 'generateAIPlan': {
       if (!env.AI) return err('Workers AI non configurato. Aggiungi [ai] binding = "AI" in wrangler.toml e rideploya.');
 
@@ -2140,33 +2223,62 @@ async function handlePost(action, body, env) {
         meseTarget ? sb(env, 'piano', 'GET', null, `?obsoleto=eq.false&stato=neq.annullato&data=gte.${meseStart}&data=lte.${meseEnd}&select=id,tecnico_id,tecnici_ids,cliente_id,data,ora_inizio,tipo_intervento_id,note,stato&limit=500`).catch(()=>[]) : Promise.resolve([])
       ]);
 
-      // Parse vincoli dinamici dalla config (only if ctx.vincoli)
+      // Parse vincoli: NEW v2 format (manual_rules) + legacy categories
       let vincoliText = '';
       if (ctx.vincoli && vincoliCfg.length) {
         try {
           const vc = JSON.parse(vincoliCfg[0].valore);
-          const cats = (vc.categories || []).filter(c => c.attiva !== false);
           const oggi = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
           const getName = (id) => { const u = allTecnici.find(t => t.id === id); return u ? `${u.nome} ${u.cognome}` : id; };
-          cats.forEach(cat => {
-            const regole = (cat.regole || []).filter(r => {
+
+          // NEW v2: manual_rules (flat array from redesigned UI)
+          const manualRules = vc.manual_rules || [];
+          if (manualRules.length) {
+            vincoliText += '\n=== REGOLE MANUALI (configurate dall\'admin) ===\n';
+            manualRules.filter(r => {
               if (!r.testo) return false;
-              if (r.permanente) return true;
+              if (r.permanente !== false) return true;
               if (r.data_fine && r.data_fine < oggi) return false;
+              if (r.data_inizio && r.data_inizio > oggi) return false;
               return true;
-            });
-            if (!regole.length) return;
-            vincoliText += `\n[${cat.icona || ''} ${cat.nome}]\n`;
-            regole.forEach(r => {
+            }).forEach(r => {
               let line = `- ${r.testo}`;
               if (r.soggetti?.length) line += ` (Soggetti: ${r.soggetti.map(getName).join(', ')})`;
-              if (r.riferimenti?.length) line += ` (Con: ${r.riferimenti.map(getName).join(', ')})`;
               if (!r.permanente && (r.data_inizio || r.data_fine)) line += ` (${r.data_inizio ? 'Dal ' + r.data_inizio : ''}${r.data_fine ? ' Al ' + r.data_fine : ''})`;
-              line += r.priorita === 'alta' ? ' [PRIORITA ALTA]' : '';
+              line += r.tipo_regola === 'vincolo' ? ' [VINCOLO OBBLIGATORIO]' : r.tipo_regola === 'preferenza' ? ' [PREFERENZA]' : ' [NOTA]';
+              if (r.priorita === 'alta') line += ' ⚠️PRIORITA ALTA';
               vincoliText += line + '\n';
             });
-          });
+          }
+
+          // LEGACY: old categories format (retrocompatibilità)
+          const cats = (vc.categories || []).filter(c => c.attiva !== false);
+          if (cats.length && !manualRules.length) {
+            cats.forEach(cat => {
+              const regole = (cat.regole || []).filter(r => {
+                if (!r.testo) return false;
+                if (r.permanente) return true;
+                if (r.data_fine && r.data_fine < oggi) return false;
+                return true;
+              });
+              if (!regole.length) return;
+              vincoliText += `\n[${cat.icona || ''} ${cat.nome}]\n`;
+              regole.forEach(r => {
+                let line = `- ${r.testo}`;
+                if (r.soggetti?.length) line += ` (Soggetti: ${r.soggetti.map(getName).join(', ')})`;
+                if (r.riferimenti?.length) line += ` (Con: ${r.riferimenti.map(getName).join(', ')})`;
+                if (!r.permanente && (r.data_inizio || r.data_fine)) line += ` (${r.data_inizio ? 'Dal ' + r.data_inizio : ''}${r.data_fine ? ' Al ' + r.data_fine : ''})`;
+                line += r.priorita === 'alta' ? ' [PRIORITA ALTA]' : '';
+                vincoliText += line + '\n';
+              });
+            });
+          }
         } catch {}
+      }
+
+      // Also accept vincoli_override from frontend (new AI planner flow)
+      if (vincoli.vincoli_override) {
+        vincoliText = vincoli.vincoli_override;
       }
 
       // Reperibilita context (only if ctx.reperibilita)
@@ -3120,6 +3232,196 @@ Rispondi SOLO con JSON valido:
       return ok({ created: created.length, errors });
     }
 
+    // ============ IMPORT/EXPORT LELY ============
+
+    case 'importLelyClienti': {
+      // Import clienti from "Customers SMART to IFS" Excel format
+      // Field mapping: Account Name → nome_account, M3 Customer Number → codice_m3,
+      // Service Area → area_servizio, Billing City → citta_fatturazione,
+      // Billing Address → indirizzo, Invoice Email → email
+      const { rows } = body;
+      if (!rows || !rows.length) return err('rows richiesto (array di oggetti con campi Lely)');
+      if (rows.length > 500) return err('Massimo 500 righe');
+      const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+      const now = new Date().toISOString();
+
+      // Column name mapping (case-insensitive, flexible)
+      const mapCol = (row, ...keys) => {
+        for (const k of keys) {
+          const val = Object.entries(row).find(([rk]) => rk.toLowerCase().replace(/[_\s]+/g,'') === k.toLowerCase().replace(/[_\s]+/g,''));
+          if (val && val[1]) return String(val[1]).trim();
+        }
+        return null;
+      };
+
+      const created = [], updated = [], errors = [];
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        try {
+          const codice_m3 = mapCol(row, 'M3CustomerNumber', 'M3 Customer Number', 'codice_m3', 'CustomerNumber');
+          const nome_account = mapCol(row, 'AccountName', 'Account Name', 'nome_account', 'Name');
+          if (!codice_m3 && !nome_account) { errors.push({ riga: i+1, err: 'Nessun identificativo (M3 o Nome)' }); continue; }
+
+          const record = {
+            codice_m3: codice_m3 || null,
+            nome_account: nome_account || null,
+            area_servizio: mapCol(row, 'ServiceArea', 'Service Area', 'area_servizio') || null,
+            citta_fatturazione: mapCol(row, 'BillingCity', 'Billing City', 'citta_fatturazione', 'City') || null,
+            indirizzo: mapCol(row, 'BillingAddress', 'Billing Address', 'Billing Street', 'indirizzo') || null,
+            email: mapCol(row, 'InvoiceEmail', 'Invoice Email', 'Email', 'email') || null,
+            stato_account: mapCol(row, 'AccountStatus', 'Account Status', 'stato_account') || 'active',
+            piva: mapCol(row, 'VATNumber', 'VAT Number', 'piva', 'PIva') || null,
+            telefono: mapCol(row, 'Phone', 'Telefono', 'telefono') || null,
+            tenant_id: tid,
+            updated_at: now
+          };
+
+          // Upsert by codice_m3
+          if (codice_m3) {
+            const existing = await sb(env, 'anagrafica_clienti', 'GET', null, `?codice_m3=eq.${codice_m3}&limit=1`).catch(()=>[]);
+            if (existing.length) {
+              await sb(env, `anagrafica_clienti?codice_m3=eq.${codice_m3}`, 'PATCH', record);
+              updated.push(codice_m3);
+            } else {
+              record.created_at = now;
+              await sb(env, 'anagrafica_clienti', 'POST', record);
+              created.push(codice_m3);
+            }
+          } else {
+            record.codice_m3 = 'CLI_IMP_' + Date.now() + '_' + i;
+            record.created_at = now;
+            await sb(env, 'anagrafica_clienti', 'POST', record);
+            created.push(record.codice_m3);
+          }
+        } catch (e) {
+          errors.push({ riga: i+1, err: e.message });
+        }
+      }
+      return ok({ created: created.length, updated: updated.length, errors, total: rows.length });
+    }
+
+    case 'importLelyAssets': {
+      // Import assets from "Maintenance Data Template" (Movex Items sheet)
+      // Field mapping: DeviceSerialNumber → numero_serie, DeviceType → tipo_macchina,
+      // CustomerNumber → codice_m3, Model code → modello, Installation date → data_installazione
+      const { rows } = body;
+      if (!rows || !rows.length) return err('rows richiesto');
+      if (rows.length > 2000) return err('Massimo 2000 righe');
+      const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+      const now = new Date().toISOString();
+
+      const mapCol = (row, ...keys) => {
+        for (const k of keys) {
+          const val = Object.entries(row).find(([rk]) => rk.toLowerCase().replace(/[_\s]+/g,'') === k.toLowerCase().replace(/[_\s]+/g,''));
+          if (val && val[1]) return String(val[1]).trim();
+        }
+        return null;
+      };
+
+      const created = [], updated = [], errors = [];
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        try {
+          const numero_serie = mapCol(row, 'DeviceSerialNumber', 'Device Serial Number', 'SerialNumber', 'numero_serie', 'Serial');
+          const tipo = mapCol(row, 'DeviceType', 'Device Type', 'tipo_macchina', 'Type');
+          if (!numero_serie) { errors.push({ riga: i+1, err: 'Nessun numero di serie' }); continue; }
+
+          const record = {
+            numero_serie,
+            tipo_macchina: tipo || null,
+            codice_m3: mapCol(row, 'CustomerNumber', 'Customer Number', 'codice_m3', 'M3Customer') || null,
+            nome_account: mapCol(row, 'CustomerName', 'Customer Name', 'nome_account') || null,
+            modello: mapCol(row, 'ModelCode', 'Model code', 'Model', 'modello') || null,
+            gruppo_attrezzatura: mapCol(row, 'EquipmentGroup', 'Equipment Group', 'gruppo_attrezzatura') || null,
+            nome_asset: mapCol(row, 'DeviceName', 'Device Name', 'nome_asset') || tipo || null,
+            data_installazione: mapCol(row, 'InstallationDate', 'Installation date', 'data_installazione') || null,
+            stato: mapCol(row, 'Status', 'stato') || 'attivo',
+            tenant_id: tid,
+            updated_at: now
+          };
+
+          // Upsert by numero_serie
+          const existing = await sb(env, 'anagrafica_assets', 'GET', null, `?numero_serie=eq.${encodeURIComponent(numero_serie)}&limit=1`).catch(()=>[]);
+          if (existing.length) {
+            await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(numero_serie)}`, 'PATCH', record);
+            updated.push(numero_serie);
+          } else {
+            record.id = 'AST_' + Date.now() + '_' + i;
+            record.created_at = now;
+            await sb(env, 'anagrafica_assets', 'POST', record);
+            created.push(numero_serie);
+          }
+        } catch (e) {
+          errors.push({ riga: i+1, err: e.message });
+        }
+      }
+      return ok({ created: created.length, updated: updated.length, errors, total: rows.length });
+    }
+
+    case 'exportLelyTemplate': {
+      // Returns field definitions for Lely export templates
+      const templateType = body.template_type || 'clienti';
+      const templates = {
+        clienti: {
+          name: 'Customers SMART to IFS',
+          columns: [
+            { header: 'Account Name', db_field: 'nome_account' },
+            { header: 'M3 Customer Number', db_field: 'codice_m3' },
+            { header: 'Service Area', db_field: 'area_servizio' },
+            { header: 'Billing City', db_field: 'citta_fatturazione' },
+            { header: 'Billing Address', db_field: 'indirizzo' },
+            { header: 'Invoice Email', db_field: 'email' },
+            { header: 'VAT Number', db_field: 'piva' },
+            { header: 'Phone', db_field: 'telefono' },
+            { header: 'Account Status', db_field: 'stato_account' }
+          ]
+        },
+        assets: {
+          name: 'Movex Items (Assets)',
+          columns: [
+            { header: 'DeviceSerialNumber', db_field: 'numero_serie' },
+            { header: 'DeviceType', db_field: 'tipo_macchina' },
+            { header: 'CustomerNumber', db_field: 'codice_m3' },
+            { header: 'CustomerName', db_field: 'nome_account' },
+            { header: 'Model code', db_field: 'modello' },
+            { header: 'EquipmentGroup', db_field: 'gruppo_attrezzatura' },
+            { header: 'Installation date', db_field: 'data_installazione' },
+            { header: 'Status', db_field: 'stato' }
+          ]
+        },
+        piano: {
+          name: 'Programmazione Mensile',
+          columns: [
+            { header: 'DATA', db_field: 'data' },
+            { header: 'FURGONE', db_field: 'automezzo_id' },
+            { header: 'TECNICO', db_field: 'tecnico_id', note: 'nome lookup' },
+            { header: 'REPERIBILITA', db_field: null, note: 'flag → record reperibilita' },
+            { header: 'ATTIVITA', db_field: 'note', note: 'CLIENTE - tipo' }
+          ]
+        }
+      };
+
+      const tpl = templates[templateType];
+      if (!tpl) return err('template_type non valido. Opzioni: clienti, assets, piano');
+
+      // If export_data=true, also fetch actual data
+      if (body.export_data) {
+        let data = [];
+        if (templateType === 'clienti') {
+          data = await sb(env, 'anagrafica_clienti', 'GET', null, '?limit=500&select=' + tpl.columns.map(c=>c.db_field).filter(Boolean).join(','));
+        } else if (templateType === 'assets') {
+          data = await sb(env, 'anagrafica_assets', 'GET', null, '?limit=1000&select=' + tpl.columns.map(c=>c.db_field).filter(Boolean).join(','));
+        }
+        return ok({ template: tpl, data: data.map(row => {
+          const mapped = {};
+          tpl.columns.forEach(col => { if(col.db_field) mapped[col.header] = row[col.db_field] || ''; });
+          return mapped;
+        })});
+      }
+
+      return ok({ template: tpl });
+    }
+
     // -------- WORKFLOW APPROVATIVO → spostato sotto dopo getVincoliCategories --------
 
     case 'geocodeAll': {
@@ -3434,6 +3736,143 @@ Rispondi SOLO con JSON valido:
       } catch {
         return ok({ categories: [], meta: {}, raw: rows[0].valore });
       }
+    }
+
+    // ──────── VINCOLI AUTO-DERIVATI (da dati esistenti) ─────────────
+    case 'getVincoliAutoDerived': {
+      const vdMese = body.mese_target;
+      if (!vdMese) return err('mese_target richiesto (YYYY-MM)');
+      const vdStart = vdMese + '-01';
+      const vdLastDay = new Date(parseInt(vdMese.split('-')[0]), parseInt(vdMese.split('-')[1]), 0).getDate();
+      const vdEnd = vdMese + '-' + String(vdLastDay).padStart(2, '0');
+
+      // Carica dati in parallelo
+      const [vdTecnici, vdRich, vdRep, vdTras, vdInst, vdManual] = await Promise.all([
+        sb(env, 'utenti', 'GET', null, '?attivo=eq.true&obsoleto=eq.false&select=id,nome,cognome,ruolo,base,automezzo_id').catch(()=>[]),
+        sb(env, 'richieste', 'GET', null, `?stato=eq.approvata&obsoleto=eq.false&data_inizio=lte.${vdEnd}&data_fine=gte.${vdStart}&select=id,tecnico_id,tipo,data_inizio,data_fine,motivo`).catch(()=>[]),
+        sb(env, 'reperibilita', 'GET', null, `?obsoleto=eq.false&data_inizio=lte.${vdEnd}&data_fine=gte.${vdStart}&select=id,tecnico_id,data_inizio,data_fine,turno,tipo`).catch(()=>[]),
+        sb(env, 'trasferte', 'GET', null, `?obsoleto=eq.false&data_inizio=lte.${vdEnd}&data_fine=gte.${vdStart}&select=id,tecnico_id,tecnici_ids,data_inizio,data_fine,cliente_id,motivo`).catch(()=>[]),
+        sb(env, 'installazioni', 'GET', null, `?obsoleto=eq.false&stato=in.(pianificato,in_corso)&data_inizio=lte.${vdEnd}&select=id,tecnico_id,tecnici_ids,data_inizio,data_fine,cliente_id,stato`).catch(()=>[]),
+        sb(env, 'config', 'GET', null, '?chiave=eq.vincoli_categories&limit=1').catch(()=>[])
+      ]);
+
+      // Helper: nome tecnico
+      const tecMap = {};
+      vdTecnici.forEach(t => { tecMap[t.id] = `${t.nome||''} ${t.cognome||''}`.trim(); });
+      const tn = id => tecMap[id] || id;
+
+      // Helper: formato data breve
+      const fd = d => d ? d.split('-').reverse().join('/') : '';
+
+      // --- VINCOLI AUTO ---
+      const auto_derived = [];
+
+      // 1. Richieste → Assenze
+      for (const r of vdRich) {
+        const icona = r.tipo === 'ferie' ? '🏖️' : r.tipo === 'malattia' ? '🤒' : '📋';
+        const tipoLabel = (r.tipo || 'permesso').charAt(0).toUpperCase() + (r.tipo || 'permesso').slice(1);
+        auto_derived.push({
+          tipo: 'auto_derived', categoria: 'Assenze', icona,
+          nome: `${tipoLabel} ${tn(r.tecnico_id)}`,
+          fonte_tabella: 'richieste', fonte_record_id: r.id,
+          testo: `${tn(r.tecnico_id)} NON DISPONIBILE per ${r.tipo}${r.motivo ? ' ('+r.motivo+')' : ''} dal ${fd(r.data_inizio)} al ${fd(r.data_fine||r.data_inizio)}`,
+          soggetti: [r.tecnico_id],
+          data_inizio: r.data_inizio, data_fine: r.data_fine || r.data_inizio,
+          priorita: 'alta', impatto: 'NON schedulare'
+        });
+      }
+
+      // 2. Reperibilità → Turni
+      for (const r of vdRep) {
+        auto_derived.push({
+          tipo: 'auto_derived', categoria: 'Reperibilita', icona: '📞',
+          nome: `Reperibilità ${tn(r.tecnico_id)}`,
+          fonte_tabella: 'reperibilita', fonte_record_id: r.id,
+          testo: `${tn(r.tecnico_id)} reperibile ${r.turno ? '('+r.turno+')' : ''} dal ${fd(r.data_inizio)} al ${fd(r.data_fine)}`,
+          soggetti: [r.tecnico_id],
+          data_inizio: r.data_inizio, data_fine: r.data_fine,
+          priorita: 'media', impatto: 'Disponibile ma reperibile'
+        });
+      }
+
+      // 3. Trasferte → Fuori sede
+      for (const t of vdTras) {
+        const tecIds = [t.tecnico_id, ...((t.tecnici_ids||'').split(',').filter(Boolean))].filter(Boolean);
+        auto_derived.push({
+          tipo: 'auto_derived', categoria: 'Trasferte', icona: '🧳',
+          nome: `Trasferta ${tecIds.map(tn).join(', ')}`,
+          fonte_tabella: 'trasferte', fonte_record_id: t.id,
+          testo: `${tecIds.map(tn).join(', ')} in trasferta${t.motivo ? ' ('+t.motivo+')' : ''} dal ${fd(t.data_inizio)} al ${fd(t.data_fine||t.data_inizio)}`,
+          soggetti: tecIds,
+          data_inizio: t.data_inizio, data_fine: t.data_fine || t.data_inizio,
+          priorita: 'alta', impatto: 'NON schedulare'
+        });
+      }
+
+      // 4. Installazioni → Impegnati
+      for (const i of vdInst) {
+        const tecIds = [i.tecnico_id, ...((i.tecnici_ids||'').split(',').filter(Boolean))].filter(Boolean);
+        auto_derived.push({
+          tipo: 'auto_derived', categoria: 'Installazioni', icona: '🏗️',
+          nome: `Installazione ${i.id}`,
+          fonte_tabella: 'installazioni', fonte_record_id: i.id,
+          testo: `${tecIds.map(tn).join(', ')} impegnati in installazione ${i.id} dal ${fd(i.data_inizio)}${i.data_fine ? ' al '+fd(i.data_fine) : ''}`,
+          soggetti: tecIds,
+          data_inizio: i.data_inizio, data_fine: i.data_fine || i.data_inizio,
+          priorita: 'alta', impatto: 'NON schedulare'
+        });
+      }
+
+      // --- REGOLE MANUALI (dal vecchio JSON config) ---
+      let manual_rules = [];
+      try {
+        if (vdManual?.[0]?.valore) {
+          const vc = JSON.parse(vdManual[0].valore);
+          const cats = (vc.categories || []).filter(c => c.attiva !== false);
+          for (const cat of cats) {
+            for (const r of (cat.regole || [])) {
+              if (!r.testo) continue;
+              // Filtra per date se non permanente
+              if (!r.permanente && r.data_fine && r.data_fine < vdStart) continue;
+              manual_rules.push({
+                tipo: 'manual_rule', categoria: cat.nome, icona: cat.icona || '📋',
+                nome: r.testo.substring(0, 60),
+                testo: r.testo,
+                soggetti: r.soggetti || [],
+                riferimenti: r.riferimenti || [],
+                priorita: r.priorita || 'media',
+                regola_tipo: r.tipo_regola || 'vincolo',
+                permanente: r.permanente !== false,
+                data_inizio: r.data_inizio, data_fine: r.data_fine
+              });
+            }
+          }
+        }
+      } catch {}
+
+      // --- SUMMARY ---
+      const assentiIds = new Set();
+      auto_derived.filter(v => v.impatto === 'NON schedulare').forEach(v => (v.soggetti||[]).forEach(s => assentiIds.add(s)));
+      const tecniciNonAdmin = vdTecnici.filter(t => t.ruolo !== 'admin');
+
+      return ok({
+        mese: vdMese,
+        auto_derived,
+        manual_rules,
+        summary: {
+          tecnici_totali: tecniciNonAdmin.length,
+          tecnici_disponibili: tecniciNonAdmin.length - assentiIds.size,
+          tecnici_assenti: [...assentiIds].map(id => ({ id, nome: tn(id) })),
+          vincoli_auto: auto_derived.length,
+          regole_manuali: manual_rules.length,
+          per_categoria: {
+            assenze: auto_derived.filter(v => v.categoria === 'Assenze').length,
+            reperibilita: auto_derived.filter(v => v.categoria === 'Reperibilita').length,
+            trasferte: auto_derived.filter(v => v.categoria === 'Trasferte').length,
+            installazioni: auto_derived.filter(v => v.categoria === 'Installazioni').length
+          }
+        }
+      });
     }
 
     // ──────── AVAILABILITY MAP (mappa disponibilità tecnici) ─────────

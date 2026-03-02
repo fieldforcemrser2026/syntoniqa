@@ -794,21 +794,56 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 
 <!-- ========== SEC: VINCOLI PIANO ========== -->
 <section class="sec" id="secVincoli">
+<!-- CARD 1: Vincoli Automatici -->
 <div class="card mb">
 <div class="card-head">
-<h3>📐 Vincoli Pianificazione</h3>
+<h3>📊 Vincoli Automatici</h3>
 <div style="display:flex;gap:8px;align-items:center">
-<span id="vincoliCount" style="font-size:.75rem;color:var(--gray)"></span>
-<button class="btn btn-sm btn-outline" onclick="addVincoliCategory()">+ Nuova Categoria</button>
-<button class="btn btn-sm btn-ok" onclick="saveVincoliCategories()">💾 Salva Vincoli</button>
+<span id="vincoliAutoCount" style="font-size:.75rem;color:var(--gray)"></span>
+<input type="month" id="vincoliMeseTarget" class="inp" style="width:auto;padding:4px 8px;font-size:.8rem" onchange="loadVincoliAuto()">
+<button class="btn btn-sm btn-outline" onclick="loadVincoliAuto()">🔄 Ricarica</button>
 </div>
 </div>
 <div class="card-body">
-<p style="font-size:.8125rem;color:var(--gray);margin-bottom:14px">Configura i vincoli che l'AI rispettera automaticamente nella generazione del piano. Categorie e regole sono completamente personalizzabili — crea, rinomina, riordina a piacere.</p>
-<div id="vincoliContainer"></div>
-<div style="border-top:1px solid #E5E7EB;padding-top:14px;margin-top:8px">
-<div style="font-size:.75rem;font-weight:600;color:var(--gray);margin-bottom:8px">Suggerimenti rapidi — clicca per creare una categoria:</div>
-<div class="vinc-templates" id="vincoliTemplates"></div>
+<p style="font-size:.8125rem;color:var(--gray);margin-bottom:12px">Derivati automaticamente da ferie, reperibilità, trasferte e installazioni nel DB. Deseleziona quelli da ignorare nella generazione AI.</p>
+<div id="vincoliAutoContainer" style="display:flex;flex-direction:column;gap:6px">
+<p style="color:var(--gray);text-align:center;padding:20px">Seleziona un mese e clicca 🔄 Ricarica</p>
+</div>
+</div>
+</div>
+
+<!-- CARD 2: Regole Manuali -->
+<div class="card mb">
+<div class="card-head">
+<h3>📋 Regole Manuali</h3>
+<div style="display:flex;gap:8px;align-items:center">
+<span id="vincoliManualCount" style="font-size:.75rem;color:var(--gray)"></span>
+<button class="btn btn-sm btn-outline" onclick="addManualVincolo()">+ Nuova Regola</button>
+<button class="btn btn-sm btn-ok" onclick="saveVincoliAll()">💾 Salva</button>
+</div>
+</div>
+<div class="card-body">
+<p style="font-size:.8125rem;color:var(--gray);margin-bottom:12px">Regole personalizzate: accoppiamenti team, preferenze, note operative. Queste sono SEMPRE inviate all'AI planner.</p>
+<div id="vincoliManualContainer"></div>
+<div style="border-top:1px solid #E5E7EB;padding-top:10px;margin-top:8px">
+<div style="font-size:.75rem;color:var(--gray);margin-bottom:6px">Suggerimenti rapidi:</div>
+<div style="display:flex;flex-wrap:wrap;gap:4px" id="vincoliQuickAdd">
+<button class="btn btn-xs btn-outline" onclick="addManualVincolo('👥 Accoppiamento Junior+Senior','Gino/Giuseppe/Emanuele devono lavorare affiancati a un senior (Jacopo/Anton/Giovanni)')">👥 Junior+Senior</button>
+<button class="btn btn-xs btn-outline" onclick="addManualVincolo('🚫 Tecnico non disponibile','[Nome] non disponibile per [motivo]')">🚫 Non disponibile</button>
+<button class="btn btn-xs btn-outline" onclick="addManualVincolo('🔧 Competenza specifica','Solo [Nome] può intervenire su [tipo macchina]')">🔧 Competenza</button>
+<button class="btn btn-xs btn-outline" onclick="addManualVincolo('🚗 Furgone fuori servizio','Furgone [FURG_X] in officina dal [data] al [data]')">🚗 Furgone KO</button>
+<button class="btn btn-xs btn-outline" onclick="addManualVincolo('📍 Zona geografica','[Nome] preferibilmente in zona [città/area]')">📍 Zona</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- CARD 3: Riepilogo -->
+<div class="card">
+<div class="card-head"><h3>📊 Riepilogo Vincoli</h3></div>
+<div class="card-body">
+<div id="vincoliSummaryBox" style="background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);border-radius:8px;padding:14px;font-size:.8125rem">
+<p style="color:var(--gray)">Carica i vincoli automatici per vedere il riepilogo.</p>
 </div>
 </div>
 </div>
@@ -849,7 +884,32 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <section class="sec" id="secAi">
 <div class="ai-box">
 <h3>🤖 AI Planner — Simulatore Intelligente</h3>
-<p>Configura mese e contesto, poi clicca <strong>Genera Piano</strong>. L'AI considera vincoli, disponibilit&agrave;, urgenze e tagliandi per creare un piano ottimizzato. Il prompt testuale &egrave; opzionale — i vincoli dalla sezione <strong>📐 Vincoli Piano</strong> vengono caricati automaticamente.</p>
+
+<!-- STEPPER -->
+<div id="aiStepper" style="display:flex;gap:0;margin-bottom:20px;background:rgba(255,255,255,.06);border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.1)">
+<div class="ai-step active" data-step="1" onclick="aiGoToStep(1)" style="flex:1;padding:10px 14px;cursor:pointer;text-align:center;font-size:.8rem;transition:all .2s;border-right:1px solid rgba(255,255,255,.1)">
+<div style="font-weight:700;font-size:.9rem">1</div><div>⚙️ Configura</div>
+</div>
+<div class="ai-step" data-step="2" onclick="aiGoToStep(2)" style="flex:1;padding:10px 14px;cursor:pointer;text-align:center;font-size:.8rem;transition:all .2s;border-right:1px solid rgba(255,255,255,.1)">
+<div style="font-weight:700;font-size:.9rem">2</div><div>👁️ Anteprima</div>
+</div>
+<div class="ai-step" data-step="3" onclick="aiGoToStep(3)" style="flex:1;padding:10px 14px;cursor:pointer;text-align:center;font-size:.8rem;transition:all .2s;border-right:1px solid rgba(255,255,255,.1)">
+<div style="font-weight:700;font-size:.9rem">3</div><div>🤖 Genera</div>
+</div>
+<div class="ai-step" data-step="4" onclick="aiGoToStep(4)" style="flex:1;padding:10px 14px;cursor:pointer;text-align:center;font-size:.8rem;transition:all .2s">
+<div style="font-weight:700;font-size:.9rem">4</div><div>✅ Applica</div>
+</div>
+</div>
+<style>
+.ai-step{opacity:.4;position:relative}
+.ai-step.active{opacity:1;background:rgba(99,102,241,.25)!important}
+.ai-step.done{opacity:.7;background:rgba(16,185,129,.15)!important}
+.ai-step.done::after{content:'✓';position:absolute;top:4px;right:6px;font-size:.65rem;color:#10B981}
+</style>
+
+<!-- STEP 1: CONFIGURA -->
+<div id="aiStep1" class="ai-step-content">
+<p style="font-size:.85rem;color:rgba(255,255,255,.7);margin-bottom:12px">Configura mese, contesto e vincoli. Poi clicca <strong>Avanti</strong> per vedere l'anteprima prima di generare.</p>
 <div id="aiVincoliStatus" style="margin-bottom:12px"></div>
 <textarea id="aiPrompt" placeholder="(Opzionale) Istruzioni aggiuntive in linguaggio naturale. Es: Dai priorità ai tagliandi scaduti. Il furgone F3 è in officina questa settimana."></textarea>
 <div style="margin-top:12px">
@@ -910,12 +970,48 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 
 <div style="display:flex;gap:8px;flex-wrap:wrap">
-<button class="btn btn-lg" style="background:#6366F1;color:white" onclick="runAI()">🤖 Genera Piano</button>
+<button class="btn btn-lg" style="background:#818CF8;color:white" onclick="aiPreviewStep()">👁️ Anteprima Vincoli →</button>
+<button class="btn btn-lg" style="background:#6366F1;color:white" onclick="runAI()">🤖 Genera Piano (diretto)</button>
+</div>
+</div><!-- end aiStep1 -->
+
+<!-- STEP 2: ANTEPRIMA VINCOLI -->
+<div id="aiStep2" class="ai-step-content" style="display:none">
+<div style="font-size:.9rem;font-weight:600;color:#fff;margin-bottom:12px">👁️ Anteprima Contesto — Verifica prima di generare</div>
+<div id="aiPreviewContent" style="margin-bottom:16px">
+<p style="color:rgba(255,255,255,.5);text-align:center;padding:20px">Carica l'anteprima dal passo 1...</p>
+</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+<button class="btn btn-lg" style="background:rgba(255,255,255,.15);color:white" onclick="aiGoToStep(1)">← Indietro</button>
+<button class="btn btn-lg" style="background:#6366F1;color:white" onclick="aiGenerateFromPreview()">🤖 Genera Piano →</button>
+</div>
+</div>
+
+<!-- STEP 3: GENERAZIONE -->
+<div id="aiStep3" class="ai-step-content" style="display:none">
+<div id="aiGenerationProgress" style="margin-bottom:16px">
+<p style="color:rgba(255,255,255,.5);text-align:center;padding:20px">In attesa di avvio generazione...</p>
+</div>
+<div class="ai-result" id="aiResult" style="display:none"></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+<button class="btn btn-lg" style="background:rgba(255,255,255,.15);color:white" onclick="aiGoToStep(1)">← Riconfigura</button>
 <button class="btn btn-lg" style="background:#22c55e;color:white" onclick="downloadAIPlanXlsx()" id="btnDownloadPlan" disabled>📥 Scarica Excel</button>
+<button class="btn btn-lg" style="background:#10B981;color:white" onclick="aiGoToStep(4)" id="btnGoStep4" disabled>Anteprima Piano →</button>
+</div>
+</div>
+
+<!-- STEP 4: APPLICA -->
+<div id="aiStep4" class="ai-step-content" style="display:none">
+<div style="font-size:.9rem;font-weight:600;color:#fff;margin-bottom:12px">✅ Applica il Piano Generato</div>
+<div id="aiApplyPreview" style="margin-bottom:16px">
+<p style="color:rgba(255,255,255,.5)">Il piano generato è pronto. Verifica e applica al sistema.</p>
+</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+<button class="btn btn-lg" style="background:rgba(255,255,255,.15);color:white" onclick="aiGoToStep(3)">← Indietro</button>
 <button class="btn btn-lg" style="background:#10B981;color:white" onclick="applyAI()" id="btnApplyAI" disabled>✅ Applica al Sistema</button>
 <button class="btn btn-lg" style="background:#3B82F6;color:white" onclick="submitAIPlanForApproval()" id="btnSubmitPlan" disabled>📤 Invia per Approvazione</button>
 </div>
-<div class="ai-result" id="aiResult" style="display:none"></div>
+</div>
 </div>
 
 <!-- Workflow Approvativo -->
@@ -1418,6 +1514,64 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </tr></thead>
 <tbody id="anagClientiBody"></tbody>
 </table>
+</div>
+</div>
+
+<!-- ══════ IMPORT/EXPORT LELY ══════ -->
+<div class="card" style="margin-top:16px">
+<div class="card-head">
+<h3>🔄 Import/Export Lely (SMART→IFS)</h3>
+<button class="btn btn-sm btn-outline" onclick="$('lelyImportExportPanel').style.display=$('lelyImportExportPanel').style.display==='none'?'':'none'">📋 Mostra/Nascondi</button>
+</div>
+<div class="card-body" id="lelyImportExportPanel" style="display:none">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+<!-- IMPORT -->
+<div style="border:1px solid #E5E7EB;border-radius:8px;padding:14px">
+<h4 style="font-size:.875rem;margin-bottom:10px">⬆️ Import da Excel Lely</h4>
+<div style="margin-bottom:12px">
+<label style="font-size:.75rem;font-weight:600;display:block;margin-bottom:4px">Clienti (Customers SMART→IFS)</label>
+<div style="border:2px dashed #D1D5DB;border-radius:8px;padding:16px;text-align:center;cursor:pointer;font-size:.8125rem" onclick="$('lelyFileClienti').click()" ondragover="event.preventDefault();this.style.borderColor='#6366F1'" ondragleave="this.style.borderColor='#D1D5DB'" ondrop="event.preventDefault();handleLelyImport('clienti',event.dataTransfer.files[0]);this.style.borderColor='#D1D5DB'">
+📎 Trascina Excel clienti o clicca
+<input type="file" id="lelyFileClienti" accept=".xlsx,.xls" style="display:none" onchange="handleLelyImport('clienti',this.files[0])">
+</div>
+</div>
+<div style="margin-bottom:12px">
+<label style="font-size:.75rem;font-weight:600;display:block;margin-bottom:4px">Assets (Maintenance Data - Movex Items)</label>
+<div style="border:2px dashed #D1D5DB;border-radius:8px;padding:16px;text-align:center;cursor:pointer;font-size:.8125rem" onclick="$('lelyFileAssets').click()" ondragover="event.preventDefault();this.style.borderColor='#6366F1'" ondragleave="this.style.borderColor='#D1D5DB'" ondrop="event.preventDefault();handleLelyImport('assets',event.dataTransfer.files[0]);this.style.borderColor='#D1D5DB'">
+📎 Trascina Excel assets o clicca
+<input type="file" id="lelyFileAssets" accept=".xlsx,.xls,.xlsm" style="display:none" onchange="handleLelyImport('assets',this.files[0])">
+</div>
+</div>
+<div id="lelyImportPreview" style="display:none;margin-top:8px"></div>
+</div>
+
+<!-- EXPORT -->
+<div style="border:1px solid #E5E7EB;border-radius:8px;padding:14px">
+<h4 style="font-size:.875rem;margin-bottom:10px">⬇️ Export in formato Lely</h4>
+<div style="display:flex;flex-direction:column;gap:8px">
+<button class="btn btn-sm btn-outline" onclick="exportLelyData('clienti')">📥 Download Clienti</button>
+<button class="btn btn-sm btn-outline" onclick="exportLelyData('assets')">📥 Download Assets</button>
+<button class="btn btn-sm btn-outline" onclick="exportLelyData('piano')">📥 Download Piano</button>
+</div>
+<div style="margin-top:12px;font-size:.75rem;color:var(--gray)">
+<details><summary style="cursor:pointer;color:#6366F1;font-size:.75rem">Field Mapping Lely↔Syntoniqa</summary>
+<div style="margin-top:4px;font-size:.7rem;font-family:monospace;background:var(--gray5);padding:8px;border-radius:4px">
+Account Name → nome_account<br>
+M3 Customer Number → codice_m3<br>
+Service Area → area_servizio<br>
+Billing City → citta_fatturazione<br>
+───────<br>
+DeviceSerialNumber → numero_serie<br>
+DeviceType → tipo_macchina<br>
+Model code → modello<br>
+Installation date → data_installazione
+</div>
+</details>
+</div>
+</div>
+
+</div>
 </div>
 </div>
 </section>
@@ -4187,6 +4341,148 @@ function saveConfig(){
     .catch(e=>{toast(e.message,'err')})
 }
 
+// ============ IMPORT/EXPORT LELY ============
+async function handleLelyImport(tipo, file){
+  if(!file) return;
+  toast('Lettura file...','info');
+
+  // Load XLSX lib if not loaded
+  if(!window.XLSX){
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    document.head.appendChild(s);
+    await new Promise(r=>{s.onload=r;setTimeout(r,5000)});
+  }
+  if(!window.XLSX){toast('Errore caricamento libreria XLSX','err');return}
+
+  const reader = new FileReader();
+  reader.onload = async function(e){
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      let rows = [];
+      let sheetName = '';
+
+      if(tipo === 'clienti'){
+        // Try common sheet names for Customers SMART→IFS
+        const trySheets = ['Customers', 'Clienti', 'Sheet1', wb.SheetNames[0]];
+        for(const sn of trySheets){
+          if(wb.Sheets[sn]){ sheetName=sn; break; }
+        }
+        if(!sheetName){toast('Nessun foglio trovato nel file','err');return}
+        rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {defval:null});
+      } else if(tipo === 'assets'){
+        // Try Movex Items sheet or first sheet
+        const trySheets = ['Movex Items', 'Assets', 'Item List', 'Sheet1', wb.SheetNames[0]];
+        for(const sn of trySheets){
+          if(wb.Sheets[sn]){ sheetName=sn; break; }
+        }
+        if(!sheetName){toast('Nessun foglio trovato','err');return}
+        rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {defval:null});
+      }
+
+      if(!rows.length){toast('Nessuna riga trovata nel foglio "'+sheetName+'"','warn');return}
+
+      // Show preview
+      const preview = $('lelyImportPreview');
+      if(!preview) return;
+      preview.style.display = '';
+
+      // Show first 5 rows and column mapping
+      const cols = Object.keys(rows[0]);
+      let html = `<div style="background:var(--gray5);border-radius:8px;padding:12px;margin-top:8px">
+        <div style="font-weight:600;margin-bottom:6px">📋 Anteprima: ${rows.length} righe da foglio "${sheetName}"</div>
+        <div style="font-size:.75rem;color:var(--gray);margin-bottom:8px">Colonne trovate: ${cols.join(', ')}</div>
+        <div style="max-height:150px;overflow:auto;font-size:.7rem;border:1px solid #E5E7EB;border-radius:4px">
+        <table class="tbl" style="font-size:.7rem"><thead><tr>${cols.slice(0,8).map(c=>'<th>'+c+'</th>').join('')}</tr></thead>
+        <tbody>${rows.slice(0,5).map(r=>'<tr>'+cols.slice(0,8).map(c=>'<td>'+(r[c]||'—')+'</td>').join('')+'</tr>').join('')}</tbody></table>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-sm btn-ok" onclick="confirmLelyImport('${tipo}')">✅ Conferma Import (${rows.length} righe)</button>
+          <button class="btn btn-sm btn-outline" onclick="$('lelyImportPreview').style.display='none'">❌ Annulla</button>
+        </div>
+      </div>`;
+      preview.innerHTML = html;
+
+      // Store rows for confirmation
+      window._lelyPendingImport = { tipo, rows };
+
+    } catch(e) {
+      toast('Errore lettura file: '+e.message, 'err');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function confirmLelyImport(tipo){
+  const pending = window._lelyPendingImport;
+  if(!pending || pending.tipo !== tipo){ toast('Nessun import in sospeso','warn'); return; }
+
+  const action = tipo === 'clienti' ? 'importLelyClienti' : 'importLelyAssets';
+  toast(`Import ${tipo} in corso... (${pending.rows.length} righe)`,'info');
+
+  try {
+    // Send in batches of 50
+    let totalCreated = 0, totalUpdated = 0, allErrors = [];
+    const batchSize = 50;
+    for(let i = 0; i < pending.rows.length; i += batchSize){
+      const batch = pending.rows.slice(i, i + batchSize);
+      const r = await apiCall(action, { rows: batch }, 'POST');
+      totalCreated += r.created || 0;
+      totalUpdated += r.updated || 0;
+      if(r.errors?.length) allErrors.push(...r.errors);
+    }
+
+    let msg = `✅ Import completato: ${totalCreated} creati, ${totalUpdated} aggiornati`;
+    if(allErrors.length) msg += `, ${allErrors.length} errori`;
+    toast(msg, allErrors.length ? 'warn' : 'ok');
+
+    // Show errors if any
+    if(allErrors.length){
+      const preview = $('lelyImportPreview');
+      if(preview){
+        preview.innerHTML += `<div style="margin-top:8px;padding:8px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:6px;font-size:.75rem;max-height:150px;overflow-y:auto">
+          <strong>⚠️ ${allErrors.length} errori:</strong><br>
+          ${allErrors.map(e=>`Riga ${e.riga}: ${e.err}`).join('<br>')}
+        </div>`;
+      }
+    }
+
+    // Reload anagrafica
+    await loadAnagClients();
+    window._lelyPendingImport = null;
+  } catch(e){
+    toast('Errore import: '+e.message, 'err');
+  }
+}
+
+async function exportLelyData(tipo){
+  toast('Preparazione export...','info');
+
+  // Load XLSX lib
+  if(!window.XLSX){
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    document.head.appendChild(s);
+    await new Promise(r=>{s.onload=r;setTimeout(r,5000)});
+  }
+  if(!window.XLSX){toast('Errore caricamento libreria XLSX','err');return}
+
+  try {
+    const r = await apiCall('exportLelyTemplate', { template_type: tipo, export_data: true }, 'POST');
+    if(!r.template || !r.data){toast('Errore: nessun dato','err');return}
+
+    const ws = XLSX.utils.json_to_sheet(r.data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, r.template.name || tipo);
+
+    const filename = `Syntoniqa_${tipo}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, filename);
+    toast(`📥 ${filename} scaricato (${r.data.length} righe)`, 'ok');
+  } catch(e){
+    toast('Errore export: '+e.message, 'err');
+  }
+}
+
 // ============ CHAT INTERNA ============
 var CHAT_CANALE=null;
 var CHAT_POLL=null;
@@ -5643,19 +5939,135 @@ async function confirmImportExcelPlan(){
   }catch(e){toast(e.message,'err')}
 }
 
+// ============ AI PLANNER STEPPER ============
+let AI_CURRENT_STEP = 1;
+let AI_PREVIEW_DATA = null;
+
+function aiGoToStep(step){
+  AI_CURRENT_STEP = step;
+  // Hide all step contents
+  for(let i=1;i<=4;i++){
+    const el=$('aiStep'+i);
+    if(el) el.style.display = i===step ? '' : 'none';
+  }
+  // Update stepper UI
+  document.querySelectorAll('#aiStepper .ai-step').forEach(s=>{
+    const sNum = parseInt(s.dataset.step);
+    s.classList.remove('active','done');
+    if(sNum === step) s.classList.add('active');
+    else if(sNum < step) s.classList.add('done');
+  });
+}
+
+async function aiPreviewStep(){
+  const meseVal = $('aiMeseTarget')?.value || '';
+  if(!meseVal){ toast('Seleziona un mese target prima','warn'); return; }
+
+  aiGoToStep(2);
+  const container = $('aiPreviewContent');
+  if(container) container.innerHTML = '<div style="text-align:center;padding:24px"><div style="font-size:1.5rem;margin-bottom:8px">⏳</div><div style="color:rgba(255,255,255,.6)">Caricamento anteprima vincoli e contesto...</div></div>';
+
+  try {
+    const r = await apiCall('previewAIPlan', { mese_target: meseVal }, 'POST');
+    AI_PREVIEW_DATA = r;
+
+    // Also update VINCOLI_AUTO for consistency
+    if(r.vincoli_auto) { VINCOLI_AUTO = r.vincoli_auto; renderVincoliAutoUI(); }
+    if(r.regole_manuali && !VINCOLI_MANUAL.length) VINCOLI_MANUAL = r.regole_manuali;
+
+    // Render preview
+    const s = r.summary || {};
+    const tipoIcons = { assenza:'🏖️', reperibilita:'📞', trasferta:'🧳', installazione:'🏗️' };
+    const perTipo = {};
+    (r.vincoli_auto||[]).forEach(v => { const t=v.tipo||'altro'; perTipo[t]=(perTipo[t]||0)+1; });
+
+    let html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px">
+      <div style="text-align:center;padding:12px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:10px">
+        <div style="font-size:1.8rem;font-weight:700;color:#818CF8">${s.tecnici_disponibili||0}</div>
+        <div style="font-size:.7rem;color:rgba(255,255,255,.5)">Tecnici Disponibili</div>
+      </div>
+      <div style="text-align:center;padding:12px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);border-radius:10px">
+        <div style="font-size:1.8rem;font-weight:700;color:#F59E0B">${s.tecnici_vincolati||0}</div>
+        <div style="font-size:.7rem;color:rgba(255,255,255,.5)">Tecnici Vincolati</div>
+      </div>
+      <div style="text-align:center;padding:12px;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);border-radius:10px">
+        <div style="font-size:1.8rem;font-weight:700;color:#10B981">${s.vincoli_auto||0}</div>
+        <div style="font-size:.7rem;color:rgba(255,255,255,.5)">Vincoli Automatici</div>
+      </div>
+      <div style="text-align:center;padding:12px;background:rgba(129,140,248,.15);border:1px solid rgba(129,140,248,.3);border-radius:10px">
+        <div style="font-size:1.8rem;font-weight:700;color:#A5B4FC">${s.regole_manuali||0}</div>
+        <div style="font-size:.7rem;color:rgba(255,255,255,.5)">Regole Manuali</div>
+      </div>
+      <div style="text-align:center;padding:12px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:10px">
+        <div style="font-size:1.8rem;font-weight:700;color:#3B82F6">${s.piano_esistente||0}</div>
+        <div style="font-size:.7rem;color:rgba(255,255,255,.5)">Piano Esistente</div>
+      </div>
+      <div style="text-align:center;padding:12px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);border-radius:10px">
+        <div style="font-size:1.8rem;font-weight:700;color:#EF4444">${s.urgenze_aperte||0}</div>
+        <div style="font-size:.7rem;color:rgba(255,255,255,.5)">Urgenze Aperte</div>
+      </div>
+    </div>`;
+
+    // Dettaglio vincoli auto per tipo
+    const tipoKeys = Object.keys(perTipo);
+    if(tipoKeys.length){
+      html += '<div style="margin-bottom:12px"><div style="font-size:.8rem;font-weight:600;color:rgba(255,255,255,.7);margin-bottom:6px">Vincoli automatici per tipo:</div>';
+      html += tipoKeys.map(t => `<span style="display:inline-block;padding:3px 10px;margin:2px;border-radius:12px;background:rgba(99,102,241,.15);font-size:.75rem;color:#A5B4FC">${tipoIcons[t]||'📌'} ${perTipo[t]} ${t}</span>`).join('');
+      html += '</div>';
+    }
+
+    // Lista vincoli auto (collapsible)
+    if((r.vincoli_auto||[]).length){
+      html += `<details style="margin-bottom:12px"><summary style="cursor:pointer;font-size:.8rem;font-weight:600;color:rgba(255,255,255,.7);padding:6px 0">📋 Dettaglio ${r.vincoli_auto.length} vincoli automatici</summary>
+      <div style="max-height:200px;overflow-y:auto;padding:8px;background:rgba(0,0,0,.2);border-radius:8px;margin-top:4px;font-size:.75rem;color:rgba(255,255,255,.6)">`;
+      r.vincoli_auto.forEach(v => {
+        html += `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05)">${tipoIcons[v.tipo]||'📌'} ${v.testo}</div>`;
+      });
+      html += '</div></details>';
+    }
+
+    // Regole manuali
+    if((r.regole_manuali||[]).length){
+      html += `<details style="margin-bottom:12px"><summary style="cursor:pointer;font-size:.8rem;font-weight:600;color:rgba(255,255,255,.7);padding:6px 0">📋 ${r.regole_manuali.length} regole manuali</summary>
+      <div style="max-height:200px;overflow-y:auto;padding:8px;background:rgba(0,0,0,.2);border-radius:8px;margin-top:4px;font-size:.75rem;color:rgba(255,255,255,.6)">`;
+      r.regole_manuali.forEach(r2 => {
+        html += `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05)">${r2.titolo||'📋'} ${r2.testo||''} ${r2.priorita==='alta'?'⚠️':''}</div>`;
+      });
+      html += '</div></details>';
+    }
+
+    html += `<div style="padding:10px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:8px;font-size:.8rem;color:#10B981">
+      ✅ Pronto per generare. L'AI considererà ${s.vincoli_auto||0} vincoli auto + ${s.regole_manuali||0} regole manuali per il mese <strong>${meseVal}</strong>.
+    </div>`;
+
+    container.innerHTML = html;
+  } catch(e){
+    container.innerHTML = `<div style="padding:20px;text-align:center;color:#EF4444">❌ Errore caricamento anteprima: ${e.message}</div>`;
+  }
+}
+
+function aiGenerateFromPreview(){
+  aiGoToStep(3);
+  runAI();
+}
+
 function updateAIVincoliStatus(){
   const el=$('aiVincoliStatus');
   if(!el)return;
-  const cats=(VINCOLI_CAT.categories||[]).filter(c=>c.attiva!==false);
-  const totalRules=cats.reduce((s,c)=>(s+(c.regole||[]).filter(r=>r.testo).length),0);
 
-  // Riepilogo vincoli noti
+  // Nuovo sistema: usa VINCOLI_AUTO + VINCOLI_MANUAL
+  const autoAttivi = VINCOLI_AUTO.filter(v => {
+    const vid = v.id || (v.fonte_tabella+'_'+v.fonte_record_id);
+    return VINCOLI_AUTO_SEL[vid] !== false;
+  });
+  const manualAttive = VINCOLI_MANUAL.filter(r => r.testo);
+  const totalRules = autoAttivi.length + manualAttive.length;
+
   const meseTarget=$('aiMeseTarget')?.value||'';
   const d=today();
   const tecnici=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Ruolo!=='admin');
   const nTec=tecnici.length;
 
-  // Conteggi eventi futuri per il mese target (o mese corrente)
   const mFilter = meseTarget || d.substring(0,7);
   const mStart=mFilter+'-01', mEnd=mFilter+'-31';
   const richAppr=(DATA.richieste||[]).filter(r=>!r.Obsoleto&&r.Stato==='approvata'&&r.DataInizio&&r.DataInizio<=mEnd&&(r.DataFine||r.DataInizio)>=mStart);
@@ -5664,7 +6076,6 @@ function updateAIVincoliStatus(){
   const pianoExist=(DATA.piano||[]).filter(p=>!p.Obsoleto&&p.Data&&p.Data>=mStart&&p.Data<=mEnd&&p.Stato!=='annullato');
   const urgAperte=(DATA.urgenze||[]).filter(u=>!u.Obsoleto&&['aperta','assegnata','schedulata'].includes(u.Stato));
 
-  // Build summary HTML
   let summaryItems=[];
   summaryItems.push(`<span>👥 ${nTec} tecnici attivi</span>`);
   if(richAppr.length) summaryItems.push(`<span>🏖️ ${richAppr.length} ferie/permessi approvati</span>`);
@@ -5673,35 +6084,34 @@ function updateAIVincoliStatus(){
   if(pianoExist.length) summaryItems.push(`<span>📋 ${pianoExist.length} interventi già pianificati</span>`);
   if(urgAperte.length) summaryItems.push(`<span>🚨 ${urgAperte.length} urgenze aperte</span>`);
 
-  // Separa vincoli known (sempre attivi) vs dynamic (per-generazione)
-  const knownCats = cats.filter(c => c.tier === 'known' && (c.regole||[]).some(r=>r.testo));
-  const dynCats = cats.filter(c => c.tier !== 'known' && (c.regole||[]).some(r=>r.testo));
-  const knownRules = knownCats.reduce((s,c) => s + (c.regole||[]).filter(r=>r.testo).length, 0);
-  const dynRules = dynCats.reduce((s,c) => s + (c.regole||[]).filter(r=>r.testo).length, 0);
-
   let html='';
   if(totalRules>0){
-    const knownBadges = knownCats.map(c=>`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.25);border-radius:12px;font-size:.7rem">${c.icona||'📌'} ${c.nome}</span>`).join(' ');
-    const dynBadges = dynCats.map(c=>`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(129,140,248,.15);border:1px solid rgba(129,140,248,.25);border-radius:12px;font-size:.7rem">${c.icona||'📌'} ${c.nome}</span>`).join(' ');
-    html+=`<div style="padding:10px 14px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:8px;font-size:.8rem;margin-bottom:8px">
-      <strong style="color:#10B981">✅ ${knownRules} vincoli noti</strong> (sempre inclusi)${knownBadges ? '<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">'+knownBadges+'</div>' : ''}
-    </div>`;
-    if(dynRules>0){
+    // Vincoli auto dal DB
+    if(autoAttivi.length){
+      const perTipo = {};
+      autoAttivi.forEach(v => { const t=v.tipo||'altro'; perTipo[t]=(perTipo[t]||0)+1; });
+      const tipoIcons = { assenza:'🏖️', reperibilita:'📞', trasferta:'🧳', installazione:'🏗️' };
+      const badges = Object.entries(perTipo).map(([t,n])=>`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.25);border-radius:12px;font-size:.7rem">${tipoIcons[t]||'📌'} ${n} ${t}</span>`).join(' ');
+      html+=`<div style="padding:10px 14px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:8px;font-size:.8rem;margin-bottom:8px">
+        <strong style="color:#10B981">✅ ${autoAttivi.length} vincoli automatici</strong> (derivati dal DB)<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${badges}</div>
+      </div>`;
+    }
+    // Regole manuali
+    if(manualAttive.length){
       html+=`<div style="padding:10px 14px;background:rgba(129,140,248,.08);border:1px solid rgba(129,140,248,.2);border-radius:8px;font-size:.8rem;margin-bottom:8px">
-        <strong style="color:#818CF8">🔧 ${dynRules} vincoli dinamici</strong> (per questa generazione)${dynBadges ? '<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">'+dynBadges+'</div>' : ''}
+        <strong style="color:#818CF8">📋 ${manualAttive.length} regole manuali</strong> (configurate dall'admin)
       </div>`;
     }
   } else {
     html+=`<div style="padding:10px 14px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:.8rem;margin-bottom:8px">
-      <strong style="color:#F59E0B">⚠️ Nessun vincolo configurato</strong> — vai alla sezione <a href="#" onclick="event.preventDefault();showSec('vincoli')" style="color:#818CF8;text-decoration:underline">📐 Vincoli Piano</a> per aggiungere regole che l'AI rispetterà.
+      <strong style="color:#F59E0B">⚠️ Nessun vincolo configurato</strong> — vai alla sezione <a href="#" onclick="event.preventDefault();showSec('vincoli')" style="color:#818CF8;text-decoration:underline">📐 Vincoli Piano</a> per caricare vincoli e aggiungere regole.
     </div>`;
   }
 
-  // Constraint summary box
   html+=`<div style="padding:10px 14px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);border-radius:8px;font-size:.8rem">
     <strong style="color:#A5B4FC">📊 Riepilogo contesto ${mFilter}</strong>
     <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:8px;font-size:.75rem;color:rgba(255,255,255,.7)">${summaryItems.join(' · ')}</div>
-    <div style="margin-top:4px;font-size:.7rem;color:rgba(255,255,255,.4)">Ferie, trasferte e installazioni saranno usate come vincoli hard (post-processing deterministico)</div>
+    <div style="margin-top:4px;font-size:.7rem;color:rgba(255,255,255,.4)">Ferie, trasferte e installazioni sono vincoli hard (derivati automaticamente dal DB)</div>
   </div>`;
 
   el.innerHTML=html;
@@ -5710,7 +6120,7 @@ function updateAIVincoliStatus(){
 async function runAI(){
   const prompt=$('aiPrompt').value.trim();
   const meseVal=$('aiMeseTarget')?.value||'';
-  const hasVincoli=VINCOLI_CAT.categories?.some(c=>c.attiva!==false&&(c.regole||[]).some(r=>r.testo));
+  const hasVincoli=VINCOLI_AUTO.some(v=>VINCOLI_AUTO_SEL[v.id||(v.fonte_tabella+'_'+v.fonte_record_id)]!==false)||VINCOLI_MANUAL.some(r=>r.testo);
   // Permetti generazione se c'è: prompt, file, mese target, o vincoli configurati
   if(!prompt&&!AI_FILES.length&&!meseVal&&!hasVincoli){toast('Specifica almeno un criterio: testo, mese target, vincoli configurati o file allegati','warn');return}
   $('aiResult').style.display='block';
@@ -5845,6 +6255,9 @@ async function runAI(){
     $('btnApplyAI').disabled=false;
     $('btnSubmitPlan').disabled=false;
     $('btnDownloadPlan').disabled=false;
+    if($('btnGoStep4')) $('btnGoStep4').disabled=false;
+    // Mark step 3 as done in stepper
+    document.querySelectorAll('#aiStepper .ai-step[data-step="3"]').forEach(s=>s.classList.add('done'));
     toast(`Piano generato: ${piano.length} interventi, ${nGiorni} giorni`,'ok');
   }catch(e){
     $('aiResult').innerHTML=`<div style="padding:16px;background:rgba(239,68,68,.1);border:1px solid var(--err);border-radius:var(--radius)">
@@ -7114,243 +7527,352 @@ document.addEventListener('keydown',e=>{
 });
 
 
-// ============ VINCOLI PIANIFICAZIONE (dinamici, white-label) ============
-let VINCOLI_CAT = { categories: [], meta: {} };
+// ============ VINCOLI PIANIFICAZIONE — NUOVO SISTEMA 3-BLOCCHI ============
+// Stato globale vincoli
+let VINCOLI_AUTO = [];       // Vincoli derivati dal DB (ferie, reperibilità, trasferte, installazioni)
+let VINCOLI_AUTO_SEL = {};   // Mappa id→boolean (deselezionati dall'utente)
+let VINCOLI_MANUAL = [];     // Regole manuali salvate dall'utente
+let VINCOLI_SUMMARY = {};    // Riepilogo dal backend
 
-async function loadVincoliCategories(){
+// ---- Init: imposta mese corrente nel selettore ----
+function initVincoliMese(){
+  const inp = $('vincoliMeseTarget');
+  if(inp && !inp.value){
+    const d = new Date();
+    inp.value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+  }
+}
+
+// ---- BLOCCO 1: Vincoli Automatici ----
+async function loadVincoliAuto(){
+  initVincoliMese();
+  const meseInp = $('vincoliMeseTarget');
+  const mese = meseInp?.value;
+  if(!mese){ toast('Seleziona un mese','err'); return; }
+  const container = $('vincoliAutoContainer');
+  if(container) container.innerHTML = '<p style="text-align:center;padding:20px;color:var(--gray)">⏳ Caricamento vincoli...</p>';
   try {
-    const r = await apiCall('getVincoliCategories', {}, 'POST');
-    VINCOLI_CAT = r || { categories: [], meta: {} };
-    if (!VINCOLI_CAT.categories) VINCOLI_CAT.categories = [];
-  } catch { VINCOLI_CAT = { categories: [], meta: {} }; }
-  renderVincoliUI();
-  renderVincoliTemplates();
+    const r = await apiCall('getVincoliAutoDerived', { mese_target: mese }, 'POST');
+    VINCOLI_AUTO = r.auto_derived || r.vincoli_auto || r.vincoli || [];
+    VINCOLI_SUMMARY = r.summary || {};
+    // Carica anche regole manuali se presenti nella risposta
+    if(r.manual_rules?.length && !VINCOLI_MANUAL.length) VINCOLI_MANUAL = r.manual_rules;
+    if(r.regole_manuali?.length && !VINCOLI_MANUAL.length) VINCOLI_MANUAL = r.regole_manuali;
+    renderVincoliAutoUI();
+    renderManualVincoliUI();
+    updateVincoliSummary();
+    const countEl = $('vincoliAutoCount');
+    if(countEl) countEl.textContent = `${VINCOLI_AUTO.length} vincoli trovati`;
+  } catch(e){
+    if(container) container.innerHTML = `<p style="color:#DC2626;text-align:center;padding:20px">❌ Errore: ${e.message}</p>`;
+  }
 }
 
-function defaultVincoliTemplates(){
-  return [
-    {nome:'Regole Team',icona:'👥',desc:'Coppie, affiancamenti, esclusioni',tier:'known'},
-    {nome:'Disponibilita e Ferie',icona:'📅',desc:'Ferie, malattia, permessi, formazione',tier:'known'},
-    {nome:'Veicoli e Attrezzature',icona:'🚐',desc:'Assegnazione furgoni, rotazione',tier:'known'},
-    {nome:'Reperibilita e Turni',icona:'📞',desc:'Turni reperibilità, riposo post-notturna',tier:'known'},
-    {nome:'Competenze',icona:'🎓',desc:'Certificazioni, specializzazioni per tipo macchina',tier:'known'},
-    {nome:'Priorita e SLA',icona:'⭐',desc:'Clienti VIP, contratti SLA, urgenze',tier:'known'},
-    {nome:'Carico Lavoro e Riposo',icona:'⏱️',desc:'Max ore/giorno, giorni consecutivi, riposo',tier:'dynamic'},
-    {nome:'Zone Geografiche',icona:'📍',desc:'Clustering per zona, basi tecnici, viaggi',tier:'dynamic'}
-  ];
+function renderVincoliAutoUI(){
+  const container = $('vincoliAutoContainer');
+  if(!container) return;
+  if(!VINCOLI_AUTO.length){
+    container.innerHTML = '<p style="text-align:center;padding:20px;color:var(--gray)">Nessun vincolo automatico per questo mese. Tutti i tecnici risultano disponibili.</p>';
+    return;
+  }
+  // Raggruppa per categoria (o tipo per retrocompatibilità)
+  const grouped = {};
+  VINCOLI_AUTO.forEach(v => {
+    const cat = v.categoria || v.tipo || 'altro';
+    if(!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(v);
+  });
+  const tipoIcons = { Assenze:'🏖️', Reperibilita:'📞', Trasferte:'🧳', Installazioni:'🏗️', assenza:'🏖️', reperibilita:'📞', trasferta:'🧳', installazione:'🏗️' };
+  const tipoLabels = { Assenze:'Assenze (Ferie/Malattia/Permessi)', Reperibilita:'Reperibilità', Trasferte:'Trasferte', Installazioni:'Installazioni', assenza:'Assenze', reperibilita:'Reperibilità', trasferta:'Trasferte', installazione:'Installazioni' };
+
+  let html = '';
+  for(const tipo of Object.keys(grouped)){
+    const items = grouped[tipo];
+    const icon = tipoIcons[tipo] || '📌';
+    const label = tipoLabels[tipo] || tipo;
+    html += `<div style="margin-bottom:10px">
+      <div style="font-weight:600;font-size:.8125rem;margin-bottom:4px;display:flex;align-items:center;gap:6px">
+        <span>${icon}</span> ${label}
+        <span style="font-size:.7rem;color:var(--gray);font-weight:400">(${items.length})</span>
+        <button class="btn btn-xs btn-ghost" onclick="toggleAllVincoliAuto('${tipo}',true)" style="font-size:.65rem">✅ Tutti</button>
+        <button class="btn btn-xs btn-ghost" onclick="toggleAllVincoliAuto('${tipo}',false)" style="font-size:.65rem">⬜ Nessuno</button>
+      </div>`;
+    items.forEach(v => {
+      const vid = v.id || (v.fonte_tabella+'_'+v.fonte_record_id);
+      const checked = VINCOLI_AUTO_SEL[vid] !== false;
+      const soggetti = (v.soggetti||[]).join(', ');
+      const periodo = v.periodo || '';
+      html += `<label style="display:flex;align-items:flex-start;gap:8px;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:.8125rem;${!checked?'opacity:.5;text-decoration:line-through':''}background:${checked?'rgba(99,102,241,.05)':'transparent'}" onmouseover="this.style.background='rgba(99,102,241,.1)'" onmouseout="this.style.background='${checked?'rgba(99,102,241,.05)':'transparent'}'">
+        <input type="checkbox" ${checked?'checked':''} onchange="toggleVincoloAuto('${vid}',this.checked)" style="margin-top:2px">
+        <div>
+          <div>${v.testo || ''}</div>
+          ${periodo ? `<div style="font-size:.7rem;color:var(--gray)">${periodo}</div>` : ''}
+          ${soggetti ? `<div style="font-size:.7rem;color:#6366F1">${soggetti}</div>` : ''}
+        </div>
+      </label>`;
+    });
+    html += '</div>';
+  }
+  container.innerHTML = html;
 }
 
-function renderVincoliTemplates(){
-  // Template vincoli: prima da config DB, poi da white_label_config, poi default generici
-  const dbTemplates=(DATA.config?.vincoli_templates)?JSON.parse(DATA.config.vincoli_templates):null;
-  const cfg = dbTemplates || window.SYNTONIQA_CONFIG?.vincoli_templates || defaultVincoliTemplates();
-  const existing = VINCOLI_CAT.categories.map(c => c.nome.toLowerCase());
-  const el = $('vincoliTemplates');
-  if(!el) return;
-  el.innerHTML = cfg.filter(t => !existing.includes(t.nome.toLowerCase()))
-    .map(t => `<button onclick="addVincoliCategory('${esc(t.nome)}','${esc(t.icona)}')">${esc(t.icona)} ${esc(t.nome)}</button>`).join('');
-  if(!el.innerHTML) el.innerHTML = '<span style="font-size:.75rem;color:var(--gray)">Tutte le categorie suggerite sono gia state create.</span>';
+function toggleVincoloAuto(vid, checked){
+  VINCOLI_AUTO_SEL[vid] = checked;
+  renderVincoliAutoUI();
+  updateVincoliSummary();
 }
 
-function renderVincoliUI(){
-  const el = $('vincoliContainer');
-  if(!el) return;
-  const cats = VINCOLI_CAT.categories || [];
-  let totalRules = 0;
-  cats.forEach(c => { totalRules += (c.regole || []).length; });
-  const countEl = $('vincoliCount');
-  const knownN = cats.filter(c=>c.tier==='known').length;
-  const dynN = cats.length - knownN;
-  if(countEl) countEl.textContent = `${cats.length} categorie (${knownN} noti, ${dynN} dinamici) · ${totalRules} regole`;
+function toggleAllVincoliAuto(tipo, val){
+  VINCOLI_AUTO.filter(v => (v.tipo||'altro') === tipo).forEach(v => {
+    const vid = v.id || (v.fonte_tabella+'_'+v.fonte_record_id);
+    VINCOLI_AUTO_SEL[vid] = val;
+  });
+  renderVincoliAutoUI();
+  updateVincoliSummary();
+}
 
-  if(!cats.length){
-    el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--gray)"><p style="font-size:1.5rem;margin-bottom:8px">📐</p><p>Nessun vincolo configurato.</p><p style="font-size:.75rem">Usa i suggerimenti rapidi qui sotto o crea una nuova categoria.</p></div>';
+// ---- BLOCCO 2: Regole Manuali ----
+function addManualVincolo(titolo, testoDefault){
+  VINCOLI_MANUAL.push({
+    id: 'mr_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+    titolo: titolo || '',
+    testo: testoDefault || '',
+    soggetti: [],
+    priorita: 'media',
+    tipo_regola: 'vincolo',
+    permanente: true,
+    data_inizio: null,
+    data_fine: null
+  });
+  renderManualVincoliUI();
+  updateVincoliSummary();
+}
+
+function removeManualVincolo(idx){
+  VINCOLI_MANUAL.splice(idx, 1);
+  renderManualVincoliUI();
+  updateVincoliSummary();
+}
+
+function manualVincoloChanged(idx, field, val){
+  VINCOLI_MANUAL[idx][field] = val;
+  if(field === 'permanente') renderManualVincoliUI();
+}
+
+function manualVincoloMultiChanged(idx, field, sel){
+  VINCOLI_MANUAL[idx][field] = Array.from(sel.selectedOptions).map(o=>o.value).filter(Boolean);
+}
+
+function renderManualVincoliUI(){
+  const container = $('vincoliManualContainer');
+  if(!container) return;
+  const countEl = $('vincoliManualCount');
+  if(countEl) countEl.textContent = `${VINCOLI_MANUAL.length} regole`;
+
+  if(!VINCOLI_MANUAL.length){
+    container.innerHTML = '<p style="text-align:center;padding:16px;color:var(--gray);font-size:.8125rem">Nessuna regola manuale. Usa i suggerimenti rapidi o clicca "+ Nuova Regola".</p>';
     return;
   }
   const tecOptions = (DATA.utenti||[]).filter(u=>!u.Obsoleto).map(u=>`<option value="${u.ID}">${u.Nome||''} ${u.Cognome||''}</option>`).join('');
-  el.innerHTML = cats.map((cat, ci) => {
-    const isOpen = cat._open !== false;
-    const regoleHtml = (cat.regole||[]).map((r, ri) => `
-      <div class="vinc-rule vinc-prio-${r.priorita||'media'}" data-cat="${ci}" data-rule="${ri}">
-        <button class="vinc-remove" onclick="removeVincoliRule(${ci},${ri})" title="Rimuovi regola">✕</button>
-        <textarea onchange="vincoliRuleChanged(${ci},${ri},'testo',this.value)" placeholder="Descrivi la regola in linguaggio naturale...">${r.testo||''}</textarea>
-        <div class="vinc-rule-meta">
-          <select multiple title="Soggetti (tecnici/risorse coinvolti)" onchange="vincoliRuleMultiChanged(${ci},${ri},'soggetti',this)" style="min-width:150px;min-height:28px">
-            <option value="" disabled>Soggetti...</option>
-            ${tecOptions.replace(new RegExp(`value="(${(r.soggetti||[]).join('|')})"`, 'g'), (m) => m + ' selected')}
-          </select>
-          <select multiple title="Riferimenti (con chi/cosa)" onchange="vincoliRuleMultiChanged(${ci},${ri},'riferimenti',this)" style="min-width:150px;min-height:28px">
-            <option value="" disabled>Riferimenti...</option>
-            ${tecOptions.replace(new RegExp(`value="(${(r.riferimenti||[]).join('|')})"`, 'g'), (m) => m + ' selected')}
-          </select>
-          <label style="font-size:.7rem;display:flex;align-items:center;gap:3px" title="Regola sempre attiva">
-            <input type="checkbox" ${r.permanente?'checked':''} onchange="vincoliRuleChanged(${ci},${ri},'permanente',this.checked)"> Permanente
-          </label>
-          ${!r.permanente ? `<input type="date" value="${r.data_inizio||''}" onchange="vincoliRuleChanged(${ci},${ri},'data_inizio',this.value)" title="Dal" placeholder="Dal">
-          <input type="date" value="${r.data_fine||''}" onchange="vincoliRuleChanged(${ci},${ri},'data_fine',this.value)" title="Al" placeholder="Al">` : ''}
-          <select onchange="vincoliRuleChanged(${ci},${ri},'priorita',this.value)" title="Priorita">
-            <option value="alta" ${r.priorita==='alta'?'selected':''}>Alta</option>
-            <option value="media" ${r.priorita==='media'||!r.priorita?'selected':''}>Media</option>
-            <option value="bassa" ${r.priorita==='bassa'?'selected':''}>Bassa</option>
-          </select>
-          <select onchange="vincoliRuleChanged(${ci},${ri},'tipo_regola',this.value)" title="Tipo">
-            <option value="vincolo" ${r.tipo_regola==='vincolo'||!r.tipo_regola?'selected':''}>Vincolo</option>
-            <option value="preferenza" ${r.tipo_regola==='preferenza'?'selected':''}>Preferenza</option>
-            <option value="nota" ${r.tipo_regola==='nota'?'selected':''}>Nota</option>
-          </select>
-        </div>
-      </div>`).join('');
 
-    const tierBadge = cat.tier === 'known'
-      ? '<span style="font-size:.6rem;padding:1px 6px;border-radius:8px;background:#10B98122;color:#10B981;border:1px solid #10B98144;font-weight:600" title="Vincolo NOTO: sempre incluso automaticamente in ogni generazione AI">NOTO</span>'
-      : '<span style="font-size:.6rem;padding:1px 6px;border-radius:8px;background:#818CF822;color:#818CF8;border:1px solid #818CF844;font-weight:600" title="Vincolo DINAMICO: incluso solo quando attivo per una specifica generazione">DINAMICO</span>';
-
-    return `<div class="vinc-category ${!cat.attiva?'disabled':''}" data-cat="${ci}">
-      <div class="vinc-cat-head ${isOpen?'open':''}" onclick="toggleVincoliCategory(${ci})">
-        <span class="vinc-arrow">&#9654;</span>
-        <span class="vinc-icona" onclick="event.stopPropagation();editVincoliIcon(${ci})" title="Clicca per cambiare icona" style="cursor:pointer">${cat.icona||'📌'}</span>
-        <span class="vinc-nome" ondblclick="event.stopPropagation();editVincoliName(${ci})" title="Doppio click per rinominare">${cat.nome||'Categoria'}</span>
-        ${tierBadge}
-        <span class="vinc-count">${(cat.regole||[]).length} regole</span>
-        <label style="font-size:.7rem;display:flex;align-items:center;gap:3px" onclick="event.stopPropagation()">
-          <input type="checkbox" ${cat.attiva!==false?'checked':''} onchange="toggleVincoliActive(${ci},this.checked)"> Attiva
-        </label>
-        <select onclick="event.stopPropagation()" onchange="toggleVincoliTier(${ci},this.value)" style="font-size:.65rem;padding:1px 4px;border-radius:4px;border:1px solid var(--border)" title="Tipo: Noto = sempre incluso, Dinamico = solo su richiesta">
-          <option value="known" ${cat.tier==='known'?'selected':''}>Noto</option>
-          <option value="dynamic" ${cat.tier!=='known'?'selected':''}>Dinamico</option>
-        </select>
-        <button class="btn btn-xs btn-ghost" onclick="event.stopPropagation();removeVincoliCategory(${ci})" title="Elimina categoria" style="color:#DC2626">🗑️</button>
+  container.innerHTML = VINCOLI_MANUAL.map((r, idx) => {
+    const selSubj = (r.soggetti||[]);
+    return `<div style="border:1px solid ${r.priorita==='alta'?'#F59E0B':r.priorita==='bassa'?'#D1D5DB':'#E5E7EB'};border-radius:8px;padding:10px;margin-bottom:8px;background:${r.priorita==='alta'?'rgba(245,158,11,.05)':'white'}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <input type="text" value="${esc(r.titolo||'')}" onchange="manualVincoloChanged(${idx},'titolo',this.value)" placeholder="Titolo regola (es: 👥 Junior+Senior)" style="border:none;font-weight:600;font-size:.8125rem;flex:1;background:transparent">
+        <button onclick="removeManualVincolo(${idx})" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:.9rem" title="Elimina regola">✕</button>
       </div>
-      <div class="vinc-cat-body ${isOpen?'open':''}">
-        ${regoleHtml || '<p style="font-size:.8125rem;color:var(--gray);padding:8px 0">Nessuna regola. Clicca per aggiungerne una.</p>'}
-        <button class="btn btn-xs btn-outline" onclick="addVincoliRule(${ci})" style="margin-top:4px">+ Aggiungi regola</button>
+      <textarea onchange="manualVincoloChanged(${idx},'testo',this.value)" placeholder="Descrivi la regola in linguaggio naturale..." style="width:100%;min-height:42px;padding:6px 8px;border:1px solid #E5E7EB;border-radius:6px;font-size:.8125rem;resize:vertical">${esc(r.testo||'')}</textarea>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center">
+        <select multiple onchange="manualVincoloMultiChanged(${idx},'soggetti',this)" style="min-width:160px;min-height:28px;font-size:.75rem;border:1px solid #E5E7EB;border-radius:4px;padding:2px" title="Soggetti coinvolti">
+          <option value="" disabled>Soggetti...</option>
+          ${tecOptions.replace(new RegExp(`value="(${selSubj.join('|')||'___NONE___'})"`, 'g'), (m) => m + ' selected')}
+        </select>
+        <select onchange="manualVincoloChanged(${idx},'priorita',this.value)" style="font-size:.75rem;padding:2px 6px;border:1px solid #E5E7EB;border-radius:4px" title="Priorità">
+          <option value="alta" ${r.priorita==='alta'?'selected':''}>⚠️ Alta</option>
+          <option value="media" ${r.priorita==='media'||!r.priorita?'selected':''}>Media</option>
+          <option value="bassa" ${r.priorita==='bassa'?'selected':''}>Bassa</option>
+        </select>
+        <select onchange="manualVincoloChanged(${idx},'tipo_regola',this.value)" style="font-size:.75rem;padding:2px 6px;border:1px solid #E5E7EB;border-radius:4px" title="Tipo regola">
+          <option value="vincolo" ${r.tipo_regola==='vincolo'||!r.tipo_regola?'selected':''}>🔒 Vincolo</option>
+          <option value="preferenza" ${r.tipo_regola==='preferenza'?'selected':''}>💡 Preferenza</option>
+          <option value="nota" ${r.tipo_regola==='nota'?'selected':''}>📝 Nota</option>
+        </select>
+        <label style="font-size:.7rem;display:flex;align-items:center;gap:3px">
+          <input type="checkbox" ${r.permanente!==false?'checked':''} onchange="manualVincoloChanged(${idx},'permanente',this.checked)"> Permanente
+        </label>
+        ${r.permanente===false ? `<input type="date" value="${r.data_inizio||''}" onchange="manualVincoloChanged(${idx},'data_inizio',this.value)" style="font-size:.7rem;padding:2px 4px;border:1px solid #E5E7EB;border-radius:4px" title="Dal">
+        <input type="date" value="${r.data_fine||''}" onchange="manualVincoloChanged(${idx},'data_fine',this.value)" style="font-size:.7rem;padding:2px 4px;border:1px solid #E5E7EB;border-radius:4px" title="Al">` : ''}
       </div>
     </div>`;
   }).join('');
 }
 
-function addVincoliCategory(nome, icona, tier){
-  // Determina tier dal template se disponibile
-  const tpl = defaultVincoliTemplates().find(t => t.nome === nome);
-  const cat = {
-    id: 'cat_' + Date.now(),
-    nome: nome || 'Nuova Categoria',
-    icona: icona || '📌',
-    ordine: VINCOLI_CAT.categories.length + 1,
-    attiva: true,
-    tier: tier || tpl?.tier || 'dynamic', // known = sempre caricato, dynamic = per-generazione
-    _open: true,
-    regole: []
-  };
-  VINCOLI_CAT.categories.push(cat);
-  renderVincoliUI();
-  renderVincoliTemplates();
-}
-
-function removeVincoliCategory(ci){
-  const cat = VINCOLI_CAT.categories[ci];
-  if(!confirm(`Eliminare la categoria "${cat.nome}" e tutte le sue ${(cat.regole||[]).length} regole?`)) return;
-  VINCOLI_CAT.categories.splice(ci, 1);
-  renderVincoliUI();
-  renderVincoliTemplates();
-}
-
-function toggleVincoliCategory(ci){
-  const cat = VINCOLI_CAT.categories[ci];
-  cat._open = cat._open === false ? true : false;
-  renderVincoliUI();
-}
-
-function toggleVincoliActive(ci, val){
-  VINCOLI_CAT.categories[ci].attiva = val;
-  renderVincoliUI();
-}
-
-function toggleVincoliTier(ci, val){
-  VINCOLI_CAT.categories[ci].tier = val;
-  renderVincoliUI();
-}
-
-function editVincoliName(ci){
-  const cat = VINCOLI_CAT.categories[ci];
-  const nome = prompt('Nome categoria:', cat.nome);
-  if(nome && nome.trim()) { cat.nome = nome.trim(); renderVincoliUI(); }
-}
-
-function editVincoliIcon(ci){
-  const icons = ['👥','📅','🚐','📞','🎓','⭐','⏱️','📍','🔧','🏗️','📋','🚨','💼','🏖️','🔑','📊','🛡️','⚡','🎯','📌'];
-  const cat = VINCOLI_CAT.categories[ci];
-  const choice = prompt('Scegli un\'icona:\n' + icons.join(' ') + '\n\nOppure incolla qualsiasi emoji:', cat.icona);
-  if(choice && choice.trim()) { cat.icona = choice.trim(); renderVincoliUI(); }
-}
-
-function addVincoliRule(ci){
-  const cat = VINCOLI_CAT.categories[ci];
-  if(!cat.regole) cat.regole = [];
-  cat.regole.push({
-    id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
-    testo: '', soggetti: [], riferimenti: [],
-    data_inizio: null, data_fine: null,
-    permanente: true, priorita: 'media', tipo_regola: 'vincolo'
+// ---- BLOCCO 3: Riepilogo ----
+function updateVincoliSummary(){
+  const box = $('vincoliSummaryBox');
+  if(!box) return;
+  const autoAttivi = VINCOLI_AUTO.filter(v => {
+    const vid = v.id || (v.fonte_tabella+'_'+v.fonte_record_id);
+    return VINCOLI_AUTO_SEL[vid] !== false;
   });
-  cat._open = true;
-  renderVincoliUI();
+  const autoDisattivati = VINCOLI_AUTO.length - autoAttivi.length;
+  const manualCount = VINCOLI_MANUAL.length;
+  const mese = $('vincoliMeseTarget')?.value || '';
+
+  // Conta per tipo
+  const perTipo = {};
+  autoAttivi.forEach(v => { const t=v.tipo||'altro'; perTipo[t]=(perTipo[t]||0)+1; });
+
+  // Tecnici coinvolti in vincoli
+  const tecVincolati = new Set();
+  autoAttivi.forEach(v => (v.soggetti_ids||v.soggetti||[]).forEach(id => tecVincolati.add(id)));
+  const totTecnici = (DATA.utenti||[]).filter(u=>!u.Obsoleto && u.Ruolo!=='admin').length;
+  const disponibili = totTecnici - tecVincolati.size;
+
+  const tipoIcons = { assenza:'🏖️', reperibilita:'📞', trasferta:'🧳', installazione:'🏗️' };
+
+  let html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:10px">
+    <div style="text-align:center;padding:8px;background:white;border-radius:6px;border:1px solid #E5E7EB">
+      <div style="font-size:1.5rem;font-weight:700;color:#6366F1">${autoAttivi.length}</div>
+      <div style="font-size:.7rem;color:var(--gray)">Vincoli Auto Attivi</div>
+    </div>
+    <div style="text-align:center;padding:8px;background:white;border-radius:6px;border:1px solid #E5E7EB">
+      <div style="font-size:1.5rem;font-weight:700;color:#F59E0B">${manualCount}</div>
+      <div style="font-size:.7rem;color:var(--gray)">Regole Manuali</div>
+    </div>
+    <div style="text-align:center;padding:8px;background:white;border-radius:6px;border:1px solid #E5E7EB">
+      <div style="font-size:1.5rem;font-weight:700;color:#10B981">${disponibili}/${totTecnici}</div>
+      <div style="font-size:.7rem;color:var(--gray)">Tecnici Disponibili</div>
+    </div>
+    ${autoDisattivati ? `<div style="text-align:center;padding:8px;background:white;border-radius:6px;border:1px solid #F59E0B44">
+      <div style="font-size:1.5rem;font-weight:700;color:#DC2626">${autoDisattivati}</div>
+      <div style="font-size:.7rem;color:var(--gray)">Vincoli Ignorati</div>
+    </div>` : ''}
+  </div>`;
+
+  // Dettaglio per tipo
+  const tipoKeys = Object.keys(perTipo);
+  if(tipoKeys.length){
+    html += '<div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Dettaglio:</div>';
+    html += tipoKeys.map(t => `<span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:12px;background:rgba(99,102,241,.1);font-size:.75rem">${tipoIcons[t]||'📌'} ${perTipo[t]} ${t}</span>`).join('');
+  }
+
+  if(mese){
+    html += `<div style="margin-top:8px;font-size:.7rem;color:var(--gray)">📅 Mese di riferimento: <strong>${mese}</strong></div>`;
+  }
+
+  box.innerHTML = html;
 }
 
-function removeVincoliRule(ci, ri){
-  VINCOLI_CAT.categories[ci].regole.splice(ri, 1);
-  renderVincoliUI();
-}
-
-function vincoliRuleChanged(ci, ri, field, val){
-  VINCOLI_CAT.categories[ci].regole[ri][field] = val;
-  if(field === 'permanente') renderVincoliUI(); // toggling date fields
-}
-
-function vincoliRuleMultiChanged(ci, ri, field, sel){
-  VINCOLI_CAT.categories[ci].regole[ri][field] = Array.from(sel.selectedOptions).map(o=>o.value).filter(Boolean);
-}
-
-async function saveVincoliCategories(){
+// ---- Salvataggio regole manuali ----
+async function saveVincoliAll(){
   try {
-    // Clean internal state before saving
-    const toSave = JSON.parse(JSON.stringify(VINCOLI_CAT));
-    toSave.categories.forEach(c => { delete c._open; });
-    toSave.meta = { ultimo_aggiornamento: new Date().toISOString(), aggiornato_da: USER?.ID || 'admin', versione: (toSave.meta?.versione || 0) + 1 };
-    await fetch(API_URL, { method:'POST', headers:{'Content-Type':'application/json','X-Token':API_TOKEN},
-      body: JSON.stringify({ action:'saveVincoliCategories', userId:USER?.ID||'', vincoli: toSave })
+    // Salva regole manuali nel vecchio formato config (retrocompatibile) + nuovo
+    const payload = {
+      action: 'saveVincoliCategories',
+      userId: USER?.ID || '',
+      vincoli: {
+        categories: [],  // vecchio formato vuoto (migrato)
+        manual_rules: VINCOLI_MANUAL,
+        auto_selections: VINCOLI_AUTO_SEL,
+        meta: {
+          ultimo_aggiornamento: new Date().toISOString(),
+          aggiornato_da: USER?.ID || 'admin',
+          formato: 'v2_vincoli_redesign'
+        }
+      }
+    };
+    await fetch(API_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-Token':API_TOKEN},
+      body: JSON.stringify(payload)
     });
-    toast('Vincoli salvati con successo!', 'ok');
-  } catch(e) { toast('Errore salvataggio vincoli: ' + e.message, 'err'); }
+    toast('Vincoli e regole salvati con successo!', 'ok');
+  } catch(e) { toast('Errore salvataggio: ' + e.message, 'err'); }
 }
 
+// ---- Carica regole manuali salvate ----
+async function loadVincoliManual(){
+  try {
+    const r = await apiCall('getVincoliCategories', {}, 'POST');
+    if(r && r.manual_rules && Array.isArray(r.manual_rules)){
+      VINCOLI_MANUAL = r.manual_rules;
+    } else if(r && r.categories && r.categories.length){
+      // Migrazione dal vecchio formato: estrai le regole
+      VINCOLI_MANUAL = [];
+      r.categories.forEach(cat => {
+        (cat.regole||[]).forEach(regola => {
+          if(regola.testo){
+            VINCOLI_MANUAL.push({
+              id: regola.id || 'mr_mig_'+Date.now(),
+              titolo: (cat.icona||'') + ' ' + (cat.nome||''),
+              testo: regola.testo,
+              soggetti: regola.soggetti || [],
+              priorita: regola.priorita || 'media',
+              tipo_regola: regola.tipo_regola || 'vincolo',
+              permanente: regola.permanente !== false,
+              data_inizio: regola.data_inizio || null,
+              data_fine: regola.data_fine || null
+            });
+          }
+        });
+      });
+    }
+    if(r && r.auto_selections) VINCOLI_AUTO_SEL = r.auto_selections;
+    renderManualVincoliUI();
+  } catch(e) { console.warn('[Vincoli] loadManual error:', e.message); }
+}
+
+// ---- Costruisci testo vincoli per prompt AI (usato da generateAIPlan) ----
 function buildVincoliPromptText(){
-  const cats = (VINCOLI_CAT.categories || []).filter(c => c.attiva !== false);
-  if(!cats.length) return '';
-  const oggi = today();
   const getName_ = (id) => { const u = (DATA.utenti||[]).find(u=>u.ID===id); return u ? (u.Nome||'')+ ' '+(u.Cognome||'') : id; };
-  let text = '=== VINCOLI CONFIGURATI (OBBLIGATORI) ===\n';
-  cats.forEach(cat => {
-    const regoleAttive = (cat.regole||[]).filter(r => {
-      if(!r.testo) return false;
-      if(r.permanente) return true;
-      if(r.data_fine && r.data_fine < oggi) return false;
-      if(r.data_inizio && r.data_inizio > oggi) return false;
-      return true;
+  const oggi = today();
+  let text = '';
+
+  // 1) Vincoli automatici selezionati
+  const autoAttivi = VINCOLI_AUTO.filter(v => {
+    const vid = v.id || (v.fonte_tabella+'_'+v.fonte_record_id);
+    return VINCOLI_AUTO_SEL[vid] !== false;
+  });
+  if(autoAttivi.length){
+    text += '=== VINCOLI AUTOMATICI (dal DB) ===\n';
+    autoAttivi.forEach(v => {
+      text += `- ${v.testo}`;
+      if(v.soggetti?.length) text += ` (${v.soggetti.join(', ')})`;
+      if(v.periodo) text += ` [${v.periodo}]`;
+      text += '\n';
     });
-    if(!regoleAttive.length) return;
-    text += `\n[${cat.icona||''} ${cat.nome}]\n`;
-    regoleAttive.forEach(r => {
+    text += '\n';
+  }
+
+  // 2) Regole manuali
+  const manAttive = VINCOLI_MANUAL.filter(r => {
+    if(!r.testo) return false;
+    if(r.permanente !== false) return true;
+    if(r.data_fine && r.data_fine < oggi) return false;
+    if(r.data_inizio && r.data_inizio > oggi) return false;
+    return true;
+  });
+  if(manAttive.length){
+    text += '=== REGOLE MANUALI (configurate dall\'admin) ===\n';
+    manAttive.forEach(r => {
       let line = `- ${r.testo}`;
       if(r.soggetti?.length) line += ` (Soggetti: ${r.soggetti.map(getName_).join(', ')})`;
-      if(r.riferimenti?.length) line += ` (Con: ${r.riferimenti.map(getName_).join(', ')})`;
       if(!r.permanente && (r.data_inizio || r.data_fine)) line += ` (${r.data_inizio?'Dal '+r.data_inizio:''}${r.data_fine?' Al '+r.data_fine:''})`;
-      line += r.tipo_regola === 'vincolo' ? ' [VINCOLO]' : r.tipo_regola === 'preferenza' ? ' [PREFERENZA]' : ' [NOTA]';
-      if(r.priorita === 'alta') line += ' ⚠️ALTA';
+      line += r.tipo_regola === 'vincolo' ? ' [VINCOLO OBBLIGATORIO]' : r.tipo_regola === 'preferenza' ? ' [PREFERENZA]' : ' [NOTA]';
+      if(r.priorita === 'alta') line += ' ⚠️PRIORITA ALTA';
       text += line + '\n';
     });
-  });
+  }
+
   return text;
+}
+
+// ---- Retrocompatibilità: alias per vecchie chiamate ----
+async function loadVincoliCategories(){
+  await loadVincoliManual();
+  initVincoliMese();
 }
 
 
@@ -7406,9 +7928,9 @@ function renderMonthPlan(){
   // Reperibilita
   const reps = showRep ? (DATA.reperibilita||[]).filter(r=>!r.Obsoleto) : [];
 
-  // Vincoli ferie (from vincoli_categories)
-  const ferieCat = (VINCOLI_CAT.categories||[]).find(c=>c.attiva!==false&&(c.nome||'').toLowerCase().includes('ferie'));
-  const ferieRules = ferieCat ? (ferieCat.regole||[]).filter(r=>r.data_inizio&&r.data_fine) : [];
+  // Vincoli ferie — dal nuovo sistema VINCOLI_AUTO (tipo=assenza)
+  const ferieRules = VINCOLI_AUTO.filter(v => v.tipo==='assenza' && v.periodo && VINCOLI_AUTO_SEL[v.id||(v.fonte_tabella+'_'+v.fonte_record_id)]!==false)
+    .map(v => ({ data_inizio: v.data_inizio||'', data_fine: v.data_fine||'', soggetti: v.soggetti_ids||v.soggetti||[], testo: v.testo }));
 
   // Richieste approvate (ferie, permesso, malattia, cambio_turno)
   const richAppr = (DATA.richieste||[]).filter(r=>!r.Obsoleto&&r.Stato==='approvata'&&r.DataInizio);
