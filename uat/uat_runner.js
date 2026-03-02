@@ -804,8 +804,14 @@ async function run() {
 
   let totalTests = 0, passed = 0, failed = 0, skipped = 0;
 
-  for (const suite of ALL_SUITES) {
+  for (let si = 0; si < ALL_SUITES.length; si++) {
+    const suite = ALL_SUITES[si];
     if (suite.tests.length === 0) { console.log(`\n⏭️  ${suite.name} — SKIP (disabilitato)\n`); continue; }
+    // Cooldown after stress tests to avoid rate-limit on next suite
+    if (si > 0 && ALL_SUITES[si - 1].name.includes('Stress')) {
+      console.log('\n⏳ Cooldown 35s post-stress (rate limit reset)...');
+      await new Promise(r => setTimeout(r, 35000));
+    }
     currentSuite = suite.name;
     console.log(`\n━━━ ${suite.name} (${suite.tests.length} tests) ━━━`);
     for (const t of suite.tests) {
