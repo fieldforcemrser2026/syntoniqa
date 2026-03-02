@@ -1382,6 +1382,24 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 .cfg-card{background:#FAFAFA;border:1px solid var(--gray4);border-radius:var(--radius);padding:16px;margin-bottom:14px}
 .cfg-card h4{margin:0 0 10px;font-size:.8125rem;font-weight:600}
 @media(max-width:768px){.cfg-grid-2,.cfg-grid-3{grid-template-columns:1fr}}
+/* AI Engine Ranking */
+.ai-eng-row{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--white);border:1px solid var(--gray3);border-radius:var(--radius-sm);cursor:grab;transition:all .15s;font-size:.8rem}
+.ai-eng-row:hover{box-shadow:var(--shadow);border-color:var(--c1)}
+.ai-eng-row.ai-eng-disabled{opacity:.45;background:var(--gray5)}
+.ai-eng-handle{color:var(--gray2);font-size:.7rem;cursor:grab}
+.ai-eng-rank{font-weight:700;font-size:.7rem;color:var(--c1);min-width:22px}
+.ai-eng-icon{font-size:.9rem}
+.ai-eng-name{font-weight:600;min-width:140px}
+.ai-eng-key{font-family:var(--mono);font-size:.65rem;color:var(--gray);background:var(--gray5);padding:2px 6px;border-radius:3px}
+.ai-eng-desc{flex:1;font-size:.7rem;color:var(--gray)}
+.ai-eng-toggle{position:relative;display:inline-block;width:32px;height:18px;margin-left:auto}
+.ai-eng-toggle input{opacity:0;width:0;height:0}
+.ai-eng-slider{position:absolute;cursor:pointer;inset:0;background:var(--gray3);border-radius:9px;transition:.2s}
+.ai-eng-slider:before{content:'';position:absolute;height:14px;width:14px;left:2px;bottom:2px;background:var(--white);border-radius:50%;transition:.2s}
+.ai-eng-toggle input:checked+.ai-eng-slider{background:var(--ok)}
+.ai-eng-toggle input:checked+.ai-eng-slider:before{transform:translateX(14px)}
+.ai-test-row{font-size:.8rem;padding:4px 0}
+@media(max-width:768px){.ai-eng-desc,.ai-eng-key{display:none}}
 </style>
 
 <div class="card" style="overflow:hidden">
@@ -1592,15 +1610,19 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 
 <!-- ===== TAB: AI Planner ===== -->
 <div class="cfg-panel" id="cfgPan_ai">
-<div class="cfg-section-title">🤖 Provider AI</div>
-<div class="cfg-grid-2">
-<div class="cfg-field"><label>Provider Principale</label><select id="cfg_ai_provider"><option value="auto">Auto (prova tutti)</option><option value="workers">Cloudflare Workers AI</option><option value="gemini">Google Gemini</option><option value="cerebras">Cerebras</option><option value="groq">Groq</option></select></div>
-<div class="cfg-field"><label>Timeout (secondi)</label><input type="number" id="cfg_ai_timeout" value="30" min="10" max="120"></div>
+<div class="cfg-section-title">🤖 Provider AI — Ranking & Blend</div>
+<p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">Trascina per riordinare la priorità. Il sistema prova dall'alto verso il basso; se uno fallisce passa al successivo. Disattiva quelli che non vuoi usare.</p>
+<div id="aiEngineRanking" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
 </div>
+<div class="cfg-grid-2">
+<div class="cfg-field"><label>Timeout per engine (sec)</label><input type="number" id="cfg_ai_timeout" value="30" min="10" max="120"></div>
+<div class="cfg-field"><label>&nbsp;</label><button class="btn btn-outline btn-sm" onclick="testAllEngines()">🧪 Testa Tutti</button></div>
+</div>
+<div id="aiTestResults" style="display:none;margin-bottom:12px"></div>
 <div style="padding:10px;background:var(--info-light);border-radius:var(--radius-sm);font-size:.8rem;line-height:1.5;margin-bottom:12px">
 <strong>🔑 API Keys</strong> — vanno nei <strong>secrets del Worker</strong> (Cloudflare Dashboard → Workers → Settings → Variables):<br>
-<code>GEMINI_KEY</code> = Google Gemini &nbsp;|&nbsp; <code>GROQ_KEY</code> = Groq &nbsp;|&nbsp; <code>CEREBRAS_KEY</code> = Cerebras<br>
-Il sistema prova i provider in ordine e passa al successivo se uno fallisce. Workers AI non richiede chiavi.
+<code>GEMINI_KEY</code> · <code>GROQ_KEY</code> · <code>CEREBRAS_KEY</code> · <code>MISTRAL_KEY</code> · <code>DEEPSEEK_KEY</code><br>
+Workers AI è incluso in Cloudflare e non richiede chiavi aggiuntive.
 </div>
 <div class="cfg-section-title">⚖️ Pesi Scoring Tecnico</div>
 <p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">Pesi per il calcolo punteggio assegnazione (0-100). Totale dovrebbe essere 100.</p>
@@ -4545,7 +4567,7 @@ const CFG_FIELD_MAP={
   // Chat
   cfg_chat_canali:'chat_canali_def',
   // AI
-  cfg_ai_provider:'ai_provider', cfg_ai_timeout:'ai_timeout',
+  cfg_ai_timeout:'ai_timeout',
   cfg_ai_peso_distanza:'ai_peso_distanza', cfg_ai_peso_carico:'ai_peso_carico',
   cfg_ai_peso_competenza:'ai_peso_competenza', cfg_ai_peso_anzianita:'ai_peso_anzianita',
   cfg_ai_chunk_size:'ai_chunk_size', cfg_ai_fallback:'ai_fallback',
@@ -4562,6 +4584,7 @@ function switchCfgTab(tabId, btn){
   if(pan) pan.classList.add('active');
   // Render dynamic content for specific tabs
   if(tabId==='sla') renderCfgSlaGrid();
+  if(tabId==='ai') renderEngineRanking();
   if(tabId==='features') renderCfgFeatures();
   if(tabId==='avanzate') renderCfgAdvanced();
   if(tabId==='notifiche'){renderTelegramConfig();renderTelegramExtras();renderEmailConfig()}
@@ -4721,6 +4744,10 @@ async function saveAllConfig(){
     const key=input.getAttribute('data-key');
     if(key) configObj[key]=input.value;
   });
+  // 4. AI Engine Ranking
+  if(currentEngineRanking.length) configObj.ai_engine_ranking = currentEngineRanking.join(',');
+  const c2=DATA.config||{};
+  if(c2.ai_engine_disabled) configObj.ai_engine_disabled = c2.ai_engine_disabled;
   if(Object.keys(configObj).length===0){toast('Nessun campo compilato','warn');return}
   try{
     await apiCall('saveConfig',{config:configObj},'POST');
@@ -4729,6 +4756,109 @@ async function saveAllConfig(){
     applyConfig();
     toast('✅ Configurazione salvata!','ok');
   }catch(e){toast('Errore: '+e.message,'err')}
+}
+
+// ============ AI ENGINE RANKING ============
+const AI_ENGINES = [
+  { id:'gemini',   name:'Google Gemini',       key:'GEMINI_KEY',   icon:'🔵', desc:'Tier gratis: 250 req/giorno, 1M token context' },
+  { id:'cerebras', name:'Cerebras',             key:'CEREBRAS_KEY', icon:'🟣', desc:'Beta gratis, inferenza veloce su wafer-scale chip' },
+  { id:'groq',     name:'Groq',                 key:'GROQ_KEY',     icon:'🟠', desc:'Tier gratis: 14.400 req/giorno, 300+ tok/sec' },
+  { id:'mistral',  name:'Mistral AI',           key:'MISTRAL_KEY',  icon:'🔴', desc:'Tier gratis: 1 miliardo token/mese' },
+  { id:'deepseek', name:'DeepSeek',             key:'DEEPSEEK_KEY', icon:'🟢', desc:'API economica, ottimo per coding e reasoning' },
+  { id:'workersai',name:'Cloudflare Workers AI', key:'(incluso)',    icon:'🟡', desc:'Incluso nel piano Workers, nessuna chiave extra' },
+];
+let currentEngineRanking = [];
+
+function renderEngineRanking(){
+  const c = DATA.config || {};
+  const saved = c.ai_engine_ranking || '';
+  if (saved) {
+    currentEngineRanking = saved.split(',').map(s=>s.trim()).filter(s=>AI_ENGINES.find(e=>e.id===s));
+    // Aggiungi engine mancanti in fondo
+    AI_ENGINES.forEach(e=>{ if(!currentEngineRanking.includes(e.id)) currentEngineRanking.push(e.id); });
+  } else {
+    currentEngineRanking = AI_ENGINES.map(e=>e.id);
+  }
+  // Stato abilitato/disabilitato
+  const disabledStr = c.ai_engine_disabled || '';
+  const disabledSet = new Set(disabledStr.split(',').map(s=>s.trim()).filter(Boolean));
+
+  const container = $('aiEngineRanking');
+  container.innerHTML = currentEngineRanking.map((eid, idx) => {
+    const eng = AI_ENGINES.find(e=>e.id===eid);
+    if(!eng) return '';
+    const disabled = disabledSet.has(eid);
+    return `<div class="ai-eng-row${disabled?' ai-eng-disabled':''}" draggable="true" data-engine="${eid}" ondragstart="engDragStart(event)" ondragover="engDragOver(event)" ondragenter="engDragEnter(event)" ondragleave="engDragLeave(event)" ondrop="engDrop(event)">
+      <span class="ai-eng-handle">☰</span>
+      <span class="ai-eng-rank">#${idx+1}</span>
+      <span class="ai-eng-icon">${eng.icon}</span>
+      <span class="ai-eng-name">${eng.name}</span>
+      <span class="ai-eng-key">${eng.key}</span>
+      <span class="ai-eng-desc">${eng.desc}</span>
+      <label class="ai-eng-toggle"><input type="checkbox" ${disabled?'':'checked'} onchange="toggleEngine('${eid}',this.checked)"><span class="ai-eng-slider"></span></label>
+    </div>`;
+  }).join('');
+}
+
+let engDragging = null;
+function engDragStart(e){ engDragging=e.target.closest('.ai-eng-row'); e.dataTransfer.effectAllowed='move'; e.target.style.opacity='.4'; }
+function engDragOver(e){ e.preventDefault(); e.dataTransfer.dropEffect='move'; }
+function engDragEnter(e){ const row=e.target.closest('.ai-eng-row'); if(row) row.style.borderTop='2px solid var(--c1)'; }
+function engDragLeave(e){ const row=e.target.closest('.ai-eng-row'); if(row) row.style.borderTop=''; }
+function engDrop(e){
+  e.preventDefault();
+  const target = e.target.closest('.ai-eng-row');
+  if(!target || !engDragging || target===engDragging) return;
+  target.style.borderTop='';
+  engDragging.style.opacity='1';
+  const fromId = engDragging.dataset.engine;
+  const toId = target.dataset.engine;
+  const fromIdx = currentEngineRanking.indexOf(fromId);
+  const toIdx = currentEngineRanking.indexOf(toId);
+  currentEngineRanking.splice(fromIdx, 1);
+  currentEngineRanking.splice(toIdx, 0, fromId);
+  renderEngineRanking();
+  saveEngineRanking();
+}
+
+function toggleEngine(eid, enabled){
+  const c = DATA.config || {};
+  const disabledStr = c.ai_engine_disabled || '';
+  const disabledSet = new Set(disabledStr.split(',').map(s=>s.trim()).filter(Boolean));
+  if(enabled) disabledSet.delete(eid); else disabledSet.add(eid);
+  DATA.config.ai_engine_disabled = [...disabledSet].join(',');
+  renderEngineRanking();
+  saveEngineRanking();
+}
+
+async function saveEngineRanking(){
+  const c = DATA.config || {};
+  try {
+    await apiCall('saveConfig',{config:{
+      ai_engine_ranking: currentEngineRanking.join(','),
+      ai_engine_disabled: c.ai_engine_disabled || ''
+    }},'POST');
+  } catch(e){ toast('Errore salvataggio ranking: '+e.message,'err'); }
+}
+
+async function testAllEngines(){
+  const box=$('aiTestResults');
+  box.style.display='block';
+  box.innerHTML='<div style="padding:10px;font-size:.8rem;color:var(--gray)">🔄 Test in corso su tutti gli engine...</div>';
+  try{
+    const r = await apiCall('testAI',{},'POST');
+    let html='<div style="display:flex;flex-direction:column;gap:4px;padding:8px">';
+    AI_ENGINES.forEach(eng=>{
+      const key = eng.id === 'workersai' ? 'workersAI' : eng.id;
+      const res = r[key];
+      if(!res) { html+=`<div class="ai-test-row">⚪ <b>${eng.name}</b> — non testato</div>`; return; }
+      if(res.configured===false) { html+=`<div class="ai-test-row">⚪ <b>${eng.name}</b> — chiave non configurata</div>`; return; }
+      if(res.ok) { html+=`<div class="ai-test-row" style="color:var(--ok)">✅ <b>${eng.name}</b> — funzionante</div>`; return; }
+      html+=`<div class="ai-test-row" style="color:var(--err)">❌ <b>${eng.name}</b> — errore (${res.status||res.error||'?'})</div>`;
+    });
+    html+='</div>';
+    box.innerHTML=html;
+  }catch(e){box.innerHTML=`<div style="padding:10px;color:var(--err);font-size:.8rem">Errore: ${e.message}</div>`}
 }
 
 // Backward compatibility alias

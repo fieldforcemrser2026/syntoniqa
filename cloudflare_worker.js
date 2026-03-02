@@ -1953,6 +1953,28 @@ async function handlePost(action, body, env) {
           else { results.groq.body = (await r.text().catch(()=>'')).substring(0,200); }
         } catch(e) { results.groq = { error: e.message }; }
       } else { results.groq = { configured: false }; }
+      // Test Mistral
+      if (env.MISTRAL_KEY) {
+        try {
+          const r = await fetch('https://api.mistral.ai/v1/chat/completions',
+            { method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${env.MISTRAL_KEY}`},
+              body: JSON.stringify({ model:'mistral-small-latest', messages:[{role:'user',content:testPrompt}], max_tokens:100, temperature:0 }) });
+          results.mistral = { status: r.status, ok: r.ok };
+          if (r.ok) { const d = await r.json(); results.mistral.response = d.choices?.[0]?.message?.content?.substring(0,100); }
+          else { results.mistral.body = (await r.text().catch(()=>'')).substring(0,200); }
+        } catch(e) { results.mistral = { error: e.message }; }
+      } else { results.mistral = { configured: false }; }
+      // Test DeepSeek
+      if (env.DEEPSEEK_KEY) {
+        try {
+          const r = await fetch('https://api.deepseek.com/chat/completions',
+            { method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${env.DEEPSEEK_KEY}`},
+              body: JSON.stringify({ model:'deepseek-chat', messages:[{role:'user',content:testPrompt}], max_tokens:100, temperature:0 }) });
+          results.deepseek = { status: r.status, ok: r.ok };
+          if (r.ok) { const d = await r.json(); results.deepseek.response = d.choices?.[0]?.message?.content?.substring(0,100); }
+          else { results.deepseek.body = (await r.text().catch(()=>'')).substring(0,200); }
+        } catch(e) { results.deepseek = { error: e.message }; }
+      } else { results.deepseek = { configured: false }; }
       // Test Workers AI
       if (env.AI) {
         try {
@@ -2691,56 +2713,87 @@ ${periodoIstruzione || 'Genera piano mese intero'}
 JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId":"TEC_xxx","cliente":"nome","clienteId":"codice","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina"}],"warnings":[]}`;
       }
 
-      // Engine cache: ricorda quale engine ha funzionato → skip cascade su chunk successivi
-      const engineState = { geminiDisabled: false, cerebrasDisabled: false, groqDisabled: false, lastWorking: null };
+      // Engine registry: ogni engine ha key env, funzione try, flag disabled
+      const engines = {
+        gemini:   { envKey: 'GEMINI_KEY',   tryFn: null, disabled: false },
+        cerebras: { envKey: 'CEREBRAS_KEY', tryFn: null, disabled: false },
+        groq:     { envKey: 'GROQ_KEY',     tryFn: null, disabled: false },
+        mistral:  { envKey: 'MISTRAL_KEY',  tryFn: null, disabled: false },
+        deepseek: { envKey: 'DEEPSEEK_KEY', tryFn: null, disabled: false },
+        workersai:{ envKey: 'AI',           tryFn: null, disabled: false },
+      };
+      // Lazy-bind tryFn (definite sotto)
+      engines.gemini.tryFn = tryGemini;
+      engines.cerebras.tryFn = tryCerebras;
+      engines.groq.tryFn = tryGroq;
+      engines.mistral.tryFn = tryMistral;
+      engines.deepseek.tryFn = tryDeepSeek;
+
+      // Ranking configurabile da DB config (chiave: ai_engine_ranking)
+      // Formato: "gemini,cerebras,groq,mistral,deepseek,workersai" (ordine = priorità)
+      const defaultRanking = ['gemini','cerebras','groq','mistral','deepseek','workersai'];
+      let engineRanking = defaultRanking;
+      try {
+        const cfgRank = await sb(env, 'config', 'GET', null,
+          `?chiave=eq.ai_engine_ranking&tenant_id=eq.${env.TENANT_ID}&select=valore`);
+        if (cfgRank?.[0]?.valore) {
+          const parsed = cfgRank[0].valore.split(',').map(s => s.trim().toLowerCase()).filter(s => engines[s]);
+          if (parsed.length) engineRanking = parsed;
+        }
+      } catch { /* usa default */ }
+
+      // Engine disabilitati dall'utente
+      try {
+        const cfgDis = await sb(env, 'config', 'GET', null,
+          `?chiave=eq.ai_engine_disabled&tenant_id=eq.${env.TENANT_ID}&select=valore`);
+        if (cfgDis?.[0]?.valore) {
+          cfgDis[0].valore.split(',').map(s => s.trim().toLowerCase()).forEach(s => {
+            if (engines[s]) engines[s].disabled = true;
+          });
+        }
+      } catch { /* ignora */ }
+
+      let lastWorking = null;
 
       async function callAI(promptText) {
         let lastError = '';
 
-        // Se un engine ha già funzionato, provalo PRIMA (skip cascade)
-        if (engineState.lastWorking === 'gemini' && env.GEMINI_KEY && !engineState.geminiDisabled) {
-          const r = await tryGemini(promptText);
-          if (r) return r;
-        }
-        if (engineState.lastWorking === 'cerebras' && env.CEREBRAS_KEY && !engineState.cerebrasDisabled) {
-          const r = await tryCerebras(promptText);
-          if (r) return r;
-        }
-        if (engineState.lastWorking === 'groq' && env.GROQ_KEY && !engineState.groqDisabled) {
-          const r = await tryGroq(promptText);
+        // Se un engine ha già funzionato in questa sessione, provalo PRIMA
+        if (lastWorking && engines[lastWorking] && !engines[lastWorking].disabled && env[engines[lastWorking].envKey]) {
+          const r = lastWorking === 'workersai'
+            ? await tryWorkersAI(promptText)
+            : await engines[lastWorking].tryFn(promptText);
           if (r) return r;
         }
 
-        // Cascade: prova tutti gli engine in ordine
-        // ENGINE 1: Gemini 2.0 Flash
-        if (env.GEMINI_KEY && !engineState.geminiDisabled) {
-          const r = await tryGemini(promptText);
-          if (r) { engineState.lastWorking = 'gemini'; return r; }
+        // Cascade secondo ranking configurato
+        for (const name of engineRanking) {
+          const eng = engines[name];
+          if (!eng || eng.disabled || !env[eng.envKey]) continue;
+          if (name === lastWorking) continue; // già provato sopra
+
+          const r = name === 'workersai'
+            ? await tryWorkersAI(promptText)
+            : await eng.tryFn(promptText);
+          if (r) { lastWorking = name; return r; }
         }
-        // ENGINE 2: Cerebras
-        if (env.CEREBRAS_KEY && !engineState.cerebrasDisabled) {
-          const r = await tryCerebras(promptText);
-          if (r) { engineState.lastWorking = 'cerebras'; return r; }
-        }
-        // ENGINE 3: Groq
-        if (env.GROQ_KEY && !engineState.groqDisabled) {
-          const r = await tryGroq(promptText);
-          if (r) { engineState.lastWorking = 'groq'; return r; }
-        }
-        // ENGINE 4: Workers AI (fallback)
-        if (env.AI) {
-          const compactPrompt = buildCompactPrompt();
-          try {
-            const aiPromise = env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
-              messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: compactPrompt }],
-              max_tokens: 4096
-            });
-            const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 30000));
-            const res = await Promise.race([aiPromise, timeout]);
-            if (res?.response) { engineState.lastWorking = 'workersai'; return res.response; }
-          } catch (e) { lastError = `Workers AI: ${e.message}`; }
-        }
-        throw new Error(`AI non disponibile (${lastError}). Configura GEMINI_KEY, CEREBRAS_KEY o GROQ_KEY.`);
+
+        throw new Error(`AI non disponibile (${lastError}). Configura almeno una chiave API: GEMINI_KEY, GROQ_KEY, CEREBRAS_KEY, MISTRAL_KEY, DEEPSEEK_KEY.`);
+      }
+
+      async function tryWorkersAI(promptText) {
+        if (!env.AI) return null;
+        const compactPrompt = buildCompactPrompt ? buildCompactPrompt() : promptText;
+        try {
+          const aiPromise = env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+            messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: compactPrompt }],
+            max_tokens: 4096
+          });
+          const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_ai')), 30000));
+          const res = await Promise.race([aiPromise, timeout]);
+          if (res?.response) return res.response;
+        } catch { /* fallthrough */ }
+        return null;
       }
 
       async function tryGemini(promptText) {
@@ -2755,11 +2808,11 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId
               })
             }
           );
-          if (res.status === 429) { engineState.geminiDisabled = true; return null; }
-          if (!res.ok) { engineState.geminiDisabled = true; return null; }
+          if (res.status === 429) { engines.gemini.disabled = true; return null; }
+          if (!res.ok) { engines.gemini.disabled = true; return null; }
           const gd = await res.json();
           return gd.candidates?.[0]?.content?.parts?.[0]?.text || null;
-        } catch { engineState.geminiDisabled = true; return null; }
+        } catch { engines.gemini.disabled = true; return null; }
       }
 
       async function tryCerebras(promptText) {
@@ -2774,7 +2827,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId
               response_format: { type: 'json_object' }
             })
           });
-          if (!res.ok) { if (res.status === 429) engineState.cerebrasDisabled = true; return null; }
+          if (!res.ok) { if (res.status === 429) engines.cerebras.disabled = true; return null; }
           const cd = await res.json();
           return cd.choices?.[0]?.message?.content || null;
         } catch { return null; }
@@ -2793,14 +2846,48 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome","tecnicoId
             })
           });
           if (!res.ok) {
-            const errBody = await res.text().catch(() => '');
-            engineState.lastError = `Groq ${res.status}: ${errBody.substring(0,200)}`;
-            if (res.status === 429) engineState.groqDisabled = true;
+            if (res.status === 429) engines.groq.disabled = true;
             return null;
           }
           const gd = await res.json();
           return gd.choices?.[0]?.message?.content || null;
-        } catch (e) { engineState.lastError = `Groq exception: ${e.message}`; return null; }
+        } catch { return null; }
+      }
+
+      async function tryMistral(promptText) {
+        try {
+          const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.MISTRAL_KEY}` },
+            body: JSON.stringify({
+              model: 'mistral-small-latest',
+              messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
+              max_tokens: 16384, temperature: 0.3,
+              response_format: { type: 'json_object' }
+            })
+          });
+          if (!res.ok) { if (res.status === 429) engines.mistral.disabled = true; return null; }
+          const d = await res.json();
+          return d.choices?.[0]?.message?.content || null;
+        } catch { engines.mistral.disabled = true; return null; }
+      }
+
+      async function tryDeepSeek(promptText) {
+        try {
+          const res = await fetch('https://api.deepseek.com/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.DEEPSEEK_KEY}` },
+            body: JSON.stringify({
+              model: 'deepseek-chat',
+              messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
+              max_tokens: 16384, temperature: 0.3,
+              response_format: { type: 'json_object' }
+            })
+          });
+          if (!res.ok) { if (res.status === 429) engines.deepseek.disabled = true; return null; }
+          const d = await res.json();
+          return d.choices?.[0]?.message?.content || null;
+        } catch { engines.deepseek.disabled = true; return null; }
       }
 
       // Parser robusto — gestisce JSON troncati (risposta tagliata a max_tokens)
@@ -3098,8 +3185,8 @@ ${instructions}`;
           // Esecuzione SEQUENZIALE con delay intelligente
           // Groq: 6000 token/min → max 1 call/minuto per prompt grandi
           // Cerebras/Gemini: nessun limite → delay breve
-          const needsLongDelay = !env.CEREBRAS_KEY && !env.GEMINI_KEY; // solo Groq disponibile
-          const chunkDelay = needsLongDelay ? 65000 : 2000; // 65s per Groq solo, 2s per altri
+          const fastEngines = env.GEMINI_KEY || env.CEREBRAS_KEY || env.MISTRAL_KEY || env.DEEPSEEK_KEY;
+          const chunkDelay = fastEngines ? 2000 : 65000; // 65s se solo Groq, 2s se altri disponibili
 
           for (let ci = 0; ci < chunks.length; ci++) {
             if (ci > 0) await new Promise(r => setTimeout(r, chunkDelay));
@@ -3109,7 +3196,7 @@ ${instructions}`;
             res.warnings.forEach(w => allWarnings.add(w));
           }
 
-          if (!allPiano.length) return err('AI non ha generato nessun intervento. Verifica le API key (GEMINI_KEY / GROQ_KEY).');
+          if (!allPiano.length) return err('AI non ha generato nessun intervento. Verifica le API key nei Worker secrets.');
 
           const processed = postProcess(allPiano);
           const allWarnArr = [...allWarnings, ...postProcessWarnings];
@@ -3130,7 +3217,7 @@ Genera almeno ${nTecAttivi} interventi per OGNI giorno lavorativo.
 ${instructions}`;
 
           const rawText = await callAI(singlePrompt);
-          if (!rawText) return err('AI non ha generato risposta. Verifica GEMINI_KEY/GROQ_KEY nelle env del worker.');
+          if (!rawText) return err('AI non ha generato risposta. Verifica le API key nei Worker secrets.');
           const result = parseAIResponse(rawText);
           if (!result) return ok({ summary: 'Errore formato risposta', piano: [], warnings: ['Risposta AI non parsabile. Riprova.'], raw: rawText.substring(0, 1500) });
           result.piano = postProcess(result.piano);

@@ -22,4 +22,6 @@ BRAND_COLOR = "#C30A14"
 
 # Secrets (NON mettere valori reali qui — usa wrangler secret put NOME_SECRET)
 # SUPABASE_URL, SUPABASE_SERVICE_KEY, SQ_TOKEN, TELEGRAM_BOT_TOKEN,
-# TELEGRAM_WEBHOOK_SECRET, RESEND_API_KEY, GEMINI_KEY, JWT_SECRET
+# TELEGRAM_WEBHOOK_SECRET, RESEND_API_KEY, JWT_SECRET
+# AI Provider keys (tutte opzionali — il sistema usa quelli configurati in ordine di ranking):
+# GEMINI_KEY, GROQ_KEY, CEREBRAS_KEY, MISTRAL_KEY, DEEPSEEK_KEY
