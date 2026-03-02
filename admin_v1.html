@@ -4526,7 +4526,7 @@ function renderAuditLog(){
 
 // ============ POWER BI ============
 function renderPowerBI(){
-  const base=API_URL+'?action=exportPowerBI&token='+API_TOKEN;
+  const base=API_URL+'?action=exportPowerBI&token='+(JWT_TOKEN||API_TOKEN||'');
   $('pbiUrl').value=base;
   const facts=['fact_interventi','fact_urgenze','fact_ordini','fact_reperibilita','fact_trasferte','fact_pagellini'];
   const dims=['dim_tecnici','dim_clienti','dim_macchine','dim_automezzi','dim_tipi_intervento','dim_priorita','dim_tempo','metrics'];
@@ -5054,7 +5054,7 @@ async function loadChatMessages(){
   if(!CHAT_CANALE)return;
   try{
     // Usa fetch diretto (senza apiCall) per non mostrare l'overlay globale ogni 5s
-    const resp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action:'getChatMessaggi',canale_id:CHAT_CANALE,userId:USER?.ID,limit:100}),signal:AbortSignal.timeout(10000)});
+    const resp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(JWT_TOKEN||API_TOKEN)},body:JSON.stringify({action:'getChatMessaggi',canale_id:CHAT_CANALE,userId:USER?.ID,limit:100}),signal:AbortSignal.timeout(10000)});
     const json=await resp.json();
     if(!json.success)throw new Error(json.error||'Errore chat');
     const r=json.data||json;
@@ -6419,7 +6419,7 @@ async function confirmImportExcelPlan(){
   try{
     toast(`Importazione ${EXCEL_PLAN_ROWS.length} righe in corso...`,'warn');
     // Timeout esteso (120s) per importazioni grandi
-    const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action:'importExcelPlan',userId:USER?.ID||'',rows:EXCEL_PLAN_ROWS}),signal:AbortSignal.timeout(120000)});
+    const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(JWT_TOKEN||API_TOKEN)},body:JSON.stringify({action:'importExcelPlan',userId:USER?.ID||'',rows:EXCEL_PLAN_ROWS}),signal:AbortSignal.timeout(120000)});
     const j=await r.json();if(!j.success)throw new Error(j.error||'Errore import');
     const result=j.data||j;
 
@@ -6687,7 +6687,7 @@ async function runAI(){
       });
     }
     // Direct fetch con timeout 120s (apiCall ha 30s hardcoded — insufficiente per Workers AI)
-    const _aiResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:{testo:prompt,files:filesData,mese_target:meseTarget,modalita,settimana,ctx:ctxFlags,piano_esistente:pianoEsistente}}),signal:AbortSignal.timeout(120000)});
+    const _aiResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(JWT_TOKEN||API_TOKEN)},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:{testo:prompt,files:filesData,mese_target:meseTarget,modalita,settimana,ctx:ctxFlags,piano_esistente:pianoEsistente}}),signal:AbortSignal.timeout(120000)});
     const _aiJson=await _aiResp.json();
     if(!_aiJson.success)throw new Error(_aiJson.error||'Errore AI');
     const result=_aiJson.data||_aiJson;
@@ -6900,7 +6900,7 @@ async function applyAI(forceOverwrite){
   try{
     const payload={action:'applyAIPlan',userId:USER?.ID||'',piano:AI_PLAN};
     if(forceOverwrite)payload.force_overwrite=true;
-    const _applyResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},
+    const _applyResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(JWT_TOKEN||API_TOKEN)},
       body:JSON.stringify(payload),signal:AbortSignal.timeout(120000)});
     const _applyJson=await _applyResp.json();
     if(!_applyJson.success)throw new Error(_applyJson.error||'Errore apply');
@@ -8308,7 +8308,7 @@ async function saveVincoliAll(){
     };
     await fetch(API_URL, {
       method:'POST',
-      headers:{'Content-Type':'application/json','X-Token':API_TOKEN},
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+(JWT_TOKEN||API_TOKEN)},
       body: JSON.stringify(payload)
     });
     toast('Vincoli e regole salvati con successo!', 'ok');
@@ -8928,7 +8928,7 @@ async function runAIPlanner(){
   try {
     toast('AI sta generando il piano... (può richiedere 30-60 sec)','warn');
     // Usa fetch diretto con timeout esteso (90s) — apiCall ha solo 30s
-    const aiResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:{testo:prompt}}),signal:AbortSignal.timeout(90000)});
+    const aiResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(JWT_TOKEN||API_TOKEN)},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:{testo:prompt}}),signal:AbortSignal.timeout(90000)});
     const aiJson=await aiResp.json();
     if(!aiJson.success)throw new Error(aiJson.error||'Errore AI');
     const result=aiJson.data||aiJson;
