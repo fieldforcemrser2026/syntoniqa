@@ -22,6 +22,7 @@ function brand(env) {
     email:     env.BRAND_EMAIL     || 'noreply@syntoniqa.app',
     emailFrom: env.BRAND_EMAIL_FROM || `Syntoniqa <${env.BRAND_EMAIL || 'noreply@syntoniqa.app'}>`,
     adminUrl:  env.BRAND_ADMIN_URL || 'https://fieldforcemrser2026.github.io/syntoniqa/admin_v1.html',
+    techUrl:   env.BRAND_TECH_URL  || 'https://fieldforcemrser2026.github.io/syntoniqa/index_v2.html',
     color:     env.BRAND_COLOR     || '#C30A14',
   };
 }
