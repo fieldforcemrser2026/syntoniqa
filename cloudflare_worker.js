@@ -4565,12 +4565,28 @@ Rispondi SOLO con JSON valido:
 
           const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
           if (aiResult.tipo === 'urgenza') {
+            // Lookup reale macchina in anagrafica_assets (o macchine) per cliente + tipo
+            let realMacchinaId = null;
+            if (aiResult.codice_m3 && aiResult.macchina) {
+              const macTipo = (aiResult.macchina || '').toUpperCase();
+              const macQuery = `?cliente_id=eq.${aiResult.codice_m3}&obsoleto=eq.false&select=id,tipo,numero_serie`;
+              const macList = await sb(env, 'macchine', 'GET', null, macQuery).catch(()=>[]);
+              const match = macList.find(m => (m.tipo||'').toUpperCase().includes(macTipo));
+              if (match) realMacchinaId = match.id;
+              if (!realMacchinaId) {
+                // Fallback: cerca in anagrafica_assets
+                const anagQ = `?codice_m3=eq.${aiResult.codice_m3}&obsoleto=eq.false&select=id,tipo_macchina,descrizione`;
+                const anagList = await sb(env, 'anagrafica_assets', 'GET', null, anagQ).catch(()=>[]);
+                const anagMatch = anagList.find(a => (a.tipo_macchina||a.descrizione||'').toUpperCase().includes(macTipo));
+                if (anagMatch) realMacchinaId = anagMatch.id;
+              }
+            }
             payload = {
               id: 'URG_TG_' + Date.now(),
               tenant_id: tid,
               problema: aiResult.problema,
               cliente_id: aiResult.codice_m3 || null,
-              macchina_id: aiResult.robot_id ? `${aiResult.macchina || 'ROBOT'}_${aiResult.robot_id}` : null,
+              macchina_id: realMacchinaId,
               priorita_id: null,
               stato: 'aperta',
               data_segnalazione: now,
@@ -4579,6 +4595,20 @@ Rispondi SOLO con JSON valido:
             };
             try {
               await sb(env, 'urgenze', 'POST', payload);
+              // Salva foto/documento come allegato collegato all'urgenza
+              if (mediaUrl) {
+                const docId = 'DOC_TG_' + Date.now();
+                await sb(env, 'documenti', 'POST', {
+                  id: docId, tenant_id: tid,
+                  entita_tipo: 'urgenza', entita_id: payload.id,
+                  nome: fileName || (mediaType === 'photo' ? 'foto_telegram.jpg' : 'allegato_telegram'),
+                  tipo: mediaType || 'photo', url: mediaUrl,
+                  caricato_da: utente?.id || 'TELEGRAM',
+                  created_at: now
+                }).catch(e => console.error('[DOC] Save error:', e.message));
+                // Aggiorna urgenza con allegati_ids
+                await sb(env, `urgenze?id=eq.${payload.id}`, 'PATCH', { allegati_ids: [docId] }).catch(() => {});
+              }
               actionReply = `🚨 *URGENZA CREATA*\nID: \`${payload.id}\`\nCliente: ${aiResult.cliente || '?'}\nProblema: ${aiResult.problema}\nMacchina: ${aiResult.macchina || '?'} ${aiResult.robot_id || ''}\nPriorità: ${aiResult.priorita}${mediaUrl ? '\n📎 Allegato salvato' : ''}`;
               // Aggiungi info ricambi se AI ha identificato componenti dalla foto
               if (aiResult.componente_identificato) actionReply += `\n\n🔍 *Componente identificato:* ${aiResult.componente_identificato}`;

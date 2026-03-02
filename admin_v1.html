@@ -2673,6 +2673,7 @@ async function saveUrgenzaEdit(id){
   try{
     const updates={id,
       ClienteID:$('edUrgCliente')?.value||null,
+      MacchinaID:$('edUrgMacchina')?.value||null,
       PrioritaID:$('edUrgPriorita')?.value||null,
       TecnicoAssegnato:$('edUrgTecnico')?.value||null,
       DataPrevista:$('edUrgDataPrev')?.value||null,
@@ -6203,7 +6204,11 @@ function showDetail(type,id){
           <option value="">— Seleziona —</option>
           ${urgClienti.map(c=>`<option value="${c.CodiceM3||c.ID}" ${(c.CodiceM3||c.ID)===item.ClienteID?'selected':''}>${c.NomeInterno||c.NomeAccount||c.Nome}</option>`).join('')}
         </select></div>
-        <div><strong>Macchina:</strong> ${getName(DATA.macchine||[],item.MacchinaID,'Tipo')}</div>
+        <div><strong>Macchina:</strong> <select id="edUrgMacchina" class="inp" style="display:inline;width:auto;min-width:180px">
+          <option value="">— Nessuna —</option>
+          ${(DATA.macchine||[]).filter(m=>!m.Obsoleto&&(!item.ClienteID||m.ClienteID===item.ClienteID)).map(m=>`<option value="${m.ID}" ${m.ID===item.MacchinaID?'selected':''}>${m.Tipo||m.Modello||m.ID}${m.NumeroSerie?' ('+m.NumeroSerie+')':''}</option>`).join('')}
+          ${item.MacchinaID&&!(DATA.macchine||[]).find(m=>m.ID===item.MacchinaID)?`<option value="${item.MacchinaID}" selected>${item.MacchinaID}</option>`:''}
+        </select></div>
         <div><strong>Priorità:</strong> <select id="edUrgPriorita" class="inp" style="display:inline;width:auto">
           <option value="">—</option>
           ${urgPriorita.map(p=>`<option value="${p.ID}" ${p.ID===item.PrioritaID?'selected':''}>${p.Nome}</option>`).join('')}
@@ -6243,6 +6248,7 @@ function showDetail(type,id){
       if(item.Stato==='assegnata'||item.Stato==='schedulata')foot+=`<button class="btn btn-warn" onclick="urgAction('${id}','startUrgenza');closeModal('modalDetail')">⚡ Inizia</button> `;
       if(item.Stato==='in_corso')foot+=`<button class="btn btn-ok" onclick="urgAction('${id}','resolveUrgenza');closeModal('modalDetail')">✅ Risolvi</button> `;
       if(item.Stato==='risolta')foot+=`<button class="btn" style="background:#E0F2FE;color:#0369A1" onclick="closeUrgenza('${id}')">📁 Chiudi Urgenza</button> `;
+      foot+=`<button class="btn" style="background:#FEE2E2;color:#DC2626;border:1px solid #FECACA" onclick="if(confirm('Cancellare questa urgenza?')){deletePlannerItem('urgenza','${id}');closeModal('modalDetail')}">🗑️ Cancella</button>`;
       break;
 
     case 'ordine':
