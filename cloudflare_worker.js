@@ -3635,7 +3635,7 @@ Rispondi SOLO con JSON valido:
         const tgUrl = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`;
         await fetch(tgUrl, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: env.TELEGRAM_GROUP_CHAT || '-5236723213', text: msg, parse_mode: 'Markdown' })
+          body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID || '-5236723213', text: msg, parse_mode: 'Markdown' })
         }).catch(() => {});
       }
       return ok({ notified: true });
@@ -6124,7 +6124,7 @@ async function checkPMExpiry(env) {
     if (!macchine3.length) { console.log('[CRON] checkPMExpiry: 0 tagliandi critici'); return; }
 
     const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
-    const group = env.TELEGRAM_GROUP || '-5236723213';
+    const group = env.TELEGRAM_CHAT_ID || '-5236723213';
     let scaduti = 0, urgenti = 0;
     const tgLines = []; // accumula per riepilogo TG
 
