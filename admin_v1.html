@@ -2991,7 +2991,8 @@ function openApproveRich(id,statoTarget){
   const tipoIcons={ferie:'🏖️',permesso:'🕐',malattia:'🤒',cambio_turno:'🔄',generico:'📝'};
   const tecNome=getName(DATA.utenti||[],r.TecnicoID);
   const isApprove=statoTarget==='approvata';
-  const html=`<div style="display:flex;flex-direction:column;gap:12px;padding:8px">
+  $('detailTitle').textContent=`${isApprove?'✅ Approva':'❌ Rifiuta'} Richiesta ${id}`;
+  $('detailBody').innerHTML=`<div style="display:flex;flex-direction:column;gap:12px;padding:8px">
     <div class="grid-2 mb">
       <div><strong>Tecnico:</strong> ${tecNome}</div>
       <div><strong>Tipo:</strong> ${tipoIcons[r.Tipo]||'📝'} ${r.Tipo||'generico'}</div>
@@ -3005,7 +3006,8 @@ function openApproveRich(id,statoTarget){
       <button class="btn btn-ghost" onclick="closeModal('modalDetail')" style="flex:1">Annulla</button>
     </div>
   </div>`;
-  openModal('modalDetail',`${isApprove?'✅ Approva':'❌ Rifiuta'} Richiesta ${id}`,html);
+  $('detailFoot').innerHTML='';
+  openModal('modalDetail');
 }
 
 async function confirmApproveRich(id,stato){
@@ -3019,7 +3021,8 @@ async function confirmApproveRich(id,stato){
 function showRichDetail(id){
   const r=(DATA.richieste||[]).find(x=>x.ID===id);if(!r)return;
   const tipoIcons={ferie:'🏖️',permesso:'🕐',malattia:'🤒',cambio_turno:'🔄',generico:'📝'};
-  const html=`<div style="display:flex;flex-direction:column;gap:10px;padding:8px">
+  $('detailTitle').textContent=`📝 Richiesta ${id}`;
+  $('detailBody').innerHTML=`<div style="display:flex;flex-direction:column;gap:10px;padding:8px">
     <div class="grid-2">
       <div><strong>Tecnico:</strong> ${getName(DATA.utenti||[],r.TecnicoID)}</div>
       <div><strong>Tipo:</strong> ${tipoIcons[r.Tipo]||'📝'} ${r.Tipo||'generico'}</div>
@@ -3032,13 +3035,15 @@ function showRichDetail(id){
     ${r.NoteAdmin?`<div><strong>Note admin:</strong> ${r.NoteAdmin}</div>`:''}
     ${r.DataRisposta?`<div><strong>Data risposta:</strong> ${fmtDate(r.DataRisposta)}</div>`:''}
   </div>`;
-  openModal('modalDetail',`📝 Richiesta ${id}`,html);
+  $('detailFoot').innerHTML=`<button class="btn btn-outline" onclick="closeModal('modalDetail')">Chiudi</button>`;
+  openModal('modalDetail');
 }
 
 function openNewRichiesta(){
   const tecOpts=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Attivo).map(u=>`<option value="${u.ID}">${u.Nome} ${u.Cognome||''}</option>`).join('');
   const oggi=new Date().toISOString().split('T')[0];
-  const html=`<div style="display:flex;flex-direction:column;gap:12px;padding:8px">
+  $('detailTitle').textContent='📝 Nuova Richiesta';
+  $('detailBody').innerHTML=`<div style="display:flex;flex-direction:column;gap:12px;padding:8px">
     <label>Tipo<select id="nrTipo" class="inp"><option value="ferie">🏖️ Ferie</option><option value="permesso">🕐 Permesso</option><option value="malattia">🤒 Malattia</option><option value="cambio_turno">🔄 Cambio Turno</option><option value="generico">📝 Generico</option></select></label>
     <label>Tecnico<select id="nrTecnico" class="inp"><option value="">— Seleziona —</option>${tecOpts}</select></label>
     <div style="display:flex;gap:12px">
@@ -3048,7 +3053,8 @@ function openNewRichiesta(){
     <label>Motivo<textarea id="nrMotivo" class="inp" rows="3" placeholder="Descrizione richiesta..."></textarea></label>
     <button class="btn btn-ok" onclick="submitRichiesta()">📝 Invia Richiesta</button>
   </div>`;
-  openModal('modalDetail','📝 Nuova Richiesta',html);
+  $('detailFoot').innerHTML='';
+  openModal('modalDetail');
 }
 async function submitRichiesta(){
   const tipo=$('nrTipo')?.value||'generico';
