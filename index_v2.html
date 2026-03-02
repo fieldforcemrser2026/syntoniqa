@@ -787,6 +787,7 @@ const API_URL = (window.SYNTONIQA_CONFIG&&window.SYNTONIQA_CONFIG.api&&window.SY
   || 'https://syntoniqa-api.YOUR_SUBDOMAIN.workers.dev';
 const API_TOKEN = (window.SYNTONIQA_CONFIG&&window.SYNTONIQA_CONFIG.api&&window.SYNTONIQA_CONFIG.api.token)
   || 'FF_TOKEN_CAMBIA_QUESTO_IN_PRODUZIONE';
+let JWT_TOKEN = null;
 
 // ============ i18n ============
 const I18N = {
@@ -908,10 +909,12 @@ let _apiActive=0;
 function showGlobalLoad(show){const el=$('globalLoad');if(el)el.style.display=show?'flex':'none'}
 async function apiCall(action,data,method){
   let url=API_URL,opts={};
+  const authToken=JWT_TOKEN||API_TOKEN;
   if(!method||method==='GET'){
-    url+='?'+new URLSearchParams({action,token:API_TOKEN,...(data||{})});
+    url+='?'+new URLSearchParams({action,...(data||{})});
+    opts={headers:{'Authorization':'Bearer '+authToken}};
   }else{
-    opts={method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action,userId:USER?.ID||'',...(data||{})})};
+    opts={method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+authToken},body:JSON.stringify({action,userId:USER?.ID||'',...(data||{})})};
   }
   _apiActive++;if(_apiActive===1)showGlobalLoad(true);
   try{
@@ -920,6 +923,12 @@ async function apiCall(action,data,method){
     opts.signal=controller.signal;
     const r=await fetch(url,opts);
     clearTimeout(timeout);
+    if(r.status===401){
+      JWT_TOKEN=null;
+      localStorage.removeItem('sq2_token');
+      localStorage.removeItem('sq2tec');
+      throw new Error('Sessione scaduta. Effettua il login.');
+    }
     const json=await r.json();
     if(!json.success)throw new Error(json.error||'Errore API');
     return json.data!==undefined?json.data:json;
@@ -935,8 +944,9 @@ async function refreshData(silent){
   if(silent){
     // Refresh silenzioso senza loading overlay
     try{
-      let url=API_URL+'?'+new URLSearchParams({action:'getAll',token:API_TOKEN,userId:USER?.ID||''});
-      const r=await fetch(url,{signal:AbortSignal.timeout(15000)});
+      const authToken=JWT_TOKEN||API_TOKEN;
+      let url=API_URL+'?'+new URLSearchParams({action:'getAll',userId:USER?.ID||''});
+      const r=await fetch(url,{signal:AbortSignal.timeout(15000),headers:{'Authorization':'Bearer '+authToken}});
       const json=await r.json();
       if(json.success&&json.data){DATA=json.data;if(USER&&USER.ID){const fresh=(DATA.utenti||[]).find(x=>x.ID===USER.ID);if(fresh)USER={...fresh}}renderAllForce()}
     }catch(e){console.warn('[SILENT-REFRESH]',e.message)}
@@ -955,12 +965,37 @@ document.addEventListener('DOMContentLoaded',init);
 async function init(){
   showGlobalLoad(false);
   try{
-    DATA=await apiCall('getAll');
+    // Check for saved JWT first
+    const savedJWT=localStorage.getItem('sq2_token');
+    if(savedJWT){
+      try{
+        const parts=savedJWT.split('.');
+        if(parts.length===3){
+          const payload=JSON.parse(atob(parts[1]));
+          if(payload.exp&&payload.exp>(Date.now()/1000)){
+            JWT_TOKEN=savedJWT;
+          }else{
+            localStorage.removeItem('sq2_token');
+          }
+        }
+      }catch(e){console.warn('[JWT-DECODE]',e.message);localStorage.removeItem('sq2_token')}
+    }
+    // Se JWT valido, carica dati e auto-login
+    if(JWT_TOKEN){
+      try{
+        DATA=await apiCall('getAll');
+        const payload=JSON.parse(atob(JWT_TOKEN.split('.')[1]));
+        const u=(DATA.utenti||[]).find(x=>x.ID===payload.sub);
+        if(u){USER=u;enterApp();return}
+      }catch(e){
+        console.warn('[JWT-INIT] getAll failed, showing login',e);
+        JWT_TOKEN=null;localStorage.removeItem('sq2_token');
+      }
+    }
+    // Nessun JWT valido → mostra login form
     $('loginLoad').style.display='none';
     $('loginForm').style.display='block';
     $('forgotPwdSection').style.display='block';
-    const s=localStorage.getItem('sq2tec');
-    if(s){const o=JSON.parse(s);const u=(DATA.utenti||[]).find(x=>x.ID===o.id);if(u){USER=u;enterApp()}}
   }catch(e){
     showGlobalLoad(false);
     console.error('[INIT]',e);
@@ -975,14 +1010,16 @@ async function doLogin(e){
     const r=await apiCall('login',{username:$('inpUser').value.trim(),password:$('inpPwd').value},'POST');
     if(!r.user)throw new Error('Credenziali non valide');
     USER=r.user;
+    if(r.token){JWT_TOKEN=r.token;localStorage.setItem('sq2_token',r.token)}
     localStorage.setItem('sq2tec',JSON.stringify({id:USER.ID}));
+    DATA=await apiCall('getAll');
     enterApp();
   }catch(e){$('loginErr').textContent=e.message;$('loginErr').style.display='block'}
   finally{$('btnLogin').disabled=false}
   return false;
 }
 
-function logout(){localStorage.removeItem('sq2tec');location.reload()}
+function logout(){localStorage.removeItem('sq2tec');localStorage.removeItem('sq2_token');JWT_TOKEN=null;location.reload()}
 
 /* ─── DARK MODE ─── */
 function initDarkMode(){

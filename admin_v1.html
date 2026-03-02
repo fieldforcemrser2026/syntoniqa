@@ -2274,6 +2274,7 @@ const API_URL = (window.SYNTONIQA_CONFIG&&window.SYNTONIQA_CONFIG.api&&window.SY
   || 'https://syntoniqa-api.YOUR_SUBDOMAIN.workers.dev';
 const API_TOKEN = (window.SYNTONIQA_CONFIG&&window.SYNTONIQA_CONFIG.api&&window.SYNTONIQA_CONFIG.api.token)
   || 'FF_TOKEN_CAMBIA_QUESTO_IN_PRODUZIONE';
+let JWT_TOKEN = null;
 let calDate=new Date(), repFilter='attivi', pagFilter='bozze';
 
 // ============ HELPERS ============
@@ -2325,11 +2326,13 @@ let _apiActive=0;
 function showGlobalLoad(show){const el=$('globalLoad');if(el)el.style.display=show?'flex':'none'}
 async function apiCall(action,data={},method='GET'){
   let url=API_URL,opts={};
+  const authToken = JWT_TOKEN || API_TOKEN;
   if(method==='GET'){
-    const p=new URLSearchParams({action,token:API_TOKEN,...data});
+    const p=new URLSearchParams({action,...data});
     url+='?'+p;
+    opts={headers:{'Authorization':'Bearer '+authToken}};
   }else{
-    opts={method:'POST',headers:{'Content-Type':'application/json','X-Token':API_TOKEN},body:JSON.stringify({action,userId:USER?.ID||'',...data})};
+    opts={method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+authToken},body:JSON.stringify({action,...data})};
   }
   _apiActive++;if(_apiActive===1)showGlobalLoad(true);
   try{
@@ -2338,6 +2341,14 @@ async function apiCall(action,data={},method='GET'){
     opts.signal=controller.signal;
     const r=await fetch(url,opts);
     clearTimeout(timeout);
+    // Handle 401 Unauthorized - JWT expired or invalid
+    if(r.status===401){
+      JWT_TOKEN=null;
+      localStorage.removeItem('ff8_token');
+      localStorage.removeItem('ff8_session');
+      location.reload();
+      throw new Error('Sessione scaduta, accedi di nuovo');
+    }
     const json=await r.json();
     if(!json.success)throw new Error(json.error||'Errore API');
     return json.data !== undefined ? json.data : json;
@@ -2356,8 +2367,19 @@ async function refreshData(silent){
   _refreshBusy=true;
   try{
     // Sempre fetch diretto senza overlay (apiCall userebbe lo spinner globale)
-    let url=API_URL+'?'+new URLSearchParams({action:'getAll',token:API_TOKEN,userId:USER?.ID||''});
-    const r=await fetch(url,{signal:AbortSignal.timeout(15000)});
+    const authToken = JWT_TOKEN || API_TOKEN;
+    let url=API_URL+'?'+new URLSearchParams({action:'getAll'});
+    const r=await fetch(url,{
+      headers:{'Authorization':'Bearer '+authToken},
+      signal:AbortSignal.timeout(15000)
+    });
+    if(r.status===401){
+      JWT_TOKEN=null;
+      localStorage.removeItem('ff8_token');
+      localStorage.removeItem('ff8_session');
+      location.reload();
+      return;
+    }
     const json=await r.json();
     if(json.success&&json.data){DATA=json.data;renderAllForce()}
   }catch(e){if(!silent)toast('Errore refresh: '+e.message,'err');else console.warn('[REFRESH]',e.message)}
@@ -2370,16 +2392,50 @@ async function init(){
   // Safety: assicurati che globalLoad non blocchi il login
   showGlobalLoad(false);
   try{
-    DATA=await apiCall('getAll');
+    // Check for JWT token first
+    const savedJWT=localStorage.getItem('ff8_token');
+    if(savedJWT){
+      // Decode JWT payload (middle part is the payload)
+      try{
+        const parts=savedJWT.split('.');
+        if(parts.length===3){
+          const payload=JSON.parse(atob(parts[1]));
+          // Check if token is not expired
+          if(payload.exp&&payload.exp*1000>Date.now()){
+            JWT_TOKEN=savedJWT;
+          }else{
+            // Token expired, remove it
+            localStorage.removeItem('ff8_token');
+          }
+        }
+      }catch(e){
+        console.warn('[JWT] Failed to decode token, clearing',e);
+        localStorage.removeItem('ff8_token');
+      }
+    }
+
     applyConfig();
+
+    // Se abbiamo un JWT valido, carica dati e auto-login
+    if(JWT_TOKEN){
+      try{
+        DATA=await apiCall('getAll');
+        const payload=JSON.parse(atob(JWT_TOKEN.split('.')[1]));
+        const u=(DATA.utenti||[]).find(x=>x.ID===payload.sub);
+        if(u&&(u.Ruolo==='admin'||u.Ruolo==='caposquadra')){
+          USER=u;
+          $('loginLoad').style.display='none';
+          enterApp();
+          return;
+        }
+      }catch(e){
+        console.warn('[JWT-INIT] getAll failed, showing login',e);
+        JWT_TOKEN=null;localStorage.removeItem('ff8_token');
+      }
+    }
+    // Nessun JWT valido → mostra login form
     $('loginLoad').style.display='none';
     $('loginForm').style.display='block';
-    const saved=localStorage.getItem('ff8_session');
-    if(saved){
-      const s=JSON.parse(saved);
-      const u=(DATA.utenti||[]).find(x=>x.ID===s.id);
-      if(u&&(u.Ruolo==='admin'||u.Ruolo==='caposquadra')){USER=u;enterApp()}
-    }
   }catch(e){
     showGlobalLoad(false);
     console.error('[INIT]',e);
@@ -2409,13 +2465,28 @@ async function doLogin(e){
     const r=await apiCall('login',{username:$('inpUser').value.trim(),password:$('inpPwd').value},'POST');
     if(!r.user)throw new Error('Credenziali non valide');
     if(r.user.Ruolo!=='admin'&&r.user.Ruolo!=='caposquadra')throw new Error('Accesso riservato a Admin e Capo Squadra');
-    USER=r.user;localStorage.setItem('ff8_session',JSON.stringify({id:USER.ID}));enterApp();
+    USER=r.user;
+    // Save JWT token if provided
+    if(r.token){
+      JWT_TOKEN=r.token;
+      localStorage.setItem('ff8_token',r.token);
+    }
+    localStorage.setItem('ff8_session',JSON.stringify({id:USER.ID}));
+    // Carica dati con il nuovo JWT e poi entra
+    DATA=await apiCall('getAll');
+    applyConfig();
+    enterApp();
   }catch(e){$('loginErr').textContent=e.message;$('loginErr').style.display='block'}
   finally{$('btnLogin').disabled=false;$('btnLogin').textContent='Accedi'}
   return false;
 }
 
-function logout(){localStorage.removeItem('ff8_session');location.reload()}
+function logout(){
+  localStorage.removeItem('ff8_session');
+  localStorage.removeItem('ff8_token');
+  JWT_TOKEN=null;
+  location.reload();
+}
 
 /* ─── DARK MODE ─── */
 function initDarkMode(){

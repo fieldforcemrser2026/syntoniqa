@@ -82,9 +82,16 @@ function validateTransition(validMap, currentStato, newStato, entityType) {
 // ============ AUTHORIZATION HELPERS ============
 
 async function requireAdmin(env, body) {
+  // PRIORITY: JWT claim (non spoofabile) — se presente, usa quello
+  if (body._isJWT) {
+    if (body._authRole === 'admin') return null; // ok
+    return 'Solo admin può eseguire questa azione';
+  }
+  // Fallback: SQ_TOKEN calls (Telegram/cron) sono trusted come sistema
+  if (body._authRole === 'system') return null;
+  // Legacy: verifica in DB (per backward compat durante migrazione)
   const uid = body.operatoreId || body.userId;
   if (!uid) return 'operatoreId richiesto';
-  // SECURITY: sanitize ID per prevenire PostgREST injection
   if (!/^[A-Za-z0-9_-]{1,50}$/.test(uid)) return 'operatoreId formato non valido';
   const caller = await sb(env, 'utenti', 'GET', null, `?id=eq.${encodeURIComponent(uid)}&select=ruolo`).catch(()=>[]);
   if (!caller?.[0]) return 'Utente non trovato';
@@ -278,10 +285,71 @@ function isLegacyHash(stored) {
   return stored && !stored.startsWith('pbkdf2:');
 }
 
-// Auth check
+// Auth check (legacy SQ_TOKEN — kept for Telegram/cron backward compat)
 function checkToken(request, env, bodyToken) {
   const token = request.headers.get('X-Token') || new URL(request.url).searchParams.get('token') || bodyToken || '';
   return token === env.SQ_TOKEN;
+}
+
+// ============ JWT HELPERS ============
+
+function b64UrlEncode(buf) {
+  // buf: string or Uint8Array
+  const str = typeof buf === 'string' ? buf : String.fromCharCode(...buf);
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function b64UrlDecode(str) {
+  const padded = str + '='.repeat((4 - str.length % 4) % 4);
+  const bin = atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
+  return new Uint8Array([...bin].map(c => c.charCodeAt(0)));
+}
+
+async function signJWT(payload, env) {
+  const header = b64UrlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const body   = b64UrlEncode(JSON.stringify(payload));
+  const msg    = `${header}.${body}`;
+  const enc    = new TextEncoder();
+  const key    = await crypto.subtle.importKey('raw', enc.encode(env.JWT_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig    = new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(msg)));
+  return `${msg}.${b64UrlEncode(sig)}`;
+}
+
+async function verifyJWT(token, env) {
+  if (!env.JWT_SECRET) return null;
+  const parts = (token || '').split('.');
+  if (parts.length !== 3) return null;
+  try {
+    // Verify signature
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey('raw', enc.encode(env.JWT_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+    const valid = await crypto.subtle.verify('HMAC', key, b64UrlDecode(parts[2]), enc.encode(`${parts[0]}.${parts[1]}`));
+    if (!valid) return null;
+    // Decode payload
+    const payload = JSON.parse(new TextDecoder().decode(b64UrlDecode(parts[1])));
+    // Check expiry
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch { return null; }
+}
+
+// Unified auth: JWT first, then legacy SQ_TOKEN fallback
+async function authenticateRequest(request, env, bodyToken) {
+  // 1. Try JWT from Authorization: Bearer <token>
+  const authHeader = request.headers.get('Authorization') || '';
+  const bearer = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (bearer) {
+    const payload = await verifyJWT(bearer[1], env);
+    if (payload) return { ok: true, sub: payload.sub, role: payload.role, jwt: true };
+    // Bearer present but not a valid JWT — maybe it's the old SQ_TOKEN sent as Bearer?
+    if (bearer[1] === env.SQ_TOKEN) return { ok: true, sub: 'system', role: 'system', jwt: false };
+    return { ok: false }; // Invalid token
+  }
+  // 2. Fallback to SQ_TOKEN via X-Token header / query param / body (Telegram, cron, legacy)
+  if (checkToken(request, env, bodyToken)) {
+    return { ok: true, sub: 'system', role: 'system', jwt: false };
+  }
+  return { ok: false };
 }
 
 // ============ RATE LIMITER ============
@@ -294,9 +362,9 @@ const RATE_LIMITS = {
 };
 const _rateStore = new Map(); // key: "ip:bucket" → [timestamps]
 
-function rateLimit(ip, bucket = 'default') {
+function rateLimit(identifier, bucket = 'default') {
   const cfg = RATE_LIMITS[bucket] || RATE_LIMITS.default;
-  const key = `${ip}:${bucket}`;
+  const key = `${identifier}:${bucket}`;
   const now = Date.now();
   const windowMs = cfg.windowSec * 1000;
   let hits = _rateStore.get(key) || [];
@@ -365,14 +433,26 @@ export default {
 
     try {
       if (request.method === 'GET') {
-        if (!checkToken(request, env)) return err('Token non valido', 401);
-        return await handleGet(action, url, env);
+        const auth = await authenticateRequest(request, env);
+        if (!auth.ok) return err('Non autorizzato', 401);
+        return await handleGet(action, url, env, auth);
       } else if (request.method === 'POST') {
         const rawBody = await request.json().catch(() => ({}));
-        if (!checkToken(request, env, rawBody.token)) return err('Token non valido', 401);
         const postAction = action || rawBody.action || '';
+        // Login bypassa auth check (utente non ha ancora un token)
+        if (postAction === 'login') {
+          const body = normalizeBody(rawBody);
+          body._clientIP = clientIP;
+          return await handlePost('login', body, env);
+        }
+        const auth = await authenticateRequest(request, env, rawBody.token);
+        if (!auth.ok) return err('Non autorizzato', 401);
         const body = normalizeBody(rawBody);
         body._clientIP = clientIP; // per audit log
+        // Inject user context from JWT (non spoofabile dal client)
+        body._authUserId = auth.sub;      // user ID dal token (JWT o 'system')
+        body._authRole   = auth.role;     // ruolo dal token
+        body._isJWT      = auth.jwt;      // true se autenticato via JWT
         return await handlePost(postAction, body, env);
       }
       return err('Metodo non supportato', 405);
@@ -394,15 +474,16 @@ export default {
 
 // ============ GET HANDLERS ============
 
-async function handleGet(action, url, env) {
+async function handleGet(action, url, env, auth = {}) {
   switch (action) {
 
     case 'getAll': {
       // Carica tutti i dati per dashboard/login (equivalente GAS getAll)
       // SECURITY: role-based filtering — tecnici vedono solo propri interventi/urgenze/ordini
-      const reqUserId = url.searchParams.get('userId') || '';
-      let userRole = 'admin';
-      if (reqUserId) {
+      // JWT: usa auth.sub/auth.role se disponibile; fallback a query param per legacy
+      const reqUserId = auth.jwt ? auth.sub : (url.searchParams.get('userId') || '');
+      let userRole = auth.jwt ? auth.role : 'admin';
+      if (!auth.jwt && reqUserId) {
         const reqUser = await sb(env, 'utenti', 'GET', null, `?id=eq.${reqUserId}&select=ruolo`).catch(()=>[]);
         userRole = reqUser?.[0]?.ruolo || 'tecnico';
       }
@@ -599,8 +680,26 @@ async function handlePost(action, body, env) {
       
       const { password_hash, ...utenteSafe } = utente;
       await wlog('auth', utente.id, 'login', utente.id);
-      // FIX CRIT-01: Frontend aspetta 'user' non 'utente', + PascalCase record
-      return ok({ user: pascalizeRecord(utenteSafe) });
+
+      // Issue JWT se JWT_SECRET configurato
+      let token = null, expiresIn = null;
+      if (env.JWT_SECRET) {
+        const rememberMe = body.remember_me || body.rememberMe;
+        expiresIn = rememberMe
+          ? parseInt(env.JWT_REMEMBER_ME_SECONDS || '2592000', 10)
+          : parseInt(env.JWT_EXPIRY_SECONDS || '28800', 10);
+        const now = Math.floor(Date.now() / 1000);
+        token = await signJWT({
+          sub: utente.id,
+          role: utente.ruolo || 'tecnico',
+          nome: `${utente.nome || ''} ${utente.cognome || ''}`.trim(),
+          tenant_id: utente.tenant_id || env.TENANT_ID,
+          iat: now,
+          exp: now + expiresIn,
+        }, env);
+      }
+
+      return ok({ token, expiresIn, user: pascalizeRecord(utenteSafe) });
     }
 
     case 'resetPassword': {

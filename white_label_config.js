@@ -32,7 +32,7 @@ window.SYNTONIQA_CONFIG = {
   // ─── API ENDPOINT ────────────────────────────────────────────────
   api: {
     url:        'https://syntoniqa-mrs-api.fieldforcemrser.workers.dev',
-    token:      'SQ_2026_MRS_88FNJz0TFbdzHMikOeN2HQ',
+    // token rimosso: ora si usa JWT dopo login (non più hardcoded nel frontend)
     timeout_ms: 10000,
   },
 
