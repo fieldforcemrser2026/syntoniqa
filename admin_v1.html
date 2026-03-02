@@ -1385,9 +1385,9 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
       <option value="GRAZEWAY">Grazeway</option>
       <option value="L4C LED">L4C LED</option>
     </select>
-    <button class="btn btn-sm" onclick="anagView='list';renderAnagClients(ANAG_FILTERED)" title="Vista Lista" id="btnAnagList">📋</button>
-    <button class="btn btn-sm" onclick="anagView='map';renderAnagClients(ANAG_FILTERED)" title="Vista Mappa" id="btnAnagMap">🗺️</button>
-    <button class="btn btn-sm" onclick="loadAnagClients()" title="Ricarica">🔄</button>
+    <button class="btn btn-sm" onclick="anagView='list';updateAnagViewBtns();renderAnagClients(ANAG_FILTERED)" title="Mostra tabella clienti con dati e macchine" id="btnAnagList" style="font-size:.75rem">📋 Lista</button>
+    <button class="btn btn-sm" onclick="anagView='map';updateAnagViewBtns();renderAnagClients(ANAG_FILTERED)" title="Mostra clienti sulla mappa geografica" id="btnAnagMap" style="font-size:.75rem">🗺️ Mappa</button>
+    <button class="btn btn-sm" onclick="loadAnagClients()" title="Ricarica tutti i dati anagrafica dal server" style="font-size:.75rem">🔄 Ricarica</button>
     <label class="btn btn-sm btn-primary" style="cursor:pointer">📤 Importa XLSX<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importAnagXlsx(this.files[0])"></label>
   </div>
 </div>
@@ -4359,7 +4359,7 @@ function prodIcon(type,size){
 const VALID_ASSET_TYPES=['ROBOT','JUNO','VECTOR','DISCOVERY','COLLECTOR','CU','CALM','COMPRESSORI','COSMIX','NAUTILUS','LUNA','METEOR','GRAZEWAY','L4C LED','ARLA','TITANIA'];
 function normAssetType(tipo){
   tipo=(tipo||'').toUpperCase();
-  if(tipo.includes('ASTRONAUT')||tipo==='ROBOT')return 'ROBOT';
+  if(tipo.includes('ASTRONAUT')||tipo==='ROBOT'||tipo.includes('MELKROBOT')||tipo.includes('MILKING ROBOT')||/\bA[2-5]\b/.test(tipo))return 'ROBOT';
   if(tipo.includes('JUNO'))return 'JUNO';
   if(tipo.includes('VECTOR'))return 'VECTOR'; // Include Vector PDB, Vector cranes, trolley, accessories
   if(tipo.includes('DISCOVERY')&&!tipo.includes('COLLECTOR'))return 'DISCOVERY';
@@ -4443,6 +4443,12 @@ function anagSort(col){
   filterAnagClients();
 }
 
+function updateAnagViewBtns(){
+  const l=$('btnAnagList'),m=$('btnAnagMap');
+  if(l)l.style.cssText='font-size:.75rem;'+(anagView==='list'?'background:var(--primary);color:white':'');
+  if(m)m.style.cssText='font-size:.75rem;'+(anagView==='map'?'background:var(--primary);color:white':'');
+}
+
 function filterAnagClients(){
   const q=($('anagSearch')?.value||'').toLowerCase();
   const typeFilter=$('anagFilterType')?.value||'';
@@ -4497,6 +4503,16 @@ function renderAnagClients(list){
     const geo=list.filter(c=>c.Lat&&c.Lng).length;
     const totAssets=list.reduce((t,c)=>t+((c._assetCounts&&c._assetCounts._total)||0),0);
     const mainTypes=['ROBOT','JUNO','VECTOR','DISCOVERY','COLLECTOR','CU','COSMIX','NAUTILUS','LUNA','CALM','COMPRESSORI','METEOR','GRAZEWAY','L4C LED'];
+    // Debug: log assets classified as ALTRI to help identify missing product mappings
+    if(window._anagDebugOnce!==true){
+      const allRaw=getAllAnagAssets(false);
+      const altri=allRaw.filter(a=>assetType(a)==='ALTRI'&&isCountableAsset(a));
+      const excluded=allRaw.filter(a=>{const s=(a.Status||'').toLowerCase().trim();return s&&EXCLUDED_ASSET_STATUS.some(v=>s.includes(v))});
+      console.log(`[ANAG DEBUG] Totale raw: ${allRaw.length}, Countable (non-ALTRI): ${getAllAnagAssets().length}, ALTRI countable: ${altri.length}, Excluded by status: ${excluded.length}`);
+      if(altri.length<20) altri.forEach(a=>console.log(`[ANAG ALTRI]`,a.TipoFoglio,'|',a.GruppoAttrezzatura,'|',a.NomeAsset,'|',a.Status));
+      if(excluded.length<20) excluded.forEach(a=>console.log(`[ANAG EXCLUDED]`,a.TipoFoglio,'|',a.GruppoAttrezzatura,'|',a.Status));
+      window._anagDebugOnce=true;
+    }
     // Row 1: General stats
     let html=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">`;
     html+=`<div class="stat-card" style="min-width:65px;padding:5px 8px;text-align:center"><div class="stat-val" style="font-size:1rem">${list.length}</div><div class="stat-lbl" style="font-size:.6rem">Clienti</div></div>`;
@@ -4504,12 +4520,12 @@ function renderAnagClients(list){
     html+=`<div class="stat-card" style="min-width:65px;padding:5px 8px;text-align:center"><div class="stat-val" style="font-size:1rem">${geo}</div><div class="stat-lbl" style="font-size:.6rem">📍 Geo</div></div>`;
     html+=`<div class="stat-card" style="min-width:65px;padding:5px 8px;text-align:center"><div class="stat-val" style="font-size:1rem;font-weight:700">${totAssets}</div><div class="stat-lbl" style="font-size:.6rem">Assets Attivi</div></div>`;
     html+=`</div>`;
-    // Row 2: Product type counts in a compact grid
-    html+=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:4px">`;
+    // Row 2: Product type counts in a compact horizontal row
+    html+=`<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">`;
     mainTypes.forEach(t=>{
       const cfg=PROD_CFG[t]||{};
       const v=sumType(t);
-      if(v>0) html+=`<div style="display:flex;align-items:center;gap:4px;padding:3px 6px;background:${cfg.color||'#6b7280'}10;border:1px solid ${cfg.color||'#6b7280'}25;border-radius:6px;font-size:.7rem;cursor:pointer" onclick="$('anagFilterType').value='${t}';filterAnagClients()" title="Filtra per ${cfg.label||t}"><strong style="color:${cfg.color||'inherit'};font-size:.85rem">${v}</strong> <span style="white-space:nowrap">${cfg.label||t}</span></div>`;
+      if(v>0) html+=`<div style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:${cfg.color||'#6b7280'}10;border:1px solid ${cfg.color||'#6b7280'}25;border-radius:12px;font-size:.7rem;cursor:pointer;white-space:nowrap" onclick="$('anagFilterType').value='${t}';filterAnagClients()" title="Clicca per filtrare: mostra solo clienti con ${cfg.label||t}"><strong style="color:${cfg.color||'inherit'};font-size:.8rem">${v}</strong> ${cfg.label||t}</div>`;
     });
     html+=`</div>`;
     s.innerHTML=html;
@@ -4534,8 +4550,8 @@ function renderAnagClients(list){
     const tot=ac._total||0;
     const m3=c.CodiceM3||'';
     const geo=c.Lat?'📍':'';
-    return `<tr class="anag-row" id="anagRow_${m3}" onclick="toggleAnagTree('${m3}')" style="cursor:pointer">
-      <td><span class="anag-arrow" id="anagArrow_${m3}">▶</span></td>
+    return `<tr class="anag-row" id="anagRow_${m3}" onclick="toggleAnagTree('${m3}')" style="cursor:pointer" title="Clicca per espandere dettagli e lista macchine">
+      <td><span class="anag-arrow" id="anagArrow_${m3}" style="display:inline-block;transition:transform .2s">▶</span></td>
       <td><strong>${esc(c.NomeInterno||c.NomeAccount||'-')}</strong><br><small style="color:var(--muted)">${esc(c.NomeInterno?c.NomeAccount||'':'')} ${geo}</small></td>
       <td>${esc(c.CittaFatturazione||'')}</td>
       <td>${esc(c.ProvinciaFatturazione||'')}</td>
@@ -5656,13 +5672,24 @@ function updateAIVincoliStatus(){
   if(pianoExist.length) summaryItems.push(`<span>📋 ${pianoExist.length} interventi già pianificati</span>`);
   if(urgAperte.length) summaryItems.push(`<span>🚨 ${urgAperte.length} urgenze aperte</span>`);
 
+  // Separa vincoli known (sempre attivi) vs dynamic (per-generazione)
+  const knownCats = cats.filter(c => c.tier === 'known' && (c.regole||[]).some(r=>r.testo));
+  const dynCats = cats.filter(c => c.tier !== 'known' && (c.regole||[]).some(r=>r.testo));
+  const knownRules = knownCats.reduce((s,c) => s + (c.regole||[]).filter(r=>r.testo).length, 0);
+  const dynRules = dynCats.reduce((s,c) => s + (c.regole||[]).filter(r=>r.testo).length, 0);
+
   let html='';
   if(totalRules>0){
-    const catNames=cats.filter(c=>(c.regole||[]).some(r=>r.testo)).map(c=>`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(129,140,248,.15);border:1px solid rgba(129,140,248,.25);border-radius:12px;font-size:.7rem">${c.icona||'📌'} ${c.nome}</span>`).join(' ');
+    const knownBadges = knownCats.map(c=>`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.25);border-radius:12px;font-size:.7rem">${c.icona||'📌'} ${c.nome}</span>`).join(' ');
+    const dynBadges = dynCats.map(c=>`<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(129,140,248,.15);border:1px solid rgba(129,140,248,.25);border-radius:12px;font-size:.7rem">${c.icona||'📌'} ${c.nome}</span>`).join(' ');
     html+=`<div style="padding:10px 14px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:8px;font-size:.8rem;margin-bottom:8px">
-      <strong style="color:#10B981">✅ ${totalRules} vincoli attivi</strong> da ${cats.length} categorie — verranno inclusi automaticamente nel prompt AI
-      <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${catNames}</div>
+      <strong style="color:#10B981">✅ ${knownRules} vincoli noti</strong> (sempre inclusi)${knownBadges ? '<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">'+knownBadges+'</div>' : ''}
     </div>`;
+    if(dynRules>0){
+      html+=`<div style="padding:10px 14px;background:rgba(129,140,248,.08);border:1px solid rgba(129,140,248,.2);border-radius:8px;font-size:.8rem;margin-bottom:8px">
+        <strong style="color:#818CF8">🔧 ${dynRules} vincoli dinamici</strong> (per questa generazione)${dynBadges ? '<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">'+dynBadges+'</div>' : ''}
+      </div>`;
+    }
   } else {
     html+=`<div style="padding:10px 14px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:.8rem;margin-bottom:8px">
       <strong style="color:#F59E0B">⚠️ Nessun vincolo configurato</strong> — vai alla sezione <a href="#" onclick="event.preventDefault();showSec('vincoli')" style="color:#818CF8;text-decoration:underline">📐 Vincoli Piano</a> per aggiungere regole che l'AI rispetterà.
@@ -7094,20 +7121,23 @@ async function loadVincoliCategories(){
   renderVincoliTemplates();
 }
 
+function defaultVincoliTemplates(){
+  return [
+    {nome:'Regole Team',icona:'👥',desc:'Coppie, affiancamenti, esclusioni',tier:'known'},
+    {nome:'Disponibilita e Ferie',icona:'📅',desc:'Ferie, malattia, permessi, formazione',tier:'known'},
+    {nome:'Veicoli e Attrezzature',icona:'🚐',desc:'Assegnazione furgoni, rotazione',tier:'known'},
+    {nome:'Reperibilita e Turni',icona:'📞',desc:'Turni reperibilità, riposo post-notturna',tier:'known'},
+    {nome:'Competenze',icona:'🎓',desc:'Certificazioni, specializzazioni per tipo macchina',tier:'known'},
+    {nome:'Priorita e SLA',icona:'⭐',desc:'Clienti VIP, contratti SLA, urgenze',tier:'known'},
+    {nome:'Carico Lavoro e Riposo',icona:'⏱️',desc:'Max ore/giorno, giorni consecutivi, riposo',tier:'dynamic'},
+    {nome:'Zone Geografiche',icona:'📍',desc:'Clustering per zona, basi tecnici, viaggi',tier:'dynamic'}
+  ];
+}
+
 function renderVincoliTemplates(){
   // Template vincoli: prima da config DB, poi da white_label_config, poi default generici
   const dbTemplates=(DATA.config?.vincoli_templates)?JSON.parse(DATA.config.vincoli_templates):null;
-  const defaultTemplates=[
-    {nome:'Regole Team',icona:'👥',desc:'Coppie, affiancamenti, esclusioni'},
-    {nome:'Disponibilita e Ferie',icona:'📅',desc:'Ferie, malattia, permessi, formazione'},
-    {nome:'Veicoli e Attrezzature',icona:'🚐',desc:'Assegnazione furgoni, rotazione'},
-    {nome:'Reperibilita e Turni',icona:'📞',desc:'Turni reperibilità, riposo post-notturna'},
-    {nome:'Competenze',icona:'🎓',desc:'Certificazioni, specializzazioni per tipo macchina'},
-    {nome:'Priorita e SLA',icona:'⭐',desc:'Clienti VIP, contratti SLA, urgenze'},
-    {nome:'Carico Lavoro e Riposo',icona:'⏱️',desc:'Max ore/giorno, giorni consecutivi, riposo'},
-    {nome:'Zone Geografiche',icona:'📍',desc:'Clustering per zona, basi tecnici, viaggi'}
-  ];
-  const cfg = dbTemplates || window.SYNTONIQA_CONFIG?.vincoli_templates || defaultTemplates;
+  const cfg = dbTemplates || window.SYNTONIQA_CONFIG?.vincoli_templates || defaultVincoliTemplates();
   const existing = VINCOLI_CAT.categories.map(c => c.nome.toLowerCase());
   const el = $('vincoliTemplates');
   if(!el) return;
@@ -7123,7 +7153,9 @@ function renderVincoliUI(){
   let totalRules = 0;
   cats.forEach(c => { totalRules += (c.regole || []).length; });
   const countEl = $('vincoliCount');
-  if(countEl) countEl.textContent = `${cats.length} categorie · ${totalRules} regole`;
+  const knownN = cats.filter(c=>c.tier==='known').length;
+  const dynN = cats.length - knownN;
+  if(countEl) countEl.textContent = `${cats.length} categorie (${knownN} noti, ${dynN} dinamici) · ${totalRules} regole`;
 
   if(!cats.length){
     el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--gray)"><p style="font-size:1.5rem;margin-bottom:8px">📐</p><p>Nessun vincolo configurato.</p><p style="font-size:.75rem">Usa i suggerimenti rapidi qui sotto o crea una nuova categoria.</p></div>';
@@ -7163,15 +7195,24 @@ function renderVincoliUI(){
         </div>
       </div>`).join('');
 
+    const tierBadge = cat.tier === 'known'
+      ? '<span style="font-size:.6rem;padding:1px 6px;border-radius:8px;background:#10B98122;color:#10B981;border:1px solid #10B98144;font-weight:600" title="Vincolo NOTO: sempre incluso automaticamente in ogni generazione AI">NOTO</span>'
+      : '<span style="font-size:.6rem;padding:1px 6px;border-radius:8px;background:#818CF822;color:#818CF8;border:1px solid #818CF844;font-weight:600" title="Vincolo DINAMICO: incluso solo quando attivo per una specifica generazione">DINAMICO</span>';
+
     return `<div class="vinc-category ${!cat.attiva?'disabled':''}" data-cat="${ci}">
       <div class="vinc-cat-head ${isOpen?'open':''}" onclick="toggleVincoliCategory(${ci})">
         <span class="vinc-arrow">&#9654;</span>
         <span class="vinc-icona" onclick="event.stopPropagation();editVincoliIcon(${ci})" title="Clicca per cambiare icona" style="cursor:pointer">${cat.icona||'📌'}</span>
         <span class="vinc-nome" ondblclick="event.stopPropagation();editVincoliName(${ci})" title="Doppio click per rinominare">${cat.nome||'Categoria'}</span>
+        ${tierBadge}
         <span class="vinc-count">${(cat.regole||[]).length} regole</span>
         <label style="font-size:.7rem;display:flex;align-items:center;gap:3px" onclick="event.stopPropagation()">
           <input type="checkbox" ${cat.attiva!==false?'checked':''} onchange="toggleVincoliActive(${ci},this.checked)"> Attiva
         </label>
+        <select onclick="event.stopPropagation()" onchange="toggleVincoliTier(${ci},this.value)" style="font-size:.65rem;padding:1px 4px;border-radius:4px;border:1px solid var(--border)" title="Tipo: Noto = sempre incluso, Dinamico = solo su richiesta">
+          <option value="known" ${cat.tier==='known'?'selected':''}>Noto</option>
+          <option value="dynamic" ${cat.tier!=='known'?'selected':''}>Dinamico</option>
+        </select>
         <button class="btn btn-xs btn-ghost" onclick="event.stopPropagation();removeVincoliCategory(${ci})" title="Elimina categoria" style="color:#DC2626">🗑️</button>
       </div>
       <div class="vinc-cat-body ${isOpen?'open':''}">
@@ -7182,13 +7223,16 @@ function renderVincoliUI(){
   }).join('');
 }
 
-function addVincoliCategory(nome, icona){
+function addVincoliCategory(nome, icona, tier){
+  // Determina tier dal template se disponibile
+  const tpl = defaultVincoliTemplates().find(t => t.nome === nome);
   const cat = {
     id: 'cat_' + Date.now(),
     nome: nome || 'Nuova Categoria',
     icona: icona || '📌',
     ordine: VINCOLI_CAT.categories.length + 1,
     attiva: true,
+    tier: tier || tpl?.tier || 'dynamic', // known = sempre caricato, dynamic = per-generazione
     _open: true,
     regole: []
   };
@@ -7213,6 +7257,11 @@ function toggleVincoliCategory(ci){
 
 function toggleVincoliActive(ci, val){
   VINCOLI_CAT.categories[ci].attiva = val;
+  renderVincoliUI();
+}
+
+function toggleVincoliTier(ci, val){
+  VINCOLI_CAT.categories[ci].tier = val;
   renderVincoliUI();
 }
 

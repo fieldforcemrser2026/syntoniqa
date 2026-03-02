@@ -2725,18 +2725,31 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnico":"nome cognome","t
             const wd = getWorkDays(weekStart, weekEnd);
             if (wd.length) chunks.push({ workDays: wd, label: 'Sett ' + settimanaNum });
           } else {
-            // Mese intero o vuoti: 3 chunk da ~7-8 giorni lavorativi
-            // Decade 1: 1-10, Decade 2: 11-20, Decade 3: 21-fine
+            // Mese intero o vuoti: chunk per SETTIMANE ISO (lun-ven)
+            // Ogni chunk = 1 settimana lavorativa, max 5 giorni. Nessun giorno perso ai confini.
+            const monthStart = new Date(yy, mm - 1, 1);
             const monthEnd = new Date(yy, mm, 0);
-            const splits = [
-              [new Date(yy, mm-1, 1),  new Date(yy, mm-1, 10)],
-              [new Date(yy, mm-1, 11), new Date(yy, mm-1, 20)],
-              [new Date(yy, mm-1, 21), monthEnd]
-            ];
-            splits.forEach((s, i) => {
-              const wd = getWorkDays(s[0], s[1]);
-              if (wd.length) chunks.push({ workDays: wd, label: 'Decade ' + (i+1) });
-            });
+            let cursor = new Date(monthStart);
+            let weekNum = 1;
+            while (cursor <= monthEnd) {
+              // Trova il lunedì di questa settimana (o il primo del mese)
+              const weekStart = new Date(cursor);
+              // Avanza al venerdì o fine mese
+              const weekEnd = new Date(weekStart);
+              const daysToFri = 5 - weekStart.getDay(); // 0=dom,...,5=ven
+              if (weekStart.getDay() === 0) weekEnd.setDate(weekStart.getDate() + 5); // dom → ven
+              else if (weekStart.getDay() === 6) weekEnd.setDate(weekStart.getDate() + 6); // sab → ven prossimo
+              else if (daysToFri > 0) weekEnd.setDate(weekStart.getDate() + daysToFri);
+              else weekEnd.setDate(weekStart.getDate()); // già ven
+              if (weekEnd > monthEnd) weekEnd.setTime(monthEnd.getTime());
+              const wd = getWorkDays(weekStart, weekEnd);
+              if (wd.length) chunks.push({ workDays: wd, label: 'Sett ' + weekNum });
+              weekNum++;
+              // Salta al lunedì prossimo
+              cursor = new Date(weekEnd);
+              cursor.setDate(cursor.getDate() + 1);
+              while (cursor.getDay() !== 1 && cursor <= monthEnd) cursor.setDate(cursor.getDate() + 1);
+            }
           }
 
           // Piano esistente context per modalità "vuoti"
@@ -4008,7 +4021,28 @@ Rispondi SOLO con JSON valido:
           reply = `👋 *Benvenuto in Syntoniqa MRS!*\n\n🤖 Il tuo assistente intelligente per il Field Service.\n\n📤 Puoi inviarmi:\n• ✍️ Testo con problemi/ordini\n• 📷 Foto di guasti → AI identifica pezzo\n• 📄 Documenti (PDF, Excel)\n• 🎤 Audio/Video\n\n⚡ L'AI analizza tutto e crea urgenze, ordini, interventi!\n\nInvia /help per tutti i comandi.`;
           break;
         case '/help':
-          reply = `📋 *Comandi Syntoniqa:*\n\n🚨 *Urgenze:*\n/stato — Urgenze aperte\n/vado — Lista urgenze, /vado N per prendere\n/incorso — Segna in corso\n/risolto [note] — Chiudi urgenza\n/assegna [N] [tecnico] — Assegna urgenza\n\n📅 *Piano:*\n/oggi — I tuoi interventi oggi\n/settimana — Piano settimanale\n/pianifica [data] [cliente] [tipo] — Crea intervento\n/disponibile — Segnati disponibile per urgenze\n\n📦 *Ordini:*\n/ordine [cod] [qt] [cliente] — Ordine ricambio\n/servepezz [desc] — Ricambio generico\n\n🔍 *Ricerca:*\n/catalogo [testo] — Cerca ricambio nel catalogo Lely\n/tagliando [cliente] — Prossimi tagliandi\n/dove — Posizione tecnici oggi\n\n📊 *Report:*\n/report — Il tuo report giornaliero\n/kpi — KPI personali\n\n📤 *Upload:*\nInvia foto, PDF, Excel → AI analizza!\n\n💡 Testo libero: "Bondioli 102 fermo, errore laser"`;
+          reply = `📋 *Comandi Syntoniqa MRS*\n\n` +
+            `▶️ *COME INIZIARE:*\n` +
+            `1️⃣ Scrivi /stato per vedere le urgenze\n` +
+            `2️⃣ Scrivi /vado per prendere un'urgenza\n` +
+            `3️⃣ Scrivi /incorso quando arrivi\n` +
+            `4️⃣ Scrivi /risolto quando finisci\n\n` +
+            `🚨 *URGENZE:*\n` +
+            `/stato → Elenco urgenze aperte\n` +
+            `/vado → Mostra urgenze disponibili\n` +
+            `/vado 2 → Prendi l'urgenza n.2\n` +
+            `/incorso → Inizia lavoro\n` +
+            `/risolto note → Chiudi (es: /risolto sostituito laser)\n\n` +
+            `📅 *PIANO:*\n` +
+            `/oggi → I tuoi interventi di oggi\n` +
+            `/settimana → Piano della settimana\n\n` +
+            `📦 *ORDINI:*\n` +
+            `/ordine codice qt cliente → Ordine ricambio\n` +
+            `Esempio: /ordine 1234567 2 Bondioli\n\n` +
+            `📤 *AI SMART:*\n` +
+            `Scrivi un messaggio libero o invia una foto!\n` +
+            `Es: "Bondioli 102 fermo errore laser"\n` +
+            `Es: Foto del guasto → AI identifica il problema`;
           break;
         case '/stato': {
           const urg = await sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,in_corso)&order=data_segnalazione.desc&limit=10');
@@ -6018,12 +6052,17 @@ async function checkSLAUrgenze(env) {
 }
 
 // ============ CRON: PM EXPIRY — Tagliandi scaduti/urgenti ============
+// Notifiche in-app: 1 volta al giorno per macchina
+// Notifiche TG gruppo: 1 riepilogo al giorno (ore 7-8 mattina), non ogni 15 min
 async function checkPMExpiry(env) {
   try {
     const now = new Date();
     const itFormatter = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' });
     const today3 = itFormatter.format(now);
     const warning7 = addDays(today3, 7);
+    // Ora locale per decidere se mandare il riepilogo TG (solo 1x/giorno ore 7-8)
+    const hourIT = parseInt(new Intl.DateTimeFormat('en', { timeZone: 'Europe/Rome', hour: 'numeric', hour12: false }).format(now));
+    const isMorningSummaryWindow = (hourIT >= 7 && hourIT < 8);
 
     const macchine3 = await sb(env, 'macchine', 'GET', null,
       `?obsoleto=eq.false&prossimo_tagliando=not.is.null&prossimo_tagliando=lte.${warning7}&select=id,seriale,modello,prossimo_tagliando,cliente_id&order=prossimo_tagliando.asc&limit=200`
@@ -6034,22 +6073,36 @@ async function checkPMExpiry(env) {
     const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
     const group = env.TELEGRAM_GROUP || '-5236723213';
     let scaduti = 0, urgenti = 0;
+    const tgLines = []; // accumula per riepilogo TG
+
+    // Pre-load anagrafica clienti per nome_interno (batch)
+    const clienteIds = [...new Set(macchine3.map(m => m.cliente_id).filter(Boolean))];
+    const anagClienti = clienteIds.length ? await sb(env, 'anagrafica_clienti', 'GET', null,
+      `?codice_m3=in.(${clienteIds.join(',')})`
+    ).catch(() => []) : [];
+    const anagMap = {};
+    (anagClienti || []).forEach(c => { anagMap[c.codice_m3] = c; });
 
     for (const m of macchine3) {
       const gg = Math.round((new Date(m.prossimo_tagliando) - new Date(today3)) / 86400000);
       const isScaduto = gg < 0;
-      const cliNome = await getEntityName(env, 'clienti', m.cliente_id);
+
+      // Nome cliente: preferisci nome_interno da anagrafica_clienti, fallback a clienti.ragione_sociale
+      const anagCli = anagMap[m.cliente_id];
+      let cliNome = anagCli ? (anagCli.nome_interno || anagCli.nome_account || m.cliente_id) : await getEntityName(env, 'clienti', m.cliente_id);
 
       // Anti-duplicato: 1 notifica per macchina per giorno
       const notifId = `PM_${isScaduto ? 'SCAD' : 'URG'}_${m.id}_${today3}`;
       const existing = await sb(env, 'notifiche', 'GET', null, `?id=eq.${notifId}&limit=1`).catch(() => []);
-      if (existing?.length) continue;
+      if (existing?.length) {
+        if (isScaduto) scaduti++; else urgenti++;
+        continue;
+      }
 
       const emoji = isScaduto ? '🔴' : '🟡';
       const label = isScaduto ? 'SCADUTO' : 'URGENTE';
-      const msg = `${emoji} PM ${label}: ${m.modello || m.id} (${m.seriale || '?'}) presso ${cliNome} — ${isScaduto ? 'scaduto da ' + Math.abs(gg) + 'gg' : 'tra ' + gg + 'gg'} (${m.prossimo_tagliando})`;
 
-      // Notifica in-app admin
+      // Notifica in-app admin (1x/giorno per macchina)
       const admins = await sb(env, 'utenti', 'GET', null, '?ruolo=eq.admin&obsoleto=eq.false&select=id').catch(() => []);
       for (const adm of admins) {
         await sb(env, 'notifiche', 'POST', {
@@ -6061,15 +6114,31 @@ async function checkPMExpiry(env) {
         }).catch(() => {});
       }
 
-      // TG gruppo (solo scaduti, per non spammare)
-      if (isScaduto && env.TELEGRAM_BOT_TOKEN) {
-        await sendTelegram(env, group, msg).catch(() => {});
-      }
+      // Accumula per riepilogo TG (non mandare singolarmente)
+      tgLines.push(`${emoji} ${m.modello || m.id} (${m.seriale || '?'}) — ${cliNome} — ${isScaduto ? 'scaduto da ' + Math.abs(gg) + 'gg' : 'tra ' + gg + 'gg'}`);
 
       if (isScaduto) scaduti++; else urgenti++;
     }
 
-    console.log(`[CRON] checkPMExpiry: ${scaduti} scaduti, ${urgenti} urgenti (<7gg)`);
+    // TG gruppo: manda un UNICO riepilogo solo nella finestra mattutina (7-8)
+    if (isMorningSummaryWindow && tgLines.length && env.TELEGRAM_BOT_TOKEN) {
+      const tgNotifId = `PM_TG_DAILY_${today3}`;
+      const tgExisting = await sb(env, 'notifiche', 'GET', null, `?id=eq.${tgNotifId}&limit=1`).catch(() => []);
+      if (!tgExisting?.length) {
+        const header = `📋 *Riepilogo Tagliandi PM — ${today3}*\n🔴 ${scaduti} scaduti | 🟡 ${urgenti} in scadenza (<7gg)\n`;
+        const body = tgLines.slice(0, 20).join('\n'); // max 20 righe
+        const footer = tgLines.length > 20 ? `\n... e altri ${tgLines.length - 20}` : '';
+        await sendTelegram(env, group, header + body + footer).catch(() => {});
+        // Segna come inviato per oggi
+        await sb(env, 'notifiche', 'POST', {
+          id: tgNotifId, tenant_id: tid, tipo: 'pm_riepilogo_tg',
+          oggetto: 'Riepilogo PM TG giornaliero', testo: `${scaduti} scaduti, ${urgenti} urgenti`,
+          destinatario_id: 'SYSTEM', priorita: 'bassa', data_invio: now.toISOString()
+        }).catch(() => {});
+      }
+    }
+
+    console.log(`[CRON] checkPMExpiry: ${scaduti} scaduti, ${urgenti} urgenti (<7gg), TG window: ${isMorningSummaryWindow}`);
   } catch (e) { console.error('[CRON] checkPMExpiry error:', e.message); }
 }
 
@@ -6082,9 +6151,16 @@ function skipWeekend(dateStr) {
   return dateStr;
 }
 
-// Helper per nome entità
+// Helper per nome entità — per clienti cerca anche nome_interno da anagrafica
 async function getEntityName(env, table, id) {
   if (!id) return '—';
+  if (table === 'clienti') {
+    // Prova prima anagrafica_clienti per nome_interno (più user-friendly)
+    const anag = await sb(env, 'anagrafica_clienti', 'GET', null, `?codice_m3=eq.${id}&select=nome_interno,nome_account`).catch(() => []);
+    if (anag?.length) {
+      return anag[0].nome_interno || anag[0].nome_account || id;
+    }
+  }
   const rows = await sb(env, table, 'GET', null, `?id=eq.${id}&select=nome,ragione_sociale,cognome`).catch(() => []);
   if (!rows?.length) return id;
   const r = rows[0];
