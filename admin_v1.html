@@ -510,10 +510,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 <button class="nav-item" onclick="showSec('report',this)"><span class="ico">📊</span>Report Builder</button>
 <button class="nav-item" onclick="showSec('auditlog',this)"><span class="ico">📜</span>Audit Log</button>
 <button class="nav-item" onclick="showSec('powerbi',this)"><span class="ico">⚡</span>Power BI</button>
-<button class="nav-item" onclick="showSec('emailconfig',this)"><span class="ico">📧</span>Email</button>
-<button class="nav-item" onclick="showSec('telegramconfig',this)"><span class="ico">💬</span>Telegram</button>
-<button class="nav-item" onclick="showSec('backup',this)"><span class="ico">💾</span>Backup</button>
-<button class="nav-item" onclick="showSec('config',this)"><span class="ico">🔧</span>Configurazione</button>
+<button class="nav-item" onclick="showSec('config',this)"><span class="ico">⚙️</span>Configurazione</button>
 </div>
 <div class="foot">
 <div style="display:flex;justify-content:space-between;align-items:center">
@@ -1306,111 +1303,277 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 </section>
 
-<!-- ========== SEC: EMAIL CONFIG ========== -->
-<section class="sec" id="secEmailconfig">
-<div class="card">
-<div class="card-head"><h3>📧 Configurazione Email</h3></div>
-<div class="card-body">
-<div style="margin-bottom:16px;padding:12px;background:#FEF3C7;border-radius:var(--radius-sm);font-size:.8125rem">
-⚠️ Richiede autorizzazione GmailApp in Apps Script. Le email partono dall'account che ha deployato l'API.
-</div>
-<div class="field" style="margin-bottom:12px">
-<label>Email Abilitata</label>
-<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="cfgEmailEnabled" onchange="saveEmailConfig()"> Attiva invio email automatiche</label>
-</div>
-<div class="field" style="margin-bottom:12px">
-<label>Eventi Abilitati</label>
-<div style="display:flex;flex-direction:column;gap:6px">
-<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="evtUrgenza" value="urgenza_creata" onchange="saveEmailConfig()"> 🚨 Nuova urgenza creata</label>
-<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="evtIntervento" value="intervento_assegnato" onchange="saveEmailConfig()"> 📋 Intervento assegnato</label>
-<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="evtRichiesta" value="richiesta_risposta" onchange="saveEmailConfig()"> 📝 Richiesta approvata/rifiutata</label>
-</div></div>
-<div class="field-row" style="margin-top:16px">
-<div class="field"><label>Test Email</label><input type="email" id="testEmailAddr" placeholder="email@test.com"></div>
-<div class="field" style="padding-top:24px"><button class="btn btn-outline" onclick="sendTestEmail()">📧 Invia Test</button></div>
-</div>
-</div>
-</div>
-</section>
+<!-- ========== SEC: CONFIGURAZIONE UNIFICATA ========== -->
+<section class="sec" id="secConfig">
+<style>
+.cfg-tabs-bar{display:flex;gap:2px;padding:0 8px;border-bottom:2px solid var(--gray4);overflow-x:auto;-webkit-overflow-scrolling:touch}
+.cfg-tab-btn{padding:10px 16px;font-size:.8rem;border:none;background:none;cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;color:var(--gray);font-weight:400;margin-bottom:-2px;transition:all .15s}
+.cfg-tab-btn:hover{color:var(--primary);background:rgba(99,102,241,.04)}
+.cfg-tab-btn.active{color:var(--primary);font-weight:600;border-bottom-color:var(--primary)}
+.cfg-panel{display:none;padding:20px}
+.cfg-panel.active{display:block}
+.cfg-field{margin-bottom:14px}
+.cfg-field label{display:block;font-size:.75rem;font-weight:600;color:var(--gray);margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px}
+.cfg-field input,.cfg-field select,.cfg-field textarea{width:100%;font-size:.8125rem;padding:8px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-family:var(--font);transition:border-color .15s}
+.cfg-field input:focus,.cfg-field select:focus,.cfg-field textarea:focus{border-color:var(--primary);outline:none;box-shadow:0 0 0 3px rgba(99,102,241,.1)}
+.cfg-field .cfg-mono{font-family:JetBrains Mono,monospace;font-size:.75rem}
+.cfg-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.cfg-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.cfg-section-title{font-size:.875rem;font-weight:600;color:var(--primary);margin:20px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--gray4)}
+.cfg-section-title:first-child{margin-top:0}
+.cfg-toggle{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.8125rem;padding:6px 0}
+.cfg-card{background:#FAFAFA;border:1px solid var(--gray4);border-radius:var(--radius);padding:16px;margin-bottom:14px}
+.cfg-card h4{margin:0 0 10px;font-size:.8125rem;font-weight:600}
+@media(max-width:768px){.cfg-grid-2,.cfg-grid-3{grid-template-columns:1fr}}
+</style>
 
-<!-- ========== SEC: TELEGRAM CONFIG ========== -->
-<section class="sec" id="secTelegramconfig">
-<!-- Card 1: Setup Bot -->
-<div class="card">
-<div class="card-head"><h3>🤖 1. Configurazione Bot Telegram</h3></div>
-<div class="card-body">
-<div style="margin-bottom:16px;padding:14px;background:linear-gradient(135deg,#DBEAFE,#EDE9FE);border-radius:var(--radius);font-size:.8125rem;line-height:1.6">
-<div style="font-weight:700;margin-bottom:8px;font-size:.875rem">📖 Come configurare il bot in 3 passi:</div>
-<div style="display:grid;gap:6px">
-<div><strong>1.</strong> Apri Telegram e cerca <code style="background:rgba(0,0,0,.08);padding:1px 5px;border-radius:3px">@BotFather</code> → invia <code style="background:rgba(0,0,0,.08);padding:1px 5px;border-radius:3px">/newbot</code> → copia il <strong>token</strong> generato</div>
-<div><strong>2.</strong> Ogni tecnico deve cercare il bot su Telegram e inviare <code style="background:rgba(0,0,0,.08);padding:1px 5px;border-radius:3px">/start</code></div>
-<div><strong>3.</strong> Clicca <strong>🔍 Auto-rileva Chat ID</strong> qui sotto per trovare automaticamente i chat ID, oppure inseriscili manualmente</div>
+<div class="card" style="overflow:hidden">
+<div class="card-head" style="padding-bottom:0">
+<h3>⚙️ Configurazione Sistema</h3>
+<div style="display:flex;gap:6px">
+<button class="btn btn-primary btn-sm" onclick="saveAllConfig()">💾 Salva Tutto</button>
 </div>
 </div>
-<div class="field" style="margin-bottom:12px"><label>Bot Token</label><input type="text" id="cfgTgToken" placeholder="123456:ABC-DEF..." style="width:100%;font-family:JetBrains Mono,monospace;font-size:.75rem"></div>
-<div style="display:flex;gap:8px;flex-wrap:wrap">
-<button class="btn btn-primary btn-sm" onclick="saveTelegramConfig()">💾 Salva Configurazione</button>
+
+<!-- Tab Bar -->
+<div class="cfg-tabs-bar" id="cfgTabBar">
+<button class="cfg-tab-btn active" onclick="switchCfgTab('generale',this)">🏢 Generale</button>
+<button class="cfg-tab-btn" onclick="switchCfgTab('interventi',this)">📋 Interventi</button>
+<button class="cfg-tab-btn" onclick="switchCfgTab('tecnici',this)">👥 Tecnici</button>
+<button class="cfg-tab-btn" onclick="switchCfgTab('automezzi',this)">🚐 Automezzi</button>
+<button class="cfg-tab-btn" onclick="switchCfgTab('sla',this)">⏱️ SLA</button>
+<button class="cfg-tab-btn" onclick="switchCfgTab('notifiche',this)">🔔 Notifiche</button>
+<button class="cfg-tab-btn" onclick="switchCfgTab('pm',this)">🔧 PM</button>
+<button class="cfg-tab-btn" onclick="switchCfgTab('mappa',this)">🗺️ Mappa</button>
+<button class="cfg-tab-btn" onclick="switchCfgTab('chatcfg',this)">💬 Chat</button>
+<button class="cfg-tab-btn" onclick="switchCfgTab('ai',this)">🤖 AI Planner</button>
+<button class="cfg-tab-btn" onclick="switchCfgTab('features',this)">🎛️ Feature</button>
+<button class="cfg-tab-btn" onclick="switchCfgTab('avanzate',this)">🔧 Avanzate</button>
+</div>
+
+<!-- ===== TAB: Generale ===== -->
+<div class="cfg-panel active" id="cfgPan_generale">
+<div class="cfg-section-title">🏢 Identità Azienda</div>
+<div class="cfg-grid-2">
+<div class="cfg-field"><label>Nome Azienda</label><input type="text" id="cfg_azienda_nome" placeholder="MRS Lely Center"></div>
+<div class="cfg-field"><label>Slogan / Sottotitolo</label><input type="text" id="cfg_azienda_slogan" placeholder="Field Service Management"></div>
+</div>
+<div class="cfg-grid-2">
+<div class="cfg-field"><label>URL Logo</label><input type="url" id="cfg_logo_url" placeholder="https://..." class="cfg-mono"></div>
+<div class="cfg-field"><label>URL Favicon</label><input type="url" id="cfg_favicon_url" placeholder="https://..." class="cfg-mono"></div>
+</div>
+<div class="cfg-section-title">🎨 Tema e Colori</div>
+<div class="cfg-grid-3">
+<div class="cfg-field"><label>Colore Primario</label><div style="display:flex;gap:8px"><input type="color" id="cfg_colore_primario" style="width:40px;height:36px;padding:2px;border:1px solid var(--gray3);border-radius:4px;cursor:pointer"><input type="text" id="cfg_colore_primario_hex" placeholder="#6366F1" style="flex:1" oninput="$('cfg_colore_primario').value=this.value"></div></div>
+<div class="cfg-field"><label>Colore Secondario</label><div style="display:flex;gap:8px"><input type="color" id="cfg_colore_secondario" style="width:40px;height:36px;padding:2px;border:1px solid var(--gray3);border-radius:4px;cursor:pointer"><input type="text" id="cfg_colore_secondario_hex" placeholder="#8B5CF6" style="flex:1" oninput="$('cfg_colore_secondario').value=this.value"></div></div>
+<div class="cfg-field"><label>Timezone</label><select id="cfg_timezone"><option value="Europe/Rome">Europe/Rome</option><option value="Europe/London">Europe/London</option><option value="Europe/Berlin">Europe/Berlin</option><option value="UTC">UTC</option></select></div>
+</div>
+<div class="cfg-section-title">💾 Backup</div>
+<div class="cfg-grid-2">
+<div class="cfg-field"><label>ID Cartella Google Drive</label><input type="text" id="cfg_backup_folder_id" placeholder="1ABCxyz..." class="cfg-mono"></div>
+<div class="cfg-field"><label>&nbsp;</label><div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm" onclick="runBackupNow()">⚡ Backup Adesso</button><button class="btn btn-outline btn-sm" onclick="saveBackupConfig()">💾 Salva</button></div></div>
+</div>
+<div id="tblBackupHistory" style="margin-top:8px"></div>
+</div>
+
+<!-- ===== TAB: Interventi ===== -->
+<div class="cfg-panel" id="cfgPan_interventi">
+<div class="cfg-section-title">📋 Tipi Intervento</div>
+<p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">Definisci i tipi di intervento disponibili nel sistema. Separati da virgola.</p>
+<div class="cfg-field"><label>Tipi</label><textarea id="cfg_tipi_intervento" rows="2" placeholder="Ordinario, Urgenza, Tagliando A, Tagliando B, Tagliando C, Tagliando D, Installazione"></textarea></div>
+<div class="cfg-section-title">🔢 Priorità</div>
+<p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">Ogni riga: livello | etichetta | SLA (ore). Es: 1|Urgente - Subito|4</p>
+<div class="cfg-field"><label>Priorità (una per riga)</label><textarea id="cfg_priorita_def" rows="5" placeholder="1|Urgente - Subito|4&#10;2|Oggi|8&#10;3|24 ore|24&#10;4|Entro settimana|72&#10;5|Programmabile|0" class="cfg-mono"></textarea></div>
+<div class="cfg-section-title">⏱️ Durate Default</div>
+<div class="cfg-grid-3">
+<div class="cfg-field"><label>Ordinario (ore)</label><input type="number" id="cfg_durata_ordinario" value="2" step="0.5" min="0.5"></div>
+<div class="cfg-field"><label>Tagliando (ore)</label><input type="number" id="cfg_durata_tagliando" value="6" step="0.5" min="0.5"></div>
+<div class="cfg-field"><label>Installazione (ore)</label><input type="number" id="cfg_durata_installazione" value="8" step="0.5" min="0.5"></div>
+</div>
+<div class="cfg-section-title">📊 Stati Intervento</div>
+<div class="cfg-grid-2">
+<div class="cfg-field"><label>Stati Piano (separati da virgola)</label><input type="text" id="cfg_stati_piano" placeholder="pianificato, in_corso, completato, annullato"></div>
+<div class="cfg-field"><label>Stati Urgenza (separati da virgola)</label><input type="text" id="cfg_stati_urgenza" placeholder="aperta, assegnata, schedulata, in_corso, risolta, chiusa"></div>
+</div>
+</div>
+
+<!-- ===== TAB: Tecnici ===== -->
+<div class="cfg-panel" id="cfgPan_tecnici">
+<div class="cfg-section-title">👥 Ruoli</div>
+<div class="cfg-field"><label>Ruoli disponibili (separati da virgola)</label><input type="text" id="cfg_ruoli_lista" placeholder="admin, caposquadra, tecnico senior, tecnico, tecnico junior"></div>
+<div class="cfg-section-title">📏 Livelli Esperienza</div>
+<div class="cfg-field"><label>Livelli (separati da virgola)</label><input type="text" id="cfg_livelli_esperienza" placeholder="junior, base, senior, esperto"></div>
+<div class="cfg-section-title">🤝 Regole Affiancamento</div>
+<p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">Regole generiche per l'affiancamento tecnici. Una per riga.</p>
+<div class="cfg-field"><label>Regole</label><textarea id="cfg_regole_affiancamento" rows="4" placeholder="junior deve lavorare con senior&#10;apprendista non lavora da solo&#10;max 2 junior per squadra" class="cfg-mono"></textarea></div>
+<div class="cfg-section-title">🏷️ Squadre</div>
+<div class="cfg-field"><label>Nomi squadre (separati da virgola)</label><input type="text" id="cfg_squadre_nomi" placeholder="Squadra A, Squadra B, Pool"></div>
+</div>
+
+<!-- ===== TAB: Automezzi ===== -->
+<div class="cfg-panel" id="cfgPan_automezzi">
+<div class="cfg-section-title">🚐 Configurazione Automezzi</div>
+<div class="cfg-grid-2">
+<div class="cfg-field"><label>Numero Max Furgoni</label><input type="number" id="cfg_automezzi_max" value="12" min="1" max="50"></div>
+<div class="cfg-field"><label>Prefisso Codice</label><input type="text" id="cfg_automezzi_prefisso" value="F" placeholder="F"></div>
+</div>
+<p style="font-size:.8rem;color:var(--muted);margin:10px 0">I furgoni appariranno come F1, F2, ... F{max}. La lista completa si gestisce nella sezione Automezzi.</p>
+<div class="cfg-section-title">🏷️ Tipi Veicolo</div>
+<div class="cfg-field"><label>Tipi (separati da virgola)</label><input type="text" id="cfg_tipi_veicolo" placeholder="Furgone, Auto, Furgone attrezzato"></div>
+</div>
+
+<!-- ===== TAB: SLA ===== -->
+<div class="cfg-panel" id="cfgPan_sla">
+<div class="cfg-section-title">⏱️ Soglie SLA per Priorità</div>
+<p style="font-size:.8rem;color:var(--muted);margin-bottom:14px">Definisci le soglie in minuti per ogni livello di priorità. Warning = avviso, Critical = critico, Breach = superato.</p>
+<div id="cfgSlaGrid"></div>
+<div class="cfg-section-title" style="margin-top:20px">🔔 Escalation</div>
+<div class="cfg-grid-2">
+<div class="cfg-field"><label>Tempo senza inizio (minuti)</label><input type="number" id="cfg_sla_escalation_minuti" value="240" min="30" step="30"></div>
+<div class="cfg-field"><label>Notifica escalation</label><select id="cfg_sla_escalation_notifica"><option value="telegram_admin">Telegram + Admin</option><option value="telegram">Solo Telegram</option><option value="email">Solo Email</option><option value="tutti">Tutti i canali</option></select></div>
+</div>
+</div>
+
+<!-- ===== TAB: Notifiche ===== -->
+<div class="cfg-panel" id="cfgPan_notifiche">
+<!-- Sub-section: Email -->
+<div class="cfg-section-title">📧 Email</div>
+<div class="cfg-card">
+<div class="cfg-toggle"><input type="checkbox" id="cfgEmailEnabled" onchange="saveEmailConfig()"><span>Attiva invio email automatiche</span></div>
+<div style="margin:10px 0;font-size:.8rem;font-weight:600">Eventi abilitati:</div>
+<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+<label class="cfg-toggle"><input type="checkbox" id="evtUrgenza" value="urgenza_creata" onchange="saveEmailConfig()"> 🚨 Nuova urgenza creata</label>
+<label class="cfg-toggle"><input type="checkbox" id="evtIntervento" value="intervento_assegnato" onchange="saveEmailConfig()"> 📋 Intervento assegnato</label>
+<label class="cfg-toggle"><input type="checkbox" id="evtRichiesta" value="richiesta_risposta" onchange="saveEmailConfig()"> 📝 Richiesta approvata/rifiutata</label>
+</div>
+<div class="cfg-grid-2">
+<div class="cfg-field"><label>Test Email</label><input type="email" id="testEmailAddr" placeholder="email@test.com"></div>
+<div class="cfg-field"><label>&nbsp;</label><button class="btn btn-outline btn-sm" onclick="sendTestEmail()">📧 Invia Test</button></div>
+</div>
+</div>
+
+<!-- Sub-section: Telegram -->
+<div class="cfg-section-title">💬 Telegram Bot</div>
+<div class="cfg-card">
+<div style="margin-bottom:12px;padding:10px;background:linear-gradient(135deg,#DBEAFE,#EDE9FE);border-radius:var(--radius-sm);font-size:.8rem;line-height:1.5">
+<strong>Setup:</strong> 1. @BotFather → /newbot → copia token &nbsp;|&nbsp; 2. Tecnici inviano /start al bot &nbsp;|&nbsp; 3. Auto-rileva Chat ID qui sotto
+</div>
+<div class="cfg-field"><label>Bot Token</label><input type="text" id="cfgTgToken" placeholder="123456:ABC-DEF..." class="cfg-mono"></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+<button class="btn btn-primary btn-sm" onclick="saveTelegramConfig()">💾 Salva</button>
 <button class="btn btn-outline btn-sm" onclick="autoDetectTelegramIds()">🔍 Auto-rileva Chat ID</button>
 <button class="btn btn-outline btn-sm" onclick="openTelegramBot()" id="btnOpenTgBot">🤖 Apri Bot</button>
 </div>
-<div id="tgAutoDetectResult" style="display:none;margin-top:12px"></div>
-</div>
-</div>
-<!-- Card 2: Tecnici Chat IDs -->
-<div class="card" style="margin-top:16px">
-<div class="card-head"><h3>👥 2. Chat ID Tecnici</h3>
-<span id="tgConnectedCount" style="font-size:.75rem;color:var(--gray)"></span>
-</div>
-<div class="card-body">
+<div id="tgAutoDetectResult" style="display:none;margin-top:8px"></div>
+<h4 style="margin:14px 0 8px;font-size:.8125rem">👥 Chat ID Tecnici <span id="tgConnectedCount" style="font-size:.7rem;color:var(--gray);margin-left:6px"></span></h4>
 <div id="tblTelegramIds"></div>
-<div class="field-row" style="margin-top:16px;padding-top:12px;border-top:1px solid var(--gray4)">
-<div class="field"><label>Test Chat ID manuale</label><input type="text" id="testTgChatId" placeholder="123456789"></div>
-<div class="field" style="padding-top:24px"><button class="btn btn-outline" onclick="sendTestTelegram()">💬 Invia Test</button></div>
+<div class="cfg-grid-2" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--gray4)">
+<div class="cfg-field"><label>Test Chat ID</label><input type="text" id="testTgChatId" placeholder="123456789"></div>
+<div class="cfg-field"><label>&nbsp;</label><button class="btn btn-outline btn-sm" onclick="sendTestTelegram()">💬 Test</button></div>
 </div>
 </div>
-</div>
-<!-- Card 3: Broadcast -->
-<div class="card" style="margin-top:16px">
-<div class="card-head"><h3>📨 3. Invia Messaggio</h3></div>
-<div class="card-body">
-<div class="field"><label>Destinatari</label>
-<select id="tgMsgDest" style="width:100%"><option value="all">🔔 Tutti i tecnici con Chat ID</option></select>
-</div>
-<div class="field"><label>Messaggio</label><textarea id="tgMsgText" rows="3" placeholder="Scrivi il messaggio da inviare via Telegram..."></textarea></div>
-<button class="btn btn-primary btn-sm" onclick="sendTelegramBroadcast()">📨 Invia Messaggio</button>
-</div>
-</div>
-<!-- Card 4: Gruppo -->
-<div class="card" style="margin-top:16px">
-<div class="card-head"><h3>💬 4. Chat Gruppo Telegram</h3></div>
-<div class="card-body">
-<div class="field"><label>Link/ID Gruppo</label><input type="text" id="cfgTgGroup" placeholder="@gruppo o https://t.me/gruppo" style="width:100%"></div>
-<div style="display:flex;gap:8px;margin-top:8px">
-<button class="btn btn-primary btn-sm" onclick="saveTelegramGroup()">💾 Salva</button>
-<button class="btn btn-outline btn-sm" onclick="openTelegramGroup()">💬 Apri Gruppo</button>
-</div>
-</div>
-</div>
-</section>
 
-<!-- ========== SEC: BACKUP ========== -->
-<section class="sec" id="secBackup">
-<div class="card">
-<div class="card-head"><h3>💾 Backup Automatico</h3>
-<button class="btn btn-primary btn-sm" onclick="runBackupNow()">⚡ Backup Adesso</button>
+<!-- Sub-section: Telegram Broadcast -->
+<div class="cfg-card">
+<h4>📨 Broadcast Telegram</h4>
+<div class="cfg-grid-2">
+<div class="cfg-field"><label>Destinatari</label><select id="tgMsgDest" style="width:100%"><option value="all">🔔 Tutti i tecnici</option></select></div>
+<div class="cfg-field"><label>Gruppo Telegram</label><div style="display:flex;gap:6px"><input type="text" id="cfgTgGroup" placeholder="@gruppo o link" style="flex:1"><button class="btn btn-outline btn-sm" onclick="saveTelegramGroup()">💾</button><button class="btn btn-outline btn-sm" onclick="openTelegramGroup()">↗</button></div></div>
 </div>
-<div class="card-body">
-<div class="field" style="margin-bottom:16px"><label>ID Cartella Google Drive per Backup</label>
-<input type="text" id="cfgBackupFolder" placeholder="Es: 1ABCxyz... (dall'URL della cartella Drive)" style="width:100%;font-family:JetBrains Mono,monospace;font-size:.75rem">
-<button class="btn btn-outline btn-sm" onclick="saveBackupConfig()" style="margin-top:8px">💾 Salva</button>
+<div class="cfg-field"><label>Messaggio</label><textarea id="tgMsgText" rows="2" placeholder="Messaggio broadcast..."></textarea></div>
+<button class="btn btn-primary btn-sm" onclick="sendTelegramBroadcast()">📨 Invia</button>
 </div>
-<div style="margin-bottom:16px;padding:12px;background:#F0FDF4;border-radius:var(--radius-sm);font-size:.8125rem">
-💡 Per backup automatico giornaliero: Apps Script → Trigger → dailyMaintenance → Ogni giorno alle 02:00
+
+<!-- Sub-section: Push -->
+<div class="cfg-section-title">📱 Push Notifications</div>
+<div class="cfg-card">
+<div class="cfg-field"><label>VAPID Public Key</label><input type="text" id="cfg_push_vapid_public" placeholder="VAPID public key..." class="cfg-mono"></div>
+<div class="cfg-field"><label>VAPID Private Key</label><input type="text" id="cfg_push_vapid_private" placeholder="VAPID private key..." class="cfg-mono"></div>
+<div class="cfg-toggle"><input type="checkbox" id="cfg_push_enabled"><span>Abilita push notifications</span></div>
 </div>
-<h4>Storico Backup</h4>
-<div id="tblBackupHistory"><div class="empty"><p>Caricamento...</p></div></div>
+</div>
+
+<!-- ===== TAB: PM Scheduling ===== -->
+<div class="cfg-panel" id="cfgPan_pm">
+<div class="cfg-section-title">🔧 Cicli Manutenzione</div>
+<p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">Definisci i tipi di servizio e i loro intervalli. Ogni riga: codice|nome|intervallo_giorni|durata_ore</p>
+<div class="cfg-field"><label>Tipi Servizio</label><textarea id="cfg_pm_tipi_servizio" rows="4" placeholder="A|Servizio A|365|6&#10;B|Servizio B|180|4&#10;C|Servizio C|90|3&#10;D|Servizio D|30|2" class="cfg-mono"></textarea></div>
+<div class="cfg-section-title">🤖 Modelli Macchine</div>
+<div class="cfg-field"><label>Modelli (separati da virgola)</label><input type="text" id="cfg_pm_modelli" placeholder="ASTRONAUT A5, ASTRONAUT A4, VECTOR, JUNO, DISCOVERY"></div>
+<div class="cfg-section-title">⏱️ Default</div>
+<div class="cfg-grid-2">
+<div class="cfg-field"><label>Durata default tagliando (ore)</label><input type="number" id="cfg_pm_durata_default" value="6" step="0.5" min="0.5"></div>
+<div class="cfg-field"><label>Giorni anticipo notifica</label><input type="number" id="cfg_pm_giorni_anticipo" value="14" min="1"></div>
 </div>
 </div>
+
+<!-- ===== TAB: Mappa ===== -->
+<div class="cfg-panel" id="cfgPan_mappa">
+<div class="cfg-section-title">🗺️ Impostazioni Mappa</div>
+<div class="cfg-grid-3">
+<div class="cfg-field"><label>Latitudine Centro</label><input type="number" id="cfg_mappa_lat" step="0.0001" placeholder="44.6500"></div>
+<div class="cfg-field"><label>Longitudine Centro</label><input type="number" id="cfg_mappa_lng" step="0.0001" placeholder="10.9200"></div>
+<div class="cfg-field"><label>Zoom Default</label><input type="number" id="cfg_mappa_zoom" value="9" min="1" max="18"></div>
+</div>
+<div class="cfg-section-title">🌐 Provider</div>
+<div class="cfg-grid-2">
+<div class="cfg-field"><label>Tile Provider</label><select id="cfg_mappa_tile"><option value="osm">OpenStreetMap</option><option value="carto">CartoDB</option><option value="stamen">Stamen</option></select></div>
+<div class="cfg-field"><label>OSRM Server URL</label><input type="url" id="cfg_mappa_osrm_url" placeholder="https://router.project-osrm.org" class="cfg-mono"></div>
+</div>
+<div class="cfg-field"><label>Google Directions API Key (opzionale)</label><input type="text" id="cfg_mappa_google_key" placeholder="AIza..." class="cfg-mono"></div>
+</div>
+
+<!-- ===== TAB: Chat ===== -->
+<div class="cfg-panel" id="cfgPan_chatcfg">
+<div class="cfg-section-title">💬 Canali Chat</div>
+<p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">Definisci i canali della chat in-app. Ogni riga: id|nome|icona|chi_può_scrivere</p>
+<div class="cfg-field"><label>Canali (uno per riga)</label><textarea id="cfg_chat_canali" rows="5" placeholder="CH_GENERALE|Generale|💬|tutti&#10;CH_URGENZE|Urgenze|🚨|tutti&#10;CH_ADMIN|Admin|🔒|admin" class="cfg-mono"></textarea></div>
+<div class="cfg-section-title">⚙️ Opzioni</div>
+<div class="cfg-toggle"><input type="checkbox" id="cfg_chat_sync_telegram"><span>Sincronizza messaggi con Telegram</span></div>
+<div class="cfg-toggle"><input type="checkbox" id="cfg_chat_notifiche_push"><span>Notifiche push per nuovi messaggi</span></div>
+</div>
+
+<!-- ===== TAB: AI Planner ===== -->
+<div class="cfg-panel" id="cfgPan_ai">
+<div class="cfg-section-title">🤖 Provider AI</div>
+<div class="cfg-grid-2">
+<div class="cfg-field"><label>Provider Principale</label><select id="cfg_ai_provider"><option value="workers">Cloudflare Workers AI</option><option value="gemini">Google Gemini</option><option value="groq">Groq</option></select></div>
+<div class="cfg-field"><label>Timeout (secondi)</label><input type="number" id="cfg_ai_timeout" value="30" min="10" max="120"></div>
+</div>
+<div class="cfg-field"><label>Gemini API Key</label><input type="text" id="cfg_ai_gemini_key" placeholder="AIza..." class="cfg-mono"></div>
+<div class="cfg-section-title">⚖️ Pesi Scoring Tecnico</div>
+<p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">Pesi per il calcolo punteggio assegnazione (0-100). Totale dovrebbe essere 100.</p>
+<div class="cfg-grid-2" style="grid-template-columns:1fr 1fr 1fr 1fr">
+<div class="cfg-field"><label>Distanza</label><input type="number" id="cfg_ai_peso_distanza" value="30" min="0" max="100"></div>
+<div class="cfg-field"><label>Carico</label><input type="number" id="cfg_ai_peso_carico" value="25" min="0" max="100"></div>
+<div class="cfg-field"><label>Competenza</label><input type="number" id="cfg_ai_peso_competenza" value="25" min="0" max="100"></div>
+<div class="cfg-field"><label>Anzianità</label><input type="number" id="cfg_ai_peso_anzianita" value="20" min="0" max="100"></div>
+</div>
+<div class="cfg-section-title">📦 Chunk Settings</div>
+<div class="cfg-grid-2">
+<div class="cfg-field"><label>Max interventi per chunk</label><input type="number" id="cfg_ai_chunk_size" value="5" min="1" max="20"></div>
+<div class="cfg-field"><label>Fallback se timeout</label><select id="cfg_ai_fallback"><option value="rule_based">Rule-based (senza AI)</option><option value="gemini">Gemini API</option><option value="nessuno">Nessun fallback</option></select></div>
+</div>
+</div>
+
+<!-- ===== TAB: Feature Toggles ===== -->
+<div class="cfg-panel" id="cfgPan_features">
+<div class="cfg-section-title">🎛️ Funzionalità Attive</div>
+<div id="cfgFeaturesGrid"></div>
+</div>
+
+<!-- ===== TAB: Avanzate ===== -->
+<div class="cfg-panel" id="cfgPan_avanzate">
+<div class="cfg-section-title">🔧 Editor Chiavi Configurazione</div>
+<p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">Editor diretto delle chiavi nel database <code>config</code>. Usa con cautela.</p>
+<div style="display:flex;gap:8px;margin-bottom:14px">
+<button class="btn btn-outline btn-sm" onclick="addConfigKey()">➕ Nuova Chiave</button>
+<button class="btn btn-ok btn-sm" onclick="saveConfig()">💾 Salva Chiavi</button>
+</div>
+<div id="configBody"></div>
+</div>
+
+</div><!-- /card -->
 </section>
 
 <!-- ========== SEC: AUDIT LOG ========== -->
@@ -1619,21 +1782,6 @@ Installation date → data_installazione
 </div>
 </div>
 </section>
-
-<!-- ========== SEC: CONFIGURAZIONE ========== -->
-<section class="sec" id="secConfig">
-<div class="card">
-<div class="card-head"><h3>🔧 Configurazione Sistema</h3>
-<div style="display:flex;gap:6px">
-<button class="btn btn-outline btn-sm" onclick="addConfigKey()">➕ Nuova Chiave</button>
-<button class="btn btn-ok btn-sm" onclick="saveConfig()">💾 Salva Tutto</button>
-</div>
-</div>
-<div style="display:flex;gap:4px;padding:0 16px;border-bottom:1px solid var(--gray3);overflow-x:auto" id="cfgTabs"></div>
-<div class="card-body" id="configBody"></div>
-</div>
-</section>
-
 
 </div><!-- /content -->
 </div><!-- /main -->
@@ -1951,7 +2099,7 @@ Installation date → data_installazione
 <input type="checkbox" id="nuAttivo" checked style="width:18px;height:18px;accent-color:var(--ok)">
 <span id="nuAttivoLabel" style="font-weight:600;color:var(--ok)">✅ Attivo</span>
 </label>
-<script>document.getElementById('nuAttivo').addEventListener('change',function(){const l=document.getElementById('nuAttivoLabel');if(this.checked){l.textContent='✅ Attivo';l.style.color='var(--ok)'}else{l.textContent='⬜ Inattivo';l.style.color='var(--gray)'}})</script>
+<script>document.getElementById('nuAttivo').addEventListener('change',function(){const l=document.getElementById('nuAttivoLabel');if(!this.checked&&!confirm('Disattivare il tecnico? Non verrà più assegnato a interventi e non apparirà nei dropdown.')){this.checked=true;return}if(this.checked){l.textContent='✅ Attivo';l.style.color='var(--ok)'}else{l.textContent='⬜ Inattivo — non apparirà nei dropdown';l.style.color='var(--err)'}})</script>
 </div>
 </div>
 <div class="field-row">
@@ -2443,15 +2591,13 @@ const SEC_RENDERERS = {
   sla: renderSLA,
   auditlog: renderAuditLog,
   powerbi: renderPowerBI,
-  config: renderConfig,
+  config: renderConfigUnified,
   pagellini: renderPagellini,
   pianomensile: renderMonthPlan,
   calendario: renderCal,
   documenti: renderDocumenti,
   checklist: renderChecklist,
   allegati: renderAllegati,
-  emailconfig: renderEmailConfig,
-  telegramconfig: ()=>{renderTelegramConfig();renderTelegramExtras()},
 };
 function lazyRender(secId, force){
   if(!force && _rendered.has(secId)) return;
@@ -4234,103 +4380,181 @@ function renderPowerBI(){
   $('pbiDims').innerHTML=dims.map(t=>`<div style="margin-bottom:6px"><code style="background:var(--gray4);padding:2px 8px;border-radius:4px;font-size:.75rem">${t}</code><br><input type="text" value="${base}&table=${t}" readonly onclick="this.select()" style="width:100%;font-size:.6875rem;padding:4px;border:1px solid var(--gray3);border-radius:4px;margin-top:2px;font-family:var(--mono)"></div>`).join('');
 }
 
-// ============ CONFIG ============
-var CFG_ACTIVE_TAB='general';
-const CFG_TABS=[
-  {id:'general',label:'⚙️ Generale',prefix:[''],desc:'Impostazioni generali dell\'applicazione'},
-  {id:'interventi',label:'📋 Interventi',prefix:['tipo_','priorita_','durata_','stato_'],desc:'Tipi intervento, priorità, durate, stati'},
-  {id:'tecnici',label:'👥 Tecnici',prefix:['ruoli_','squadre_','affiancamento_'],desc:'Ruoli utenti, regole squadre e affiancamento'},
-  {id:'sla',label:'⏱️ SLA',prefix:['sla_'],desc:'Soglie SLA: warning, critical, breach'},
-  {id:'pm',label:'🔧 PM Scheduling',prefix:['pm_'],desc:'Cicli manutenzione, modelli, intervalli servizio'},
-  {id:'notifiche',label:'🔔 Notifiche',prefix:['telegram_','email_','push_','notif_'],desc:'Telegram, Email, Push notifications'},
-  {id:'mappa',label:'🗺️ Mappa',prefix:['mappa_','geo_'],desc:'Centro mappa, zoom, tile provider'},
-  {id:'chat',label:'💬 Chat',prefix:['chat_','canale_'],desc:'Canali chat, configurazione messaggistica'},
-  {id:'features',label:'🎛️ Feature',prefix:['feature_'],desc:'Toggle funzionalità attive/disattive'}
-];
+// ============ CONFIG UNIFICATA ============
+var CFG_CURRENT_TAB='generale';
 
-function renderConfig(){
-  const cfg=DATA.config||{};
-  const keys=Object.keys(cfg);
-  // Build tabs
-  const tabsEl=$('cfgTabs');
-  if(tabsEl){
-    tabsEl.innerHTML=CFG_TABS.map(t=>{
-      const active=t.id===CFG_ACTIVE_TAB;
-      return `<button onclick="CFG_ACTIVE_TAB='${t.id}';renderConfig()" style="padding:8px 14px;font-size:.8rem;border:none;background:none;cursor:pointer;white-space:nowrap;border-bottom:2px solid ${active?'var(--primary)':'transparent'};color:${active?'var(--primary)':'var(--gray)'};font-weight:${active?'600':'400'}">${t.label}</button>`;
-    }).join('');
-  }
-  const tab=CFG_TABS.find(t=>t.id===CFG_ACTIVE_TAB)||CFG_TABS[0];
-  let html=`<p style="font-size:.8rem;color:var(--muted);margin-bottom:12px">${tab.desc}</p>`;
+// Mapping: campo form ID → chiave config DB
+const CFG_FIELD_MAP={
+  // Generale
+  cfg_azienda_nome:'azienda_nome', cfg_azienda_slogan:'azienda_slogan',
+  cfg_logo_url:'logo_url', cfg_favicon_url:'favicon_url',
+  cfg_colore_primario:'colore_primario', cfg_colore_secondario:'colore_secondario',
+  cfg_timezone:'timezone', cfg_backup_folder_id:'backup_folder_id',
+  // Interventi
+  cfg_tipi_intervento:'tipi_intervento', cfg_priorita_def:'priorita_definizioni',
+  cfg_durata_ordinario:'durata_default_ordinario', cfg_durata_tagliando:'durata_default_tagliando',
+  cfg_durata_installazione:'durata_default_installazione',
+  cfg_stati_piano:'stati_piano', cfg_stati_urgenza:'stati_urgenza',
+  // Tecnici
+  cfg_ruoli_lista:'ruoli_lista', cfg_livelli_esperienza:'livelli_esperienza',
+  cfg_regole_affiancamento:'regole_affiancamento', cfg_squadre_nomi:'squadre_nomi',
+  // Automezzi
+  cfg_automezzi_max:'automezzi_max', cfg_automezzi_prefisso:'automezzi_prefisso',
+  cfg_tipi_veicolo:'tipi_veicolo',
+  // SLA
+  cfg_sla_escalation_minuti:'sla_escalation_minuti', cfg_sla_escalation_notifica:'sla_escalation_notifica',
+  // PM
+  cfg_pm_tipi_servizio:'pm_tipi_servizio', cfg_pm_modelli:'pm_modelli',
+  cfg_pm_durata_default:'pm_durata_default', cfg_pm_giorni_anticipo:'pm_giorni_anticipo',
+  // Mappa
+  cfg_mappa_lat:'mappa_centro_lat', cfg_mappa_lng:'mappa_centro_lng',
+  cfg_mappa_zoom:'mappa_zoom_default', cfg_mappa_tile:'mappa_tile_provider',
+  cfg_mappa_osrm_url:'mappa_osrm_url', cfg_mappa_google_key:'mappa_google_directions_key',
+  // Chat
+  cfg_chat_canali:'chat_canali_def',
+  // AI
+  cfg_ai_provider:'ai_provider', cfg_ai_timeout:'ai_timeout',
+  cfg_ai_gemini_key:'ai_gemini_key',
+  cfg_ai_peso_distanza:'ai_peso_distanza', cfg_ai_peso_carico:'ai_peso_carico',
+  cfg_ai_peso_competenza:'ai_peso_competenza', cfg_ai_peso_anzianita:'ai_peso_anzianita',
+  cfg_ai_chunk_size:'ai_chunk_size', cfg_ai_fallback:'ai_fallback',
+  // Push
+  cfg_push_vapid_public:'push_vapid_public', cfg_push_vapid_private:'push_vapid_private',
+};
 
-  if(tab.id==='features'){
-    // Feature toggles — show WL_CONFIG features + config feature_ keys
-    html+=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">`;
-    if(typeof WL_CONFIG!=='undefined'&&WL_CONFIG.features){
-      Object.entries(WL_CONFIG.features).forEach(([k,v])=>{
-        const color=v?'#10B981':'#9CA3AF';
-        html+=`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:var(--radius-sm);background:${v?'#F0FDF4':'#F9FAFB'};border:1px solid ${v?'#BBF7D0':'#E5E7EB'}">
-          <span style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0"></span>
-          <div><div style="font-size:.8125rem;font-weight:500">${k.replace(/_/g,' ')}</div>
-          <div style="font-size:.65rem;color:var(--muted)">white_label_config.js</div></div>
-        </div>`;
-      });
-    }
-    // Anche feature_ dal DB config
-    keys.filter(k=>k.startsWith('feature_')).forEach(k=>{
-      const val=cfg[k]||'';
-      html+=`<div style="padding:10px 14px;border-radius:var(--radius-sm);background:#F9FAFB;border:1px solid #E5E7EB">
-        <label style="font-size:.75rem;font-family:var(--mono);font-weight:600">${k}</label>
-        <input type="text" class="cfg-input" data-key="${k}" value="${esc(val)}" style="font-size:.8rem;margin-top:4px;width:100%">
+function switchCfgTab(tabId, btn){
+  CFG_CURRENT_TAB=tabId;
+  document.querySelectorAll('.cfg-tab-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  document.querySelectorAll('.cfg-panel').forEach(p=>p.classList.remove('active'));
+  const pan=$('cfgPan_'+tabId);
+  if(pan) pan.classList.add('active');
+  // Render dynamic content for specific tabs
+  if(tabId==='sla') renderCfgSlaGrid();
+  if(tabId==='features') renderCfgFeatures();
+  if(tabId==='avanzate') renderCfgAdvanced();
+  if(tabId==='notifiche'){renderTelegramConfig();renderTelegramExtras();renderEmailConfig()}
+}
+
+function renderConfigUnified(){
+  const c=DATA.config||{};
+  // Popola tutti i campi form dai valori config
+  Object.entries(CFG_FIELD_MAP).forEach(([elId, cfgKey])=>{
+    const el=$(elId);
+    if(!el) return;
+    const val=c[cfgKey]||'';
+    if(el.type==='checkbox') el.checked=(val==='true'||val==='1');
+    else if(el.type==='color'){el.value=val||'#6366F1';const hex=$(elId+'_hex');if(hex)hex.value=val||''}
+    else el.value=val;
+  });
+  // Color picker sync
+  const cp1=$('cfg_colore_primario');
+  const ch1=$('cfg_colore_primario_hex');
+  if(cp1&&ch1){cp1.onchange=()=>{ch1.value=cp1.value};if(!ch1.value&&cp1.value)ch1.value=cp1.value}
+  const cp2=$('cfg_colore_secondario');
+  const ch2=$('cfg_colore_secondario_hex');
+  if(cp2&&ch2){cp2.onchange=()=>{ch2.value=cp2.value};if(!ch2.value&&cp2.value)ch2.value=cp2.value}
+  // Checkbox speciali
+  const csync=$('cfg_chat_sync_telegram');if(csync)csync.checked=(c.chat_sync_telegram==='true');
+  const cpush=$('cfg_chat_notifiche_push');if(cpush)cpush.checked=(c.chat_notifiche_push==='true');
+  const ppush=$('cfg_push_enabled');if(ppush)ppush.checked=(c.push_enabled==='true');
+  // Render tab corrente
+  switchCfgTab(CFG_CURRENT_TAB, document.querySelector('.cfg-tab-btn.active'));
+  // Email + Telegram (pre-render per quando si apre la tab Notifiche)
+  renderEmailConfig();
+  try{renderTelegramConfig();renderTelegramExtras()}catch(e){}
+  // Backup
+  const bf=$('cfg_backup_folder_id');if(bf&&c.backup_folder_id)bf.value=c.backup_folder_id;
+  loadBackupHistory();
+}
+
+function renderCfgSlaGrid(){
+  const c=DATA.config||{};
+  const priorities=[
+    {lv:1,label:'Urgente - Subito',sla:4},
+    {lv:2,label:'Oggi',sla:8},
+    {lv:3,label:'24 ore',sla:24},
+    {lv:4,label:'Entro settimana',sla:72},
+    {lv:5,label:'Programmabile',sla:0}
+  ];
+  let html=`<div style="display:grid;grid-template-columns:auto 1fr 1fr 1fr 1fr;gap:8px;font-size:.8rem;align-items:center">
+    <div style="font-weight:600">Priorità</div><div style="font-weight:600">SLA (ore)</div><div style="font-weight:600;color:#F59E0B">Warning (min)</div><div style="font-weight:600;color:#EF4444">Critical (min)</div><div style="font-weight:600;color:#7C3AED">Breach (min)</div>`;
+  priorities.forEach(p=>{
+    const w=c['sla_p'+p.lv+'_warning']||'';
+    const cr=c['sla_p'+p.lv+'_critical']||'';
+    const b=c['sla_p'+p.lv+'_breach']||'';
+    html+=`<div style="font-weight:500">${p.lv}. ${p.label}</div>
+      <div><input type="number" class="cfg-sla-input" data-key="sla_p${p.lv}_sla" value="${c['sla_p'+p.lv+'_sla']||p.sla}" min="0" style="width:70px;padding:4px 6px;font-size:.8rem;border:1px solid var(--gray3);border-radius:4px"></div>
+      <div><input type="number" class="cfg-sla-input" data-key="sla_p${p.lv}_warning" value="${w}" placeholder="${Math.round(p.sla*60*0.5)}" min="0" style="width:70px;padding:4px 6px;font-size:.8rem;border:1px solid #FDE68A;border-radius:4px;background:#FFFBEB"></div>
+      <div><input type="number" class="cfg-sla-input" data-key="sla_p${p.lv}_critical" value="${cr}" placeholder="${Math.round(p.sla*60*0.8)}" min="0" style="width:70px;padding:4px 6px;font-size:.8rem;border:1px solid #FCA5A5;border-radius:4px;background:#FEF2F2"></div>
+      <div><input type="number" class="cfg-sla-input" data-key="sla_p${p.lv}_breach" value="${b}" placeholder="${p.sla*60}" min="0" style="width:70px;padding:4px 6px;font-size:.8rem;border:1px solid #C4B5FD;border-radius:4px;background:#F5F3FF"></div>`;
+  });
+  html+=`</div>`;
+  $('cfgSlaGrid').innerHTML=html;
+}
+
+function renderCfgFeatures(){
+  const c=DATA.config||{};
+  let html='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">';
+  // WL_CONFIG features
+  if(typeof WL_CONFIG!=='undefined'&&WL_CONFIG.features){
+    Object.entries(WL_CONFIG.features).forEach(([k,v])=>{
+      const color=v?'#10B981':'#9CA3AF';
+      html+=`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:var(--radius-sm);background:${v?'#F0FDF4':'#F9FAFB'};border:1px solid ${v?'#BBF7D0':'#E5E7EB'}">
+        <span style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0"></span>
+        <div><div style="font-size:.8125rem;font-weight:500">${k.replace(/_/g,' ')}</div>
+        <div style="font-size:.65rem;color:var(--muted)">white_label_config.js</div></div>
       </div>`;
     });
-    html+=`</div>`;
-  }else{
-    // Regular config keys for this tab
-    const tabKeys=keys.filter(k=>{
-      if(tab.id==='general'){
-        // General = everything that doesn't match other tabs
-        return !CFG_TABS.some(t=>t.id!=='general'&&t.prefix.some(p=>p&&k.startsWith(p)));
-      }
-      return tab.prefix.some(p=>k.startsWith(p));
-    });
-    if(tabKeys.length){
-      html+=`<div style="display:grid;gap:10px">`;
-      tabKeys.sort().forEach(k=>{
-        const val=cfg[k]||'';
-        const isJson=val.startsWith('{')||val.startsWith('[');
-        const isBool=val==='true'||val==='false';
-        const label=k.replace(/^(sla_|pm_|telegram_|email_|tipo_|ruoli_|mappa_|chat_|push_|notif_)/,'').replace(/_/g,' ');
-        html+=`<div style="padding:10px 14px;background:#FAFAFA;border:1px solid #E5E7EB;border-radius:8px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <label style="font-size:.75rem;font-family:var(--mono);font-weight:600;color:var(--primary)">${k}</label>
-            <button class="btn btn-ghost btn-xs" onclick="if(confirm('Eliminare chiave ${k}?')){this.closest('div[style]').remove();toast('Chiave rimossa (salva per confermare)','info')}" title="Elimina" style="color:#EF4444;font-size:.7rem">🗑️</button>
-          </div>
-          <div style="font-size:.65rem;color:var(--muted);margin-bottom:4px;text-transform:capitalize">${label}</div>
-          ${isJson?`<textarea class="cfg-input" data-key="${k}" rows="4" style="width:100%;font-size:.75rem;font-family:var(--mono);border:1px solid #D1D5DB;border-radius:6px;padding:8px">${val}</textarea>`:
-          isBool?`<select class="cfg-input" data-key="${k}" style="font-size:.8125rem;padding:6px 10px;border:1px solid #D1D5DB;border-radius:6px"><option value="true" ${val==='true'?'selected':''}>✅ Attivo (true)</option><option value="false" ${val==='false'?'selected':''}>⬜ Disattivo (false)</option></select>`:
-          `<input type="text" class="cfg-input" data-key="${k}" value="${esc(val)}" style="font-size:.8125rem;padding:6px 10px;border:1px solid #D1D5DB;border-radius:6px;width:100%">`}
-        </div>`;
-      });
-      html+=`</div>`;
-    }else{
-      html+=`<div style="text-align:center;padding:32px;color:var(--gray)"><p>Nessuna configurazione in questa sezione.</p><p style="font-size:.75rem">Usa "➕ Nuova Chiave" per aggiungere configurazioni con prefisso <code>${tab.prefix.filter(p=>p).join(', ')||'qualsiasi'}</code></p></div>`;
-    }
   }
+  // DB config feature_ keys
+  Object.keys(c).filter(k=>k.startsWith('feature_')).forEach(k=>{
+    const val=c[k]||'';
+    const on=val==='true'||val==='1';
+    html+=`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:var(--radius-sm);background:${on?'#F0FDF4':'#F9FAFB'};border:1px solid ${on?'#BBF7D0':'#E5E7EB'};cursor:pointer" onclick="this.querySelector('select').value=this.querySelector('select').value==='true'?'false':'true';this.style.background=this.querySelector('select').value==='true'?'#F0FDF4':'#F9FAFB'">
+      <select class="cfg-input" data-key="${k}" style="font-size:.75rem;padding:2px 4px;border:1px solid var(--gray3);border-radius:4px" onclick="event.stopPropagation()"><option value="true" ${on?'selected':''}>✅ On</option><option value="false" ${!on?'selected':''}>⬜ Off</option></select>
+      <div style="font-size:.8125rem;font-weight:500">${k.replace('feature_','').replace(/_/g,' ')}</div>
+    </div>`;
+  });
+  html+='</div>';
+  $('cfgFeaturesGrid').innerHTML=html;
+}
+
+function renderCfgAdvanced(){
+  // Editor chiave/valore grezzo — mantiene vecchia logica
+  const cfg=DATA.config||{};
+  const keys=Object.keys(cfg).sort();
+  let html='<div style="display:grid;gap:8px">';
+  keys.forEach(k=>{
+    const val=cfg[k]||'';
+    const isJson=val.startsWith('{')||val.startsWith('[');
+    const isBool=val==='true'||val==='false';
+    html+=`<div style="padding:8px 12px;background:#FAFAFA;border:1px solid #E5E7EB;border-radius:6px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+        <label style="font-size:.7rem;font-family:var(--mono);font-weight:600;color:var(--primary)">${k}</label>
+        <button class="btn btn-ghost btn-xs" onclick="if(confirm('Eliminare ${k}?')){delete DATA.config['${k}'];renderCfgAdvanced()}" style="color:#EF4444;font-size:.65rem">🗑️</button>
+      </div>
+      ${isJson?`<textarea class="cfg-input" data-key="${k}" rows="3" style="width:100%;font-size:.7rem;font-family:var(--mono);border:1px solid #D1D5DB;border-radius:4px;padding:6px">${val}</textarea>`:
+      isBool?`<select class="cfg-input" data-key="${k}" style="font-size:.75rem;padding:4px 8px;border:1px solid #D1D5DB;border-radius:4px"><option value="true" ${val==='true'?'selected':''}>true</option><option value="false" ${val==='false'?'selected':''}>false</option></select>`:
+      `<input type="text" class="cfg-input" data-key="${k}" value="${esc(val)}" style="font-size:.75rem;padding:4px 8px;border:1px solid #D1D5DB;border-radius:4px;width:100%">`}
+    </div>`;
+  });
+  html+='</div>';
   $('configBody').innerHTML=html;
 }
+
 function addConfigKey(){
-  const tab=CFG_TABS.find(t=>t.id===CFG_ACTIVE_TAB)||CFG_TABS[0];
-  const suggestedPrefix=tab.prefix.find(p=>p)||'';
-  const key=prompt('Nome chiave configurazione:',suggestedPrefix);
+  const key=prompt('Nome chiave configurazione:','');
   if(!key)return;
   if(!DATA.config)DATA.config={};
   DATA.config[key]='';
-  renderConfig();
+  renderCfgAdvanced();
   toast(`Chiave "${key}" aggiunta — inserisci il valore e salva`,'info');
 }
 function saveConfig(){
+  // Salva chiavi da tab Avanzate
   const configObj={};
-  document.querySelectorAll('.cfg-input').forEach(input=>{
+  document.querySelectorAll('#configBody .cfg-input').forEach(input=>{
     const key=input.getAttribute('data-key');
     const val=input.tagName==='SELECT'?input.value:input.value;
     if(key) configObj[key]=val;
@@ -4340,6 +4564,44 @@ function saveConfig(){
     .then(r=>{toast('Configurazione salvata!','ok');applyConfig()})
     .catch(e=>{toast(e.message,'err')})
 }
+
+async function saveAllConfig(){
+  // Raccoglie valori da TUTTI i campi form strutturati + SLA + features
+  const configObj={};
+  // 1. Campi mappati
+  Object.entries(CFG_FIELD_MAP).forEach(([elId, cfgKey])=>{
+    const el=$(elId);
+    if(!el) return;
+    if(el.type==='checkbox') configObj[cfgKey]=el.checked?'true':'false';
+    else if(el.type==='color'){const hex=$(elId+'_hex');configObj[cfgKey]=hex?hex.value:el.value}
+    else if(el.value!==undefined && el.value!=='') configObj[cfgKey]=el.value;
+  });
+  // Checkbox speciali
+  const csync=$('cfg_chat_sync_telegram');if(csync) configObj.chat_sync_telegram=csync.checked?'true':'false';
+  const cpush=$('cfg_chat_notifiche_push');if(cpush) configObj.chat_notifiche_push=cpush.checked?'true':'false';
+  const ppush=$('cfg_push_enabled');if(ppush) configObj.push_enabled=ppush.checked?'true':'false';
+  // 2. SLA grid
+  document.querySelectorAll('.cfg-sla-input').forEach(input=>{
+    const key=input.getAttribute('data-key');
+    if(key && input.value) configObj[key]=input.value;
+  });
+  // 3. Feature toggles da DB
+  document.querySelectorAll('#cfgFeaturesGrid .cfg-input').forEach(input=>{
+    const key=input.getAttribute('data-key');
+    if(key) configObj[key]=input.value;
+  });
+  if(Object.keys(configObj).length===0){toast('Nessun campo compilato','warn');return}
+  try{
+    await apiCall('saveConfig',{config:configObj},'POST');
+    // Aggiorna DATA.config locale
+    Object.assign(DATA.config||{}, configObj);
+    applyConfig();
+    toast('✅ Configurazione salvata!','ok');
+  }catch(e){toast('Errore: '+e.message,'err')}
+}
+
+// Backward compatibility alias
+function renderConfig(){ renderConfigUnified(); }
 
 // ============ IMPORT/EXPORT LELY ============
 async function handleLelyImport(tipo, file){
