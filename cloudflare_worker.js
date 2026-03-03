@@ -6544,11 +6544,11 @@ function findCycleDef(defs, modelloKey) {
   const up = modelloKey.toUpperCase().trim();
   // Cerca match esatto nei modelli
   for (const d of defs) {
-    if (d.modelli && d.modelli.some(m => up.includes(m.toUpperCase()))) return d;
+    if (d.modelli && d.modelli.some(m => m && up.includes(m.toUpperCase()))) return d;
   }
   // Fallback: cerca nel nome
   for (const d of defs) {
-    if (up.includes(d.nome.toUpperCase())) return d;
+    if (d.nome && up.includes(d.nome.toUpperCase())) return d;
   }
   return null;
 }
