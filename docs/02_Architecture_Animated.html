@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SYNTONIQA v1.0 — System Architecture</title>
+    <title>Syntoniqa v1.0 — System Architecture</title>
     <style>
         * {
             margin: 0;
@@ -11,1011 +11,1106 @@
             box-sizing: border-box;
         }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #0A0A0A 0%, #1A1A1A 100%);
-            color: #E0E0E0;
-            overflow-x: hidden;
-            min-height: 100vh;
-            position: relative;
+        :root {
+            --bg-dark: #0D1117;
+            --bg-card: #161B22;
+            --primary-red: #C30A14;
+            --accent-red: #FF4444;
+            --text-light: #E6EDF3;
+            --text-muted: #8B949E;
+            --border-color: #30363D;
+            --glow-red: rgba(195, 10, 20, 0.6);
+            --glow-accent: rgba(255, 68, 68, 0.4);
         }
 
-        /* Animated background */
-        body::before {
+        body {
+            background: linear-gradient(135deg, #0D1117 0%, #0F1419 100%);
+            color: var(--text-light);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            padding: 40px 20px 20px;
+            background: linear-gradient(180deg, rgba(195, 10, 20, 0.15) 0%, rgba(195, 10, 20, 0) 100%);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 {
+            font-size: 2.5em;
+            font-weight: 700;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #FF4444 0%, #C30A14 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 30px rgba(255, 68, 68, 0.3);
+            letter-spacing: -1px;
+        }
+
+        .subtitle {
+            font-size: 1.1em;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+        }
+
+        .stats-bar {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 30px;
+            padding: 20px;
+            background: rgba(22, 27, 34, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            margin: 0 auto;
+            width: fit-content;
+            font-size: 0.95em;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            color: var(--accent-red);
+        }
+
+        /* Main Container */
+        .container {
+            max-width: 1400px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+
+        /* Canvas & SVG */
+        .canvas-wrapper {
+            position: relative;
+            background: linear-gradient(180deg, rgba(195, 10, 20, 0.05) 0%, rgba(195, 10, 20, 0.02) 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 40px;
+            margin-bottom: 40px;
+            overflow: hidden;
+            min-height: 700px;
+        }
+
+        #canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Nodes Container */
+        .nodes-container {
+            position: absolute;
+            top: 40px;
+            left: 40px;
+            right: 40px;
+            bottom: 40px;
+            width: calc(100% - 80px);
+            height: calc(100% - 80px);
+        }
+
+        /* Node Styling */
+        .node {
+            position: absolute;
+            width: 160px;
+            background: linear-gradient(135deg, rgba(22, 27, 34, 0.8) 0%, rgba(22, 27, 34, 0.6) 100%);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+            user-select: none;
+        }
+
+        .node:hover {
+            transform: translateY(-8px) scale(1.05);
+            border-color: var(--accent-red);
+            background: linear-gradient(135deg, rgba(22, 27, 34, 0.95) 0%, rgba(22, 27, 34, 0.85) 100%);
+            box-shadow: 0 0 30px var(--glow-accent), 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .node-icon {
+            font-size: 2.5em;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .node-title {
+            font-size: 0.95em;
+            font-weight: 600;
+            color: var(--accent-red);
+            margin-bottom: 6px;
+            line-height: 1.3;
+        }
+
+        .node-subtitle {
+            font-size: 0.8em;
+            color: var(--text-muted);
+        }
+
+        /* Worker Center Glow */
+        .node.worker-hub::before {
             content: '';
+            position: absolute;
+            top: -20px;
+            left: -20px;
+            right: -20px;
+            bottom: -20px;
+            background: radial-gradient(circle, rgba(255, 68, 68, 0.3) 0%, rgba(255, 68, 68, 0) 70%);
+            border-radius: 12px;
+            z-index: -1;
+            animation: pulse 3s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 0 20px rgba(255, 68, 68, 0.3);
+            }
+            50% {
+                box-shadow: 0 0 40px rgba(255, 68, 68, 0.6);
+            }
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            background: 
-                radial-gradient(circle at 20% 50%, rgba(195, 10, 20, 0.05) 0%, transparent 50%),
-                radial-gradient(circle at 80% 80%, rgba(59, 126, 247, 0.05) 0%, transparent 50%);
-            pointer-events: none;
-            z-index: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+            animation: fadeIn 0.3s ease;
         }
 
-        .container {
-            position: relative;
-            z-index: 1;
-            max-width: 100%;
-            margin: 0 auto;
-            padding: 40px 20px;
+        .modal.active {
+            display: flex;
         }
 
-        .header {
-            text-align: center;
-            margin-bottom: 60px;
-            animation: slideDown 0.8s ease-out;
-        }
-
-        @keyframes slideDown {
+        @keyframes fadeIn {
             from {
                 opacity: 0;
-                transform: translateY(-30px);
             }
             to {
                 opacity: 1;
-                transform: translateY(0);
             }
         }
 
-        .header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            background: linear-gradient(135deg, #C30A14, #3B7EF7, #22C55E);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            font-weight: 700;
-            letter-spacing: -0.5px;
+        .modal-content {
+            background: linear-gradient(135deg, var(--bg-card) 0%, rgba(22, 27, 34, 0.8) 100%);
+            border: 2px solid var(--primary-red);
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 0 60px var(--glow-red), 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .header p {
-            font-size: 1.1rem;
-            color: #888;
-            font-weight: 300;
+        @keyframes slideIn {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
         }
 
-        .subtitle {
-            font-size: 0.95rem;
-            color: #666;
-            margin-top: 15px;
-        }
-
-        /* Main architecture canvas */
-        .canvas {
-            position: relative;
-            background: #1A1A1A;
-            border: 1px solid #2A2A2A;
-            border-radius: 20px;
-            padding: 60px 40px;
-            margin-bottom: 40px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 
-                        inset 0 1px 0 rgba(255, 255, 255, 0.05);
-            overflow: hidden;
-            min-height: 600px;
-        }
-
-        /* Three-column layout */
-        .architecture {
-            display: grid;
-            grid-template-columns: 1fr 1.2fr 1fr;
-            gap: 40px;
-            align-items: start;
-            position: relative;
-            z-index: 2;
-        }
-
-        .layer {
+        .modal-header {
             display: flex;
-            flex-direction: column;
+            align-items: center;
             gap: 20px;
-            position: relative;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
         }
 
-        .layer-label {
-            font-size: 0.85rem;
-            font-weight: 700;
+        .modal-icon {
+            font-size: 3em;
+        }
+
+        .modal-title {
+            flex: 1;
+        }
+
+        .modal-title h2 {
+            font-size: 1.8em;
+            color: var(--accent-red);
+            margin-bottom: 5px;
+        }
+
+        .modal-title p {
+            color: var(--text-muted);
+            font-size: 0.95em;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-light);
+            font-size: 2em;
+            cursor: pointer;
+            transition: color 0.2s;
+            padding: 0;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-close:hover {
+            color: var(--accent-red);
+        }
+
+        .modal-section {
+            margin-bottom: 25px;
+        }
+
+        .modal-section h3 {
+            color: var(--accent-red);
+            font-size: 1.1em;
+            margin-bottom: 12px;
             text-transform: uppercase;
             letter-spacing: 1px;
-            color: #3B7EF7;
-            margin-bottom: 10px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid rgba(59, 126, 247, 0.3);
+            font-weight: 600;
         }
 
-        .component {
-            background: #2A2A2A;
-            border: 1px solid #3A3A3A;
-            border-radius: 12px;
-            padding: 20px;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-            position: relative;
-            overflow: hidden;
-            animation: fadeInUp 0.6s ease-out forwards;
-            opacity: 0;
-        }
-
-        .component::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-            transition: left 0.6s ease;
-        }
-
-        .component:hover::before {
-            left: 100%;
-        }
-
-        .component:hover {
-            border-color: #C30A14;
-            box-shadow: 0 0 20px rgba(195, 10, 20, 0.3),
-                        0 0 40px rgba(59, 126, 247, 0.1);
-            transform: translateY(-5px);
-        }
-
-        .component:nth-child(2) { animation-delay: 0.1s; }
-        .component:nth-child(3) { animation-delay: 0.2s; }
-        .component:nth-child(4) { animation-delay: 0.3s; }
-        .component:nth-child(5) { animation-delay: 0.4s; }
-
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .component-title {
-            font-size: 0.95rem;
-            font-weight: 700;
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .component-icon {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 24px;
-            height: 24px;
-            border-radius: 6px;
-            font-size: 0.7rem;
-            font-weight: 700;
-        }
-
-        .component.frontend .component-icon {
-            background: rgba(59, 126, 247, 0.3);
-            color: #3B7EF7;
-        }
-
-        .component.backend .component-icon {
-            background: rgba(195, 10, 20, 0.3);
-            color: #C30A14;
-        }
-
-        .component.data .component-icon {
-            background: rgba(34, 197, 94, 0.3);
-            color: #22C55E;
-        }
-
-        .component-subtitle {
-            font-size: 0.75rem;
-            color: #999;
-            margin-bottom: 12px;
-        }
-
-        .component-stats {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        .stat {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.7rem;
-            color: #AAA;
-        }
-
-        .stat-value {
-            font-weight: 700;
-            color: #E0E0E0;
-        }
-
-        /* SVG Flow Lines */
-        .flow-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-        }
-
-        svg {
-            width: 100%;
-            height: 100%;
-        }
-
-        .flow-line {
-            stroke: url(#lineGradient);
-            stroke-width: 2;
-            fill: none;
-            stroke-linecap: round;
-            filter: drop-shadow(0 0 4px rgba(59, 126, 247, 0.3));
-            opacity: 0.6;
-            animation: flowAnimation 3s ease-in-out infinite;
-        }
-
-        @keyframes flowAnimation {
-            0%, 100% { stroke-dashoffset: 0; opacity: 0.4; }
-            50% { opacity: 0.8; }
-        }
-
-        .flow-particle {
-            animation: particleFlow 3s ease-in-out infinite;
-        }
-
-        @keyframes particleFlow {
-            0% { offset-distance: 0%; opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 1; }
-            100% { offset-distance: 100%; opacity: 0; }
-        }
-
-        /* Tooltip/Popup */
-        .popup {
-            position: fixed;
-            background: #2A2A2A;
-            border: 1px solid #C30A14;
-            border-radius: 12px;
-            padding: 20px;
-            max-width: 350px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8),
-                        0 0 30px rgba(195, 10, 20, 0.3);
-            display: none;
-            z-index: 1000;
-            animation: popupAppear 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-            pointer-events: auto;
-        }
-
-        @keyframes popupAppear {
-            from {
-                opacity: 0;
-                transform: scale(0.8) translateY(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: scale(1) translateY(0);
-            }
-        }
-
-        .popup.show {
-            display: block;
-        }
-
-        .popup-title {
-            font-size: 1rem;
-            font-weight: 700;
-            margin-bottom: 12px;
-            color: #C30A14;
-        }
-
-        .popup-content {
-            font-size: 0.85rem;
+        .modal-section p {
+            color: var(--text-light);
             line-height: 1.6;
-            color: #BBB;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
         }
 
-        .popup-details {
+        .stats-grid {
             display: grid;
-            gap: 8px;
-            font-size: 0.8rem;
-            padding-top: 12px;
-            border-top: 1px solid #3A3A3A;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
         }
 
-        .popup-detail {
+        .stat-box {
+            background: rgba(195, 10, 20, 0.15);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .stat-box-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: var(--accent-red);
+        }
+
+        .stat-box-label {
+            font-size: 0.85em;
+            color: var(--text-muted);
+            margin-top: 5px;
+        }
+
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .feature-list li {
+            padding: 8px 0;
+            color: var(--text-light);
+            border-bottom: 1px solid rgba(195, 10, 20, 0.2);
             display: flex;
-            justify-content: space-between;
+            align-items: center;
             gap: 10px;
         }
 
-        .popup-detail-label {
-            color: #888;
+        .feature-list li:last-child {
+            border-bottom: none;
         }
 
-        .popup-detail-value {
-            color: #3B7EF7;
-            font-weight: 700;
+        .feature-list li::before {
+            content: '▸';
+            color: var(--accent-red);
+            font-weight: bold;
+            flex-shrink: 0;
         }
 
-        .popup-close {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            width: 24px;
-            height: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            color: #888;
-            transition: color 0.2s;
-            font-size: 1.3rem;
-            line-height: 1;
-        }
-
-        .popup-close:hover {
-            color: #C30A14;
-        }
-
-        /* Stats Bar */
-        .stats-bar {
-            background: #2A2A2A;
-            border: 1px solid #3A3A3A;
-            border-radius: 12px;
-            padding: 25px;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 30px;
+        /* Footer */
+        footer {
             text-align: center;
-            margin-bottom: 30px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            animation: slideUp 0.8s ease-out;
+            padding: 40px 20px;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border-color);
+            margin-top: 40px;
         }
 
-        @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+        footer p {
+            margin: 8px 0;
         }
 
-        .stat-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .stat-number {
-            font-size: 2rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #C30A14, #3B7EF7);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .stat-label {
-            font-size: 0.8rem;
-            color: #888;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+        .footer-highlight {
+            color: var(--accent-red);
+            font-weight: 600;
         }
 
         /* Responsive */
-        @media (max-width: 1200px) {
-            .architecture {
-                grid-template-columns: 1fr;
-                gap: 30px;
+        @media (max-width: 1024px) {
+            h1 {
+                font-size: 2em;
             }
 
-            .header h1 {
-                font-size: 2rem;
+            .stats-bar {
+                gap: 15px;
+                font-size: 0.85em;
             }
 
-            .canvas {
-                padding: 40px 20px;
-                min-height: auto;
+            .canvas-wrapper {
+                min-height: 600px;
+                padding: 30px;
+            }
+
+            .node {
+                width: 140px;
+                font-size: 0.9em;
+            }
+
+            .node-icon {
+                font-size: 2em;
             }
         }
 
         @media (max-width: 768px) {
-            .header h1 {
-                font-size: 1.5rem;
+            header {
+                padding: 30px 15px 15px;
             }
 
-            .component {
-                padding: 15px;
+            h1 {
+                font-size: 1.6em;
             }
 
-            .component-title {
-                font-size: 0.85rem;
+            .subtitle {
+                font-size: 0.95em;
             }
 
             .stats-bar {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 15px;
-                padding: 15px;
+                gap: 10px;
+                font-size: 0.75em;
+                flex-direction: column;
+                width: 100%;
             }
 
-            .stat-number {
-                font-size: 1.5rem;
+            .canvas-wrapper {
+                min-height: 500px;
+                padding: 20px;
             }
 
-            .popup {
-                max-width: 280px;
+            .node {
+                width: 120px;
+                padding: 12px;
+                font-size: 0.85em;
             }
-        }
 
-        /* Hover effect for flow lines */
-        .flow-line:hover {
-            opacity: 1;
-            filter: drop-shadow(0 0 8px rgba(59, 126, 247, 0.6));
-        }
-
-        /* Smooth transitions */
-        * {
-            transition-property: color, background-color, border-color, box-shadow;
-            transition-duration: 0.3s;
-            transition-timing-function: ease;
-        }
-
-        /* Glow effect on active component */
-        .component.active {
-            border-color: #C30A14;
-            box-shadow: 0 0 20px rgba(195, 10, 20, 0.5),
-                        0 0 40px rgba(59, 126, 247, 0.2);
-        }
-
-        .footer {
-            text-align: center;
-            color: #666;
-            font-size: 0.85rem;
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid #2A2A2A;
-        }
-
-        .footer a {
-            color: #3B7EF7;
-            text-decoration: none;
-            transition: color 0.3s;
-        }
-
-        .footer a:hover {
-            color: #C30A14;
-        }
-
-        /* Pulse animation for active elements */
-        @keyframes pulse {
-            0%, 100% {
-                box-shadow: 0 0 0 0 rgba(195, 10, 20, 0.7);
+            .node-icon {
+                font-size: 1.8em;
+                margin-bottom: 5px;
             }
-            50% {
-                box-shadow: 0 0 0 10px rgba(195, 10, 20, 0);
+
+            .node-title {
+                font-size: 0.85em;
+            }
+
+            .node-subtitle {
+                font-size: 0.75em;
+            }
+
+            .modal-content {
+                padding: 25px;
+                max-width: 90vw;
+                max-height: 85vh;
+            }
+
+            .modal-title h2 {
+                font-size: 1.4em;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
             }
         }
 
-        .component.pulse {
-            animation: pulse 2s infinite;
+        /* Animation Classes */
+        .particle {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: var(--accent-red);
+            border-radius: 50%;
+            pointer-events: none;
+            box-shadow: 0 0 10px var(--accent-red);
         }
 
-        /* Section divider */
-        .divider {
-            width: 2px;
-            background: linear-gradient(180deg, transparent, rgba(59, 126, 247, 0.3), transparent);
-            height: 80%;
-            margin: 0 20px;
-            animation: expandHeight 0.8s ease-out 0.3s both;
-        }
-
-        @keyframes expandHeight {
-            from {
-                height: 0;
-            }
+        @keyframes float-particle {
             to {
-                height: 80%;
+                transform: translate(var(--tx), var(--ty));
+                opacity: 0;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>SYNTONIQA v1.0</h1>
-            <p>Field Service Management PWA — System Architecture</p>
-            <div class="subtitle">MRS Lely Center Emilia Romagna • Zero Framework • 10,726 Lines of Code</div>
-        </div>
-
+    <header>
+        <h1>Syntoniqa v1.0</h1>
+        <p class="subtitle">MRS Lely Center Emilia Romagna — Field Service Management Platform</p>
         <div class="stats-bar">
-            <div class="stat-item">
-                <div class="stat-number">10,726</div>
-                <div class="stat-label">Lines of Code</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-number">22</div>
-                <div class="stat-label">Database Tables</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-number">97</div>
-                <div class="stat-label">API Endpoints</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-number">59</div>
-                <div class="stat-label">Git Commits</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-number">7</div>
-                <div class="stat-label">Telegram Commands</div>
-            </div>
+            <div class="stat-item"><span class="stat-value">3</span> Files</div>
+            <div class="stat-item"><span class="stat-value">10,726</span> Lines</div>
+            <div class="stat-item"><span class="stat-value">97</span> Endpoints</div>
+            <div class="stat-item"><span class="stat-value">22</span> Tables</div>
+            <div class="stat-item"><span class="stat-value">✓</span> Zero Framework</div>
         </div>
+    </header>
 
-        <div class="canvas">
-            <svg class="flow-container" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMid slice">
-                <defs>
-                    <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" style="stop-color:#3B7EF7;stop-opacity:0.2" />
-                        <stop offset="50%" style="stop-color:#C30A14;stop-opacity:0.8" />
-                        <stop offset="100%" style="stop-color:#22C55E;stop-opacity:0.2" />
-                    </linearGradient>
-                    <filter id="glow">
-                        <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-                        <feMerge>
-                            <feMergeNode in="coloredBlur"/>
-                            <feMergeNode in="SourceGraphic"/>
-                        </feMerge>
-                    </filter>
-                </defs>
-
-                <!-- Flow lines from frontend to worker -->
-                <path class="flow-line" d="M 320 150 Q 400 120 480 140" stroke-dasharray="10,5" stroke-dashoffset="0" filter="url(#glow)"/>
-                <path class="flow-line" d="M 320 220 Q 400 240 480 220" stroke-dasharray="10,5" stroke-dashoffset="0" filter="url(#glow)"/>
-                
-                <!-- Flow lines from worker to data layer -->
-                <path class="flow-line" d="M 720 140 Q 800 120 880 160" stroke-dasharray="10,5" stroke-dashoffset="0" filter="url(#glow)"/>
-                <path class="flow-line" d="M 720 220 Q 800 240 880 200" stroke-dasharray="10,5" stroke-dashoffset="0" filter="url(#glow)"/>
-                <path class="flow-line" d="M 720 280 Q 800 300 880 280" stroke-dasharray="10,5" stroke-dashoffset="0" filter="url(#glow)"/>
-
-                <!-- Response flow back -->
-                <path class="flow-line" d="M 880 300 Q 800 320 720 300" stroke-dasharray="10,5" stroke-dashoffset="0" filter="url(#glow)" opacity="0.5"/>
-                <path class="flow-line" d="M 480 300 Q 400 280 320 280" stroke-dasharray="10,5" stroke-dashoffset="0" filter="url(#glow)" opacity="0.5"/>
-
-                <!-- Animated particles -->
-                <circle class="flow-particle" cx="320" cy="150" r="3" fill="#3B7EF7" style="offset-path: path('M 320 150 Q 400 120 480 140')"/>
-                <circle class="flow-particle" cx="320" cy="220" r="3" fill="#C30A14" style="offset-path: path('M 320 220 Q 400 240 480 220')" style="animation-delay: 0.5s"/>
-                <circle class="flow-particle" cx="720" cy="140" r="3" fill="#22C55E" style="offset-path: path('M 720 140 Q 800 120 880 160')" style="animation-delay: 1s"/>
-            </svg>
-
-            <div class="architecture">
-                <!-- Layer 1: Frontend -->
-                <div class="layer">
-                    <div class="layer-label">Frontend Layer</div>
-                    
-                    <div class="component frontend" onclick="showPopup(event, 'admin')">
-                        <div class="component-title">
-                            <span class="component-icon">📊</span>
-                            Admin Dashboard
-                        </div>
-                        <div class="component-subtitle">admin_v1.html</div>
-                        <div class="component-stats">
-                            <span class="stat"><span class="stat-value">5548</span> lines</span>
-                            <span class="stat"><span class="stat-value">33</span> sections</span>
-                            <span class="stat"><span class="stat-value">17</span> modals</span>
-                        </div>
-                    </div>
-
-                    <div class="component frontend" onclick="showPopup(event, 'mobile')">
-                        <div class="component-title">
-                            <span class="component-icon">📱</span>
-                            Mobile PWA
-                        </div>
-                        <div class="component-subtitle">index_v2.html</div>
-                        <div class="component-stats">
-                            <span class="stat"><span class="stat-value">2071</span> lines</span>
-                            <span class="stat"><span class="stat-value">17</span> pages</span>
-                            <span class="stat"><span class="stat-value">Sheet</span> nav</span>
-                        </div>
-                    </div>
-
-                    <div class="component frontend" onclick="showPopup(event, 'config')">
-                        <div class="component-title">
-                            <span class="component-icon">⚙️</span>
-                            White-Label Config
-                        </div>
-                        <div class="component-subtitle">white_label_config.js</div>
-                        <div class="component-stats">
-                            <span class="stat">Colors</span>
-                            <span class="stat">Toggles</span>
-                            <span class="stat">Brand</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Layer 2: Backend -->
-                <div class="layer">
-                    <div class="layer-label">Backend Layer</div>
-                    
-                    <div class="component backend" onclick="showPopup(event, 'worker')">
-                        <div class="component-title">
-                            <span class="component-icon">⚡</span>
-                            Cloudflare Worker
-                        </div>
-                        <div class="component-subtitle">cloudflare_worker.js</div>
-                        <div class="component-stats">
-                            <span class="stat"><span class="stat-value">3042</span> lines</span>
-                            <span class="stat"><span class="stat-value">8</span> GET</span>
-                            <span class="stat"><span class="stat-value">89</span> POST</span>
-                        </div>
-                    </div>
-
-                    <div class="component backend" onclick="showPopup(event, 'router')">
-                        <div class="component-title">
-                            <span class="component-icon">🔀</span>
-                            Router & Auth
-                        </div>
-                        <div class="component-subtitle">Request Dispatch</div>
-                        <div class="component-stats">
-                            <span class="stat">normalizeBody</span>
-                            <span class="stat">JWT</span>
-                            <span class="stat">RBAC</span>
-                        </div>
-                    </div>
-
-                    <div class="component backend" onclick="showPopup(event, 'statemachine')">
-                        <div class="component-title">
-                            <span class="component-icon">🔄</span>
-                            State Machine
-                        </div>
-                        <div class="component-subtitle">Workflow Engine</div>
-                        <div class="component-stats">
-                            <span class="stat">Piano</span>
-                            <span class="stat">Urgenze</span>
-                            <span class="stat">SLA</span>
-                        </div>
-                    </div>
-
-                    <div class="component backend" onclick="showPopup(event, 'cron')">
-                        <div class="component-title">
-                            <span class="component-icon">⏱️</span>
-                            Cron Jobs
-                        </div>
-                        <div class="component-subtitle">Scheduled Tasks</div>
-                        <div class="component-stats">
-                            <span class="stat">15m</span>
-                            <span class="stat">Reminders</span>
-                            <span class="stat">SLA Check</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Layer 3: Data & Services -->
-                <div class="layer">
-                    <div class="layer-label">Data & Services</div>
-                    
-                    <div class="component data" onclick="showPopup(event, 'supabase')">
-                        <div class="component-title">
-                            <span class="component-icon">🗄️</span>
-                            Supabase PostgreSQL
-                        </div>
-                        <div class="component-subtitle">Primary Database</div>
-                        <div class="component-stats">
-                            <span class="stat"><span class="stat-value">22</span> tables</span>
-                            <span class="stat">RBAC</span>
-                            <span class="stat">RLS</span>
-                        </div>
-                    </div>
-
-                    <div class="component data" onclick="showPopup(event, 'telegram')">
-                        <div class="component-title">
-                            <span class="component-icon">📲</span>
-                            Telegram Bot
-                        </div>
-                        <div class="component-subtitle">Webhook Handler</div>
-                        <div class="component-stats">
-                            <span class="stat"><span class="stat-value">7</span> commands</span>
-                            <span class="stat">Notifications</span>
-                            <span class="stat">Group/DM</span>
-                        </div>
-                    </div>
-
-                    <div class="component data" onclick="showPopup(event, 'gemini')">
-                        <div class="component-title">
-                            <span class="component-icon">🧠</span>
-                            Gemini AI
-                        </div>
-                        <div class="component-subtitle">AI Planning & Media</div>
-                        <div class="component-stats">
-                            <span class="stat">Image</span>
-                            <span class="stat">Analysis</span>
-                            <span class="stat">Planning</span>
-                        </div>
-                    </div>
-
-                    <div class="component data" onclick="showPopup(event, 'resend')">
-                        <div class="component-title">
-                            <span class="component-icon">📧</span>
-                            Email & Push
-                        </div>
-                        <div class="component-subtitle">Notifications</div>
-                        <div class="component-stats">
-                            <span class="stat">Resend</span>
-                            <span class="stat">Web Push</span>
-                            <span class="stat">Web</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="footer">
-            <p>
-                Built for <strong>MRS Lely Center</strong> • 
-                <a href="https://github.com/fieldforcemrser2026/syntoniqa" target="_blank">GitHub Repo</a> • 
-                <a href="https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" target="_blank">Worker API</a>
-            </p>
-            <p style="margin-top: 10px; font-size: 0.75rem;">
-                Click any component to learn more about its architecture and features.
-            </p>
+    <div class="container">
+        <div class="canvas-wrapper">
+            <svg id="canvas" style="position: absolute; top: 40px; left: 40px; right: 40px; bottom: 40px; width: calc(100% - 80px); height: calc(100% - 80px);"></svg>
+            <div class="nodes-container" id="nodesContainer"></div>
         </div>
     </div>
 
-    <!-- Popup -->
-    <div class="popup" id="popup">
-        <span class="popup-close" onclick="closePopup()">×</span>
-        <div class="popup-title" id="popupTitle"></div>
-        <div class="popup-content" id="popupContent"></div>
-        <div class="popup-details" id="popupDetails"></div>
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-icon" id="modalIcon"></div>
+                <div class="modal-title">
+                    <h2 id="modalTitle"></h2>
+                    <p id="modalRole"></p>
+                </div>
+                <button class="modal-close" onclick="closeModal()">✕</button>
+            </div>
+            <div id="modalBody"></div>
+        </div>
     </div>
+
+    <footer>
+        <p><span class="footer-highlight">Syntoniqa v1.0</span> — Cloudflare Workers + Supabase PostgreSQL + Telegram Bot + Gemini AI</p>
+        <p>Zero external dependencies · Full-stack FSM platform · Real-time notifications · AI-powered dispatch</p>
+    </footer>
 
     <script>
-        // Component data
-        const componentData = {
-            admin: {
-                title: 'Admin Dashboard (admin_v1.html)',
-                content: 'Full-featured admin SPA with 33 sections for managing technicians, clients, machines, interventions, urgencies, and KPIs. Includes Leaflet interactive maps, Chart.js analytics dashboards, and real-time notifications.',
-                details: [
+        // Architecture Data
+        const nodes = [
+            {
+                id: 'admin',
+                title: 'Admin Dashboard',
+                subtitle: 'admin_v1.html',
+                icon: '📊',
+                x: 50,
+                y: 20,
+                role: 'Web Interface',
+                description: 'Complete SPA admin dashboard for Lely technician management, planning, and KPI tracking.',
+                stats: [
                     { label: 'Lines of Code', value: '5,548' },
                     { label: 'Sections', value: '33' },
                     { label: 'Modals', value: '17' },
-                    { label: 'Charts', value: 'Chart.js 4.4.0' },
-                    { label: 'Maps', value: 'Leaflet 1.9.4' },
-                    { label: 'Role', value: 'Admin only' }
+                ],
+                features: [
+                    'Dashboard KPI & charts (Chart.js)',
+                    'Interactive Leaflet maps',
+                    'Technician dispatch scheduling',
+                    'Order & parts management',
+                    'Excel export (SheetJS)',
+                    'Real-time notifications',
+                    'SLA monitoring & alerts',
+                    'Technician performance metrics',
+                ]
+            },
+            {
+                id: 'mobile',
+                title: 'Mobile PWA',
+                subtitle: 'index_v2.html',
+                icon: '📱',
+                x: 25,
+                y: 20,
+                role: 'Field App',
+                description: 'Progressive Web App for technicians in the field with offline capability and quick actions.',
+                stats: [
+                    { label: 'Lines of Code', value: '2,071' },
+                    { label: 'Pages', value: '17' },
+                    { label: 'Offline Mode', value: '✓' },
+                ],
+                features: [
+                    'Bottom navigation menu',
+                    'Today\'s interventions list',
+                    'Quick status updates',
+                    'Real-time chat integration',
+                    'GPS tracking ready',
+                    'Form submission queue',
+                    'Photo capture & upload',
+                    'Telegram command shortcuts',
+                ]
+            },
+            {
+                id: 'worker',
+                title: 'Cloudflare Worker',
+                subtitle: 'cloudflare_worker.js',
+                icon: '⚙️',
+                x: 50,
+                y: 50,
+                role: 'API Hub',
+                description: 'Serverless backend handling all API requests, webhooks, cron jobs, and Telegram bot integration.',
+                stats: [
+                    { label: 'Lines of Code', value: '3,042' },
+                    { label: 'Endpoints', value: '97' },
+                    { label: 'Cron Jobs', value: '2' },
+                ],
+                features: [
+                    '8 GET endpoints',
+                    '89 POST handlers',
+                    'Full CORS support',
+                    'Token-based auth (X-Token)',
+                    'Request normalization',
+                    'State machine validation',
+                    'Telegram webhook processor',
+                    'AI media analysis integration',
+                ]
+            },
+            {
+                id: 'supabase',
+                title: 'PostgreSQL',
+                subtitle: 'Supabase',
+                icon: '🗄️',
+                x: 75,
+                y: 50,
+                role: 'Data Layer',
+                description: 'Managed PostgreSQL database with 22 tables, tenant isolation, and soft-delete patterns.',
+                stats: [
+                    { label: 'Tables', value: '22' },
+                    { label: 'Tenants', value: 'Multi' },
+                    { label: 'Max Query', value: '1000' },
+                ],
+                features: [
+                    'Utenti (technicians + admin)',
+                    'Clienti, Macchine, Piano interventi',
+                    'Urgenze (emergencies) + SLA',
+                    'Ordini (orders), Trasferte (travel)',
+                    'Chat canali & messaggi',
+                    'Automezzi (vehicles)',
+                    'Reperibilità (standby shifts)',
+                    'Workflow & KPI audit logs',
+                ]
+            },
+            {
+                id: 'telegram',
+                title: 'Telegram Bot',
+                subtitle: 'Webhook Handler',
+                icon: '🤖',
+                x: 25,
+                y: 80,
+                role: 'Notifications',
+                description: 'Real-time notifications via Telegram with 8 interactive bot commands for technicians.',
+                stats: [
+                    { label: 'Commands', value: '8' },
+                    { label: 'Group Chat', value: 'Alerts' },
+                    { label: 'Private DM', value: 'Assign' },
+                ],
+                features: [
+                    '/vado — Take next urgent job',
+                    '/incorso — Mark in progress',
+                    '/risolto — Close urgent + notes',
+                    '/oggi — Today\'s schedule',
+                    '/settimana — Weekly plan',
+                    '/ordine — Create parts order',
+                    '/stato — Current status',
+                    'Photo + text analysis',
+                ]
+            },
+            {
+                id: 'gemini',
+                title: 'Gemini AI',
+                subtitle: 'Google AI',
+                icon: '🧠',
+                x: 75,
+                y: 80,
+                role: 'AI Analysis',
+                description: 'Google Gemini API for intelligent photo analysis and dispatch recommendation engine.',
+                stats: [
+                    { label: 'Model', value: 'Gemini' },
+                    { label: 'Use Cases', value: '2' },
+                    { label: 'Rate Limit', value: '✓' },
+                ],
+                features: [
+                    'Machine photo analysis',
+                    'Defect detection from images',
+                    'AI-powered dispatch planning',
+                    'Natural language processing',
+                    'Action recommendation engine',
+                    'Context-aware responses',
+                ]
+            },
+            {
+                id: 'resend',
+                title: 'Email Service',
+                subtitle: 'Resend API',
+                icon: '📧',
+                x: 40,
+                y: 70,
+                role: 'Notifications',
+                description: 'Transactional email service for SLA alerts, order confirmations, and admin notifications.',
+                stats: [
+                    { label: 'Provider', value: 'Resend' },
+                    { label: 'Templates', value: 'Dynamic' },
+                    { label: 'Delivery', value: '✓' },
+                ],
+                features: [
+                    'SLA breach alerts',
+                    'Order confirmations',
+                    'Shift notifications',
+                    'Daily digest reports',
+                    'HTML templates',
+                    'Reply tracking',
+                ]
+            },
+            {
+                id: 'push',
+                title: 'Web Push',
+                subtitle: 'Service Worker',
+                icon: '🔔',
+                x: 60,
+                y: 70,
+                role: 'Notifications',
+                description: 'Browser push notifications for real-time alerts on new jobs and urgent updates.',
+                stats: [
+                    { label: 'Channels', value: 'Multi' },
+                    { label: 'Offline Queue', value: '✓' },
+                    { label: 'Badge Count', value: '✓' },
+                ],
+                features: [
+                    'New urgent job alerts',
+                    'SLA escalation push',
+                    'Offline message queue',
+                    'Badge count update',
+                    'Vibration feedback',
+                    'Deep link navigation',
+                ]
+            }
+        ];
+
+        const connections = [
+            // Frontend → Worker
+            { from: 'admin', to: 'worker', label: 'API + X-Token' },
+            { from: 'mobile', to: 'worker', label: 'API + X-Token' },
+            // Worker → Database
+            { from: 'worker', to: 'supabase', label: 'CRUD Queries' },
+            // Worker → Services
+            { from: 'worker', to: 'telegram', label: 'Webhooks' },
+            { from: 'worker', to: 'gemini', label: 'Analysis' },
+            { from: 'worker', to: 'resend', label: 'Email' },
+            { from: 'worker', to: 'push', label: 'Notifications' },
+            // Cron → Worker
+            { from: 'worker', to: 'worker', label: 'Cron (15min)', isSelf: true },
+        ];
+
+        // Modal Data
+        const modalData = {
+            admin: {
+                title: 'Admin Dashboard',
+                role: 'Web Interface - SPA',
+                icon: '📊',
+                description: 'Complete SPA admin dashboard for Lely technician management, planning, and KPI tracking.',
+                stats: [
+                    { label: 'Lines of Code', value: '5,548' },
+                    { label: 'Sections', value: '33' },
+                    { label: 'Modals', value: '17' },
+                ],
+                tech: 'Chart.js 4.4.0, Leaflet 1.9.4, SheetJS 0.18.5',
+                features: [
+                    'Dashboard KPI & charts (Chart.js)',
+                    'Interactive Leaflet maps',
+                    'Technician dispatch scheduling',
+                    'Order & parts management',
+                    'Excel export (SheetJS)',
+                    'Real-time notifications',
+                    'SLA monitoring & alerts',
+                    'Technician performance metrics',
                 ]
             },
             mobile: {
-                title: 'Mobile PWA (index_v2.html)',
-                content: 'Progressive Web App for field technicians with 17 pages, responsive bottom navigation, offline caching, and real-time intervention tracking. Optimized for mobile-first experience.',
-                details: [
+                title: 'Mobile PWA',
+                role: 'Field App - Progressive Web',
+                icon: '📱',
+                description: 'Progressive Web App for technicians in the field with offline capability and quick actions.',
+                stats: [
                     { label: 'Lines of Code', value: '2,071' },
                     { label: 'Pages', value: '17' },
-                    { label: 'Navigation', value: 'Bottom Sheet' },
-                    { label: 'PWA', value: 'Offline-first' },
-                    { label: 'Target', value: 'Field Technicians' },
-                    { label: 'Responsive', value: 'Mobile optimized' }
-                ]
-            },
-            config: {
-                title: 'White-Label Configuration',
-                content: 'Centralized configuration file managing brand identity, color schemes, API endpoints, feature toggles, and PWA manifest. Supports multi-tenant deployments.',
-                details: [
-                    { label: 'Features', value: '12+ toggles' },
-                    { label: 'Brand Colors', value: '5 primary' },
-                    { label: 'File', value: 'white_label_config.js' },
-                    { label: 'Tenants', value: 'Multi-tenant ready' },
-                    { label: 'Dark Theme', value: 'Built-in' },
-                    { label: 'Localization', value: 'i18n prepared' }
+                    { label: 'Offline Ready', value: '✓' },
+                ],
+                tech: 'HTML5 PWA, Service Worker, IndexedDB',
+                features: [
+                    'Bottom navigation menu',
+                    'Today\'s interventions list',
+                    'Quick status updates',
+                    'Real-time chat integration',
+                    'GPS tracking ready',
+                    'Form submission queue',
+                    'Photo capture & upload',
+                    'Telegram command shortcuts',
                 ]
             },
             worker: {
-                title: 'Cloudflare Workers (cloudflare_worker.js)',
-                content: 'Serverless backend handling all API requests. Zero dependencies, full request routing, JWT authentication, normalization pipelines, and integration with external services. Deployed globally on Cloudflare edge.',
-                details: [
+                title: 'Cloudflare Worker',
+                role: 'Serverless Backend - API Hub',
+                icon: '⚙️',
+                description: 'Serverless backend handling all API requests, webhooks, cron jobs, and Telegram bot integration.',
+                stats: [
                     { label: 'Lines of Code', value: '3,042' },
-                    { label: 'GET Handlers', value: '8' },
-                    { label: 'POST Handlers', value: '89' },
-                    { label: 'Cron Jobs', value: '2 (15-min)' },
-                    { label: 'Runtime', value: 'Cloudflare Edge' },
-                    { label: 'Dependencies', value: 'Zero' }
-                ]
-            },
-            router: {
-                title: 'Router & Authentication',
-                content: 'Central request dispatcher with normalizeBody() pipeline converting PascalCase to snake_case, JWT token validation, role-based access control (RBAC), and CORS handling via mutable global headers.',
-                details: [
-                    { label: 'Auth Method', value: 'JWT + Token Header' },
-                    { label: 'Case Transform', value: 'PascalCase ↔ snake_case' },
-                    { label: 'CORS Scope', value: 'GitHub Pages + app.syntoniqa.app' },
-                    { label: 'Rate Limiting', value: 'Cloudflare native' },
-                    { label: 'Validation', value: 'normalizeBody()' },
-                    { label: 'Error Handling', value: 'Structured JSON' }
-                ]
-            },
-            statemachine: {
-                title: 'State Machine & Workflow',
-                content: 'Validates state transitions for Piano interventions (pianificato→in_corso→completato) and Urgenze (aperta→assegnata→schedulata→in_corso→risolta→chiusa). Prevents invalid transitions and logs workflow changes.',
-                details: [
-                    { label: 'Piano States', value: '5 states' },
-                    { label: 'Urgenza States', value: '6 states' },
-                    { label: 'Transitions', value: 'Validated' },
-                    { label: 'Rejections', value: 'Allowed' },
-                    { label: 'DB Constraints', value: 'CHECK' },
-                    { label: 'Audit Trail', value: 'workflow_log' }
-                ]
-            },
-            cron: {
-                title: 'Scheduled Tasks (Cron)',
-                content: 'Two cron jobs running every 15 minutes: checkInterventoReminders() sends notifications for pending/overdue interventions, and checkSLAUrgenze() monitors SLA compliance and escalates critical issues.',
-                details: [
-                    { label: 'Frequency', value: 'Every 15 min' },
-                    { label: 'Timezone', value: 'Europe/Rome' },
-                    { label: 'Job 1', value: 'Intervention reminders' },
-                    { label: 'Job 2', value: 'SLA monitoring' },
-                    { label: 'Escalation', value: 'TG + Admin' },
-                    { label: 'Anti-Duplicate', value: 'notification ID/day' }
+                    { label: 'Endpoints', value: '97' },
+                    { label: 'Cron Jobs', value: '2' },
+                ],
+                tech: 'Cloudflare Workers, Zero Dependencies, Edge Computing',
+                features: [
+                    '8 GET endpoints',
+                    '89 POST handlers',
+                    'Full CORS support',
+                    'Token-based auth (X-Token)',
+                    'Request normalization',
+                    'State machine validation',
+                    'Telegram webhook processor',
+                    'AI media analysis integration',
                 ]
             },
             supabase: {
-                title: 'Supabase PostgreSQL Database',
-                content: 'Primary data layer with 22 tables managing interventions, technicians, clients, machines, urgencies, orders, and more. Includes row-level security (RLS), real-time subscriptions, and automatic timestamping.',
-                details: [
+                title: 'PostgreSQL Database',
+                role: 'Data Layer - Managed Database',
+                icon: '🗄️',
+                description: 'Managed PostgreSQL database with 22 tables, tenant isolation, and soft-delete patterns.',
+                stats: [
                     { label: 'Tables', value: '22' },
-                    { label: 'Security', value: 'RLS + RBAC' },
-                    { label: 'Soft Delete', value: 'obsoleto column' },
-                    { label: 'Multi-tenant', value: 'tenant_id column' },
-                    { label: 'Real-time', value: 'Subscriptions' },
-                    { label: 'Backup', value: 'Automatic' }
+                    { label: 'Multi-Tenant', value: '✓' },
+                    { label: 'Max Query', value: '1000 rows' },
+                ],
+                tech: 'PostgreSQL 15, Supabase, Row-Level Security',
+                features: [
+                    'Utenti (technicians + admin)',
+                    'Clienti, Macchine, Piano interventi',
+                    'Urgenze (emergencies) + SLA',
+                    'Ordini (orders), Trasferte (travel)',
+                    'Chat canali & messaggi',
+                    'Automezzi (vehicles)',
+                    'Reperibilità (standby shifts)',
+                    'Workflow & KPI audit logs',
                 ]
             },
             telegram: {
-                title: 'Telegram Bot Integration',
-                content: '7 bot commands: /vado (pick urgency), /incorso (start), /risolto (resolve), /oggi (today), /settimana (week), /ordine (create), plus free-text AI analysis. Webhook-based with private + group notifications.',
-                details: [
-                    { label: 'Commands', value: '7 main' },
-                    { label: 'Webhook', value: 'REST POST' },
-                    { label: 'Group Chat', value: 'Notifications' },
-                    { label: 'Private DM', value: 'Assignments' },
-                    { label: 'AI', value: 'Gemini integration' },
-                    { label: 'Media', value: 'Photo analysis' }
+                title: 'Telegram Bot',
+                role: 'Notifications - Command Interface',
+                icon: '🤖',
+                description: 'Real-time notifications via Telegram with 8 interactive bot commands for technicians.',
+                stats: [
+                    { label: 'Commands', value: '8' },
+                    { label: 'Group Alerts', value: 'Enabled' },
+                    { label: 'Private DM', value: 'Enabled' },
+                ],
+                tech: 'Telegram Bot API, Webhooks, Media Analysis',
+                features: [
+                    '/vado — Take next urgent job',
+                    '/incorso — Mark in progress',
+                    '/risolto — Close urgent + notes',
+                    '/oggi — Today\'s schedule',
+                    '/settimana — Weekly plan',
+                    '/ordine — Create parts order',
+                    '/stato — Current status',
+                    'Photo + text analysis',
                 ]
             },
             gemini: {
                 title: 'Google Gemini AI',
-                content: 'Multimodal AI engine for image analysis (technician photos during interventions), automatic action creation, planning optimization, and free-text command interpretation. Improves workflow intelligence.',
-                details: [
-                    { label: 'Capabilities', value: 'Vision + Text' },
-                    { label: 'Use Cases', value: 'Media analysis' },
-                    { label: 'Trigger', value: 'TG text/image' },
-                    { label: 'Output', value: 'Auto-actions' },
-                    { label: 'Accuracy', value: 'Context-aware' },
-                    { label: 'Cost', value: 'Per-request' }
+                role: 'AI Intelligence - Analysis Engine',
+                icon: '🧠',
+                description: 'Google Gemini API for intelligent photo analysis and dispatch recommendation engine.',
+                stats: [
+                    { label: 'Model', value: 'Gemini' },
+                    { label: 'Use Cases', value: '2+' },
+                    { label: 'Accuracy', value: 'High' },
+                ],
+                tech: 'Google Gemini API, Vision, NLP',
+                features: [
+                    'Machine photo analysis',
+                    'Defect detection from images',
+                    'AI-powered dispatch planning',
+                    'Natural language processing',
+                    'Action recommendation engine',
+                    'Context-aware responses',
                 ]
             },
             resend: {
-                title: 'Email & Web Push Notifications',
-                content: 'Resend handles transactional emails (order updates, SLA alerts), while Web Push provides real-time browser notifications to technicians. Dual-channel notification strategy for critical events.',
-                details: [
-                    { label: 'Email Service', value: 'Resend API' },
-                    { label: 'Push Type', value: 'Web Push' },
-                    { label: 'Triggers', value: 'Orders, SLA, Assign' },
-                    { label: 'Delivery', value: '99.9% uptime' },
-                    { label: 'Templates', value: 'HTML + Plain' },
-                    { label: 'Channels', value: 'Dual-channel' }
+                title: 'Email Service',
+                role: 'Notifications - Transactional Mail',
+                icon: '📧',
+                description: 'Transactional email service for SLA alerts, order confirmations, and admin notifications.',
+                stats: [
+                    { label: 'Provider', value: 'Resend' },
+                    { label: 'Email Templates', value: 'Dynamic' },
+                    { label: 'Reliability', value: '✓' },
+                ],
+                tech: 'Resend API, HTML Email, SMTP',
+                features: [
+                    'SLA breach alerts',
+                    'Order confirmations',
+                    'Shift notifications',
+                    'Daily digest reports',
+                    'HTML templates',
+                    'Reply tracking',
+                ]
+            },
+            push: {
+                title: 'Web Push Notifications',
+                role: 'Notifications - Browser Alerts',
+                icon: '🔔',
+                description: 'Browser push notifications for real-time alerts on new jobs and urgent updates.',
+                stats: [
+                    { label: 'Channels', value: 'Multi' },
+                    { label: 'Offline Queue', value: '✓' },
+                    { label: 'Badge Count', value: '✓' },
+                ],
+                tech: 'Web Push API, Service Worker, Push Events',
+                features: [
+                    'New urgent job alerts',
+                    'SLA escalation push',
+                    'Offline message queue',
+                    'Badge count update',
+                    'Vibration feedback',
+                    'Deep link navigation',
                 ]
             }
         };
 
-        // Show popup with component details
-        function showPopup(event, componentId) {
-            const data = componentData[componentId];
-            if (!data) return;
-
-            const popup = document.getElementById('popup');
-            const title = document.getElementById('popupTitle');
-            const content = document.getElementById('popupContent');
-            const details = document.getElementById('popupDetails');
-
-            title.textContent = data.title;
-            content.textContent = data.content;
-
-            details.innerHTML = data.details.map(detail => `
-                <div class="popup-detail">
-                    <span class="popup-detail-label">${detail.label}</span>
-                    <span class="popup-detail-value">${detail.value}</span>
-                </div>
-            `).join('');
-
-            popup.classList.add('show');
-
-            // Position popup near click
-            const rect = event.currentTarget.getBoundingClientRect();
-            popup.style.left = Math.min(rect.right + 20, window.innerWidth - 370) + 'px';
-            popup.style.top = rect.top + 'px';
-
-            // Close on outside click
-            document.addEventListener('click', closePopupOnOutside);
+        // Utility Functions
+        function getNodeScreenPos(node) {
+            const container = document.getElementById('nodesContainer');
+            const rect = container.getBoundingClientRect();
+            const x = (node.x / 100) * rect.width - 80;
+            const y = (node.y / 100) * rect.height - 40;
+            return { x, y };
         }
 
-        // Close popup
-        function closePopup() {
-            document.getElementById('popup').classList.remove('show');
-            document.removeEventListener('click', closePopupOnOutside);
-        }
+        function drawConnections() {
+            const svg = document.getElementById('canvas');
+            svg.innerHTML = '';
 
-        function closePopupOnOutside(e) {
-            const popup = document.getElementById('popup');
-            if (!popup.contains(e.target) && !e.target.closest('.component')) {
-                closePopup();
-            }
-        }
+            const container = document.getElementById('nodesContainer');
+            const rect = container.getBoundingClientRect();
 
-        // Animate components on load
-        window.addEventListener('load', () => {
-            document.querySelectorAll('.component').forEach((el, idx) => {
-                el.style.animationDelay = (idx * 0.1) + 's';
+            connections.forEach(conn => {
+                const fromNode = nodes.find(n => n.id === conn.from);
+                const toNode = nodes.find(n => n.id === conn.to);
+
+                const x1 = (fromNode.x / 100) * rect.width;
+                const y1 = (fromNode.y / 100) * rect.height;
+                const x2 = (toNode.x / 100) * rect.width;
+                const y2 = (toNode.y / 100) * rect.height;
+
+                if (conn.isSelf) {
+                    // Self loop
+                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    const r = 40;
+                    path.setAttribute('d', `M ${x1} ${y1 - 80} Q ${x1 + 100} ${y1 - 80} ${x1 + 100} ${y1}`);
+                    path.setAttribute('stroke', 'rgba(255, 68, 68, 0.4)');
+                    path.setAttribute('stroke-width', '2');
+                    path.setAttribute('fill', 'none');
+                    path.setAttribute('stroke-dasharray', '5,5');
+                    svg.appendChild(path);
+                } else {
+                    // Regular line
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', x1);
+                    line.setAttribute('y1', y1);
+                    line.setAttribute('x2', x2);
+                    line.setAttribute('y2', y2);
+                    line.setAttribute('stroke', 'rgba(255, 68, 68, 0.3)');
+                    line.setAttribute('stroke-width', '2');
+                    svg.appendChild(line);
+
+                    // Glow effect
+                    const glowLine = line.cloneNode();
+                    glowLine.setAttribute('stroke', 'rgba(255, 68, 68, 0.1)');
+                    glowLine.setAttribute('stroke-width', '8');
+                    svg.insertBefore(glowLine, svg.firstChild);
+
+                    // Arrow
+                    const angle = Math.atan2(y2 - y1, x2 - x1);
+                    const arrowSize = 12;
+                    const ax = x2 - arrowSize * Math.cos(angle);
+                    const ay = y2 - arrowSize * Math.sin(angle);
+
+                    const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                    const points = [
+                        [x2, y2],
+                        [ax - arrowSize * Math.sin(angle), ay + arrowSize * Math.cos(angle)],
+                        [ax + arrowSize * Math.sin(angle), ay - arrowSize * Math.cos(angle)]
+                    ];
+                    arrow.setAttribute('points', points.map(p => p.join(',')).join(' '));
+                    arrow.setAttribute('fill', 'rgba(255, 68, 68, 0.6)');
+                    svg.appendChild(arrow);
+
+                    // Animated particles
+                    animateParticles(x1, y1, x2, y2, svg);
+                }
             });
+        }
 
-            // Add pulse effect to worker component
-            const workerComponent = document.querySelector('.component.backend');
-            if (workerComponent) {
+        function animateParticles(x1, y1, x2, y2, svg) {
+            const particleCount = 3;
+            for (let i = 0; i < particleCount; i++) {
                 setTimeout(() => {
-                    workerComponent.classList.add('pulse');
-                }, 1000);
+                    const particle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    particle.setAttribute('cx', x1);
+                    particle.setAttribute('cy', y1);
+                    particle.setAttribute('r', '4');
+                    particle.setAttribute('fill', 'rgba(255, 68, 68, 0.8)');
+                    particle.setAttribute('class', 'particle');
+                    svg.appendChild(particle);
+
+                    const distance = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+                    const duration = 2000;
+                    const startTime = Date.now();
+
+                    const animate = () => {
+                        const now = Date.now();
+                        const progress = (now - startTime) / duration;
+
+                        if (progress < 1) {
+                            particle.setAttribute('cx', x1 + (x2 - x1) * progress);
+                            particle.setAttribute('cy', y1 + (y2 - y1) * progress);
+                            particle.setAttribute('opacity', 1 - progress);
+                            requestAnimationFrame(animate);
+                        } else {
+                            particle.remove();
+                        }
+                    };
+                    animate();
+                }, (i * 600) % 2000);
+            }
+        }
+
+        function createNodeElement(node) {
+            const div = document.createElement('div');
+            div.className = 'node' + (node.id === 'worker' ? ' worker-hub' : '');
+            div.style.left = node.x + '%';
+            div.style.top = node.y + '%';
+            div.style.transform = 'translate(-50%, -50%)';
+
+            div.innerHTML = `
+                <div class="node-icon">${node.icon}</div>
+                <div class="node-title">${node.title}</div>
+                <div class="node-subtitle">${node.subtitle}</div>
+            `;
+
+            div.addEventListener('click', () => openModal(node.id));
+            return div;
+        }
+
+        function openModal(nodeId) {
+            const data = modalData[nodeId];
+            const modal = document.getElementById('modal');
+
+            document.getElementById('modalIcon').textContent = data.icon;
+            document.getElementById('modalTitle').textContent = data.title;
+            document.getElementById('modalRole').textContent = data.role;
+
+            let bodyHTML = `
+                <div class="modal-section">
+                    <p>${data.description}</p>
+                </div>
+
+                <div class="modal-section">
+                    <h3>Key Metrics</h3>
+                    <div class="stats-grid">
+            `;
+
+            data.stats.forEach(stat => {
+                bodyHTML += `
+                    <div class="stat-box">
+                        <div class="stat-box-value">${stat.value}</div>
+                        <div class="stat-box-label">${stat.label}</div>
+                    </div>
+                `;
+            });
+
+            bodyHTML += `
+                    </div>
+                </div>
+
+                <div class="modal-section">
+                    <h3>Technology</h3>
+                    <p>${data.tech}</p>
+                </div>
+
+                <div class="modal-section">
+                    <h3>Features & Capabilities</h3>
+                    <ul class="feature-list">
+            `;
+
+            data.features.forEach(feature => {
+                bodyHTML += `<li>${feature}</li>`;
+            });
+
+            bodyHTML += `
+                    </ul>
+                </div>
+            `;
+
+            document.getElementById('modalBody').innerHTML = bodyHTML;
+            modal.classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.remove('active');
+        }
+
+        // Initialize
+        function init() {
+            const container = document.getElementById('nodesContainer');
+            nodes.forEach(node => {
+                container.appendChild(createNodeElement(node));
+            });
+
+            drawConnections();
+            window.addEventListener('resize', drawConnections);
+        }
+
+        // Close modal on background click
+        document.getElementById('modal').addEventListener('click', (e) => {
+            if (e.target.id === 'modal') {
+                closeModal();
             }
         });
 
-        // Smooth scroll for footer links
-        document.querySelectorAll('a').forEach(a => {
-            a.addEventListener('mouseenter', (e) => {
-                e.target.style.transform = 'translateY(-2px)';
-            });
-            a.addEventListener('mouseleave', (e) => {
-                e.target.style.transform = 'translateY(0)';
-            });
-        });
-
-        // Keyboard shortcut: Escape to close popup
+        // Close modal on Escape key
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                closePopup();
+                closeModal();
             }
         });
 
-        // Add interactivity to SVG flow lines
-        const flowLines = document.querySelectorAll('.flow-line');
-        flowLines.forEach(line => {
-            line.addEventListener('mouseenter', () => {
-                line.style.opacity = '1';
-                line.style.filter = 'drop-shadow(0 0 8px rgba(59, 126, 247, 0.8))';
-            });
-            line.addEventListener('mouseleave', () => {
-                line.style.opacity = '0.6';
-                line.style.filter = 'drop-shadow(0 0 4px rgba(59, 126, 247, 0.3))';
-            });
-        });
-
-        // Responsive popup positioning
-        window.addEventListener('resize', () => {
-            const popup = document.getElementById('popup');
-            if (popup.classList.contains('show')) {
-                const rect = popup.getBoundingClientRect();
-                if (rect.right > window.innerWidth) {
-                    popup.style.left = (window.innerWidth - 350) + 'px';
-                }
-            }
-        });
+        // Start animation
+        init();
     </script>
 </body>
 </html>

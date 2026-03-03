@@ -3,2396 +3,1061 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Syntoniqa v1.0 API Reference</title>
+    <title>Syntoniqa v1.0 — API Reference</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
-            --bg-primary: #0A0A0A;
-            --bg-secondary: #1A1A1A;
-            --bg-tertiary: #2A2A2A;
-            --bg-hover: #3A3A3A;
-            --color-red: #C30A14;
-            --color-blue: #3B7EF7;
-            --color-green: #22C55E;
-            --color-yellow: #FBBF24;
-            --color-purple: #A855F7;
-            --color-cyan: #06B6D4;
-            --color-text-primary: #F5F5F5;
-            --color-text-secondary: #B0B0B0;
-            --border-color: #333333;
-            --success: #10B981;
-            --warning: #F59E0B;
-            --error: #EF4444;
+            --bg-main: #0D1117; --bg-card: #161B22; --bg-code: #1E2430;
+            --primary: #C30A14; --primary-dark: #8B0810; --primary-light: #E53E3E;
+            --text-primary: #E6EDF3; --text-secondary: #8B949E; --border: #30363D;
+            --success: #3FB950; --warning: #D29922; --info: #58A6FF; --danger: #F85149;
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
         }
-
-        html, body {
-            width: 100%;
-            height: 100%;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background-color: var(--bg-primary);
-            color: var(--color-text-primary);
-            line-height: 1.6;
-        }
-
         body {
-            display: flex;
-            flex-direction: column;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--bg-main) 0%, #0a0e13 100%);
+            color: var(--text-primary); line-height: 1.6;
         }
-
-        /* Header */
-        .header {
-            background-color: var(--bg-secondary);
-            border-bottom: 1px solid var(--border-color);
-            padding: 2rem 2rem;
-            position: sticky;
-            top: 0;
-            z-index: 100;
+        header {
+            background: linear-gradient(90deg, var(--bg-card) 0%, rgba(19, 23, 29, 0.8) 100%);
+            border-bottom: 2px solid var(--primary); padding: 1.5rem 2rem;
+            position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow);
         }
-
         .header-content {
-            max-width: 1400px;
-            margin: 0 auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 2rem;
+            max-width: 1600px; margin: 0 auto; display: flex;
+            justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;
         }
-
-        .header-title {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
+        .logo-section { display: flex; align-items: center; gap: 1rem; }
+        .logo-text h1 {
+            font-size: 1.8rem; font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
         }
-
-        .header-title h1 {
-            font-size: 1.8rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--color-red), var(--color-blue));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+        .logo-text p { font-size: 0.85rem; color: var(--text-secondary); }
+        .stats { display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
+        .stat-item { display: flex; flex-direction: column; align-items: center; }
+        .stat-value { font-size: 1.5rem; font-weight: 700; color: var(--primary); }
+        .stat-label { font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; }
+        .container {
+            max-width: 1600px; margin: 0 auto; display: grid;
+            grid-template-columns: 280px 1fr; gap: 2rem; padding: 2rem; min-height: calc(100vh - 120px);
         }
-
-        .header-title .version {
-            background-color: var(--bg-tertiary);
-            padding: 0.4rem 0.8rem;
-            border-radius: 4px;
-            font-size: 0.85rem;
-            color: var(--color-text-secondary);
-            border: 1px solid var(--border-color);
-        }
-
-        .header-stats {
-            display: flex;
-            gap: 1.5rem;
-            font-size: 0.95rem;
-            color: var(--color-text-secondary);
-        }
-
-        .header-stats span {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .stat-badge {
-            background-color: var(--bg-tertiary);
-            padding: 0.3rem 0.6rem;
-            border-radius: 3px;
-            font-weight: 600;
-            color: var(--color-blue);
-        }
-
-        /* Main Container */
-        .main-container {
-            display: flex;
-            flex: 1;
-            overflow: hidden;
-        }
-
-        /* Sidebar */
         .sidebar {
-            width: 240px;
-            background-color: var(--bg-secondary);
-            border-right: 1px solid var(--border-color);
-            overflow-y: auto;
-            padding: 1.5rem 0;
+            position: sticky; top: 100px; height: fit-content;
+            max-height: calc(100vh - 120px); overflow-y: auto; padding-right: 1rem;
         }
-
-        .sidebar-section {
-            margin-bottom: 1.5rem;
+        .search-box { margin-bottom: 1.5rem; }
+        .search-box input {
+            width: 100%; padding: 0.75rem; background: var(--bg-card);
+            border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary);
+            font-size: 0.9rem; transition: all 0.3s ease;
         }
-
-        .sidebar-title {
-            padding: 0.5rem 1.5rem;
-            font-size: 0.85rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--color-text-secondary);
+        .search-box input:focus {
+            outline: none; border-color: var(--primary);
+            background: var(--bg-main); box-shadow: 0 0 0 3px rgba(195, 10, 20, 0.1);
         }
-
+        .sidebar-section { margin-bottom: 1.5rem; }
+        .section-title {
+            font-size: 0.9rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.1em; color: var(--primary); margin-bottom: 0.75rem;
+            cursor: pointer; display: flex; align-items: center; gap: 0.5rem; user-select: none;
+        }
+        .toggle-icon { display: inline-block; transition: transform 0.3s ease; font-size: 0.75rem; }
+        .toggle-icon.collapsed { transform: rotate(-90deg); }
+        .section-items {
+            display: flex; flex-direction: column; gap: 0.5rem; margin-left: 0.5rem;
+            transition: max-height 0.3s ease, opacity 0.3s ease; max-height: 500px; opacity: 1;
+        }
+        .section-items.collapsed { max-height: 0; opacity: 0; overflow: hidden; }
         .sidebar-item {
-            padding: 0.75rem 1.5rem;
-            cursor: pointer;
-            border-left: 3px solid transparent;
-            transition: all 0.2s ease;
-            font-size: 0.95rem;
+            padding: 0.6rem 0.8rem; border-left: 2px solid transparent;
+            border-radius: 4px; cursor: pointer; transition: all 0.2s ease;
+            font-size: 0.85rem; color: var(--text-secondary);
         }
-
         .sidebar-item:hover {
-            background-color: var(--bg-hover);
-            color: var(--color-blue);
+            color: var(--text-primary); background: rgba(195, 10, 20, 0.1);
+            border-left-color: var(--primary);
         }
-
         .sidebar-item.active {
-            border-left-color: var(--color-blue);
-            background-color: var(--bg-tertiary);
-            color: var(--color-blue);
+            color: var(--primary); background: rgba(195, 10, 20, 0.15);
+            border-left-color: var(--primary); font-weight: 600;
         }
-
-        /* Content Area */
-        .content {
-            flex: 1;
-            overflow-y: auto;
-            padding: 2rem;
+        .sidebar::-webkit-scrollbar { width: 6px; }
+        .sidebar::-webkit-scrollbar-track { background: transparent; }
+        .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        .sidebar::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+        .content { display: flex; flex-direction: column; gap: 1.5rem; }
+        .intro-section {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-left: 4px solid var(--primary); border-radius: 8px;
+            padding: 1.5rem; margin-bottom: 2rem;
         }
-
-        .content-wrapper {
-            max-width: 1200px;
-            margin: 0 auto;
+        .intro-section h2 { font-size: 1.3rem; margin-bottom: 0.75rem; color: var(--primary); }
+        .intro-section p { color: var(--text-secondary); margin-bottom: 0.75rem; }
+        .base-url {
+            background: var(--bg-code); border: 1px solid var(--border);
+            padding: 0.75rem 1rem; border-radius: 6px;
+            font-family: Monaco, Courier New, monospace; font-size: 0.9rem;
+            color: var(--info); display: flex;
+            justify-content: space-between; align-items: center; margin-top: 0.75rem;
         }
-
-        /* Search Bar */
-        .search-container {
-            margin-bottom: 2rem;
-            position: sticky;
-            top: 0;
-            z-index: 50;
+        .copy-btn {
+            background: var(--primary); color: white; border: none;
+            padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer;
+            font-size: 0.8rem; transition: all 0.2s ease;
         }
-
-        .search-bar {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            background-color: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 0.75rem 1rem;
-            transition: all 0.2s ease;
-        }
-
-        .search-bar:focus-within {
-            border-color: var(--color-blue);
-            box-shadow: 0 0 0 3px rgba(59, 130, 247, 0.1);
-        }
-
-        .search-bar input {
-            background: none;
-            border: none;
-            color: var(--color-text-primary);
-            font-size: 1rem;
-            flex: 1;
-            outline: none;
-        }
-
-        .search-bar input::placeholder {
-            color: var(--color-text-secondary);
-        }
-
-        .search-icon {
-            color: var(--color-text-secondary);
-            font-size: 1.1rem;
-        }
-
-        /* Tabs */
-        .tabs {
-            display: flex;
-            gap: 0.5rem;
-            margin-bottom: 2rem;
-            overflow-x: auto;
-            padding-bottom: 0.5rem;
-        }
-
-        .tab {
-            padding: 0.6rem 1.2rem;
-            border: 1px solid var(--border-color);
-            background-color: var(--bg-secondary);
-            color: var(--color-text-secondary);
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            white-space: nowrap;
-            font-size: 0.95rem;
-        }
-
-        .tab:hover {
-            border-color: var(--color-blue);
-            color: var(--color-blue);
-        }
-
-        .tab.active {
-            background-color: var(--color-blue);
-            border-color: var(--color-blue);
-            color: white;
-        }
-
-        /* Endpoint Card */
-        .endpoint-section {
-            margin-bottom: 3rem;
-        }
-
-        .section-header {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-            padding-bottom: 1rem;
-            border-bottom: 2px solid var(--border-color);
-        }
-
-        .section-header h2 {
-            font-size: 1.5rem;
-            font-weight: 700;
-        }
-
-        .section-header .count {
-            background-color: var(--bg-tertiary);
-            padding: 0.3rem 0.8rem;
-            border-radius: 3px;
-            font-size: 0.85rem;
-            color: var(--color-text-secondary);
-        }
-
-        .endpoints-grid {
-            display: grid;
-            gap: 1.5rem;
-        }
-
+        .copy-btn:hover { background: var(--primary-dark); transform: translateY(-1px); }
+        .copy-btn.copied { background: var(--success); }
         .endpoint-card {
-            background-color: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            overflow: hidden;
-            transition: all 0.2s ease;
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 8px; overflow: hidden; transition: all 0.3s ease;
+            scroll-margin-top: 120px; margin-bottom: 1rem;
         }
-
-        .endpoint-card:hover {
-            border-color: var(--color-blue);
-            box-shadow: 0 0 20px rgba(59, 130, 247, 0.2);
-        }
-
+        .endpoint-card:hover { border-color: var(--primary); box-shadow: 0 0 20px rgba(195, 10, 20, 0.15); }
         .endpoint-header {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            padding: 1.25rem;
-            background-color: var(--bg-tertiary);
-            cursor: pointer;
-            user-select: none;
+            padding: 1.25rem; display: flex; gap: 1rem; align-items: flex-start;
+            border-bottom: 1px solid var(--border); cursor: pointer; user-select: none;
         }
-
-        .endpoint-header:hover {
-            background-color: var(--bg-hover);
-        }
-
+        .endpoint-header:hover { background: rgba(195, 10, 20, 0.05); }
         .method-badge {
-            padding: 0.4rem 0.8rem;
-            border-radius: 4px;
-            font-weight: 700;
-            font-size: 0.85rem;
-            min-width: 50px;
-            text-align: center;
-            letter-spacing: 0.5px;
+            padding: 0.4rem 0.8rem; border-radius: 4px; font-weight: 700;
+            font-size: 0.75rem; text-transform: uppercase; min-width: 50px;
+            text-align: center; flex-shrink: 0;
         }
-
-        .method-badge.get {
-            background-color: rgba(34, 197, 94, 0.2);
-            color: var(--color-green);
-            border: 1px solid var(--color-green);
+        .method-badge.get { background: rgba(63, 185, 80, 0.2); color: var(--success); }
+        .method-badge.post { background: rgba(88, 166, 255, 0.2); color: var(--info); }
+        .endpoint-info { flex: 1; }
+        .endpoint-path {
+            font-family: Monaco, Courier New, monospace; font-size: 0.95rem;
+            color: var(--text-primary); word-break: break-all; margin-bottom: 0.4rem;
         }
-
-        .method-badge.post {
-            background-color: rgba(59, 130, 247, 0.2);
-            color: var(--color-blue);
-            border: 1px solid var(--color-blue);
+        .endpoint-description { font-size: 0.9rem; color: var(--text-secondary); }
+        .expand-icon { transition: transform 0.3s ease; color: var(--text-secondary); font-size: 1.2rem; }
+        .endpoint-card.expanded .expand-icon { transform: rotate(180deg); }
+        .endpoint-body { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+        .endpoint-card.expanded .endpoint-body { max-height: 2000px; }
+        .endpoint-section { padding: 1.25rem; border-top: 1px solid var(--border); }
+        .endpoint-section h4 {
+            font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em;
+            color: var(--primary); margin-bottom: 0.75rem; font-weight: 700;
         }
-
-        .endpoint-info {
-            flex: 1;
-        }
-
-        .endpoint-name {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: var(--color-text-primary);
-            margin-bottom: 0.3rem;
-        }
-
-        .endpoint-description {
-            font-size: 0.9rem;
-            color: var(--color-text-secondary);
-        }
-
-        .category-badge {
-            padding: 0.3rem 0.8rem;
-            border-radius: 3px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            white-space: nowrap;
-        }
-
-        .category-badge.auth {
-            background-color: rgba(168, 85, 247, 0.2);
-            color: var(--color-purple);
-        }
-
-        .category-badge.urgenze {
-            background-color: rgba(195, 10, 20, 0.2);
-            color: var(--color-red);
-        }
-
-        .category-badge.piano {
-            background-color: rgba(59, 130, 247, 0.2);
-            color: var(--color-blue);
-        }
-
-        .category-badge.ordini {
-            background-color: rgba(34, 197, 94, 0.2);
-            color: var(--color-green);
-        }
-
-        .category-badge.clienti {
-            background-color: rgba(6, 182, 212, 0.2);
-            color: var(--color-cyan);
-        }
-
-        .category-badge.macchine {
-            background-color: rgba(251, 191, 36, 0.2);
-            color: var(--color-yellow);
-        }
-
-        .category-badge.automezzi {
-            background-color: rgba(251, 191, 36, 0.2);
-            color: var(--color-yellow);
-        }
-
-        .category-badge.reperibilita {
-            background-color: rgba(59, 130, 247, 0.2);
-            color: var(--color-blue);
-        }
-
-        .category-badge.trasferte {
-            background-color: rgba(251, 191, 36, 0.2);
-            color: var(--color-yellow);
-        }
-
-        .category-badge.installazioni {
-            background-color: rgba(34, 197, 94, 0.2);
-            color: var(--color-green);
-        }
-
-        .category-badge.chat {
-            background-color: rgba(59, 130, 247, 0.2);
-            color: var(--color-blue);
-        }
-
-        .category-badge.notifiche {
-            background-color: rgba(168, 85, 247, 0.2);
-            color: var(--color-purple);
-        }
-
-        .category-badge.kpi {
-            background-color: rgba(34, 197, 94, 0.2);
-            color: var(--color-green);
-        }
-
-        .category-badge.config {
-            background-color: rgba(6, 182, 212, 0.2);
-            color: var(--color-cyan);
-        }
-
-        .category-badge.utenti {
-            background-color: rgba(168, 85, 247, 0.2);
-            color: var(--color-purple);
-        }
-
-        .category-badge.ai {
-            background-color: rgba(251, 191, 36, 0.2);
-            color: var(--color-yellow);
-        }
-
-        .category-badge.telegram {
-            background-color: rgba(59, 130, 247, 0.2);
-            color: var(--color-blue);
-        }
-
-        .toggle-icon {
-            color: var(--color-text-secondary);
-            font-size: 1.2rem;
-            transition: transform 0.2s ease;
-        }
-
-        .endpoint-card.expanded .toggle-icon {
-            transform: rotate(180deg);
-        }
-
-        .endpoint-body {
-            padding: 1.5rem;
-            display: none;
-            border-top: 1px solid var(--border-color);
-        }
-
-        .endpoint-card.expanded .endpoint-body {
-            display: block;
-        }
-
-        /* Details Section */
-        .detail-section {
-            margin-bottom: 1.5rem;
-        }
-
-        .detail-label {
-            font-size: 0.9rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: var(--color-text-secondary);
-            margin-bottom: 0.5rem;
-            display: block;
-        }
-
-        .detail-content {
-            color: var(--color-text-primary);
-        }
-
-        /* Parameters Table */
         .params-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.9rem;
-            margin-top: 0.5rem;
+            width: 100%; border-collapse: collapse; font-size: 0.85rem;
         }
-
         .params-table th {
-            background-color: var(--bg-hover);
-            padding: 0.75rem;
-            text-align: left;
-            font-weight: 700;
-            color: var(--color-text-secondary);
-            border-bottom: 1px solid var(--border-color);
+            background: rgba(195, 10, 20, 0.1); padding: 0.75rem;
+            text-align: left; color: var(--primary); font-weight: 600; border-bottom: 1px solid var(--border);
         }
-
         .params-table td {
-            padding: 0.75rem;
-            border-bottom: 1px solid var(--border-color);
+            padding: 0.75rem; border-bottom: 1px solid var(--border);
+            color: var(--text-secondary);
         }
-
-        .params-table tr:last-child td {
-            border-bottom: none;
-        }
-
-        .param-name {
-            font-weight: 600;
-            color: var(--color-blue);
-            font-family: 'Courier New', monospace;
-            font-size: 0.85rem;
-        }
-
+        .params-table tr:last-child td { border-bottom: none; }
+        .param-name { font-family: Monaco, Courier New, monospace; color: var(--info); font-weight: 600; }
         .param-type {
-            color: var(--color-yellow);
-            font-size: 0.85rem;
-            font-family: 'Courier New', monospace;
+            background: rgba(195, 10, 20, 0.1); padding: 0.2rem 0.5rem;
+            border-radius: 3px; font-size: 0.8rem; color: var(--primary); display: inline-block;
         }
-
-        .param-required {
-            color: var(--color-red);
-            font-weight: 700;
-        }
-
-        .param-optional {
-            color: var(--color-text-secondary);
-        }
-
-        /* Code Block */
+        .param-required { color: var(--danger); font-weight: 700; }
         .code-block {
-            background-color: var(--bg-tertiary);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 1rem;
-            overflow-x: auto;
-            margin-top: 0.5rem;
-            position: relative;
+            background: var(--bg-code); border: 1px solid var(--border);
+            border-radius: 6px; padding: 1rem; overflow-x: auto;
+            margin-bottom: 1rem; position: relative;
         }
-
         .code-block code {
-            font-family: 'Courier New', monospace;
-            font-size: 0.85rem;
-            color: var(--color-text-primary);
-            line-height: 1.5;
-            white-space: pre-wrap;
-            word-wrap: break-word;
+            font-family: Monaco, Courier New, monospace; font-size: 0.85rem;
+            line-height: 1.5; color: var(--text-primary);
         }
-
-        .copy-button {
-            position: absolute;
-            top: 0.75rem;
-            right: 0.75rem;
-            background-color: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            color: var(--color-text-secondary);
-            padding: 0.4rem 0.8rem;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.85rem;
-            transition: all 0.2s ease;
+        .code-block pre { margin: 0; }
+        .code-copy-btn {
+            position: absolute; top: 0.5rem; right: 0.5rem;
+            background: rgba(195, 10, 20, 0.8); color: white; border: none;
+            padding: 0.4rem 0.75rem; border-radius: 4px; cursor: pointer;
+            font-size: 0.75rem; transition: all 0.2s ease; opacity: 0;
         }
-
-        .copy-button:hover {
-            background-color: var(--bg-hover);
-            color: var(--color-blue);
-            border-color: var(--color-blue);
+        .code-block:hover .code-copy-btn { opacity: 1; }
+        .code-copy-btn:hover { background: var(--primary); transform: translateY(-1px); }
+        .code-copy-btn.copied { background: var(--success); }
+        footer {
+            background: var(--bg-card); border-top: 1px solid var(--border);
+            padding: 2rem; margin-top: 3rem; text-align: center;
+            color: var(--text-secondary); font-size: 0.85rem;
         }
-
-        .copy-button.copied {
-            color: var(--color-green);
-            border-color: var(--color-green);
+        @media (max-width: 1200px) {
+            .container { grid-template-columns: 250px 1fr; gap: 1.5rem; padding: 1.5rem; }
         }
-
-        /* Response Example */
-        .response-example {
-            margin-top: 1rem;
-        }
-
-        .response-example code {
-            font-family: 'Courier New', monospace;
-            font-size: 0.8rem;
-            color: var(--color-text-primary);
-            line-height: 1.5;
-        }
-
-        /* Footer */
-        .footer {
-            background-color: var(--bg-secondary);
-            border-top: 1px solid var(--border-color);
-            padding: 2rem;
-            text-align: center;
-            color: var(--color-text-secondary);
-            font-size: 0.9rem;
-        }
-
-        /* Scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background-color: var(--bg-secondary);
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background-color: var(--border-color);
-            border-radius: 4px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background-color: var(--color-blue);
-        }
-
-        /* Responsive */
         @media (max-width: 768px) {
-            .main-container {
-                flex-direction: column;
-            }
-
-            .sidebar {
-                width: 100%;
-                border-right: none;
-                border-bottom: 1px solid var(--border-color);
-                max-height: 200px;
-                display: flex;
-                overflow-x: auto;
-                overflow-y: hidden;
-                padding: 0;
-            }
-
-            .sidebar-section {
-                display: flex;
-                gap: 1rem;
-                margin-bottom: 0;
-                padding: 1rem;
-                white-space: nowrap;
-            }
-
-            .sidebar-title {
-                display: none;
-            }
-
-            .sidebar-item {
-                padding: 0.6rem 1rem;
-                border-left: none;
-                border-bottom: 3px solid transparent;
-            }
-
-            .sidebar-item.active {
-                border-left: none;
-                border-bottom-color: var(--color-blue);
-            }
-
-            .header-stats {
-                flex-direction: column;
-                gap: 0.5rem;
-            }
-
-            .content {
-                padding: 1.5rem;
-            }
-
-            .endpoint-header {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-
-            .method-badge {
-                align-self: flex-start;
-            }
-        }
-
-        /* Empty State */
-        .empty-state {
-            text-align: center;
-            padding: 3rem 2rem;
-            color: var(--color-text-secondary);
-        }
-
-        .empty-state h3 {
-            font-size: 1.3rem;
-            margin-bottom: 0.5rem;
-            color: var(--color-text-primary);
-        }
-
-        .hidden {
-            display: none !important;
+            .container { grid-template-columns: 1fr; padding: 1rem; }
+            .sidebar { position: relative; top: 0; max-height: none; margin-bottom: 2rem; padding-right: 0; }
+            .header-content { flex-direction: column; align-items: flex-start; }
+            .stats { width: 100%; justify-content: space-between; }
+            .endpoint-header { flex-direction: column; }
+            .method-badge { width: 100%; }
         }
     </style>
 </head>
 <body>
-    <!-- Header -->
-    <div class="header">
+    <header>
         <div class="header-content">
-            <div class="header-title">
-                <h1>Syntoniqa API</h1>
-                <div class="version">v1.0</div>
-            </div>
-            <div class="header-stats">
-                <span><span class="stat-badge">8</span> GET Endpoints</span>
-                <span><span class="stat-badge">89</span> POST Endpoints</span>
-                <span><span class="stat-badge">7</span> Telegram Commands</span>
-            </div>
-        </div>
-    </div>
-
-    <!-- Main Container -->
-    <div class="main-container">
-        <!-- Sidebar -->
-        <div class="sidebar">
-            <div class="sidebar-section">
-                <div class="sidebar-title">Categories</div>
-                <div class="sidebar-item active" data-category="all">All Endpoints</div>
-            </div>
-            <div class="sidebar-section">
-                <div class="sidebar-title">Methods</div>
-                <div class="sidebar-item" data-category="get">GET (8)</div>
-                <div class="sidebar-item" data-category="post">POST (89)</div>
-            </div>
-            <div class="sidebar-section">
-                <div class="sidebar-title">Collections</div>
-                <div class="sidebar-item" data-category="auth">Auth</div>
-                <div class="sidebar-item" data-category="urgenze">Urgenze</div>
-                <div class="sidebar-item" data-category="piano">Piano</div>
-                <div class="sidebar-item" data-category="ordini">Ordini</div>
-                <div class="sidebar-item" data-category="clienti">Clienti</div>
-                <div class="sidebar-item" data-category="macchine">Macchine</div>
-                <div class="sidebar-item" data-category="automezzi">Automezzi</div>
-                <div class="sidebar-item" data-category="reperibilita">Reperibilità</div>
-                <div class="sidebar-item" data-category="trasferte">Trasferte</div>
-                <div class="sidebar-item" data-category="installazioni">Installazioni</div>
-                <div class="sidebar-item" data-category="chat">Chat</div>
-                <div class="sidebar-item" data-category="notifiche">Notifiche</div>
-                <div class="sidebar-item" data-category="kpi">KPI</div>
-                <div class="sidebar-item" data-category="config">Config</div>
-                <div class="sidebar-item" data-category="utenti">Utenti</div>
-                <div class="sidebar-item" data-category="ai">AI</div>
-                <div class="sidebar-item" data-category="telegram">Telegram</div>
-            </div>
-        </div>
-
-        <!-- Content -->
-        <div class="content">
-            <div class="content-wrapper">
-                <!-- Search Bar -->
-                <div class="search-container">
-                    <div class="search-bar">
-                        <span class="search-icon">🔍</span>
-                        <input type="text" id="searchInput" placeholder="Search endpoints by name, action, or description...">
-                    </div>
+            <div class="logo-section">
+                <div class="logo-text">
+                    <h1>Syntoniqa v1.0</h1>
+                    <p>FSM Platform API Reference</p>
                 </div>
-
-                <!-- Content Area -->
-                <div id="contentArea"></div>
+            </div>
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-value">97</div>
+                    <div class="stat-label">Endpoints</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">8</div>
+                    <div class="stat-label">GET</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">89</div>
+                    <div class="stat-label">POST</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">8</div>
+                    <div class="stat-label">Telegram</div>
+                </div>
             </div>
         </div>
-    </div>
+    </header>
 
-    <!-- Footer -->
-    <div class="footer">
-        <p>Syntoniqa v1.0 FSM API Reference | Base URL: <code style="background-color: var(--bg-tertiary); padding: 0.2rem 0.4rem; border-radius: 3px;">https://syntoniqa-mrs-api.fieldforcemrser.workers.dev</code></p>
-        <p style="margin-top: 0.5rem;">Authentication: <code style="background-color: var(--bg-tertiary); padding: 0.2rem 0.4rem; border-radius: 3px;">X-Token: &lt;token&gt;</code> header required for all requests</p>
-    </div>
+    <div class="container">
+        <aside class="sidebar">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Search endpoints...">
+            </div>
 
-    <script>
-        // API Data
-        const apiData = {
-            get: [
-                {
-                    name: 'getAll',
-                    description: 'Get all data for dashboard (role-filtered)',
-                    category: 'dashboard',
-                    method: 'GET',
-                    params: [
-                        { name: 'action', type: 'string', required: true, description: 'getAll' },
-                        { name: 'token', type: 'string', required: true, description: 'API token' },
-                        { name: 'userId', type: 'string', required: false, description: 'User ID for filtering (optional)' }
-                    ],
-                    curl: 'curl -s "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev?action=getAll&token=<SQ_TOKEN>&userId=TEC_691"',
-                    response: `{
-  "status": "ok",
-  "data": {
-    "utenti": [...],
-    "clienti": [...],
-    "macchine": [...],
-    "piano": [...],
-    "urgenze": [...],
-    "ordini": [...]
-  }
-}`
-                },
-                {
-                    name: 'getUrgenze',
-                    description: 'Get all urgenze (emergencies)',
-                    category: 'urgenze',
-                    method: 'GET',
-                    params: [
-                        { name: 'action', type: 'string', required: true, description: 'getUrgenze' },
-                        { name: 'token', type: 'string', required: true, description: 'API token' },
-                        { name: 'stato', type: 'string', required: false, description: 'Filter by status (aperta, assegnata, schedulata, in_corso, risolta, chiusa)' }
-                    ],
-                    curl: 'curl -s "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev?action=getUrgenze&token=<SQ_TOKEN>&stato=aperta"',
-                    response: `{
-  "status": "ok",
-  "data": [
-    {
-      "id": "URG_001",
-      "cliente_id": "CLI_001",
-      "titolo": "Robot Lely non funzionante",
-      "stato": "aperta",
-      "priorita": "alta",
-      "data_creazione": "2026-03-03T10:30:00Z",
-      "tecnico_id": null,
-      "assegnato_a": null
-    }
-  ]
-}`
-                },
-                {
-                    name: 'getPiano',
-                    description: 'Get all piano interventions (scheduled)',
-                    category: 'piano',
-                    method: 'GET',
-                    params: [
-                        { name: 'action', type: 'string', required: true, description: 'getPiano' },
-                        { name: 'token', type: 'string', required: true, description: 'API token' },
-                        { name: 'stato', type: 'string', required: false, description: 'Filter by status (pianificato, in_corso, completato, annullato)' }
-                    ],
-                    curl: 'curl -s "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev?action=getPiano&token=<SQ_TOKEN>"',
-                    response: `{
-  "status": "ok",
-  "data": [
-    {
-      "id": "INT_001",
-      "cliente_id": "CLI_001",
-      "titolo": "Manutenzione preventiva",
-      "stato": "pianificato",
-      "data_intervento": "2026-03-05T09:00:00Z",
-      "tecnico_id": "TEC_691"
-    }
-  ]
-}`
-                },
-                {
-                    name: 'getOrdini',
-                    description: 'Get all spare part orders',
-                    category: 'ordini',
-                    method: 'GET',
-                    params: [
-                        { name: 'action', type: 'string', required: true, description: 'getOrdini' },
-                        { name: 'token', type: 'string', required: true, description: 'API token' },
-                        { name: 'stato', type: 'string', required: false, description: 'Filter by status (richiesto, approvato, ordinato, consegnato)' }
-                    ],
-                    curl: 'curl -s "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev?action=getOrdini&token=<SQ_TOKEN>"',
-                    response: `{
-  "status": "ok",
-  "data": [
-    {
-      "id": "ORD_001",
-      "cliente_id": "CLI_001",
-      "codice_ricambio": "LEL-001",
-      "quantita": 2,
-      "stato": "richiesto",
-      "data_richiesta": "2026-03-02T15:20:00Z"
-    }
-  ]
-}`
-                },
-                {
-                    name: 'getClienti',
-                    description: 'Get all clients (farms)',
-                    category: 'clienti',
-                    method: 'GET',
-                    params: [
-                        { name: 'action', type: 'string', required: true, description: 'getClienti' },
-                        { name: 'token', type: 'string', required: true, description: 'API token' }
-                    ],
-                    curl: 'curl -s "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev?action=getClienti&token=<SQ_TOKEN>"',
-                    response: `{
-  "status": "ok",
-  "data": [
-    {
-      "id": "CLI_001",
-      "nome": "Azienda Agricola Rossi",
-      "indirizzo": "Via Roma 123",
-      "citta": "Piacenza",
-      "provincia": "PC",
-      "latitudine": 45.0633,
-      "longitudine": 9.6907
-    }
-  ]
-}`
-                },
-                {
-                    name: 'getMacchine',
-                    description: 'Get all Lely robots installed',
-                    category: 'macchine',
-                    method: 'GET',
-                    params: [
-                        { name: 'action', type: 'string', required: true, description: 'getMacchine' },
-                        { name: 'token', type: 'string', required: true, description: 'API token' },
-                        { name: 'cliente_id', type: 'string', required: false, description: 'Filter by client' }
-                    ],
-                    curl: 'curl -s "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev?action=getMacchine&token=<SQ_TOKEN>"',
-                    response: `{
-  "status": "ok",
-  "data": [
-    {
-      "id": "MAC_001",
-      "cliente_id": "CLI_001",
-      "modello": "Lely Vector",
-      "numero_serie": "SN-2023-0001",
-      "data_installazione": "2023-06-15",
-      "stato": "operativo"
-    }
-  ]
-}`
-                },
-                {
-                    name: 'getNotifiche',
-                    description: 'Get notifications for authenticated user',
-                    category: 'notifiche',
-                    method: 'GET',
-                    params: [
-                        { name: 'action', type: 'string', required: true, description: 'getNotifiche' },
-                        { name: 'token', type: 'string', required: true, description: 'API token' },
-                        { name: 'letti', type: 'boolean', required: false, description: 'Filter by read status' }
-                    ],
-                    curl: 'curl -s "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev?action=getNotifiche&token=<SQ_TOKEN>"',
-                    response: `{
-  "status": "ok",
-  "data": [
-    {
-      "id": "NOT_001",
-      "titolo": "Nuova urgenza assegnata",
-      "messaggio": "Urgenza URG_005 assegnata",
-      "lettura": false,
-      "data_creazione": "2026-03-03T14:25:00Z"
-    }
-  ]
-}`
-                },
-                {
-                    name: 'getKPI',
-                    description: 'Get KPI data for dashboard (performance metrics)',
-                    category: 'kpi',
-                    method: 'GET',
-                    params: [
-                        { name: 'action', type: 'string', required: true, description: 'getKPI' },
-                        { name: 'token', type: 'string', required: true, description: 'API token' },
-                        { name: 'periodo', type: 'string', required: false, description: '7d, 30d, 90d' }
-                    ],
-                    curl: 'curl -s "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev?action=getKPI&token=<SQ_TOKEN>&periodo=7d"',
-                    response: `{
-  "status": "ok",
-  "data": {
-    "interventi_completati": 24,
-    "sla_compliance": 98.5,
-    "tempo_medio_risoluzione": "2.5h",
-    "urgenze_aperte": 3,
-    "team_productivity": 92.1
-  }
-}`
-                }
-            ],
-            post: {
-                auth: [
-                    {
-                        name: 'login',
-                        description: 'Authenticate user and get token',
-                        category: 'auth',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'login' },
-                            { name: 'username', type: 'string', required: true, description: 'Username (e.g., m.bozzarelli)' },
-                            { name: 'password', type: 'string', required: true, description: 'Hashed password' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"login","username":"m.bozzarelli","password":"<hash>"}\'',
-                        response: `{
-  "status": "ok",
-  "token": "<JWT_TOKEN>",
-  "user": {
-    "id": "USR001",
-    "username": "m.bozzarelli",
-    "ruolo": "admin"
-  }
-}`
-                    },
-                    {
-                        name: 'logout',
-                        description: 'Invalidate current session',
-                        category: 'auth',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'logout' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"logout"}\'',
-                        response: `{
-  "status": "ok",
-  "message": "Logout successful"
-}`
-                    },
-                    {
-                        name: 'changePassword',
-                        description: 'Change authenticated user password',
-                        category: 'auth',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'changePassword' },
-                            { name: 'oldPassword', type: 'string', required: true, description: 'Current password hash' },
-                            { name: 'newPassword', type: 'string', required: true, description: 'New password hash' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"changePassword","oldPassword":"<old_hash>","newPassword":"<new_hash>"}\'',
-                        response: `{
-  "status": "ok",
-  "message": "Password changed successfully"
-}`
-                    }
-                ],
-                urgenze: [
-                    {
-                        name: 'createUrgenza',
-                        description: 'Create new urgency/emergency ticket',
-                        category: 'urgenze',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'createUrgenza' },
-                            { name: 'cliente_id', type: 'string', required: true, description: 'Client ID (CLI_xxx)' },
-                            { name: 'titolo', type: 'string', required: true, description: 'Title' },
-                            { name: 'descrizione', type: 'string', required: true, description: 'Description' },
-                            { name: 'priorita', type: 'string', required: true, description: 'bassa, media, alta, critica' },
-                            { name: 'macchina_id', type: 'string', required: false, description: 'Machine ID if applicable' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"createUrgenza","cliente_id":"CLI_001","titolo":"Robot non funziona","descrizione":"Lely Vector acceso ma non risponde","priorita":"alta"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "URG_042",
-    "cliente_id": "CLI_001",
-    "titolo": "Robot non funziona",
-    "stato": "aperta",
-    "priorita": "alta",
-    "created_at": "2026-03-03T15:45:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'updateUrgenza',
-                        description: 'Update urgency details',
-                        category: 'urgenze',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'updateUrgenza' },
-                            { name: 'id', type: 'string', required: true, description: 'Urgency ID (URG_xxx)' },
-                            { name: 'titolo', type: 'string', required: false, description: 'Update title' },
-                            { name: 'descrizione', type: 'string', required: false, description: 'Update description' },
-                            { name: 'priorita', type: 'string', required: false, description: 'Update priority' },
-                            { name: 'note_interne', type: 'string', required: false, description: 'Internal notes' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"updateUrgenza","id":"URG_042","priorita":"critica","note_interne":"Problema confermato da cliente"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "URG_042",
-    "titolo": "Robot non funziona",
-    "priorita": "critica",
-    "updated_at": "2026-03-03T16:00:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'assignUrgenza',
-                        description: 'Assign urgency to technician',
-                        category: 'urgenze',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'assignUrgenza' },
-                            { name: 'id', type: 'string', required: true, description: 'Urgency ID (URG_xxx)' },
-                            { name: 'tecnico_id', type: 'string', required: true, description: 'Technician ID (TEC_xxx)' },
-                            { name: 'note_assegnazione', type: 'string', required: false, description: 'Assignment notes' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"assignUrgenza","id":"URG_042","tecnico_id":"TEC_691","note_assegnazione":"Priorità alta, cliente disponibile"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "URG_042",
-    "stato": "assegnata",
-    "tecnico_id": "TEC_691",
-    "assigned_at": "2026-03-03T16:05:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'scheduleUrgenza',
-                        description: 'Schedule urgency for specific time',
-                        category: 'urgenze',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'scheduleUrgenza' },
-                            { name: 'id', type: 'string', required: true, description: 'Urgency ID (URG_xxx)' },
-                            { name: 'data_intervento', type: 'string', required: true, description: 'ISO 8601 datetime' },
-                            { name: 'tecnico_id', type: 'string', required: false, description: 'Technician (if reassigning)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"scheduleUrgenza","id":"URG_042","data_intervento":"2026-03-03T17:00:00Z"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "URG_042",
-    "stato": "schedulata",
-    "data_intervento": "2026-03-03T17:00:00Z",
-    "scheduled_at": "2026-03-03T16:10:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'startUrgenza',
-                        description: 'Mark urgency as in progress',
-                        category: 'urgenze',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'startUrgenza' },
-                            { name: 'id', type: 'string', required: true, description: 'Urgency ID (URG_xxx)' },
-                            { name: 'ora_inizio', type: 'string', required: false, description: 'Start time (default: now)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"startUrgenza","id":"URG_042"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "URG_042",
-    "stato": "in_corso",
-    "ora_inizio": "2026-03-03T17:02:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'resolveUrgenza',
-                        description: 'Mark urgency as resolved',
-                        category: 'urgenze',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'resolveUrgenza' },
-                            { name: 'id', type: 'string', required: true, description: 'Urgency ID (URG_xxx)' },
-                            { name: 'soluzione', type: 'string', required: true, description: 'Solution description' },
-                            { name: 'ore_lavoro', type: 'number', required: false, description: 'Hours worked' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"resolveUrgenza","id":"URG_042","soluzione":"Sostituito disco rigido difettoso","ore_lavoro":1.5}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "URG_042",
-    "stato": "risolta",
-    "ora_fine": "2026-03-03T18:32:00Z",
-    "tempo_totale": "1h 30m"
-  }
-}`
-                    },
-                    {
-                        name: 'closeUrgenza',
-                        description: 'Close resolved urgency (admin only)',
-                        category: 'urgenze',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'closeUrgenza' },
-                            { name: 'id', type: 'string', required: true, description: 'Urgency ID (URG_xxx)' },
-                            { name: 'note_chiusura', type: 'string', required: false, description: 'Closing notes' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"closeUrgenza","id":"URG_042"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "URG_042",
-    "stato": "chiusa",
-    "closed_at": "2026-03-03T18:45:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'rejectUrgenza',
-                        description: 'Reject assigned or scheduled urgency',
-                        category: 'urgenze',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'rejectUrgenza' },
-                            { name: 'id', type: 'string', required: true, description: 'Urgency ID (URG_xxx)' },
-                            { name: 'motivo', type: 'string', required: true, description: 'Rejection reason' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"rejectUrgenza","id":"URG_042","motivo":"Conflitto di orario"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "URG_042",
-    "stato": "aperta",
-    "rejected_at": "2026-03-03T16:20:00Z"
-  }
-}`
-                    }
-                ],
-                piano: [
-                    {
-                        name: 'createIntervento',
-                        description: 'Create new scheduled intervention',
-                        category: 'piano',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'createIntervento' },
-                            { name: 'cliente_id', type: 'string', required: true, description: 'Client ID (CLI_xxx)' },
-                            { name: 'titolo', type: 'string', required: true, description: 'Intervention title' },
-                            { name: 'descrizione', type: 'string', required: true, description: 'Description' },
-                            { name: 'data_intervento', type: 'string', required: true, description: 'ISO 8601 datetime' },
-                            { name: 'tecnico_id', type: 'string', required: false, description: 'Assigned technician' },
-                            { name: 'tipo', type: 'string', required: false, description: 'preventiva, correttiva, straordinaria' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"createIntervento","cliente_id":"CLI_001","titolo":"Manutenzione preventiva trimestrale","descrizione":"Controllo completo robot Lely Vector","data_intervento":"2026-03-10T09:00:00Z","tipo":"preventiva"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "INT_023",
-    "cliente_id": "CLI_001",
-    "titolo": "Manutenzione preventiva trimestrale",
-    "stato": "pianificato",
-    "data_intervento": "2026-03-10T09:00:00Z",
-    "created_at": "2026-03-03T15:50:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'updateIntervento',
-                        description: 'Update scheduled intervention',
-                        category: 'piano',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'updateIntervento' },
-                            { name: 'id', type: 'string', required: true, description: 'Intervention ID (INT_xxx)' },
-                            { name: 'titolo', type: 'string', required: false, description: 'Update title' },
-                            { name: 'data_intervento', type: 'string', required: false, description: 'Reschedule date' },
-                            { name: 'tecnico_id', type: 'string', required: false, description: 'Assign/reassign technician' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"updateIntervento","id":"INT_023","data_intervento":"2026-03-12T10:00:00Z","tecnico_id":"TEC_691"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "INT_023",
-    "stato": "pianificato",
-    "data_intervento": "2026-03-12T10:00:00Z",
-    "updated_at": "2026-03-03T16:00:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'startIntervento',
-                        description: 'Start scheduled intervention',
-                        category: 'piano',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'startIntervento' },
-                            { name: 'id', type: 'string', required: true, description: 'Intervention ID (INT_xxx)' },
-                            { name: 'ora_inizio', type: 'string', required: false, description: 'Start time (default: now)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"startIntervento","id":"INT_023"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "INT_023",
-    "stato": "in_corso",
-    "ora_inizio": "2026-03-12T10:05:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'completeIntervento',
-                        description: 'Complete scheduled intervention',
-                        category: 'piano',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'completeIntervento' },
-                            { name: 'id', type: 'string', required: true, description: 'Intervention ID (INT_xxx)' },
-                            { name: 'note_conclusione', type: 'string', required: true, description: 'Completion notes' },
-                            { name: 'ore_lavoro', type: 'number', required: false, description: 'Hours worked' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"completeIntervento","id":"INT_023","note_conclusione":"Manutenzione completata, robot operativo","ore_lavoro":2}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "INT_023",
-    "stato": "completato",
-    "ora_fine": "2026-03-12T12:05:00Z",
-    "tempo_totale": "2h"
-  }
-}`
-                    },
-                    {
-                        name: 'cancelIntervento',
-                        description: 'Cancel scheduled intervention',
-                        category: 'piano',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'cancelIntervento' },
-                            { name: 'id', type: 'string', required: true, description: 'Intervention ID (INT_xxx)' },
-                            { name: 'motivo', type: 'string', required: true, description: 'Cancellation reason' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"cancelIntervento","id":"INT_023","motivo":"Cliente ha rinviato"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "INT_023",
-    "stato": "annullato",
-    "cancelled_at": "2026-03-11T15:30:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'restoreIntervento',
-                        description: 'Restore cancelled intervention to planned',
-                        category: 'piano',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'restoreIntervento' },
-                            { name: 'id', type: 'string', required: true, description: 'Intervention ID (INT_xxx)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"restoreIntervento","id":"INT_023"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "INT_023",
-    "stato": "pianificato",
-    "restored_at": "2026-03-11T16:00:00Z"
-  }
-}`
-                    }
-                ],
-                ordini: [
-                    {
-                        name: 'createOrdine',
-                        description: 'Create spare part order',
-                        category: 'ordini',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'createOrdine' },
-                            { name: 'cliente_id', type: 'string', required: true, description: 'Client ID (CLI_xxx)' },
-                            { name: 'codice_ricambio', type: 'string', required: true, description: 'Spare part code' },
-                            { name: 'quantita', type: 'number', required: true, description: 'Quantity' },
-                            { name: 'note', type: 'string', required: false, description: 'Order notes' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"createOrdine","cliente_id":"CLI_001","codice_ricambio":"LEL-HDD-001","quantita":1,"note":"Disco rigido da 2TB"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "ORD_045",
-    "cliente_id": "CLI_001",
-    "codice_ricambio": "LEL-HDD-001",
-    "quantita": 1,
-    "stato": "richiesto",
-    "created_at": "2026-03-03T16:15:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'updateOrdine',
-                        description: 'Update order details',
-                        category: 'ordini',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'updateOrdine' },
-                            { name: 'id', type: 'string', required: true, description: 'Order ID (ORD_xxx)' },
-                            { name: 'quantita', type: 'number', required: false, description: 'Update quantity' },
-                            { name: 'note', type: 'string', required: false, description: 'Update notes' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"updateOrdine","id":"ORD_045","quantita":2}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "ORD_045",
-    "quantita": 2,
-    "updated_at": "2026-03-03T16:20:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'approveOrdine',
-                        description: 'Approve pending order (admin only)',
-                        category: 'ordini',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'approveOrdine' },
-                            { name: 'id', type: 'string', required: true, description: 'Order ID (ORD_xxx)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"approveOrdine","id":"ORD_045"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "ORD_045",
-    "stato": "approvato",
-    "approved_at": "2026-03-03T16:25:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'orderOrdine',
-                        description: 'Place approved order with supplier',
-                        category: 'ordini',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'orderOrdine' },
-                            { name: 'id', type: 'string', required: true, description: 'Order ID (ORD_xxx)' },
-                            { name: 'data_consegna_prevista', type: 'string', required: false, description: 'Expected delivery date' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"orderOrdine","id":"ORD_045","data_consegna_prevista":"2026-03-06"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "ORD_045",
-    "stato": "ordinato",
-    "data_consegna_prevista": "2026-03-06",
-    "ordered_at": "2026-03-03T16:30:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'deliverOrdine',
-                        description: 'Mark order as delivered',
-                        category: 'ordini',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'deliverOrdine' },
-                            { name: 'id', type: 'string', required: true, description: 'Order ID (ORD_xxx)' },
-                            { name: 'data_consegna', type: 'string', required: false, description: 'Delivery date' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"deliverOrdine","id":"ORD_045"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "ORD_045",
-    "stato": "consegnato",
-    "delivered_at": "2026-03-05T14:20:00Z"
-  }
-}`
-                    }
-                ],
-                clienti: [
-                    {
-                        name: 'createCliente',
-                        description: 'Create new client (farm) - admin only',
-                        category: 'clienti',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'createCliente' },
-                            { name: 'nome', type: 'string', required: true, description: 'Business name' },
-                            { name: 'indirizzo', type: 'string', required: true, description: 'Street address' },
-                            { name: 'citta', type: 'string', required: true, description: 'City' },
-                            { name: 'provincia', type: 'string', required: true, description: '2-letter province code' },
-                            { name: 'cap', type: 'string', required: false, description: 'Postal code' },
-                            { name: 'telefono', type: 'string', required: false, description: 'Phone' },
-                            { name: 'email', type: 'string', required: false, description: 'Email' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"createCliente","nome":"Azienda Bianchi","indirizzo":"Via Verde 456","citta":"Reggio Emilia","provincia":"RE"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "CLI_089",
-    "nome": "Azienda Bianchi",
-    "indirizzo": "Via Verde 456",
-    "citta": "Reggio Emilia",
-    "provincia": "RE",
-    "created_at": "2026-03-03T16:40:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'updateCliente',
-                        description: 'Update client details - admin only',
-                        category: 'clienti',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'updateCliente' },
-                            { name: 'id', type: 'string', required: true, description: 'Client ID (CLI_xxx)' },
-                            { name: 'nome', type: 'string', required: false, description: 'Update name' },
-                            { name: 'telefono', type: 'string', required: false, description: 'Update phone' },
-                            { name: 'email', type: 'string', required: false, description: 'Update email' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"updateCliente","id":"CLI_089","email":"info@bianchi.it","telefono":"0522-123456"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "CLI_089",
-    "nome": "Azienda Bianchi",
-    "email": "info@bianchi.it",
-    "updated_at": "2026-03-03T16:45:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'deleteCliente',
-                        description: 'Soft delete client - admin only',
-                        category: 'clienti',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'deleteCliente' },
-                            { name: 'id', type: 'string', required: true, description: 'Client ID (CLI_xxx)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"deleteCliente","id":"CLI_089"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "CLI_089",
-    "deleted_at": "2026-03-03T16:50:00Z"
-  }
-}`
-                    }
-                ],
-                macchine: [
-                    {
-                        name: 'createMacchina',
-                        description: 'Register new Lely robot - admin only',
-                        category: 'macchine',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'createMacchina' },
-                            { name: 'cliente_id', type: 'string', required: true, description: 'Client ID (CLI_xxx)' },
-                            { name: 'modello', type: 'string', required: true, description: 'e.g., Lely Vector, Lely Astronaut A4' },
-                            { name: 'numero_serie', type: 'string', required: true, description: 'Serial number' },
-                            { name: 'data_installazione', type: 'string', required: true, description: 'Installation date (YYYY-MM-DD)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"createMacchina","cliente_id":"CLI_089","modello":"Lely Vector","numero_serie":"SN-2025-0042","data_installazione":"2025-12-15"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "MAC_089",
-    "cliente_id": "CLI_089",
-    "modello": "Lely Vector",
-    "numero_serie": "SN-2025-0042",
-    "stato": "operativo",
-    "created_at": "2026-03-03T16:55:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'updateMacchina',
-                        description: 'Update robot details - admin only',
-                        category: 'macchine',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'updateMacchina' },
-                            { name: 'id', type: 'string', required: true, description: 'Machine ID (MAC_xxx)' },
-                            { name: 'modello', type: 'string', required: false, description: 'Update model' },
-                            { name: 'stato', type: 'string', required: false, description: 'operativo, fermo_manutenzione, dismesso' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"updateMacchina","id":"MAC_089","stato":"fermo_manutenzione"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "MAC_089",
-    "stato": "fermo_manutenzione",
-    "updated_at": "2026-03-03T17:00:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'deleteMacchina',
-                        description: 'Soft delete robot - admin only',
-                        category: 'macchine',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'deleteMacchina' },
-                            { name: 'id', type: 'string', required: true, description: 'Machine ID (MAC_xxx)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"deleteMacchina","id":"MAC_089"}\'',
-                        response: `{
-  "status": "ok",
-  "message": "Machine deleted"
-}`
-                    }
-                ],
-                automezzi: [
-                    {
-                        name: 'createAutomezzo',
-                        description: 'Register new service vehicle - admin only',
-                        category: 'automezzi',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'createAutomezzo' },
-                            { name: 'targa', type: 'string', required: true, description: 'License plate' },
-                            { name: 'modello', type: 'string', required: true, description: 'Vehicle model' },
-                            { name: 'assegnato_a', type: 'string', required: false, description: 'Assigned technician (TEC_xxx)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"createAutomezzo","targa":"PC123AB","modello":"Fiat Ducato","assegnato_a":"TEC_691"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "FURG_8",
-    "targa": "PC123AB",
-    "modello": "Fiat Ducato",
-    "assegnato_a": "TEC_691",
-    "created_at": "2026-03-03T17:05:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'updateAutomezzo',
-                        description: 'Update vehicle details - admin only',
-                        category: 'automezzi',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'updateAutomezzo' },
-                            { name: 'id', type: 'string', required: true, description: 'Vehicle ID (FURG_x, AUT_xxx)' },
-                            { name: 'assegnato_a', type: 'string', required: false, description: 'Reassign to technician' },
-                            { name: 'stato', type: 'string', required: false, description: 'disponibile, in_uso, manutenzione' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"updateAutomezzo","id":"FURG_8","stato":"manutenzione"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "FURG_8",
-    "stato": "manutenzione",
-    "updated_at": "2026-03-03T17:10:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'deleteAutomezzo',
-                        description: 'Soft delete vehicle - admin only',
-                        category: 'automezzi',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'deleteAutomezzo' },
-                            { name: 'id', type: 'string', required: true, description: 'Vehicle ID (FURG_x, AUT_xxx)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"deleteAutomezzo","id":"FURG_8"}\'',
-                        response: `{
-  "status": "ok",
-  "message": "Vehicle deleted"
-}`
-                    }
-                ],
-                reperibilita: [
-                    {
-                        name: 'createReperibilita',
-                        description: 'Create on-call duty shift - admin only',
-                        category: 'reperibilita',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'createReperibilita' },
-                            { name: 'tecnico_id', type: 'string', required: true, description: 'Technician ID (TEC_xxx)' },
-                            { name: 'data_inizio', type: 'string', required: true, description: 'Start date (YYYY-MM-DD)' },
-                            { name: 'data_fine', type: 'string', required: true, description: 'End date (YYYY-MM-DD)' },
-                            { name: 'tipo', type: 'string', required: false, description: 'notturna, festiva, 24h' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"createReperibilita","tecnico_id":"TEC_691","data_inizio":"2026-03-10","data_fine":"2026-03-14","tipo":"notturna"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "REP_023",
-    "tecnico_id": "TEC_691",
-    "data_inizio": "2026-03-10",
-    "data_fine": "2026-03-14",
-    "tipo": "notturna",
-    "created_at": "2026-03-03T17:15:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'updateReperibilita',
-                        description: 'Update on-call shift - admin only',
-                        category: 'reperibilita',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'updateReperibilita' },
-                            { name: 'id', type: 'string', required: true, description: 'Duty ID (REP_xxx)' },
-                            { name: 'data_fine', type: 'string', required: false, description: 'Update end date' },
-                            { name: 'tipo', type: 'string', required: false, description: 'Update shift type' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"updateReperibilita","id":"REP_023","data_fine":"2026-03-15"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "REP_023",
-    "data_fine": "2026-03-15",
-    "updated_at": "2026-03-03T17:20:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'deleteReperibilita',
-                        description: 'Remove on-call duty - admin only',
-                        category: 'reperibilita',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'deleteReperibilita' },
-                            { name: 'id', type: 'string', required: true, description: 'Duty ID (REP_xxx)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"deleteReperibilita","id":"REP_023"}\'',
-                        response: `{
-  "status": "ok",
-  "message": "Shift deleted"
-}`
-                    }
-                ],
-                trasferte: [
-                    {
-                        name: 'createTrasferta',
-                        description: 'Create travel expense report - admin only',
-                        category: 'trasferte',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'createTrasferta' },
-                            { name: 'tecnico_id', type: 'string', required: true, description: 'Technician ID (TEC_xxx)' },
-                            { name: 'data', type: 'string', required: true, description: 'Travel date (YYYY-MM-DD)' },
-                            { name: 'destinazione', type: 'string', required: true, description: 'Destination' },
-                            { name: 'importo', type: 'number', required: true, description: 'Amount in EUR' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"createTrasferta","tecnico_id":"TEC_691","data":"2026-03-02","destinazione":"Mantova","importo":45.50}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "TRA_089",
-    "tecnico_id": "TEC_691",
-    "data": "2026-03-02",
-    "destinazione": "Mantova",
-    "importo": 45.50,
-    "created_at": "2026-03-03T17:25:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'updateTrasferta',
-                        description: 'Update travel expense - admin only',
-                        category: 'trasferte',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'updateTrasferta' },
-                            { name: 'id', type: 'string', required: true, description: 'Travel ID (TRA_xxx)' },
-                            { name: 'importo', type: 'number', required: false, description: 'Update amount' },
-                            { name: 'note', type: 'string', required: false, description: 'Add notes' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"updateTrasferta","id":"TRA_089","importo":50.00}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "TRA_089",
-    "importo": 50.00,
-    "updated_at": "2026-03-03T17:30:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'deleteTrasferta',
-                        description: 'Delete travel expense - admin only',
-                        category: 'trasferte',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'deleteTrasferta' },
-                            { name: 'id', type: 'string', required: true, description: 'Travel ID (TRA_xxx)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"deleteTrasferta","id":"TRA_089"}\'',
-                        response: `{
-  "status": "ok",
-  "message": "Travel deleted"
-}`
-                    }
-                ],
-                installazioni: [
-                    {
-                        name: 'createInstallazione',
-                        description: 'Create new robot installation project - admin only',
-                        category: 'installazioni',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'createInstallazione' },
-                            { name: 'cliente_id', type: 'string', required: true, description: 'Client ID (CLI_xxx)' },
-                            { name: 'modello_robot', type: 'string', required: true, description: 'Robot model' },
-                            { name: 'data_prevista', type: 'string', required: true, description: 'Planned installation date' },
-                            { name: 'tecnico_responsabile', type: 'string', required: false, description: 'Lead technician' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"createInstallazione","cliente_id":"CLI_089","modello_robot":"Lely Astronaut A4","data_prevista":"2026-04-15","tecnico_responsabile":"TEC_691"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "INS_045",
-    "cliente_id": "CLI_089",
-    "modello_robot": "Lely Astronaut A4",
-    "data_prevista": "2026-04-15",
-    "stato": "pianificato",
-    "created_at": "2026-03-03T17:35:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'updateInstallazione',
-                        description: 'Update installation project - admin only',
-                        category: 'installazioni',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'updateInstallazione' },
-                            { name: 'id', type: 'string', required: true, description: 'Installation ID (INS_xxx)' },
-                            { name: 'data_prevista', type: 'string', required: false, description: 'Reschedule' },
-                            { name: 'stato', type: 'string', required: false, description: 'pianificato, in_corso, completato' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"updateInstallazione","id":"INS_045","stato":"in_corso"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "INS_045",
-    "stato": "in_corso",
-    "updated_at": "2026-03-03T17:40:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'deleteInstallazione',
-                        description: 'Cancel installation project - admin only',
-                        category: 'installazioni',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'deleteInstallazione' },
-                            { name: 'id', type: 'string', required: true, description: 'Installation ID (INS_xxx)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"deleteInstallazione","id":"INS_045"}\'',
-                        response: `{
-  "status": "ok",
-  "message": "Installation cancelled"
-}`
-                    }
-                ],
-                chat: [
-                    {
-                        name: 'createCanale',
-                        description: 'Create chat channel',
-                        category: 'chat',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'createCanale' },
-                            { name: 'nome', type: 'string', required: true, description: 'Channel name' },
-                            { name: 'tipo', type: 'string', required: false, description: 'pubblica, privata' },
-                            { name: 'membri', type: 'array', required: false, description: 'Initial members (user IDs)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"createCanale","nome":"Supporto Tecnico","tipo":"pubblica"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "CH_012",
-    "nome": "Supporto Tecnico",
-    "tipo": "pubblica",
-    "created_at": "2026-03-03T17:45:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'sendMessage',
-                        description: 'Send message to channel',
-                        category: 'chat',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'sendMessage' },
-                            { name: 'canale_id', type: 'string', required: true, description: 'Channel ID (CH_xxx)' },
-                            { name: 'messaggio', type: 'string', required: true, description: 'Message text' },
-                            { name: 'allegato_url', type: 'string', required: false, description: 'Optional attachment URL' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"sendMessage","canale_id":"CH_012","messaggio":"Ho completato l\'intervento di manutenzione"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "MSG_234",
-    "canale_id": "CH_012",
-    "mittente_id": "TEC_691",
-    "messaggio": "Ho completato l'intervento di manutenzione",
-    "created_at": "2026-03-03T17:50:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'getMessages',
-                        description: 'Get messages from channel',
-                        category: 'chat',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'getMessages' },
-                            { name: 'canale_id', type: 'string', required: true, description: 'Channel ID (CH_xxx)' },
-                            { name: 'limite', type: 'number', required: false, description: 'Max messages (default: 50)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"getMessages","canale_id":"CH_012","limite":20}\'',
-                        response: `{
-  "status": "ok",
-  "data": [
-    {
-      "id": "MSG_234",
-      "mittente_id": "TEC_691",
-      "messaggio": "Ho completato l'intervento",
-      "created_at": "2026-03-03T17:50:00Z"
-    }
-  ]
-}`
-                    },
-                    {
-                        name: 'markRead',
-                        description: 'Mark messages as read',
-                        category: 'chat',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'markRead' },
-                            { name: 'canale_id', type: 'string', required: true, description: 'Channel ID (CH_xxx)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"markRead","canale_id":"CH_012"}\'',
-                        response: `{
-  "status": "ok",
-  "message": "Messages marked as read"
-}`
-                    },
-                    {
-                        name: 'deleteMessage',
-                        description: 'Delete message from channel',
-                        category: 'chat',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'deleteMessage' },
-                            { name: 'messaggio_id', type: 'string', required: true, description: 'Message ID (MSG_xxx)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"deleteMessage","messaggio_id":"MSG_234"}\'',
-                        response: `{
-  "status": "ok",
-  "message": "Message deleted"
-}`
-                    }
-                ],
-                notifiche: [
-                    {
-                        name: 'createNotifica',
-                        description: 'Create in-app notification',
-                        category: 'notifiche',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'createNotifica' },
-                            { name: 'utente_id', type: 'string', required: true, description: 'User ID (TEC_xxx, USR_xxx)' },
-                            { name: 'titolo', type: 'string', required: true, description: 'Notification title' },
-                            { name: 'messaggio', type: 'string', required: true, description: 'Notification message' },
-                            { name: 'tipo', type: 'string', required: false, description: 'info, avviso, critica' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"createNotifica","utente_id":"TEC_691","titolo":"SLA in pericolo","messaggio":"Urgenza URG_042 vicina alla scadenza","tipo":"critica"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "NOT_045",
-    "utente_id": "TEC_691",
-    "titolo": "SLA in pericolo",
-    "lettura": false,
-    "created_at": "2026-03-03T18:00:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'markNotificaRead',
-                        description: 'Mark notification as read',
-                        category: 'notifiche',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'markNotificaRead' },
-                            { name: 'id', type: 'string', required: true, description: 'Notification ID (NOT_xxx)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"markNotificaRead","id":"NOT_045"}\'',
-                        response: `{
-  "status": "ok",
-  "message": "Notification marked as read"
-}`
-                    },
-                    {
-                        name: 'markAllRead',
-                        description: 'Mark all user notifications as read',
-                        category: 'notifiche',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'markAllRead' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"markAllRead"}\'',
-                        response: `{
-  "status": "ok",
-  "message": "All notifications marked as read"
-}`
-                    }
-                ],
-                kpi: [
-                    {
-                        name: 'saveKPISnapshot',
-                        description: 'Save KPI snapshot for analytics',
-                        category: 'kpi',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'saveKPISnapshot' },
-                            { name: 'data', type: 'object', required: true, description: '{interventi_completati, sla_compliance, tempo_medio_risoluzione, urgenze_aperte, team_productivity}' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"saveKPISnapshot","data":{"interventi_completati":24,"sla_compliance":98.5,"urgenze_aperte":3}}\'',
-                        response: `{
-  "status": "ok",
-  "snapshot_id": "KPI_20260303",
-  "created_at": "2026-03-03T18:05:00Z"
-}`
-                    },
-                    {
-                        name: 'getKPIHistory',
-                        description: 'Get KPI snapshots for period',
-                        category: 'kpi',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'getKPIHistory' },
-                            { name: 'periodo', type: 'string', required: false, description: '7d, 30d, 90d (default: 30d)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"getKPIHistory","periodo":"30d"}\'',
-                        response: `{
-  "status": "ok",
-  "data": [
-    {
-      "date": "2026-03-03",
-      "interventi_completati": 24,
-      "sla_compliance": 98.5,
-      "urgenze_aperte": 3
-    }
-  ]
-}`
-                    }
-                ],
-                config: [
-                    {
-                        name: 'getConfig',
-                        description: 'Get configuration values',
-                        category: 'config',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'getConfig' },
-                            { name: 'chiave', type: 'string', required: false, description: 'Specific key (optional)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"getConfig"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "timezone": "Europe/Rome",
-    "sla_default_ore": 4,
-    "feature_telegram": true
-  }
-}`
-                    },
-                    {
-                        name: 'updateConfig',
-                        description: 'Update configuration (admin only)',
-                        category: 'config',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'updateConfig' },
-                            { name: 'chiave', type: 'string', required: true, description: 'Config key' },
-                            { name: 'valore', type: 'any', required: true, description: 'New value' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"updateConfig","chiave":"sla_default_ore","valore":6}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "chiave": "sla_default_ore",
-    "valore": 6,
-    "updated_at": "2026-03-03T18:10:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'updateSLAConfig',
-                        description: 'Update SLA configuration (admin only)',
-                        category: 'config',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'updateSLAConfig' },
-                            { name: 'priorita', type: 'string', required: true, description: 'bassa, media, alta, critica' },
-                            { name: 'ore_limite', type: 'number', required: true, description: 'Max hours to resolve' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"updateSLAConfig","priorita":"critica","ore_limite":2}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "priorita": "critica",
-    "ore_limite": 2,
-    "updated_at": "2026-03-03T18:15:00Z"
-  }
-}`
-                    }
-                ],
-                utenti: [
-                    {
-                        name: 'createUtente',
-                        description: 'Create new user (admin only)',
-                        category: 'utenti',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'createUtente' },
-                            { name: 'username', type: 'string', required: true, description: 'Unique username' },
-                            { name: 'nome', type: 'string', required: true, description: 'Full name' },
-                            { name: 'ruolo', type: 'string', required: true, description: 'admin, tecnico, supervisor' },
-                            { name: 'base_operativa', type: 'string', required: false, description: 'Headquarters (Piacenza, Bologna, etc)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"createUtente","username":"a.rossi","nome":"Andrea Rossi","ruolo":"tecnico","base_operativa":"Piacenza"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "TEC_999",
-    "username": "a.rossi",
-    "nome": "Andrea Rossi",
-    "ruolo": "tecnico",
-    "created_at": "2026-03-03T18:20:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'updateUtente',
-                        description: 'Update user details (admin only)',
-                        category: 'utenti',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'updateUtente' },
-                            { name: 'id', type: 'string', required: true, description: 'User ID (TEC_xxx, USR_xxx)' },
-                            { name: 'nome', type: 'string', required: false, description: 'Update full name' },
-                            { name: 'ruolo', type: 'string', required: false, description: 'Update role' },
-                            { name: 'attivo', type: 'boolean', required: false, description: 'Enable/disable' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"updateUtente","id":"TEC_999","ruolo":"caposquadra"}\'',
-                        response: `{
-  "status": "ok",
-  "data": {
-    "id": "TEC_999",
-    "nome": "Andrea Rossi",
-    "ruolo": "caposquadra",
-    "updated_at": "2026-03-03T18:25:00Z"
-  }
-}`
-                    },
-                    {
-                        name: 'deleteUtente',
-                        description: 'Soft delete user (admin only)',
-                        category: 'utenti',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'deleteUtente' },
-                            { name: 'id', type: 'string', required: true, description: 'User ID (TEC_xxx, USR_xxx)' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"deleteUtente","id":"TEC_999"}\'',
-                        response: `{
-  "status": "ok",
-  "message": "User deleted"
-}`
-                    },
-                    {
-                        name: 'selfUpdate',
-                        description: 'Update own profile (any authenticated user)',
-                        category: 'utenti',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'selfUpdate' },
-                            { name: 'nome', type: 'string', required: false, description: 'Update display name' },
-                            { name: 'email', type: 'string', required: false, description: 'Update email' },
-                            { name: 'telefono', type: 'string', required: false, description: 'Update phone' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"selfUpdate","email":"andrea.rossi@mail.com"}\'',
-                        response: `{
-  "status": "ok",
-  "message": "Profile updated"
-}`
-                    }
-                ],
-                ai: [
-                    {
-                        name: 'aiPlan',
-                        description: 'AI-powered smart scheduling (Gemini)',
-                        category: 'ai',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'aiPlan' },
-                            { name: 'urgenze_aperte', type: 'array', required: true, description: 'Open urgencies to schedule' },
-                            { name: 'tecnici_disponibili', type: 'array', required: true, description: 'Available technicians with skills' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"aiPlan","urgenze_aperte":[{"id":"URG_042","priorita":"alta"}],"tecnici_disponibili":[{"id":"TEC_691","skills":["Vector","Astronaut"]}]}\'',
-                        response: `{
-  "status": "ok",
-  "piano_suggerito": [
-    {
-      "urgenza_id": "URG_042",
-      "tecnico_id": "TEC_691",
-      "data_orario_suggerito": "2026-03-03T17:00:00Z",
-      "motivo": "Priorità alta, tecnico esperto disponibile"
-    }
-  ]
-}`
-                    },
-                    {
-                        name: 'aiAnalyze',
-                        description: 'AI photo/media analysis for issues (Gemini Vision)',
-                        category: 'ai',
-                        method: 'POST',
-                        params: [
-                            { name: 'action', type: 'string', required: true, description: 'aiAnalyze' },
-                            { name: 'foto_base64', type: 'string', required: true, description: 'Image in base64' },
-                            { name: 'contesto', type: 'string', required: false, description: 'Problem description' }
-                        ],
-                        curl: 'curl -X POST "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" \\\n  -H "X-Token: <token>" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"action":"aiAnalyze","foto_base64":"iVBORw0KGgo...","contesto":"Robot non accende"}\'',
-                        response: `{
-  "status": "ok",
-  "analisi": {
-    "problema_rilevato": "Alimentazione assente",
-    "severita": "critica",
-    "azioni_suggerite": ["Controllare connettore energia", "Testare batteria"],
-    "urgenza_consigliata": {
-      "priorita": "critica",
-      "descrizione": "Lely Vector offline, alimentazione assente"
-    }
-  }
-}`
-                    }
-                ],
-                telegram: []
-            }
-        };
+            <div class="sidebar-section">
+                <div class="section-title" onclick="toggleSection(this)">
+                    <span class="toggle-icon">▼</span> Getting Started
+                </div>
+                <div class="section-items">
+                    <div class="sidebar-item" onclick="scrollToSection('intro')">Overview</div>
+                    <div class="sidebar-item" onclick="scrollToSection('auth')">Authentication</div>
+                    <div class="sidebar-item" onclick="scrollToSection('errors')">Error Handling</div>
+                </div>
+            </div>
 
-        // Flatten POST endpoints for easier filtering
-        let allPostEndpoints = [];
-        for (const category in apiData.post) {
-            if (Array.isArray(apiData.post[category])) {
-                allPostEndpoints = allPostEndpoints.concat(apiData.post[category]);
-            }
-        }
+            <div class="sidebar-section">
+                <div class="section-title" onclick="toggleSection(this)">
+                    <span class="toggle-icon">▼</span> API Endpoints
+                </div>
+                <div class="section-items">
+                    <div class="sidebar-item" onclick="scrollToSection('auth-endpoints')">Authentication</div>
+                    <div class="sidebar-item" onclick="scrollToSection('urgenze-endpoints')">Urgenze</div>
+                    <div class="sidebar-item" onclick="scrollToSection('piano-endpoints')">Piano</div>
+                    <div class="sidebar-item" onclick="scrollToSection('ordini-endpoints')">Ordini</div>
+                    <div class="sidebar-item" onclick="scrollToSection('clienti-endpoints')">Clienti</div>
+                    <div class="sidebar-item" onclick="scrollToSection('macchine-endpoints')">Macchine</div>
+                    <div class="sidebar-item" onclick="scrollToSection('automezzi-endpoints')">Automezzi</div>
+                    <div class="sidebar-item" onclick="scrollToSection('utenti-endpoints')">Utenti</div>
+                    <div class="sidebar-item" onclick="scrollToSection('kpi-endpoints')">KPI</div>
+                    <div class="sidebar-item" onclick="scrollToSection('telegram-endpoints')">Telegram</div>
+                </div>
+            </div>
 
-        // Initialize search and filtering
-        const searchInput = document.getElementById('searchInput');
-        const sidebar = document.querySelectorAll('.sidebar-item');
-        const contentArea = document.getElementById('contentArea');
+            <div class="sidebar-section">
+                <div class="section-title" onclick="toggleSection(this)">
+                    <span class="toggle-icon">▼</span> Reference
+                </div>
+                <div class="section-items">
+                    <div class="sidebar-item" onclick="scrollToSection('state-machine')">State Machine</div>
+                    <div class="sidebar-item" onclick="scrollToSection('data-models')">Data Models</div>
+                </div>
+            </div>
+        </aside>
 
-        let currentCategory = 'all';
+        <main class="content">
+            <section id="intro" class="intro-section">
+                <h2>Getting Started</h2>
+                <p>Syntoniqa v1.0 is a Field Service Management (FSM) platform for MRS Lely Center Emilia Romagna. The API runs on Cloudflare Workers with Supabase PostgreSQL backend.</p>
+                <div class="base-url">
+                    <code>https://syntoniqa-mrs-api.fieldforcemrser.workers.dev</code>
+                    <button class="copy-btn" onclick="copyToClipboard(this)">Copy</button>
+                </div>
+            </section>
 
-        // Render endpoints
-        function renderEndpoints(endpoints, category) {
-            if (endpoints.length === 0) {
-                contentArea.innerHTML = '<div class="empty-state"><h3>No endpoints found</h3><p>Try adjusting your search or filter</p></div>';
-                return;
-            }
+            <section id="auth" class="intro-section">
+                <h2>Authentication</h2>
+                <p>All endpoints (except login) require an <code>X-Token</code> header.</p>
+                <div class="code-block">
+                    <button class="code-copy-btn" onclick="copyCode(this)">Copy</button>
+                    <pre><code>curl -H "X-Token: your_token_here" \
+  https://syntoniqa-mrs-api.fieldforcemrser.workers.dev?action=getAll</code></pre>
+                </div>
+            </section>
 
-            let html = '';
-            const groupedByCategory = {};
+            <section id="errors" class="intro-section">
+                <h2>Error Handling</h2>
+                <table class="params-table">
+                    <thead>
+                        <tr><th>Status</th><th>Meaning</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><strong>200</strong></td><td>Success</td></tr>
+                        <tr><td><strong>400</strong></td><td>Bad Request</td></tr>
+                        <tr><td><strong>401</strong></td><td>Unauthorized</td></tr>
+                        <tr><td><strong>403</strong></td><td>Forbidden</td></tr>
+                        <tr><td><strong>500</strong></td><td>Server Error</td></tr>
+                    </tbody>
+                </table>
+            </section>
 
-            endpoints.forEach(endpoint => {
-                const cat = endpoint.category || 'other';
-                if (!groupedByCategory[cat]) {
-                    groupedByCategory[cat] = [];
-                }
-                groupedByCategory[cat].push(endpoint);
-            });
+            <section id="auth-endpoints">
+                <h2 style="margin: 2rem 0 1rem 0; font-size: 1.3rem; color: var(--primary);">Authentication</h2>
 
-            for (const cat in groupedByCategory) {
-                const count = groupedByCategory[cat].length;
-                html += `
-                    <div class="endpoint-section">
-                        <div class="section-header">
-                            <h2>${cat.charAt(0).toUpperCase() + cat.slice(1)}</h2>
-                            <div class="count">${count}</div>
-                        </div>
-                        <div class="endpoints-grid">
-                            ${groupedByCategory[cat].map(endpoint => renderEndpointCard(endpoint)).join('')}
-                        </div>
-                    </div>
-                `;
-            }
-
-            contentArea.innerHTML = html;
-            attachCardListeners();
-        }
-
-        function renderEndpointCard(endpoint) {
-            const methodClass = endpoint.method.toLowerCase();
-            const categoryBadge = endpoint.category || 'other';
-
-            return `
-                <div class="endpoint-card">
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
                     <div class="endpoint-header">
-                        <div class="method-badge ${methodClass}">${endpoint.method}</div>
+                        <span class="method-badge post">POST</span>
                         <div class="endpoint-info">
-                            <div class="endpoint-name">${endpoint.name}</div>
-                            <div class="endpoint-description">${endpoint.description}</div>
+                            <div class="endpoint-path">/api · action=login</div>
+                            <div class="endpoint-description">Authenticate user and get API token</div>
                         </div>
-                        <div class="category-badge ${categoryBadge}">${categoryBadge}</div>
-                        <div class="toggle-icon">▼</div>
+                        <div class="expand-icon">▼</div>
                     </div>
                     <div class="endpoint-body">
-                        ${endpoint.params && endpoint.params.length > 0 ? `
-                            <div class="detail-section">
-                                <label class="detail-label">Parameters</label>
-                                <table class="params-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Name</th>
-                                            <th>Type</th>
-                                            <th>Required</th>
-                                            <th>Description</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${endpoint.params.map(p => `
-                                            <tr>
-                                                <td><span class="param-name">${p.name}</span></td>
-                                                <td><span class="param-type">${p.type}</span></td>
-                                                <td><span class="${p.required ? 'param-required' : 'param-optional'}">${p.required ? 'Yes' : 'No'}</span></td>
-                                                <td>${p.description}</td>
-                                            </tr>
-                                        `).join('')}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ` : ''}
-
-                        <div class="detail-section">
-                            <label class="detail-label">Example cURL</label>
-                            <div class="code-block">
-                                <button class="copy-button" onclick="copyToClipboard(this)">Copy</button>
-                                <code>${escapeHtml(endpoint.curl)}</code>
-                            </div>
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">username</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Username</td></tr>
+                                    <tr><td class="param-name">password</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Password</td></tr>
+                                </tbody>
+                            </table>
                         </div>
-
-                        <div class="detail-section">
-                            <label class="detail-label">Response Example</label>
+                        <div class="endpoint-section">
+                            <h4>Response</h4>
                             <div class="code-block">
-                                <button class="copy-button" onclick="copyToClipboard(this)">Copy</button>
-                                <code>${escapeHtml(endpoint.response)}</code>
+                                <button class="code-copy-btn" onclick="copyCode(this)">Copy</button>
+                                <pre><code>{"token":"sq_...",
+  "user":{"id":"USR001","nome":"Marcello","ruolo":"admin"}}</code></pre>
                             </div>
                         </div>
                     </div>
                 </div>
-            `;
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=changePassword</div>
+                            <div class="endpoint-description">Change user password</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">userId</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>User ID</td></tr>
+                                    <tr><td class="param-name">oldPassword</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Current password</td></tr>
+                                    <tr><td class="param-name">newPassword</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>New password (min 8 chars)</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="urgenze-endpoints">
+                <h2 style="margin: 2rem 0 1rem 0; font-size: 1.3rem; color: var(--primary);">Urgenze (Emergency Interventions)</h2>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=createUrgenza</div>
+                            <div class="endpoint-description">Create new urgency</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">clienteId</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Client ID (CLI_xxx)</td></tr>
+                                    <tr><td class="param-name">descrizione</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Issue description</td></tr>
+                                    <tr><td class="param-name">priorita</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>bassa, media, alta, critica</td></tr>
+                                    <tr><td class="param-name">macchinaId</td><td><span class="param-type">string</span></td><td>No</td><td>Machine ID</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=updateStatoUrgenza</div>
+                            <div class="endpoint-description">Update urgency state</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">id</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Urgency ID</td></tr>
+                                    <tr><td class="param-name">stato</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>aperta, assegnata, schedulata, in_corso, risolta, chiusa</td></tr>
+                                    <tr><td class="param-name">note</td><td><span class="param-type">string</span></td><td>No</td><td>Notes</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=assignUrgenza</div>
+                            <div class="endpoint-description">Assign urgency to technician</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">id</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Urgency ID</td></tr>
+                                    <tr><td class="param-name">tecnicoId</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Technician ID</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=scheduleUrgenza</div>
+                            <div class="endpoint-description">Schedule urgency for specific date</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">id</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Urgency ID</td></tr>
+                                    <tr><td class="param-name">dataSchedulata</td><td><span class="param-type">date</span></td><td><span class="param-required">Yes</span></td><td>YYYY-MM-DD</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=getUrgenzaDetail</div>
+                            <div class="endpoint-description">Get urgency details</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">id</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Urgency ID</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=deleteUrgenza</div>
+                            <div class="endpoint-description">Delete urgency (soft delete)</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">id</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Urgency ID</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="piano-endpoints">
+                <h2 style="margin: 2rem 0 1rem 0; font-size: 1.3rem; color: var(--primary);">Piano Interventi (Scheduled Work)</h2>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=createIntervento</div>
+                            <div class="endpoint-description">Create scheduled intervention</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">clienteId</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Client ID</td></tr>
+                                    <tr><td class="param-name">tecnicoId</td><td><span class="param-type">string</span></td><td>No</td><td>Technician ID</td></tr>
+                                    <tr><td class="param-name">data</td><td><span class="param-type">date</span></td><td><span class="param-required">Yes</span></td><td>Intervention date</td></tr>
+                                    <tr><td class="param-name">descrizione</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Work description</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=updateStatoIntervento</div>
+                            <div class="endpoint-description">Update intervention state</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">id</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Intervention ID</td></tr>
+                                    <tr><td class="param-name">stato</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>pianificato, in_corso, completato, annullato</td></tr>
+                                    <tr><td class="param-name">note</td><td><span class="param-type">string</span></td><td>No</td><td>Completion notes</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=bulkAssignInterventi</div>
+                            <div class="endpoint-description">Bulk assign interventions</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">ids</td><td><span class="param-type">array</span></td><td><span class="param-required">Yes</span></td><td>Array of intervention IDs</td></tr>
+                                    <tr><td class="param-name">tecnicoId</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Technician ID to assign to</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="ordini-endpoints">
+                <h2 style="margin: 2rem 0 1rem 0; font-size: 1.3rem; color: var(--primary);">Ordini (Spare Parts Orders)</h2>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=createOrdine</div>
+                            <div class="endpoint-description">Create spare parts order</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">tecnicoId</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Technician ID</td></tr>
+                                    <tr><td class="param-name">clienteId</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Client ID</td></tr>
+                                    <tr><td class="param-name">codiceRicambio</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Spare part code</td></tr>
+                                    <tr><td class="param-name">quantita</td><td><span class="param-type">number</span></td><td><span class="param-required">Yes</span></td><td>Quantity</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=updateStatoOrdine</div>
+                            <div class="endpoint-description">Update order status</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">id</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Order ID</td></tr>
+                                    <tr><td class="param-name">stato</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>richiesto, confermato, spedito, consegnato</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="clienti-endpoints">
+                <h2 style="margin: 2rem 0 1rem 0; font-size: 1.3rem; color: var(--primary);">Clienti (Farms/Clients)</h2>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=createCliente</div>
+                            <div class="endpoint-description">Create new client</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">nome</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Client name</td></tr>
+                                    <tr><td class="param-name">indirizzo</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Address</td></tr>
+                                    <tr><td class="param-name">telefono</td><td><span class="param-type">string</span></td><td>No</td><td>Phone number</td></tr>
+                                    <tr><td class="param-name">email</td><td><span class="param-type">string</span></td><td>No</td><td>Email address</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=updateCliente</div>
+                            <div class="endpoint-description">Update client information</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">id</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Client ID</td></tr>
+                                    <tr><td class="param-name">...fields</td><td><span class="param-type">mixed</span></td><td>No</td><td>Client fields to update</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="macchine-endpoints">
+                <h2 style="margin: 2rem 0 1rem 0; font-size: 1.3rem; color: var(--primary);">Macchine (Lely Machines)</h2>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=createMacchina</div>
+                            <div class="endpoint-description">Register new machine</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">clienteId</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Client ID</td></tr>
+                                    <tr><td class="param-name">tipo</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Machine type (A5, etc)</td></tr>
+                                    <tr><td class="param-name">modello</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Model name</td></tr>
+                                    <tr><td class="param-name">seriale</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Serial number</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="automezzi-endpoints">
+                <h2 style="margin: 2rem 0 1rem 0; font-size: 1.3rem; color: var(--primary);">Automezzi (Service Vehicles)</h2>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=createAutomezzo</div>
+                            <div class="endpoint-description">Register new vehicle</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">targa</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>License plate</td></tr>
+                                    <tr><td class="param-name">modello</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Vehicle model</td></tr>
+                                    <tr><td class="param-name">tecnicoId</td><td><span class="param-type">string</span></td><td>No</td><td>Primary technician</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="utenti-endpoints">
+                <h2 style="margin: 2rem 0 1rem 0; font-size: 1.3rem; color: var(--primary);">Utenti (User Management)</h2>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=createUtente</div>
+                            <div class="endpoint-description">Create new user account</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">username</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Username (unique)</td></tr>
+                                    <tr><td class="param-name">password</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Password (min 8 chars)</td></tr>
+                                    <tr><td class="param-name">nome</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>Full name</td></tr>
+                                    <tr><td class="param-name">ruolo</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>admin, tecnico, caposquadra</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=updateUtente</div>
+                            <div class="endpoint-description">Update user information</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">id</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>User ID</td></tr>
+                                    <tr><td class="param-name">...fields</td><td><span class="param-type">mixed</span></td><td>No</td><td>Any user fields to update</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="kpi-endpoints">
+                <h2 style="margin: 2rem 0 1rem 0; font-size: 1.3rem; color: var(--primary);">KPI (Key Performance Indicators)</h2>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=getKPISnapshot</div>
+                            <div class="endpoint-description">Get KPI snapshot for period</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">periodo</td><td><span class="param-type">string</span></td><td><span class="param-required">Yes</span></td><td>giorno, settimana, mese, anno</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">POST</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/api · action=getKPIHistory</div>
+                            <div class="endpoint-description">Get KPI history over date range</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <h4>Parameters</h4>
+                            <table class="params-table">
+                                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="param-name">startDate</td><td><span class="param-type">date</span></td><td><span class="param-required">Yes</span></td><td>Start date (YYYY-MM-DD)</td></tr>
+                                    <tr><td class="param-name">endDate</td><td><span class="param-type">date</span></td><td><span class="param-required">Yes</span></td><td>End date (YYYY-MM-DD)</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="telegram-endpoints">
+                <h2 style="margin: 2rem 0 1rem 0; font-size: 1.3rem; color: var(--primary);">Telegram Bot Commands</h2>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">TG</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/stato</div>
+                            <div class="endpoint-description">Get current status overview</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <p>Returns dashboard: open urgencies, today's interventions, SLA status, team availability</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">TG</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/vado [n]</div>
+                            <div class="endpoint-description">Accept an urgency task</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <p>Shows 5 open urgencies. Reply /vado or /vado 2 to accept. Assigns and changes state to "assegnata".</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">TG</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/incorso</div>
+                            <div class="endpoint-description">Mark current urgency as in progress</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <p>Changes assigned urgency state from "assegnata" to "in_corso".</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">TG</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/risolto [note]</div>
+                            <div class="endpoint-description">Resolve and close urgency</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <p>Closes current urgency. Changes state to "risolta" then "chiusa". Optional notes saved as resolution.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">TG</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">/ordine [code] [qty] [client]</div>
+                            <div class="endpoint-description">Create spare parts order</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <p>Creates order: /ordine PAR-001 2 CLI_123. Admin receives notification.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="endpoint-card" onclick="toggleEndpoint(this)">
+                    <div class="endpoint-header">
+                        <span class="method-badge post">TG</span>
+                        <div class="endpoint-info">
+                            <div class="endpoint-path">Photo/Text Message</div>
+                            <div class="endpoint-description">Send photo or text for AI analysis</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="endpoint-body">
+                        <div class="endpoint-section">
+                            <p>Send photo or text description. Gemini AI analyzes and automatically creates urgency if confirmed.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="state-machine">
+                <h2 style="margin: 2rem 0 1rem 0; font-size: 1.3rem; color: var(--primary);">State Machine</h2>
+
+                <div class="intro-section">
+                    <h3 style="margin-bottom: 1rem;">Urgenze States</h3>
+                    <div class="code-block">
+                        <button class="code-copy-btn" onclick="copyCode(this)">Copy</button>
+                        <pre><code>aperta → assegnata → schedulata → in_corso → risolta → chiusa
+
+Reject: assegnata/schedulata → aperta</code></pre>
+                    </div>
+                </div>
+
+                <div class="intro-section" style="margin-top: 1.5rem;">
+                    <h3 style="margin-bottom: 1rem;">Piano States</h3>
+                    <div class="code-block">
+                        <button class="code-copy-btn" onclick="copyCode(this)">Copy</button>
+                        <pre><code>pianificato → in_corso → completato
+OR
+pianificato → annullato (then annullato → pianificato)</code></pre>
+                    </div>
+                </div>
+            </section>
+
+            <section id="data-models">
+                <h2 style="margin: 2rem 0 1rem 0; font-size: 1.3rem; color: var(--primary);">Data Models</h2>
+
+                <div class="intro-section">
+                    <h3 style="margin-bottom: 1rem;">ID Prefixes</h3>
+                    <table class="params-table">
+                        <thead><tr><th>Entity</th><th>Prefix</th><th>Example</th></tr></thead>
+                        <tbody>
+                            <tr><td>Technician</td><td>TEC_</td><td>TEC_691</td></tr>
+                            <tr><td>Admin</td><td>USR</td><td>USR001</td></tr>
+                            <tr><td>Client</td><td>CLI_</td><td>CLI_123</td></tr>
+                            <tr><td>Machine</td><td>MAC_</td><td>MAC_001</td></tr>
+                            <tr><td>Intervention</td><td>INT_</td><td>INT_001</td></tr>
+                            <tr><td>Urgency</td><td>URG_</td><td>URG_001</td></tr>
+                            <tr><td>Order</td><td>ORD_</td><td>ORD_001</td></tr>
+                            <tr><td>Vehicle</td><td>FURG_/AUT_</td><td>FURG_1</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <footer>
+        <p>Syntoniqa v1.0 — FSM Platform for MRS Lely Center Emilia Romagna</p>
+        <p style="margin-top: 0.5rem;">
+            Base URL: https://syntoniqa-mrs-api.fieldforcemrser.workers.dev | Updated: 2026-03-03
+        </p>
+    </footer>
+
+    <script>
+        function toggleSection(titleElement) {
+            const itemsDiv = titleElement.nextElementSibling;
+            const icon = titleElement.querySelector('.toggle-icon');
+            itemsDiv.classList.toggle('collapsed');
+            icon.classList.toggle('collapsed');
         }
 
-        function escapeHtml(text) {
-            const map = {
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#039;'
-            };
-            return text.replace(/[&<>"']/g, m => map[m]);
+        function scrollToSection(sectionId) {
+            const section = document.getElementById(sectionId);
+            if (section) {
+                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                document.querySelectorAll('.sidebar-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+                if (event.target) event.target.classList.add('active');
+            }
+        }
+
+        function toggleEndpoint(card) {
+            card.classList.toggle('expanded');
         }
 
         function copyToClipboard(button) {
-            const codeBlock = button.nextElementSibling;
-            const text = codeBlock.innerText;
+            const text = button.previousElementSibling.textContent;
             navigator.clipboard.writeText(text).then(() => {
-                button.classList.add('copied');
                 button.textContent = 'Copied!';
+                button.classList.add('copied');
                 setTimeout(() => {
-                    button.classList.remove('copied');
                     button.textContent = 'Copy';
+                    button.classList.remove('copied');
                 }, 2000);
             });
         }
 
-        function attachCardListeners() {
-            document.querySelectorAll('.endpoint-header').forEach(header => {
-                header.addEventListener('click', () => {
-                    const card = header.parentElement;
-                    card.classList.toggle('expanded');
-                });
+        function copyCode(button) {
+            const codeBlock = button.nextElementSibling;
+            const code = codeBlock.textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                button.textContent = 'Copied!';
+                button.classList.add('copied');
+                setTimeout(() => {
+                    button.textContent = 'Copy';
+                    button.classList.remove('copied');
+                }, 2000);
             });
         }
 
-        function filterEndpoints() {
-            const searchTerm = searchInput.value.toLowerCase();
-            let endpoints = [];
-
-            if (currentCategory === 'all') {
-                endpoints = [...apiData.get, ...allPostEndpoints];
-            } else if (currentCategory === 'get') {
-                endpoints = apiData.get;
-            } else if (currentCategory === 'post') {
-                endpoints = allPostEndpoints;
-            } else {
-                endpoints = [...apiData.get, ...allPostEndpoints].filter(e => e.category === currentCategory);
-            }
-
-            if (searchTerm) {
-                endpoints = endpoints.filter(e =>
-                    e.name.toLowerCase().includes(searchTerm) ||
-                    e.description.toLowerCase().includes(searchTerm) ||
-                    (e.category && e.category.toLowerCase().includes(searchTerm))
-                );
-            }
-
-            renderEndpoints(endpoints, currentCategory);
-        }
-
-        // Event listeners
-        searchInput.addEventListener('input', filterEndpoints);
-
-        sidebar.forEach(item => {
-            item.addEventListener('click', (e) => {
-                sidebar.forEach(i => i.classList.remove('active'));
-                e.target.classList.add('active');
-                currentCategory = e.target.getAttribute('data-category');
-                filterEndpoints();
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            const query = e.target.value.toLowerCase();
+            const cards = document.querySelectorAll('.endpoint-card');
+            cards.forEach(card => {
+                const text = card.textContent.toLowerCase();
+                card.style.display = text.includes(query) ? 'block' : 'none';
             });
         });
-
-        // Initial render
-        filterEndpoints();
-
-        // Expose copy function globally
-        window.copyToClipboard = copyToClipboard;
     </script>
 </body>
 </html>
