@@ -18,19 +18,13 @@
   var cfg = window.SYNTONIQA_CONFIG;
   if(!cfg) return;
 
-  /* -- CSS Variables -- */
+  /* -- CSS Variables (solo accenti, no sfondo/testo che dipendono dal tema light/dark) -- */
   var r = document.documentElement.style;
   var co = cfg.colors||{};
-  if(co.primary)       r.setProperty('--c1', co.primary);
-  if(co.primary2||co.primary_dark) r.setProperty('--c2', co.primary2||co.primary_dark);
-  if(co.primary_light) r.setProperty('--c3', co.primary_light);
-  if(co.secondary||co.accent)      r.setProperty('--c4', co.secondary||co.accent);
-  if(co.bg)            r.setProperty('--bg', co.bg);
-  if(co.surface)       r.setProperty('--surface', co.surface);
-  if(co.card)          r.setProperty('--card-bg', co.card);
-  if(co.border)        r.setProperty('--gray3', co.border);
-  if(co.text)          r.setProperty('--dark', co.text);
-  if(co.textSec)       r.setProperty('--gray', co.textSec);
+  if(co.primary)                    r.setProperty('--c1', co.primary);
+  if(co.primary2||co.primary_dark)  r.setProperty('--c2', co.primary2||co.primary_dark);
+  if(co.primary_light)              r.setProperty('--c3', co.primary_light);
+  if(co.secondary||co.accent)       r.setProperty('--c4', co.secondary||co.accent);
 
   /* -- Meta theme-color -- */
   var mt = document.querySelector('meta[name="theme-color"]');
@@ -5642,6 +5636,7 @@ const PROD_CFG={
   ROBOT:{icon:'M12 2a3 3 0 0 0-3 3v1H7a2 2 0 0 0-2 2v8a4 4 0 0 0 4 4h6a4 4 0 0 0 4-4V8a2 2 0 0 0-2-2h-2V5a3 3 0 0 0-3-3zm-1 5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm4 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm-5 5h4l-2 3z',color:'#C30A14',label:'Astronaut',url:'https://www.lely.com/solutions/milking/astronaut/'},
   JUNO:{icon:'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3l3 5H9l3-5zm0 14c-2.76 0-5-2.24-5-5h10c0 2.76-2.24 5-5 5z',color:'#3b82f6',label:'Juno',url:'https://www.lely.com/solutions/feeding/juno/'},
   VECTOR:{icon:'M3 12l3-8h12l3 8-3 8H6l-3-8zm5-2h8v4H8v-4zm2 1v2h4v-2h-4z',color:'#8b5cf6',label:'Vector',url:'https://www.lely.com/solutions/feeding/vector/'},
+  MFR:{icon:'M5 3h14l2 4-2 3v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V10L3 7l2-4zm0 7v9h14v-9H5zm2 2h10v2H7v-2zm0 4h6v2H7v-2z',color:'#7c3aed',label:'MFR',url:'https://www.lely.com/solutions/feeding/vector/'},
   DISCOVERY:{icon:'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 4a6 6 0 0 1 5.2 3H6.8A6 6 0 0 1 12 6zm0 12a6 6 0 0 1-5.2-3h10.4A6 6 0 0 1 12 18zm6-5H6a6 6 0 0 1 0-2h12a6 6 0 0 1 0 2z',color:'#06b6d4',label:'Discovery',url:'https://www.lely.com/solutions/manure/discovery/'},
   COLLECTOR:{icon:'M4 4h16v3H4zm2 5h12l-1 9H7zm3 2v5h1v-5zm3 0v5h1v-5z',color:'#14b8a6',label:'Collector',url:'https://www.lely.com/solutions/manure/discovery-collector/'},
   CU:{icon:'M4 4h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm1 2v8h14V6zm3 10h8v2H8z',color:'#6366f1',label:'Central Unit',url:''},
@@ -5668,12 +5663,13 @@ function prodIcon(type,size){
 // Helper: normalize asset type to PROD_CFG key
 // SOLO i tipi con foglio dedicato nell'Excel + ARLA e TITANIA sono tipi reali
 // Tutto il resto → ALTRI
-const VALID_ASSET_TYPES=['ROBOT','JUNO','VECTOR','DISCOVERY','COLLECTOR','CU','CALM','COMPRESSORI','COSMIX','NAUTILUS','LUNA','METEOR','GRAZEWAY','L4C LED','ARLA','TITANIA'];
+const VALID_ASSET_TYPES=['ROBOT','JUNO','VECTOR','MFR','DISCOVERY','COLLECTOR','CU','CALM','COMPRESSORI','COSMIX','NAUTILUS','LUNA','METEOR','GRAZEWAY','L4C LED','ARLA','TITANIA'];
 function normAssetType(tipo){
   tipo=(tipo||'').toUpperCase();
   if(tipo.includes('ASTRONAUT')||tipo==='ROBOT'||tipo.includes('MELKROBOT')||tipo.includes('MILKING ROBOT')||/\bA[2-5]\b/.test(tipo))return 'ROBOT';
   if(tipo.includes('JUNO'))return 'JUNO';
-  if(tipo.includes('VECTOR'))return 'VECTOR'; // Include Vector PDB, Vector cranes, trolley, accessories
+  if(/\bMFR\d*\b/.test(tipo)||tipo==='MFR')return 'MFR'; // MFR1, MFR2, MFR2 NEXT, MFR3
+  if(tipo.includes('VECTOR'))return 'VECTOR'; // Vector cranes, trolley, etc. (non-MFR)
   if(tipo.includes('DISCOVERY')&&!tipo.includes('COLLECTOR'))return 'DISCOVERY';
   if(tipo.includes('COLLECTOR'))return 'COLLECTOR';
   if(tipo.includes('CENTRAL')||tipo==='CU')return 'CU';
@@ -5814,7 +5810,7 @@ function renderAnagClients(list){
     const a=list.filter(c=>c.StatoCliente==='Attivo').length;
     const geo=list.filter(c=>c.Lat&&c.Lng).length;
     const totAssets=list.reduce((t,c)=>t+((c._assetCounts&&c._assetCounts._total)||0),0);
-    const mainTypes=['ROBOT','JUNO','VECTOR','DISCOVERY','COLLECTOR','CU','COSMIX','NAUTILUS','LUNA','CALM','COMPRESSORI','METEOR','GRAZEWAY','L4C LED'];
+    const mainTypes=['ROBOT','JUNO','VECTOR','MFR','DISCOVERY','COLLECTOR','CU','COSMIX','NAUTILUS','LUNA','CALM','COMPRESSORI','METEOR','GRAZEWAY','L4C LED'];
     // Debug: log assets classified as ALTRI to help identify missing product mappings
     if(window._anagDebugOnce!==true){
       const allRaw=getAllAnagAssets(false);
@@ -6186,6 +6182,12 @@ async function importAnagXlsx(file){
           const rhlh=cfg.rhlh!=null?row[cfg.rhlh]:null;
           const ind=cfg.ind!=null?row[cfg.ind]:null;
 
+          // VECTOR special: Bridge Crane e Feed Grabber sono accessori, non macchine autonome
+          const modeloStr=(modelo?String(modelo):'').toUpperCase();
+          if(sname==='VECTOR'&&(modeloStr.includes('BRIDGE CRANE')||modeloStr.includes('FEED GRABBER'))){continue;}
+          // Tipo foglio per VECTOR: MFR* → 'MFR', altrimenti 'VECTOR'
+          const effectiveTipoFoglio=(sname==='VECTOR'&&/\bMFR\d*\b/.test(modeloStr))?'MFR':sname;
+
           // Try to enrich existing asset first
           if(serieNorm&&assetsBySerieNorm[serieNorm]){
             const existing=assetsBySerieNorm[serieNorm];
@@ -6197,7 +6199,7 @@ async function importAnagXlsx(file){
             // Status dal foglio singolo SOVRASCRIVE sempre (più affidabile del foglio Assets generico)
             if(status)existing.Status=String(status);
             // TipoFoglio: SEMPRE aggiornato al foglio prodotto (fonte autorevole del tipo)
-            existing.TipoFoglio=sname;
+            existing.TipoFoglio=effectiveTipoFoglio;
             // GruppoAttrezzatura: preserva il valore originale dal foglio Assets base
             // CodiceM3: se manca, risolvi dal foglio prodotto (client name + movex col)
             if(!existing.CodiceM3){
@@ -6215,7 +6217,7 @@ async function importAnagXlsx(file){
           const asset={
             CodiceM3:m3,NomeAccount:String(cli),NumeroSerie:String(serie).replace(/\.0$/,''),
             Modello:modelo?String(modelo):sname,GruppoAttrezzatura:sname,
-            DataInstallazione:dataInst||null,Status:status?String(status):'Attivo',TipoFoglio:sname,
+            DataInstallazione:dataInst||null,Status:status?String(status):'Attivo',TipoFoglio:effectiveTipoFoglio,
             Provincia:prov?String(prov):null,Note:nota?String(nota):null,
             SalesAdvisor:salesAdv?String(salesAdv):null,
             RhLh:rhlh?String(rhlh):null,Ind:ind?String(ind):null
