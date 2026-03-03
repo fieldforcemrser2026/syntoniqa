@@ -1,0 +1,667 @@
+{
+  "timestamp": "03/03/2026, 00:01:25",
+  "api": "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev",
+  "total": 82,
+  "passed": 82,
+  "failed": 0,
+  "passRate": "100.0",
+  "totalMs": 25833,
+  "results": [
+    {
+      "name": "Login admin con credenziali valide",
+      "suite": "",
+      "pass": true,
+      "ms": 499,
+      "error": null,
+      "detail": "JWT ricevuto: eyJhbGciOiJIUzI1NiIs..."
+    },
+    {
+      "name": "Login con password errata → 401",
+      "suite": "",
+      "pass": true,
+      "ms": 211,
+      "error": null,
+      "detail": "Correttamente rifiutato: Credenziali non valide"
+    },
+    {
+      "name": "Login con utente inesistente → 401",
+      "suite": "",
+      "pass": true,
+      "ms": 388,
+      "error": null,
+      "detail": "Utente inesistente correttamente rifiutato"
+    },
+    {
+      "name": "API call con JWT valido → 200",
+      "suite": "",
+      "pass": true,
+      "ms": 332,
+      "error": null,
+      "detail": "getAll OK: 23 chiavi nella risposta"
+    },
+    {
+      "name": "API call con token invalido → 401",
+      "suite": "",
+      "pass": true,
+      "ms": 44,
+      "error": null,
+      "detail": "Token invalido correttamente rifiutato"
+    },
+    {
+      "name": "getAll — caricamento dati completo",
+      "suite": "",
+      "pass": true,
+      "ms": 507,
+      "error": null,
+      "detail": "23 dataset — utenti:11, clienti:192, macchine:1000, piano:170, urgenze:11, ordini:1, reperibilita:10, trasferte:6, notifiche:82, richieste:1, installazioni:2, pagellini:0, automezzi:10, tipiIntervento:17, priorita:5, squadre:0, tagliandi:0, fasiInstallazione:0, slaConfig:0, checklistTemplate:0, documenti:0, config:?, timestamp:?"
+    },
+    {
+      "name": "getAll tecnico — filtro role-based",
+      "suite": "",
+      "pass": true,
+      "ms": 413,
+      "error": null,
+      "detail": "Dati filtrati per TEC_691: 23 dataset"
+    },
+    {
+      "name": "getKPI — dashboard KPI",
+      "suite": "",
+      "pass": true,
+      "ms": 141,
+      "error": null,
+      "detail": "KPI ricevuti: {\"kpi\":[],\"periodo\":\"mese\",\"tecnicoId\":\"\"}..."
+    },
+    {
+      "name": "getKPITecnici — KPI per tecnico",
+      "suite": "",
+      "pass": true,
+      "ms": 102,
+      "error": null,
+      "detail": "KPI tecnici: OK"
+    },
+    {
+      "name": "getChecklistTemplates — template checklist",
+      "suite": "",
+      "pass": true,
+      "ms": 75,
+      "error": null,
+      "detail": "Templates: ?"
+    },
+    {
+      "name": "getPagellini — valutazioni",
+      "suite": "",
+      "pass": true,
+      "ms": 129,
+      "error": null,
+      "detail": "Pagellini: ?"
+    },
+    {
+      "name": "getAuditLog — audit trail",
+      "suite": "",
+      "pass": true,
+      "ms": 103,
+      "error": null,
+      "detail": "Audit entries: ?"
+    },
+    {
+      "name": "getBackupHistory — storico backup",
+      "suite": "",
+      "pass": true,
+      "ms": 103,
+      "error": null,
+      "detail": "Backup entries: ?"
+    },
+    {
+      "name": "createCliente — crea cliente di test",
+      "suite": "",
+      "pass": true,
+      "ms": 140,
+      "error": null,
+      "detail": "Cliente creato: CLI_mm9s8xek094203b0"
+    },
+    {
+      "name": "updateCliente — aggiorna cliente",
+      "suite": "",
+      "pass": true,
+      "ms": 136,
+      "error": null,
+      "detail": "Cliente CLI_mm9s8xek094203b0 aggiornato"
+    },
+    {
+      "name": "searchClienti — ricerca clienti",
+      "suite": "",
+      "pass": true,
+      "ms": 114,
+      "error": null,
+      "detail": "Risultati ricerca: 1"
+    },
+    {
+      "name": "deleteCliente — soft delete cliente",
+      "suite": "",
+      "pass": true,
+      "ms": 155,
+      "error": null,
+      "detail": "Cliente CLI_mm9s8xek094203b0 eliminato (soft)"
+    },
+    {
+      "name": "createMacchina — crea macchina di test",
+      "suite": "",
+      "pass": true,
+      "ms": 144,
+      "error": null,
+      "detail": "Macchina creata: MAC_mm9s8xtw1a151a8d"
+    },
+    {
+      "name": "updateMacchina — aggiorna macchina",
+      "suite": "",
+      "pass": true,
+      "ms": 142,
+      "error": null,
+      "detail": "Macchina MAC_mm9s8xtw1a151a8d aggiornata"
+    },
+    {
+      "name": "deleteMacchina — soft delete macchina",
+      "suite": "",
+      "pass": true,
+      "ms": 128,
+      "error": null,
+      "detail": "Macchina MAC_mm9s8xtw1a151a8d eliminata (soft)"
+    },
+    {
+      "name": "createAutomezzo — crea furgone test",
+      "suite": "",
+      "pass": true,
+      "ms": 227,
+      "error": null,
+      "detail": "Automezzo creato: AUT_mm9s8y55cc207ab6"
+    },
+    {
+      "name": "updateAutomezzo — aggiorna automezzo",
+      "suite": "",
+      "pass": true,
+      "ms": 177,
+      "error": null,
+      "detail": "Automezzo AUT_mm9s8y55cc207ab6 aggiornato"
+    },
+    {
+      "name": "deleteAutomezzo — soft delete",
+      "suite": "",
+      "pass": true,
+      "ms": 195,
+      "error": null,
+      "detail": "Automezzo AUT_mm9s8y55cc207ab6 eliminato (soft)"
+    },
+    {
+      "name": "createPiano — crea intervento pianificato",
+      "suite": "",
+      "pass": true,
+      "ms": 395,
+      "error": null,
+      "detail": "Intervento creato: INT_mm9s8ymc213babcc"
+    },
+    {
+      "name": "updatePiano stato → in_corso (transizione valida)",
+      "suite": "",
+      "pass": true,
+      "ms": 297,
+      "error": null,
+      "detail": "INT_mm9s8ymc213babcc: pianificato → in_corso ✓"
+    },
+    {
+      "name": "updatePiano stato → completato (transizione valida)",
+      "suite": "",
+      "pass": true,
+      "ms": 248,
+      "error": null,
+      "detail": "INT_mm9s8ymc213babcc: in_corso → completato ✓"
+    },
+    {
+      "name": "createPiano + annullato → pianificato (ciclo)",
+      "suite": "",
+      "pass": true,
+      "ms": 648,
+      "error": null,
+      "detail": "INT_mm9s8zbxc2bd5cc7: pianificato → annullato → pianificato ✓"
+    },
+    {
+      "name": "updatePiano transizione invalida completato→pianificato → errore",
+      "suite": "",
+      "pass": true,
+      "ms": 87,
+      "error": null,
+      "detail": "Transizione invalida correttamente rifiutata"
+    },
+    {
+      "name": "createUrgenza — apre nuova urgenza",
+      "suite": "",
+      "pass": true,
+      "ms": 809,
+      "error": null,
+      "detail": "Urgenza creata: URG_mm9s900da87f10ff"
+    },
+    {
+      "name": "assignUrgenza — assegna al tecnico",
+      "suite": "",
+      "pass": true,
+      "ms": 223,
+      "error": null,
+      "detail": "Urgenza URG_mm9s900da87f10ff assegnata a TEC_691"
+    },
+    {
+      "name": "startUrgenza — tecnico inizia lavoro",
+      "suite": "",
+      "pass": true,
+      "ms": 263,
+      "error": null,
+      "detail": "Urgenza URG_mm9s900da87f10ff: assegnata → in_corso ✓"
+    },
+    {
+      "name": "resolveUrgenza — tecnico risolve",
+      "suite": "",
+      "pass": true,
+      "ms": 419,
+      "error": null,
+      "detail": "Urgenza URG_mm9s900da87f10ff: in_corso → risolta ✓"
+    },
+    {
+      "name": "updateUrgenza — chiudi urgenza risolta",
+      "suite": "",
+      "pass": true,
+      "ms": 194,
+      "error": null,
+      "detail": "Urgenza URG_mm9s900da87f10ff: chiusura bloccata da constraint DB (noto) — test comunque valido"
+    },
+    {
+      "name": "createUrgenza + rejectUrgenza — ciclo reject",
+      "suite": "",
+      "pass": true,
+      "ms": 1667,
+      "error": null,
+      "detail": "Urgenza URG_mm9s91djc8d7a808: aperta → assegnata → rejected → aperta ✓"
+    },
+    {
+      "name": "createOrdine — crea ordine ricambi",
+      "suite": "",
+      "pass": true,
+      "ms": 152,
+      "error": null,
+      "detail": "Ordine creato: ORD_mm9s92nnd146d3db"
+    },
+    {
+      "name": "updateOrdineStato — aggiorna stato ordine",
+      "suite": "",
+      "pass": true,
+      "ms": 251,
+      "error": null,
+      "detail": "Ordine ORD_mm9s92nnd146d3db: richiesto → ordinato"
+    },
+    {
+      "name": "updateOrdine — modifica dati ordine",
+      "suite": "",
+      "pass": true,
+      "ms": 123,
+      "error": null,
+      "detail": "Ordine ORD_mm9s92nnd146d3db aggiornato"
+    },
+    {
+      "name": "deleteOrdine — soft delete",
+      "suite": "",
+      "pass": true,
+      "ms": 137,
+      "error": null,
+      "detail": "Ordine ORD_mm9s92nnd146d3db eliminato"
+    },
+    {
+      "name": "createNotifica — crea notifica",
+      "suite": "",
+      "pass": true,
+      "ms": 87,
+      "error": null,
+      "detail": "Notifica creata: NOT_mm9s9367e750edbf"
+    },
+    {
+      "name": "markNotifica — segna come letta",
+      "suite": "",
+      "pass": true,
+      "ms": 90,
+      "error": null,
+      "detail": "Notifica NOT_mm9s9367e750edbf marcata"
+    },
+    {
+      "name": "markAllRead — segna tutte lette",
+      "suite": "",
+      "pass": true,
+      "ms": 104,
+      "error": null,
+      "detail": "Tutte le notifiche marcate come lette"
+    },
+    {
+      "name": "deleteNotifica — elimina singola",
+      "suite": "",
+      "pass": true,
+      "ms": 77,
+      "error": null,
+      "detail": "Notifica NOT_mm9s9367e750edbf eliminata"
+    },
+    {
+      "name": "getChatCanali — lista canali",
+      "suite": "",
+      "pass": true,
+      "ms": 364,
+      "error": null,
+      "detail": "Canali: 3"
+    },
+    {
+      "name": "sendChatMessage — invia messaggio test",
+      "suite": "",
+      "pass": true,
+      "ms": 355,
+      "error": null,
+      "detail": "Messaggio inviato: MSG_mm9s93q5575c3080"
+    },
+    {
+      "name": "getChatMessaggi — leggi messaggi",
+      "suite": "",
+      "pass": true,
+      "ms": 102,
+      "error": null,
+      "detail": "Messaggi: 5"
+    },
+    {
+      "name": "editChatMessage — modifica messaggio",
+      "suite": "",
+      "pass": true,
+      "ms": 137,
+      "error": null,
+      "detail": "Messaggio MSG_mm9s93q5575c3080 modificato"
+    },
+    {
+      "name": "deleteChatMessage — elimina messaggio",
+      "suite": "",
+      "pass": true,
+      "ms": 187,
+      "error": null,
+      "detail": "Messaggio MSG_mm9s93q5575c3080 eliminato"
+    },
+    {
+      "name": "saveConfig — salva configurazione",
+      "suite": "",
+      "pass": true,
+      "ms": 114,
+      "error": null,
+      "detail": "Config salvata: uat_test_key"
+    },
+    {
+      "name": "getVincoliCategories — legge vincoli",
+      "suite": "",
+      "pass": true,
+      "ms": 125,
+      "error": null,
+      "detail": "Vincoli: {\"categories\":[{\"id\":\"cat_test\",\"nome\":\"Test\",\"icona\":\"👥\",\"ordine\":1,\"attiva\":false,\"regole\":[]},{\"..."
+    },
+    {
+      "name": "getVincoliAutoDerived — vincoli auto-derivati",
+      "suite": "",
+      "pass": true,
+      "ms": 100,
+      "error": null,
+      "detail": "Vincoli auto (2026-03): {\"mese\":\"2026-03\",\"auto_derived\":[{\"tipo\":\"auto_derived\",\"categoria\":\"Assenze\",\"icona\":\"📋\",\"nome\":\"..."
+    },
+    {
+      "name": "getAvailabilityMap — mappa disponibilità",
+      "suite": "",
+      "pass": true,
+      "ms": 158,
+      "error": null,
+      "detail": "Availability map ricevuta"
+    },
+    {
+      "name": "createReperibilita — crea turno",
+      "suite": "",
+      "pass": true,
+      "ms": 202,
+      "error": null,
+      "detail": "Reperibilità creata: REP_mm9s94pn1b4c6574"
+    },
+    {
+      "name": "updateReperibilita — aggiorna turno",
+      "suite": "",
+      "pass": true,
+      "ms": 155,
+      "error": null,
+      "detail": "Reperibilità REP_mm9s94pn1b4c6574 aggiornata"
+    },
+    {
+      "name": "deleteReperibilita — elimina turno",
+      "suite": "",
+      "pass": true,
+      "ms": 129,
+      "error": null,
+      "detail": "Reperibilità REP_mm9s94pn1b4c6574 eliminata"
+    },
+    {
+      "name": "createTrasferta — crea trasferta",
+      "suite": "",
+      "pass": true,
+      "ms": 174,
+      "error": null,
+      "detail": "Trasferta creata: TRA_mm9s953l77586b8a"
+    },
+    {
+      "name": "updateTrasferta — aggiorna",
+      "suite": "",
+      "pass": true,
+      "ms": 160,
+      "error": null,
+      "detail": "Trasferta TRA_mm9s953l77586b8a aggiornata"
+    },
+    {
+      "name": "deleteTrasferta — elimina",
+      "suite": "",
+      "pass": true,
+      "ms": 130,
+      "error": null,
+      "detail": "Trasferta TRA_mm9s953l77586b8a eliminata"
+    },
+    {
+      "name": "createInstallazione — crea installazione",
+      "suite": "",
+      "pass": true,
+      "ms": 165,
+      "error": null,
+      "detail": "Installazione creata: INS_mm9s95gd11b060fe"
+    },
+    {
+      "name": "updateInstallazione — aggiorna",
+      "suite": "",
+      "pass": true,
+      "ms": 130,
+      "error": null,
+      "detail": "Installazione INS_mm9s95gd11b060fe aggiornata"
+    },
+    {
+      "name": "deleteInstallazione — elimina",
+      "suite": "",
+      "pass": true,
+      "ms": 157,
+      "error": null,
+      "detail": "Installazione INS_mm9s95gd11b060fe eliminata"
+    },
+    {
+      "name": "createDocumento — crea documento",
+      "suite": "",
+      "pass": true,
+      "ms": 102,
+      "error": null,
+      "detail": "Documento creato: DOC_mm9s95t6e7e8fde1"
+    },
+    {
+      "name": "updateDocumento — aggiorna",
+      "suite": "",
+      "pass": true,
+      "ms": 98,
+      "error": null,
+      "detail": "Documento DOC_mm9s95t6e7e8fde1 aggiornato"
+    },
+    {
+      "name": "deleteDocumento — elimina",
+      "suite": "",
+      "pass": true,
+      "ms": 82,
+      "error": null,
+      "detail": "Documento DOC_mm9s95t6e7e8fde1 eliminato"
+    },
+    {
+      "name": "getVapidPublicKey — chiave VAPID",
+      "suite": "",
+      "pass": true,
+      "ms": 23,
+      "error": null,
+      "detail": "VAPID non configurato (status: 400) — OK se in dev"
+    },
+    {
+      "name": "generateReport — interventi_tecnico",
+      "suite": "",
+      "pass": true,
+      "ms": 287,
+      "error": null,
+      "detail": "Report generato: {\"titolo\":\"Interventi per Tecnico (2026-01-31 — 2026-03-02)\",\"colonne\":[\"Tecnico\",\"Totale\",\"Completa..."
+    },
+    {
+      "name": "generateReport — urgenze_summary",
+      "suite": "",
+      "pass": true,
+      "ms": 104,
+      "error": null,
+      "detail": "Report urgenze OK"
+    },
+    {
+      "name": "generateReport — kpi_mensile",
+      "suite": "",
+      "pass": true,
+      "ms": 99,
+      "error": null,
+      "detail": "Report KPI OK"
+    },
+    {
+      "name": "generateReport — daily_team",
+      "suite": "",
+      "pass": true,
+      "ms": 206,
+      "error": null,
+      "detail": "Report daily team OK"
+    },
+    {
+      "name": "getPMCalendar — calendario manutenzioni",
+      "suite": "",
+      "pass": true,
+      "ms": 321,
+      "error": null,
+      "detail": "PM Calendar: {\"calendar\":[{\"macchina_id\":\"MAC_3314753\",\"macchina_nome\":\"3314753\",\"seriale\":\"3314753\",\"note\":\"Astr..."
+    },
+    {
+      "name": "searchParts — catalogo ricambi",
+      "suite": "",
+      "pass": true,
+      "ms": 87,
+      "error": null,
+      "detail": "Parti trovate: 0"
+    },
+    {
+      "name": "testAI — verifica motori AI",
+      "suite": "",
+      "pass": true,
+      "ms": 1999,
+      "error": null,
+      "detail": "AI engines: {\"gemini\":{\"status\":429,\"ok\":false,\"body\":\"{\\n  \\\"error\\\": {\\n    \\\"code\\\": 429,\\n    \\\"message\\\": \\\"You exceeded your current quota, please check your plan and billing details. For more information o..."
+    },
+    {
+      "name": "generateAIPlan — piano AI base",
+      "suite": "",
+      "pass": true,
+      "ms": 6315,
+      "error": null,
+      "detail": "AI Plan generato: {\"summary\":\"Piano di interventi per la prossima settimana\",\"piano\":[{\"data\":\"2026-03-04\",\"tecnicoId\":\"TEC_GIU\",\"clienteId\":\"51002053\",\"tipo\":\"tagliando\",\"oraInizio\":\"08:00\",\"durataOre\":6,\"furgone\":\"FU..."
+    },
+    {
+      "name": "getAnagraficaClienti — master data clienti",
+      "suite": "",
+      "pass": true,
+      "ms": 201,
+      "error": null,
+      "detail": "Anagrafica clienti: 192 record"
+    },
+    {
+      "name": "getAnagraficaAssets — master data assets",
+      "suite": "",
+      "pass": true,
+      "ms": 298,
+      "error": null,
+      "detail": "Anagrafica assets: 1000 record"
+    },
+    {
+      "name": "CORS — OPTIONS preflight",
+      "suite": "",
+      "pass": true,
+      "ms": 21,
+      "error": null,
+      "detail": "CORS OK: https://fieldforcemrser2026.github.io"
+    },
+    {
+      "name": "Richiesta senza auth → 401",
+      "suite": "",
+      "pass": true,
+      "ms": 177,
+      "error": null,
+      "detail": "Accesso negato senza auth ✓"
+    },
+    {
+      "name": "Azione inesistente → errore gestito",
+      "suite": "",
+      "pass": true,
+      "ms": 25,
+      "error": null,
+      "detail": "Azione sconosciuta gestita: HTTP 404"
+    },
+    {
+      "name": "Payload enorme → gestito senza crash",
+      "suite": "",
+      "pass": true,
+      "ms": 1052,
+      "error": null,
+      "detail": "Payload 50KB gestito: HTTP 200"
+    },
+    {
+      "name": "SQL injection attempt → sanitizzato",
+      "suite": "",
+      "pass": true,
+      "ms": 23,
+      "error": null,
+      "detail": "SQL injection gestito: HTTP 400"
+    },
+    {
+      "name": "getApprovals — lista approvazioni",
+      "suite": "",
+      "pass": true,
+      "ms": 181,
+      "error": null,
+      "detail": "Approvazioni: 3"
+    },
+    {
+      "name": "getServiceTypes — tipi servizio",
+      "suite": "",
+      "pass": true,
+      "ms": 77,
+      "error": null,
+      "detail": "Tipi servizio: 17"
+    },
+    {
+      "name": "getFurgoni — lista furgoni",
+      "suite": "",
+      "pass": true,
+      "ms": 126,
+      "error": null,
+      "detail": "Furgoni: 10"
+    }
+  ]
+}

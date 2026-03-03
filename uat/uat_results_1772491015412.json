@@ -1,0 +1,667 @@
+{
+  "timestamp": "02/03/2026, 23:36:55",
+  "api": "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev",
+  "total": 82,
+  "passed": 11,
+  "failed": 71,
+  "passRate": "13.4",
+  "totalMs": 4299,
+  "results": [
+    {
+      "name": "Login admin con credenziali valide",
+      "suite": "",
+      "pass": false,
+      "ms": 1114,
+      "error": "Token JWT mancante nella risposta",
+      "detail": ""
+    },
+    {
+      "name": "Login con password errata → 401",
+      "suite": "",
+      "pass": true,
+      "ms": 413,
+      "error": null,
+      "detail": "Correttamente rifiutato: Credenziali non valide"
+    },
+    {
+      "name": "Login con utente inesistente → 401",
+      "suite": "",
+      "pass": true,
+      "ms": 343,
+      "error": null,
+      "detail": "Utente inesistente correttamente rifiutato"
+    },
+    {
+      "name": "API call con JWT valido → 200",
+      "suite": "",
+      "pass": false,
+      "ms": 1,
+      "error": "JWT non disponibile",
+      "detail": ""
+    },
+    {
+      "name": "API call con token invalido → 401",
+      "suite": "",
+      "pass": true,
+      "ms": 27,
+      "error": null,
+      "detail": "Token invalido correttamente rifiutato"
+    },
+    {
+      "name": "getAll — caricamento dati completo",
+      "suite": "",
+      "pass": false,
+      "ms": 36,
+      "error": "getAll fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "getAll tecnico — filtro role-based",
+      "suite": "",
+      "pass": false,
+      "ms": 54,
+      "error": "getAll tecnico fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "getKPI — dashboard KPI",
+      "suite": "",
+      "pass": false,
+      "ms": 47,
+      "error": "getKPI fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "getKPITecnici — KPI per tecnico",
+      "suite": "",
+      "pass": false,
+      "ms": 55,
+      "error": "getKPITecnici fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "getChecklistTemplates — template checklist",
+      "suite": "",
+      "pass": false,
+      "ms": 48,
+      "error": "getChecklistTemplates fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "getPagellini — valutazioni",
+      "suite": "",
+      "pass": false,
+      "ms": 56,
+      "error": "getPagellini fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "getAuditLog — audit trail",
+      "suite": "",
+      "pass": false,
+      "ms": 48,
+      "error": "getAuditLog fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "getBackupHistory — storico backup",
+      "suite": "",
+      "pass": false,
+      "ms": 51,
+      "error": "getBackupHistory fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "createCliente — crea cliente di test",
+      "suite": "",
+      "pass": false,
+      "ms": 50,
+      "error": "createCliente fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "updateCliente — aggiorna cliente",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessun cliente da aggiornare",
+      "detail": ""
+    },
+    {
+      "name": "searchClienti — ricerca clienti",
+      "suite": "",
+      "pass": false,
+      "ms": 54,
+      "error": "searchClienti fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "deleteCliente — soft delete cliente",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessun cliente da eliminare",
+      "detail": ""
+    },
+    {
+      "name": "createMacchina — crea macchina di test",
+      "suite": "",
+      "pass": false,
+      "ms": 49,
+      "error": "createMacchina fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "updateMacchina — aggiorna macchina",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessuna macchina da aggiornare",
+      "detail": ""
+    },
+    {
+      "name": "deleteMacchina — soft delete macchina",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessuna macchina da eliminare",
+      "detail": ""
+    },
+    {
+      "name": "createAutomezzo — crea furgone test",
+      "suite": "",
+      "pass": false,
+      "ms": 54,
+      "error": "createAutomezzo fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "updateAutomezzo — aggiorna automezzo",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessun automezzo da aggiornare",
+      "detail": ""
+    },
+    {
+      "name": "deleteAutomezzo — soft delete",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessun automezzo da eliminare",
+      "detail": ""
+    },
+    {
+      "name": "createPiano — crea intervento pianificato",
+      "suite": "",
+      "pass": false,
+      "ms": 23,
+      "error": "createPiano fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "updatePiano stato → in_corso (transizione valida)",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessun intervento da aggiornare",
+      "detail": ""
+    },
+    {
+      "name": "updatePiano stato → completato (transizione valida)",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessun intervento",
+      "detail": ""
+    },
+    {
+      "name": "createPiano + annullato → pianificato (ciclo)",
+      "suite": "",
+      "pass": false,
+      "ms": 27,
+      "error": "createPiano #2 fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "updatePiano transizione invalida completato→pianificato → errore",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessun intervento completato",
+      "detail": ""
+    },
+    {
+      "name": "createUrgenza — apre nuova urgenza",
+      "suite": "",
+      "pass": false,
+      "ms": 48,
+      "error": "createUrgenza fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "assignUrgenza — assegna al tecnico",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessuna urgenza da assegnare",
+      "detail": ""
+    },
+    {
+      "name": "startUrgenza — tecnico inizia lavoro",
+      "suite": "",
+      "pass": false,
+      "ms": 1,
+      "error": "Nessuna urgenza",
+      "detail": ""
+    },
+    {
+      "name": "resolveUrgenza — tecnico risolve",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessuna urgenza",
+      "detail": ""
+    },
+    {
+      "name": "updateUrgenza — chiudi urgenza risolta",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessuna urgenza",
+      "detail": ""
+    },
+    {
+      "name": "createUrgenza + rejectUrgenza — ciclo reject",
+      "suite": "",
+      "pass": false,
+      "ms": 56,
+      "error": "createUrgenza #2 fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "createOrdine — crea ordine ricambi",
+      "suite": "",
+      "pass": false,
+      "ms": 44,
+      "error": "createOrdine fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "updateOrdineStato — aggiorna stato ordine",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessun ordine",
+      "detail": ""
+    },
+    {
+      "name": "updateOrdine — modifica dati ordine",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessun ordine",
+      "detail": ""
+    },
+    {
+      "name": "deleteOrdine — soft delete",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessun ordine",
+      "detail": ""
+    },
+    {
+      "name": "createNotifica — crea notifica",
+      "suite": "",
+      "pass": false,
+      "ms": 55,
+      "error": "createNotifica fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "markNotifica — segna come letta",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessuna notifica",
+      "detail": ""
+    },
+    {
+      "name": "markAllRead — segna tutte lette",
+      "suite": "",
+      "pass": false,
+      "ms": 18,
+      "error": "markAllRead fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "deleteNotifica — elimina singola",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessuna notifica",
+      "detail": ""
+    },
+    {
+      "name": "getChatCanali — lista canali",
+      "suite": "",
+      "pass": false,
+      "ms": 32,
+      "error": "getChatCanali fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "sendChatMessage — invia messaggio test",
+      "suite": "",
+      "pass": false,
+      "ms": 47,
+      "error": "sendChatMessage fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "getChatMessaggi — leggi messaggi",
+      "suite": "",
+      "pass": false,
+      "ms": 55,
+      "error": "getChatMessaggi fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "editChatMessage — modifica messaggio",
+      "suite": "",
+      "pass": true,
+      "ms": 0,
+      "error": null,
+      "detail": "Skip: nessun messaggio da modificare"
+    },
+    {
+      "name": "deleteChatMessage — elimina messaggio",
+      "suite": "",
+      "pass": true,
+      "ms": 0,
+      "error": null,
+      "detail": "Skip: nessun messaggio da eliminare"
+    },
+    {
+      "name": "saveConfig — salva configurazione",
+      "suite": "",
+      "pass": false,
+      "ms": 48,
+      "error": "saveConfig fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "getVincoliCategories — legge vincoli",
+      "suite": "",
+      "pass": false,
+      "ms": 26,
+      "error": "getVincoliCategories fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "getVincoliAutoDerived — vincoli auto-derivati",
+      "suite": "",
+      "pass": false,
+      "ms": 25,
+      "error": "getVincoliAutoDerived fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "getAvailabilityMap — mappa disponibilità",
+      "suite": "",
+      "pass": false,
+      "ms": 55,
+      "error": "getAvailabilityMap fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "createReperibilita — crea turno",
+      "suite": "",
+      "pass": false,
+      "ms": 48,
+      "error": "createReperibilita fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "updateReperibilita — aggiorna turno",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessun turno",
+      "detail": ""
+    },
+    {
+      "name": "deleteReperibilita — elimina turno",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessun turno",
+      "detail": ""
+    },
+    {
+      "name": "createTrasferta — crea trasferta",
+      "suite": "",
+      "pass": false,
+      "ms": 22,
+      "error": "createTrasferta fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "updateTrasferta — aggiorna",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessuna trasferta",
+      "detail": ""
+    },
+    {
+      "name": "deleteTrasferta — elimina",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessuna trasferta",
+      "detail": ""
+    },
+    {
+      "name": "createInstallazione — crea installazione",
+      "suite": "",
+      "pass": false,
+      "ms": 28,
+      "error": "createInstallazione fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "updateInstallazione — aggiorna",
+      "suite": "",
+      "pass": false,
+      "ms": 1,
+      "error": "Nessuna installazione",
+      "detail": ""
+    },
+    {
+      "name": "deleteInstallazione — elimina",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessuna installazione",
+      "detail": ""
+    },
+    {
+      "name": "createDocumento — crea documento",
+      "suite": "",
+      "pass": false,
+      "ms": 54,
+      "error": "createDocumento fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "updateDocumento — aggiorna",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessun documento",
+      "detail": ""
+    },
+    {
+      "name": "deleteDocumento — elimina",
+      "suite": "",
+      "pass": false,
+      "ms": 0,
+      "error": "Nessun documento",
+      "detail": ""
+    },
+    {
+      "name": "getVapidPublicKey — chiave VAPID",
+      "suite": "",
+      "pass": true,
+      "ms": 47,
+      "error": null,
+      "detail": "VAPID non configurato (status: 401) — OK se in dev"
+    },
+    {
+      "name": "generateReport — interventi_tecnico",
+      "suite": "",
+      "pass": false,
+      "ms": 54,
+      "error": "Report interventi_tecnico fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "generateReport — urgenze_summary",
+      "suite": "",
+      "pass": false,
+      "ms": 49,
+      "error": "Report urgenze_summary fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "generateReport — kpi_mensile",
+      "suite": "",
+      "pass": false,
+      "ms": 55,
+      "error": "Report kpi_mensile fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "generateReport — daily_team",
+      "suite": "",
+      "pass": false,
+      "ms": 48,
+      "error": "Report daily_team fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "getPMCalendar — calendario manutenzioni",
+      "suite": "",
+      "pass": false,
+      "ms": 55,
+      "error": "getPMCalendar fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "searchParts — catalogo ricambi",
+      "suite": "",
+      "pass": false,
+      "ms": 48,
+      "error": "searchParts fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "testAI — verifica motori AI",
+      "suite": "",
+      "pass": false,
+      "ms": 55,
+      "error": "testAI fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "generateAIPlan — piano AI base",
+      "suite": "",
+      "pass": false,
+      "ms": 51,
+      "error": "generateAIPlan fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "getAnagraficaClienti — master data clienti",
+      "suite": "",
+      "pass": false,
+      "ms": 50,
+      "error": "getAnagraficaClienti fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "getAnagraficaAssets — master data assets",
+      "suite": "",
+      "pass": false,
+      "ms": 48,
+      "error": "getAnagraficaAssets fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "CORS — OPTIONS preflight",
+      "suite": "",
+      "pass": true,
+      "ms": 54,
+      "error": null,
+      "detail": "CORS OK: https://fieldforcemrser2026.github.io"
+    },
+    {
+      "name": "Richiesta senza auth → 401",
+      "suite": "",
+      "pass": true,
+      "ms": 48,
+      "error": null,
+      "detail": "Accesso negato senza auth ✓"
+    },
+    {
+      "name": "Azione inesistente → errore gestito",
+      "suite": "",
+      "pass": true,
+      "ms": 55,
+      "error": null,
+      "detail": "Azione sconosciuta gestita: HTTP 401"
+    },
+    {
+      "name": "Payload enorme → gestito senza crash",
+      "suite": "",
+      "pass": true,
+      "ms": 151,
+      "error": null,
+      "detail": "Payload 50KB gestito: HTTP 401"
+    },
+    {
+      "name": "SQL injection attempt → sanitizzato",
+      "suite": "",
+      "pass": true,
+      "ms": 53,
+      "error": null,
+      "detail": "SQL injection gestito: HTTP 401"
+    },
+    {
+      "name": "getApprovals — lista approvazioni",
+      "suite": "",
+      "pass": false,
+      "ms": 49,
+      "error": "getApprovals fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "getServiceTypes — tipi servizio",
+      "suite": "",
+      "pass": false,
+      "ms": 54,
+      "error": "getServiceTypes fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    },
+    {
+      "name": "getFurgoni — lista furgoni",
+      "suite": "",
+      "pass": false,
+      "ms": 48,
+      "error": "getFurgoni fallito: HTTP 401 — {\"success\":false,\"error\":\"Non autorizzato\"}",
+      "detail": ""
+    }
+  ]
+}

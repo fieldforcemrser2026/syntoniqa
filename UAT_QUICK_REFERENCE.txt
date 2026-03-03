@@ -1,0 +1,313 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║     SYNTONIQA UAT GAP ANALYSIS — QUICK REFERENCE CHECKLIST                 ║
+║     Location: /sessions/brave-peaceful-lovelace/mnt/Syntoniqa_repo/        ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+WHAT'S TESTED (66/129 = 51.2%)
+════════════════════════════════════════════════════════════════════════════
+
+SOLID COVERAGE:
+  ✓ Authentication (login, JWT validation)
+  ✓ Data retrieval (getAll, getKPI, reports)
+  ✓ CRUD operations (Clienti, Macchine, Automezzi, Trasferte, etc.)
+  ✓ Core workflows (Piano scheduling, Urgenza management)
+  ✓ Order management (create, update status, delete)
+  ✓ Chat system (send, edit, delete messages)
+  ✓ Security (CORS, auth validation, injection tests)
+
+PARTIAL COVERAGE:
+  △ State machines (Piano: 2/5 transitions, Urgenza: 3/6 paths)
+  △ Role-based access (login tested, restrictions not enforced)
+  △ Notifications (create tested, delivery untested)
+  △ AI features (generateAIPlan optional only)
+
+
+WHAT'S MISSING (63/129 = 48.8%)
+════════════════════════════════════════════════════════════════════════════
+
+CRITICAL (BLOCKS PRODUCTION):
+  ✗ Telegram bot (10 endpoints, 18 commands — 0% tested)
+  ✗ State machine edge cases (invalid transitions)
+  ✗ Notification delivery (E2E flows)
+  ✗ SLA escalation cron job
+
+HIGH PRIORITY:
+  ✗ User management (password reset, create user)
+  ✗ File uploads (uploadFile, uploadFotoProfilo)
+  ✗ AI analysis (analyzeImage, applyAIPlan, etc.)
+  ✗ Import/export (Lely, Excel, bulk operations)
+  ✗ PM scheduling (maintenance planning)
+
+MEDIUM PRIORITY:
+  ✗ Role enforcement (Tecnico, Caposquadra restrictions)
+  ✗ Concurrent operations (race condition testing)
+  ✗ Boundary conditions (empty datasets, large results)
+  ✗ Approvals workflow
+
+
+CRITICAL ENDPOINTS TO TEST IMMEDIATELY
+════════════════════════════════════════════════════════════════════════════
+
+1. Telegram Integration:
+   sendTelegramMsg, testTelegram, telegramWebhook
+   Commands: /vado, /incorso, /risolto, /ordine, /catalogo, /pianifica
+
+2. State Machines:
+   All invalid transitions for Piano (completato→pianificato, etc.)
+   All missing paths for Urgenza (aperta→schedulata, etc.)
+
+3. Notifications:
+   Create urgenza → group notification
+   Assign urgenza → private TG message
+   SLA escalation (>4h) → escalation alert
+   Piano late (>1h) → reminder notification
+   Order old (>7d) → reminder
+
+4. Cron Jobs:
+   checkInterventoReminders (1h late, 8h status)
+   checkSLAUrgenze (4h warning, SLA breach)
+
+
+KEY WORKFLOWS NOT END-TO-END TESTED
+════════════════════════════════════════════════════════════════════════════
+
+□ Urgenza: create → [TG group alert] → assign → [TG private] → 
+           [4h escalation] → resolve → close
+
+□ Piano: create → [tomorrow reminder] → [+1h late alert] → 
+         start → [8h status] → complete
+
+□ Telegram bot session: /vado → select urgenza → /incorso → /risolto
+
+□ AI plan: generateAIPlan → previewAIPlan → applyAIPlan → verify scheduled
+
+□ Bulk import: importLelyClienti → [geocode] → validate → sync
+
+
+TEST SUITE COVERAGE MATRIX
+════════════════════════════════════════════════════════════════════════════
+
+Suite              Tests  Coverage  Status
+─────────────────────────────────────────────
+A. Auth            5      60%      △ Partial
+B. Data Retrieval  8      100%     ✓ Done
+C. Clienti         4      100%     ✓ Done
+D. Macchine        3      100%     ✓ Done
+E. Automezzi       3      100%     ✓ Done
+F. Piano           5      70%      △ Gaps
+G. Urgenze         6      70%      △ Gaps
+H. Ordini          4      100%     ✓ Done
+I. Notifiche       4      60%      △ Flow missing
+J. Chat            5      83%      △ Channels
+K. Config          4      75%      △ Vincoli
+L. Reperibilita    3      100%     ✓ Done
+M. Trasferte       3      100%     ✓ Done
+N. Installazioni   3      100%     ✓ Done
+O. Documenti       3      100%     ✓ Done
+P. Push            1      20%      ✗ Not tested
+Q. Reports         4      100%     ✓ Done
+R. PM              2      25%      ✗ Not tested
+S. AI              2      10%      ✗ Not tested
+T. Anagrafica      2      100%     ✓ Done
+U. Security        5      100%     ✓ Done
+V. Stress          3      0%       ✗ Not tested
+W. Approvals       3      33%      ✗ Not tested
+─────────────────────────────────────────────
+TOTAL              85     51%      △ In Progress
+
+
+UNTESTED ENDPOINTS BY CATEGORY
+════════════════════════════════════════════════════════════════════════════
+
+User Management (0/5):
+  □ changePassword
+  □ createUtente
+  □ resetPassword
+  □ requestPasswordReset
+  □ updateUtente
+
+Telegram (0/10):
+  □ sendTelegramMsg
+  □ testTelegram
+  □ telegramWebhook
+  □ setupWebhook
+  □ removeWebhook
+  □ sendEmail
+  □ testEmail
+  □ [Plus 18 Telegram commands]
+
+Push Notifications (0/3):
+  □ savePushSubscription
+  □ removePushSubscription
+  □ sendPush
+
+File Operations (0/2):
+  □ uploadFile
+  □ uploadFotoProfilo
+
+AI Features (1/6):
+  ✗ analyzeImage
+  ✗ applyAIPlan
+  ✗ generatePlanSmart
+  ✓ generateAIPlan (optional)
+  ✗ importExcelPlan
+  ✗ previewAIPlan
+
+Import/Export (0/9):
+  □ importLelyClienti
+  □ importLelyAssets
+  □ importAnagraficaClienti
+  □ importAnagraficaAssets
+  □ exportLelyTemplate
+  □ exportPowerBI
+  □ geocodeAll
+  □ clearAnagrafica
+  □ syncClientiFromAnagrafica
+
+PM Scheduling (0/6):
+  □ generatePMSchedule
+  □ bulkGeneratePMCalendar
+  □ completePM
+  □ savePMCycleState
+  □ savePMCycleDefinitions
+  □ updatePMDate
+
+Approvals (1/4):
+  □ createApproval
+  □ getApproval
+  □ updateApproval
+  ✓ getApprovals (tested)
+
+Other Missing (15+ endpoints):
+  □ Checklists (create, update, delete, compile)
+  □ Chat channels (create, join)
+  □ Advanced (backup, migrate, KPI log, vehicle swap)
+  □ Misc (attachments, service requests)
+
+
+RISK MATRIX
+════════════════════════════════════════════════════════════════════════════
+
+CRITICAL RISKS (Stop deployment without fixing):
+  🔴 Telegram bot commands untested → Ops cannot dispatch
+  🔴 State machine invalid transitions → Data corruption
+  🔴 Notification delivery untested → Users don't get alerts
+  🔴 Role-based access not enforced → Tecnico can do admin ops
+
+HIGH RISKS (Fix before major release):
+  🟠 User management (password reset broken)
+  🟠 File uploads (no validation)
+  🟠 AI features (smart planning untested)
+  🟠 Import/export (data integrity issues)
+  🟠 PM scheduling (maintenance tracking fails)
+
+MEDIUM RISKS (Nice to have before release):
+  🟡 Concurrent operations (race conditions)
+  🟡 Boundary conditions (edge cases crash)
+  🟡 Approvals workflow (plan approval broken)
+  🟡 Caposquadra role (team lead missing)
+
+
+TESTING EFFORT ESTIMATE
+════════════════════════════════════════════════════════════════════════════
+
+Phase 1 (CRITICAL):  20-25 hrs
+  - Telegram bot integration: 10 hrs
+  - State machine coverage: 7 hrs
+  - Notification delivery: 8 hrs
+
+Phase 2 (HIGH):      15-20 hrs
+  - Role-based access: 5 hrs
+  - User management: 3 hrs
+  - File uploads: 3 hrs
+  - PM scheduling: 4 hrs
+
+Phase 3 (MEDIUM):    15-20 hrs
+  - AI features: 5 hrs
+  - Import/export: 7 hrs
+  - Approvals: 3 hrs
+  - Boundary conditions: 5 hrs
+
+TOTAL:              50-65 hours
+Current Coverage:    51%
+Target Coverage:     80%
+Estimated Time:      2-3 weeks (full-time)
+
+
+HOW TO RUN CURRENT TESTS
+════════════════════════════════════════════════════════════════════════════
+
+Basic run:
+  node uat/uat_runner.js
+
+With AI tests:
+  TEST_AI=true node uat/uat_runner.js
+
+With stress tests:
+  STRESS_TEST=true node uat/uat_runner.js
+
+With all tests:
+  TEST_AI=true STRESS_TEST=true node uat/uat_runner.js
+
+Custom test filtering:
+  [Not implemented — would be good addition]
+
+Requirements:
+  - .env.uat file with: API_URL, SQ_TOKEN, ADMIN_USER, ADMIN_PASS, TENANT_ID
+  - Node.js 18+
+  - Network access to Cloudflare worker URL
+  - Test account with admin privileges
+
+
+KEY FILES
+════════════════════════════════════════════════════════════════════════════
+
+Main Test File:
+  /sessions/brave-peaceful-lovelace/mnt/Syntoniqa_repo/uat/uat_runner.js
+  - 85 current tests across 22 suites
+  - Framework: Custom async test runner with assertions
+  - Size: 50+ KB
+
+Worker Implementation:
+  /sessions/brave-peaceful-lovelace/mnt/Syntoniqa_repo/cloudflare_worker.js
+  - 129 action handlers (GET & POST)
+  - Telegram webhook integration
+  - Cron jobs (checkInterventoReminders, checkSLAUrgenze)
+  - AI planning (Gemini)
+
+Documentation:
+  /sessions/brave-peaceful-lovelace/mnt/Syntoniqa_repo/CLAUDE.md
+  - State machine definitions
+  - Database schema (22 tables)
+  - Authorization rules
+  - Cron job behavior
+
+
+NEXT STEPS
+════════════════════════════════════════════════════════════════════════════
+
+1. IMMEDIATE (this sprint):
+   [ ] Add Telegram bot command tests (start with /vado)
+   [ ] Add state machine invalid transition tests
+   [ ] Add notification delivery verification
+
+2. SHORT-TERM (next sprint):
+   [ ] Enforce role-based access restrictions
+   [ ] Add user management tests
+   [ ] Add file upload tests
+
+3. MEDIUM-TERM (1 month):
+   [ ] Complete AI feature coverage
+   [ ] Add import/export tests
+   [ ] Add boundary condition tests
+
+4. LONG-TERM (backlog):
+   [ ] Performance testing (load, scalability)
+   [ ] Mobile-specific tests
+   [ ] Manual UAT by end users
+
+
+═════════════════════════════════════════════════════════════════════════════
+Generated: 2026-03-02
+Report: /sessions/brave-peaceful-lovelace/mnt/Syntoniqa_repo/UAT_GAP_ANALYSIS.md
+═════════════════════════════════════════════════════════════════════════════

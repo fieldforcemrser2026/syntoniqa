@@ -1,1109 +1,954 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Syntoniqa v1.0 — Solution Architecture</title>
-<style>
-  :root {
-    --brand: #C30A14;
-    --brand2: #A00810;
-    --blue: #3B7EF7;
-    --bg: #050505;
-    --surface: #1A1A1A;
-    --card: #2A2A2A;
-    --border: #3A3A3A;
-    --text: #F5F5F5;
-    --textSec: #B0B0B0;
-    --green: #22C55E;
-    --amber: #F59E0B;
-    --purple: #A855F7;
-    --cyan: #06B6D4;
-    --pink: #EC4899;
-  }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SYNTONIQA v1.0 — System Architecture</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --mrs-red: #C30A14;
+            --mrs-blue: #3B7EF7;
+            --dark-bg: #0A0A0A;
+            --surface: #1A1A1A;
+            --card: #2A2A2A;
+            --text-primary: #FFFFFF;
+            --text-secondary: #B0B0B0;
+            --text-muted: #808080;
+            --success: #22C55E;
+            --warning: #F59E0B;
+            --telegram: #0088CC;
+            --gemini: #9333EA;
+        }
 
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    overflow-x: hidden;
-    min-height: 100vh;
-  }
+        html, body {
+            width: 100%;
+            height: 100%;
+            background-color: var(--dark-bg);
+            color: var(--text-primary);
+            font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+            overflow-x: hidden;
+        }
 
-  /* ─── HEADER ─── */
-  .header {
-    text-align: center;
-    padding: 40px 20px 20px;
-    position: relative;
-  }
-  .header::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 200px;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, var(--brand), transparent);
-  }
-  .header h1 {
-    font-size: 2.2em;
-    font-weight: 700;
-    background: linear-gradient(135deg, var(--brand), #FF4444);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin-bottom: 8px;
-  }
-  .header p {
-    color: var(--textSec);
-    font-size: 1.1em;
-  }
-  .header .version {
-    display: inline-block;
-    background: var(--brand);
-    color: white;
-    padding: 2px 12px;
-    border-radius: 20px;
-    font-size: 0.8em;
-    margin-top: 8px;
-  }
+        /* Particle Background */
+        #particleCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            opacity: 0.15;
+        }
 
-  /* ─── STATS BAR ─── */
-  .stats-bar {
-    display: flex;
-    justify-content: center;
-    gap: 30px;
-    padding: 25px 20px;
-    flex-wrap: wrap;
-  }
-  .stat {
-    text-align: center;
-    min-width: 100px;
-  }
-  .stat .num {
-    font-size: 2em;
-    font-weight: 800;
-    color: var(--brand);
-  }
-  .stat .label {
-    font-size: 0.8em;
-    color: var(--textSec);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-  }
+        .container {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
 
-  /* ─── ARCHITECTURE CANVAS ─── */
-  .arch-container {
-    position: relative;
-    width: 100%;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 40px 20px;
-    min-height: 700px;
-  }
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, var(--surface) 0%, rgba(195, 10, 20, 0.1) 100%);
+            border-bottom: 2px solid var(--mrs-red);
+            padding: 2rem;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(195, 10, 20, 0.2);
+        }
 
-  /* ─── NODES ─── */
-  .node {
-    position: absolute;
-    background: var(--card);
-    border: 2px solid var(--border);
-    border-radius: 16px;
-    padding: 20px;
-    cursor: pointer;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    opacity: 0;
-    transform: scale(0.8);
-    z-index: 2;
-  }
-  .node.visible {
-    opacity: 1;
-    transform: scale(1);
-  }
-  .node:hover {
-    border-color: var(--brand);
-    transform: scale(1.05);
-    box-shadow: 0 0 30px rgba(195, 10, 20, 0.3);
-    z-index: 10;
-  }
-  .node .icon {
-    font-size: 2.5em;
-    margin-bottom: 8px;
-  }
-  .node .title {
-    font-weight: 700;
-    font-size: 1em;
-    margin-bottom: 4px;
-  }
-  .node .subtitle {
-    font-size: 0.75em;
-    color: var(--textSec);
-  }
-  .node .badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 0.65em;
-    margin-top: 6px;
-    font-weight: 600;
-  }
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, var(--mrs-red), var(--text-primary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
 
-  /* Node types */
-  .node-frontend { border-color: var(--blue); }
-  .node-frontend:hover { border-color: var(--blue); box-shadow: 0 0 30px rgba(59,126,247,0.3); }
-  .node-frontend .badge { background: rgba(59,126,247,0.2); color: var(--blue); }
+        .header-subtitle {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            letter-spacing: 0.05em;
+        }
 
-  .node-backend { border-color: var(--brand); }
-  .node-backend .badge { background: rgba(195,10,20,0.2); color: var(--brand); }
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            padding: 1.5rem;
+            background: var(--surface);
+            border-bottom: 1px solid rgba(195, 10, 20, 0.3);
+            flex-wrap: wrap;
+        }
 
-  .node-db { border-color: var(--green); }
-  .node-db:hover { border-color: var(--green); box-shadow: 0 0 30px rgba(34,197,94,0.3); }
-  .node-db .badge { background: rgba(34,197,94,0.2); color: var(--green); }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: 2px solid var(--mrs-red);
+            background: transparent;
+            color: var(--text-primary);
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
 
-  .node-integration { border-color: var(--purple); }
-  .node-integration:hover { border-color: var(--purple); box-shadow: 0 0 30px rgba(168,85,247,0.3); }
-  .node-integration .badge { background: rgba(168,85,247,0.2); color: var(--purple); }
+        .btn:hover {
+            background: var(--mrs-red);
+            box-shadow: 0 0 20px rgba(195, 10, 20, 0.5);
+            transform: translateY(-2px);
+        }
 
-  .node-ai { border-color: var(--amber); }
-  .node-ai:hover { border-color: var(--amber); box-shadow: 0 0 30px rgba(245,158,11,0.3); }
-  .node-ai .badge { background: rgba(245,158,11,0.2); color: var(--amber); }
+        .btn.active {
+            background: var(--mrs-red);
+            box-shadow: 0 0 20px rgba(195, 10, 20, 0.5);
+        }
 
-  .node-notify { border-color: var(--cyan); }
-  .node-notify:hover { border-color: var(--cyan); box-shadow: 0 0 30px rgba(6,182,212,0.3); }
-  .node-notify .badge { background: rgba(6,182,212,0.2); color: var(--cyan); }
+        /* Main Content */
+        .content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 2rem;
+        }
 
-  /* ─── SVG CONNECTIONS ─── */
-  .connections {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 1;
-    pointer-events: none;
-  }
-  .connections line {
-    stroke: var(--border);
-    stroke-width: 2;
-    stroke-dasharray: 8 4;
-    opacity: 0;
-    transition: opacity 0.5s;
-  }
-  .connections line.visible {
-    opacity: 0.6;
-  }
-  .connections line.active {
-    stroke: var(--brand);
-    opacity: 1;
-    stroke-dasharray: none;
-    filter: drop-shadow(0 0 4px rgba(195,10,20,0.5));
-  }
+        .diagram-section {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 600px;
+            margin-bottom: 3rem;
+        }
 
-  /* ─── PARTICLE SYSTEM ─── */
-  .particle {
-    position: absolute;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--brand);
-    box-shadow: 0 0 10px var(--brand);
-    z-index: 3;
-    pointer-events: none;
-  }
+        /* SVG Diagram */
+        .diagram {
+            width: 100%;
+            max-width: 900px;
+            filter: drop-shadow(0 0 30px rgba(195, 10, 20, 0.3));
+        }
 
-  /* ─── DETAIL PANEL ─── */
-  .detail-panel {
-    position: fixed;
-    top: 0;
-    right: -500px;
-    width: 450px;
-    max-width: 90vw;
-    height: 100vh;
-    background: var(--surface);
-    border-left: 2px solid var(--border);
-    padding: 30px;
-    z-index: 100;
-    transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    overflow-y: auto;
-  }
-  .detail-panel.open { right: 0; }
-  .detail-panel .close-btn {
-    position: absolute;
-    top: 15px;
-    right: 15px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    color: var(--text);
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    cursor: pointer;
-    font-size: 1.2em;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-  }
-  .detail-panel .close-btn:hover { background: var(--brand); border-color: var(--brand); }
-  .detail-panel h2 {
-    font-size: 1.5em;
-    margin-bottom: 5px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .detail-panel .detail-sub { color: var(--textSec); margin-bottom: 20px; }
-  .detail-panel h3 {
-    font-size: 0.9em;
-    color: var(--brand);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin: 20px 0 10px;
-  }
-  .detail-panel ul {
-    list-style: none;
-    padding: 0;
-  }
-  .detail-panel li {
-    padding: 8px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-    font-size: 0.9em;
-    color: var(--textSec);
-  }
-  .detail-panel li::before {
-    content: '→ ';
-    color: var(--brand);
-  }
-  .detail-panel .tech-tag {
-    display: inline-block;
-    background: var(--card);
-    border: 1px solid var(--border);
-    padding: 3px 10px;
-    border-radius: 12px;
-    font-size: 0.75em;
-    margin: 3px;
-    color: var(--textSec);
-  }
-  .detail-panel .metric {
-    display: flex;
-    justify-content: space-between;
-    padding: 10px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-  }
-  .detail-panel .metric .val {
-    font-weight: 700;
-    color: var(--brand);
-  }
+        @keyframes pulse {
+            0%, 100% {
+                filter: drop-shadow(0 0 20px currentColor);
+            }
+            50% {
+                filter: drop-shadow(0 0 40px currentColor);
+            }
+        }
 
-  /* ─── DATA FLOW ANIMATION ─── */
-  .flow-section {
-    max-width: 1200px;
-    margin: 60px auto;
-    padding: 0 20px;
-  }
-  .flow-section h2 {
-    text-align: center;
-    font-size: 1.5em;
-    margin-bottom: 30px;
-  }
-  .flow-timeline {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0;
-    flex-wrap: wrap;
-    padding: 20px 0;
-  }
-  .flow-step {
-    text-align: center;
-    padding: 15px;
-    min-width: 130px;
-    opacity: 0;
-    transform: translateY(20px);
-    transition: all 0.5s ease;
-  }
-  .flow-step.visible {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  .flow-step .step-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5em;
-    margin: 0 auto 10px;
-    border: 2px solid var(--border);
-    background: var(--card);
-    transition: all 0.3s;
-  }
-  .flow-step.active .step-icon {
-    border-color: var(--brand);
-    box-shadow: 0 0 20px rgba(195,10,20,0.4);
-    transform: scale(1.1);
-  }
-  .flow-step .step-label {
-    font-size: 0.8em;
-    color: var(--textSec);
-  }
-  .flow-arrow {
-    color: var(--border);
-    font-size: 1.5em;
-    opacity: 0;
-    transition: all 0.3s;
-  }
-  .flow-arrow.visible {
-    opacity: 1;
-    color: var(--brand);
-  }
+        @keyframes flowDot {
+            0% {
+                offset-distance: 0%;
+            }
+            100% {
+                offset-distance: 100%;
+            }
+        }
 
-  /* ─── DB SCHEMA ─── */
-  .schema-section {
-    max-width: 1200px;
-    margin: 60px auto;
-    padding: 0 20px;
-  }
-  .schema-section h2 {
-    text-align: center;
-    font-size: 1.5em;
-    margin-bottom: 30px;
-  }
-  .schema-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 12px;
-  }
-  .schema-table {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 12px;
-    transition: all 0.3s;
-    cursor: default;
-  }
-  .schema-table:hover {
-    border-color: var(--green);
-    box-shadow: 0 0 15px rgba(34,197,94,0.2);
-  }
-  .schema-table .tbl-name {
-    font-weight: 700;
-    font-size: 0.85em;
-    color: var(--green);
-  }
-  .schema-table .tbl-desc {
-    font-size: 0.7em;
-    color: var(--textSec);
-    margin-top: 4px;
-  }
-  .schema-table .tbl-key {
-    font-size: 0.65em;
-    color: var(--amber);
-    margin-top: 4px;
-    font-family: monospace;
-  }
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0px);
+            }
+            50% {
+                transform: translateY(-10px);
+            }
+        }
 
-  /* ─── TECH STACK ─── */
-  .stack-section {
-    max-width: 1200px;
-    margin: 60px auto;
-    padding: 0 20px 80px;
-  }
-  .stack-section h2 {
-    text-align: center;
-    font-size: 1.5em;
-    margin-bottom: 30px;
-  }
-  .stack-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 16px;
-  }
-  .stack-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-    transition: all 0.3s;
-  }
-  .stack-card:hover {
-    border-color: var(--brand);
-    transform: translateY(-2px);
-  }
-  .stack-card .stack-icon { font-size: 2em; margin-bottom: 10px; }
-  .stack-card .stack-name { font-weight: 700; margin-bottom: 4px; }
-  .stack-card .stack-desc { font-size: 0.8em; color: var(--textSec); }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(400px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
 
-  /* ─── FOOTER ─── */
-  .footer {
-    text-align: center;
-    padding: 30px;
-    color: var(--textSec);
-    font-size: 0.8em;
-    border-top: 1px solid var(--border);
-  }
-  .footer span { color: var(--brand); font-weight: 600; }
+        /* Node Styling */
+        .diagram-node {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
 
-  /* ─── OVERLAY ─── */
-  .overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.5);
-    z-index: 99;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s;
-  }
-  .overlay.open {
-    opacity: 1;
-    pointer-events: all;
-  }
+        .diagram-node:hover circle,
+        .diagram-node:hover rect {
+            filter: drop-shadow(0 0 30px currentColor);
+        }
 
-  /* ─── RESPONSIVE ─── */
-  @media (max-width: 768px) {
-    .header h1 { font-size: 1.5em; }
-    .stats-bar { gap: 15px; }
-    .stat .num { font-size: 1.4em; }
-    .arch-container { min-height: 1100px; }
-    .node { padding: 12px; }
-    .node .icon { font-size: 1.8em; }
-    .node .title { font-size: 0.85em; }
-  }
-</style>
+        .diagram-node text {
+            transition: all 0.3s ease;
+        }
+
+        .diagram-node:hover text {
+            font-weight: 600;
+        }
+
+        /* Detail Panel */
+        .detail-panel {
+            position: fixed;
+            right: 0;
+            top: 0;
+            width: 400px;
+            height: 100%;
+            background: var(--surface);
+            border-left: 3px solid var(--mrs-red);
+            padding: 2rem;
+            overflow-y: auto;
+            z-index: 1000;
+            transform: translateX(450px);
+            transition: transform 0.3s ease;
+            box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .detail-panel.active {
+            transform: translateX(0);
+            animation: slideIn 0.3s ease;
+        }
+
+        .detail-close {
+            position: absolute;
+            top: 1.5rem;
+            right: 1.5rem;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        .detail-close:hover {
+            color: var(--mrs-red);
+        }
+
+        .detail-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: var(--mrs-red);
+            margin-top: 1.5rem;
+        }
+
+        .detail-section {
+            margin-bottom: 2rem;
+        }
+
+        .detail-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .detail-content {
+            font-size: 0.95rem;
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.4rem 0.8rem;
+            background: rgba(195, 10, 20, 0.2);
+            border: 1px solid var(--mrs-red);
+            border-radius: 6px;
+            font-size: 0.8rem;
+            margin: 0.25rem;
+            color: var(--mrs-red);
+        }
+
+        /* Schema Grid */
+        .schema-section {
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 2px solid rgba(195, 10, 20, 0.3);
+        }
+
+        .section-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
+        }
+
+        .schema-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .schema-card {
+            background: var(--card);
+            border: 1px solid rgba(195, 10, 20, 0.3);
+            border-top: 4px solid var(--mrs-red);
+            border-radius: 12px;
+            padding: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .schema-card:hover {
+            transform: translateY(-8px);
+            border-color: var(--mrs-red);
+            box-shadow: 0 0 30px rgba(195, 10, 20, 0.3);
+        }
+
+        .schema-card-name {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--mrs-red);
+            margin-bottom: 0.75rem;
+            font-family: 'Courier New', monospace;
+        }
+
+        .schema-card-desc {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            margin-bottom: 1rem;
+        }
+
+        .schema-card-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* Tech Stack */
+        .tech-stack-section {
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 2px solid rgba(195, 10, 20, 0.3);
+        }
+
+        .tech-scroll {
+            display: flex;
+            gap: 1.5rem;
+            overflow-x: auto;
+            padding: 1rem 0;
+            scroll-behavior: smooth;
+        }
+
+        .tech-card {
+            flex: 0 0 280px;
+            background: var(--card);
+            border: 1px solid rgba(195, 10, 20, 0.3);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .tech-card:hover {
+            transform: translateY(-8px);
+            border-color: var(--mrs-red);
+            box-shadow: 0 0 30px rgba(195, 10, 20, 0.3);
+        }
+
+        .tech-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .tech-name {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--mrs-red);
+            margin-bottom: 0.5rem;
+        }
+
+        .tech-desc {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            margin-top: 3rem;
+            padding: 2rem;
+            border-top: 1px solid rgba(195, 10, 20, 0.3);
+            color: var(--text-muted);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8rem;
+            }
+
+            .detail-panel {
+                width: 100%;
+                transform: translateX(100%);
+            }
+
+            .schema-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .controls {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--surface);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--mrs-red);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #ff1424;
+        }
+    </style>
 </head>
 <body>
+    <canvas id="particleCanvas"></canvas>
 
-<!-- HEADER -->
-<div class="header">
-  <h1>SYNTONIQA</h1>
-  <p>Solution Architecture — Field Service Management Platform</p>
-  <div class="version">v1.0</div>
-</div>
+    <div class="container">
+        <div class="header">
+            <h1>SYNTONIQA v1.0</h1>
+            <p class="header-subtitle">System Architecture & Component Overview</p>
+        </div>
 
-<!-- STATS BAR -->
-<div class="stats-bar">
-  <div class="stat"><div class="num" data-target="129">0</div><div class="label">API Endpoints</div></div>
-  <div class="stat"><div class="num" data-target="22">0</div><div class="label">DB Tables</div></div>
-  <div class="stat"><div class="num" data-target="18">0</div><div class="label">TG Commands</div></div>
-  <div class="stat"><div class="num" data-target="155">0</div><div class="label">UAT Tests</div></div>
-  <div class="stat"><div class="num" data-target="13">0</div><div class="label">Feature Modules</div></div>
-  <div class="stat"><div class="num" data-target="7086">0</div><div class="label">Lines of Code</div></div>
-</div>
+        <div class="controls">
+            <button class="btn" onclick="animateFlow()">Animate Urgency Flow</button>
+            <button class="btn" onclick="toggleDarkMode()">Theme</button>
+            <button class="btn" onclick="resetDiagram()">Reset Diagram</button>
+        </div>
 
-<!-- ARCHITECTURE DIAGRAM -->
-<div class="arch-container" id="archContainer">
-  <svg class="connections" id="connections"></svg>
+        <div class="content">
+            <div class="diagram-section">
+                <svg class="diagram" viewBox="0 0 900 600" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Background -->
+                    <defs>
+                        <filter id="glow-red">
+                            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                            <feMerge>
+                                <feMergeNode in="coloredBlur"/>
+                                <feMergeNode in="SourceGraphic"/>
+                            </feMerge>
+                        </filter>
+                        <marker id="arrowHead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                            <polygon points="0 0, 10 3, 0 6" fill="#C30A14"/>
+                        </marker>
+                    </defs>
 
-  <!-- Frontend nodes -->
-  <div class="node node-frontend" id="nodeAdmin" data-detail="admin" style="left:5%;top:10%;width:200px;">
-    <div class="icon">🖥️</div>
-    <div class="title">Admin Dashboard</div>
-    <div class="subtitle">SPA — 9.250 righe</div>
-    <div class="badge">admin_v1.html</div>
-  </div>
+                    <!-- Connections with animation -->
+                    <g class="connections">
+                        <!-- Admin to Worker -->
+                        <line x1="150" y1="150" x2="450" y2="300" stroke="#C30A14" stroke-width="2" stroke-dasharray="5,5" opacity="0.6"/>
+                        <circle cx="150" cy="150" r="3" fill="#C30A14" opacity="0.8">
+                            <animate attributeName="cy" values="150;300" dur="3s" repeatCount="indefinite"/>
+                        </circle>
 
-  <div class="node node-frontend" id="nodeMobile" data-detail="mobile" style="left:5%;top:45%;width:200px;">
-    <div class="icon">📱</div>
-    <div class="title">PWA Mobile</div>
-    <div class="subtitle">Tecnici — 2.855 righe</div>
-    <div class="badge">index_v2.html</div>
-  </div>
+                        <!-- Mobile to Worker -->
+                        <line x1="450" y1="150" x2="450" y2="280" stroke="#3B7EF7" stroke-width="2" stroke-dasharray="5,5" opacity="0.6"/>
+                        <circle cx="450" cy="150" r="3" fill="#3B7EF7" opacity="0.8">
+                            <animate attributeName="cy" values="150;280" dur="3s" repeatCount="indefinite"/>
+                        </circle>
 
-  <div class="node node-integration" id="nodeTelegram" data-detail="telegram" style="left:5%;top:75%;width:200px;">
-    <div class="icon">✈️</div>
-    <div class="title">Telegram Bot</div>
-    <div class="subtitle">18 comandi + AI</div>
-    <div class="badge">Webhook</div>
-  </div>
+                        <!-- Telegram to Worker -->
+                        <line x1="750" y1="150" x2="450" y2="300" stroke="#0088CC" stroke-width="2" stroke-dasharray="5,5" opacity="0.6"/>
+                        <circle cx="750" cy="150" r="3" fill="#0088CC" opacity="0.8">
+                            <animate attributeName="cy" values="150;300" dur="3s" repeatCount="indefinite"/>
+                        </circle>
 
-  <!-- Core -->
-  <div class="node node-backend" id="nodeWorker" data-detail="worker" style="left:35%;top:30%;width:260px;">
-    <div class="icon">⚡</div>
-    <div class="title">Cloudflare Worker</div>
-    <div class="subtitle">7.086 righe · 129 endpoint</div>
-    <div class="badge">cloudflare_worker.js</div>
-  </div>
+                        <!-- Worker to DB -->
+                        <line x1="380" y1="380" x2="250" y2="480" stroke="#22C55E" stroke-width="2" stroke-dasharray="5,5" opacity="0.6"/>
+                        <circle cx="380" cy="380" r="3" fill="#22C55E" opacity="0.8">
+                            <animate attributeName="cx" values="380;250" dur="3s" repeatCount="indefinite"/>
+                        </circle>
 
-  <!-- Database -->
-  <div class="node node-db" id="nodeDB" data-detail="database" style="right:10%;top:30%;width:220px;">
-    <div class="icon">🗄️</div>
-    <div class="title">Supabase PostgreSQL</div>
-    <div class="subtitle">22 tabelle · REST API</div>
-    <div class="badge">sajzbanhkehkkhhgztkq</div>
-  </div>
+                        <!-- Worker to Gemini -->
+                        <line x1="450" y1="380" x2="450" y2="480" stroke="#9333EA" stroke-width="2" stroke-dasharray="5,5" opacity="0.6"/>
+                        <circle cx="450" cy="380" r="3" fill="#9333EA" opacity="0.8">
+                            <animate attributeName="cy" values="380;480" dur="3s" repeatCount="indefinite"/>
+                        </circle>
 
-  <!-- AI -->
-  <div class="node node-ai" id="nodeAI" data-detail="ai" style="left:38%;top:70%;width:220px;">
-    <div class="icon">🤖</div>
-    <div class="title">AI Engine</div>
-    <div class="subtitle">Gemini Pro · Vision</div>
-    <div class="badge">Smart Dispatching</div>
-  </div>
+                        <!-- Worker to Notifications -->
+                        <line x1="520" y1="380" x2="650" y2="480" stroke="#F59E0B" stroke-width="2" stroke-dasharray="5,5" opacity="0.6"/>
+                        <circle cx="520" cy="380" r="3" fill="#F59E0B" opacity="0.8">
+                            <animate attributeName="cx" values="520;650" dur="3s" repeatCount="indefinite"/>
+                        </circle>
+                    </g>
 
-  <!-- Notifications -->
-  <div class="node node-notify" id="nodeNotify" data-detail="notify" style="right:8%;top:70%;width:220px;">
-    <div class="icon">🔔</div>
-    <div class="title">Notification Hub</div>
-    <div class="subtitle">Email · Push · TG · In-App</div>
-    <div class="badge">Multi-channel</div>
-  </div>
+                    <!-- Nodes -->
+                    <!-- Admin Dashboard -->
+                    <g class="diagram-node" onclick="showDetail('admin')">
+                        <rect x="80" y="110" width="140" height="80" rx="12" fill="#2A2A2A" stroke="#C30A14" stroke-width="2" opacity="0.7"/>
+                        <circle cx="150" cy="130" r="20" fill="#C30A14" opacity="0.2"/>
+                        <text x="150" y="165" text-anchor="middle" font-size="13" fill="#FFFFFF" font-weight="600">Admin Dashboard</text>
+                    </g>
 
-  <!-- Cron -->
-  <div class="node node-integration" id="nodeCron" data-detail="cron" style="right:10%;top:5%;width:200px;">
-    <div class="icon">⏰</div>
-    <div class="title">Cron Scheduler</div>
-    <div class="subtitle">Ogni 15 minuti</div>
-    <div class="badge">SLA + Reminders</div>
-  </div>
-</div>
+                    <!-- Mobile PWA -->
+                    <g class="diagram-node" onclick="showDetail('mobile')">
+                        <rect x="380" y="110" width="140" height="80" rx="12" fill="#2A2A2A" stroke="#3B7EF7" stroke-width="2" opacity="0.7"/>
+                        <circle cx="450" cy="130" r="20" fill="#3B7EF7" opacity="0.2"/>
+                        <text x="450" y="165" text-anchor="middle" font-size="13" fill="#FFFFFF" font-weight="600">Mobile PWA</text>
+                    </g>
 
-<!-- DATA FLOW SECTION -->
-<div class="flow-section">
-  <h2>📡 Flusso Gestione Urgenza</h2>
-  <div class="flow-timeline" id="flowTimeline">
-    <div class="flow-step" data-step="1"><div class="step-icon">📞</div><div class="step-label">Chiamata<br>Cliente</div></div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-step" data-step="2"><div class="step-icon">🔴</div><div class="step-label">Urgenza<br>Aperta</div></div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-step" data-step="3"><div class="step-icon">🤖</div><div class="step-label">AI<br>Dispatch</div></div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-step" data-step="4"><div class="step-icon">👤</div><div class="step-label">Tecnico<br>Assegnato</div></div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-step" data-step="5"><div class="step-icon">📱</div><div class="step-label">Notifica<br>Push + TG</div></div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-step" data-step="6"><div class="step-icon">🔧</div><div class="step-label">Lavoro<br>In Corso</div></div>
-    <div class="flow-arrow">→</div>
-    <div class="flow-step" data-step="7"><div class="step-icon">✅</div><div class="step-label">Risolta<br>+ KPI</div></div>
-  </div>
-</div>
+                    <!-- Telegram Bot -->
+                    <g class="diagram-node" onclick="showDetail('telegram')">
+                        <rect x="680" y="110" width="140" height="80" rx="12" fill="#2A2A2A" stroke="#0088CC" stroke-width="2" opacity="0.7"/>
+                        <circle cx="750" cy="130" r="20" fill="#0088CC" opacity="0.2"/>
+                        <text x="750" y="165" text-anchor="middle" font-size="13" fill="#FFFFFF" font-weight="600">Telegram Bot</text>
+                    </g>
 
-<!-- DB SCHEMA -->
-<div class="schema-section">
-  <h2>🗄️ Database Schema — 22 Tabelle</h2>
-  <div class="schema-grid" id="schemaGrid"></div>
-</div>
+                    <!-- Central Worker -->
+                    <g class="diagram-node" onclick="showDetail('worker')">
+                        <circle cx="450" cy="330" r="60" fill="#C30A14" opacity="0.3" stroke="#C30A14" stroke-width="3"/>
+                        <circle cx="450" cy="330" r="55" fill="none" stroke="#C30A14" stroke-width="2" stroke-dasharray="8,4">
+                            <animate attributeName="stroke-dashoffset" from="0" to="-12" dur="2s" repeatCount="indefinite"/>
+                        </circle>
+                        <text x="450" y="325" text-anchor="middle" font-size="11" fill="#FFFFFF" font-weight="700">Cloudflare</text>
+                        <text x="450" y="340" text-anchor="middle" font-size="11" fill="#FFFFFF" font-weight="700">Worker</text>
+                    </g>
 
-<!-- TECH STACK -->
-<div class="stack-section">
-  <h2>🛠️ Technology Stack</h2>
-  <div class="stack-grid">
-    <div class="stack-card">
-      <div class="stack-icon">⚡</div>
-      <div class="stack-name">Cloudflare Workers</div>
-      <div class="stack-desc">Edge computing, 0ms cold start, 200+ data center globali. Cron triggers ogni 15 min.</div>
+                    <!-- Database -->
+                    <g class="diagram-node" onclick="showDetail('db')">
+                        <rect x="200" y="470" width="100" height="70" rx="8" fill="#2A2A2A" stroke="#22C55E" stroke-width="2" opacity="0.7"/>
+                        <text x="250" y="500" text-anchor="middle" font-size="12" fill="#22C55E" font-weight="600">Supabase</text>
+                        <text x="250" y="520" text-anchor="middle" font-size="11" fill="#B0B0B0">PostgreSQL</text>
+                    </g>
+
+                    <!-- Gemini AI -->
+                    <g class="diagram-node" onclick="showDetail('gemini')">
+                        <rect x="400" y="470" width="100" height="70" rx="8" fill="#2A2A2A" stroke="#9333EA" stroke-width="2" opacity="0.7"/>
+                        <text x="450" y="500" text-anchor="middle" font-size="12" fill="#9333EA" font-weight="600">Gemini AI</text>
+                        <text x="450" y="520" text-anchor="middle" font-size="11" fill="#B0B0B0">Analysis</text>
+                    </g>
+
+                    <!-- Notifications -->
+                    <g class="diagram-node" onclick="showDetail('notifications')">
+                        <rect x="600" y="470" width="100" height="70" rx="8" fill="#2A2A2A" stroke="#F59E0B" stroke-width="2" opacity="0.7"/>
+                        <text x="650" y="495" text-anchor="middle" font-size="12" fill="#F59E0B" font-weight="600">Email, Push</text>
+                        <text x="650" y="515" text-anchor="middle" font-size="11" fill="#F59E0B" font-weight="600">Telegram</text>
+                    </g>
+
+                    <!-- Stats -->
+                    <g opacity="0.6">
+                        <text x="20" y="580" font-size="12" fill="#B0B0B0">📊 10,726 lines • 3,042 worker • 22 tables</text>
+                        <text x="20" y="600" font-size="12" fill="#B0B0B0">⚡ 97 API endpoints • 2 cron jobs • Zero framework</text>
+                    </g>
+                </svg>
+            </div>
+
+            <!-- Database Schema Section -->
+            <div class="schema-section">
+                <h2 class="section-title">Database Schema (22 Tables)</h2>
+                <div class="schema-grid">
+                    <div class="schema-card">
+                        <div class="schema-card-name">utenti</div>
+                        <div class="schema-card-desc">Tecnici & Admin con ruoli e permessi</div>
+                        <div class="schema-card-meta"><span>PK: id</span><span>10 record</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">clienti</div>
+                        <div class="schema-card-desc">Allevamenti e strutture con anagrafe master</div>
+                        <div class="schema-card-meta"><span>PK: id</span><span>70+ record</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">macchine</div>
+                        <div class="schema-card-desc">Robot Lely installati presso clienti</div>
+                        <div class="schema-card-meta"><span>PK: id</span><span>150+ record</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">piano</div>
+                        <div class="schema-card-desc">Interventi pianificati (pianificato → in_corso → completato)</div>
+                        <div class="schema-card-meta"><span>PK: id</span><span>State Machine</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">urgenze</div>
+                        <div class="schema-card-desc">Emergenze/urgenze con SLA monitoring</div>
+                        <div class="schema-card-meta"><span>PK: id</span><span>SLA Tracked</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">ordini</div>
+                        <div class="schema-card-desc">Richieste di ricambi (richiesto → spedito → consegnato)</div>
+                        <div class="schema-card-meta"><span>PK: id</span><span>Audit trail</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">automezzi</div>
+                        <div class="schema-card-desc">Furgoni per tecnici con tracking</div>
+                        <div class="schema-card-meta"><span>PK: id</span><span>Locationable</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">reperibilita</div>
+                        <div class="schema-card-desc">Turni reperibilità con calendari</div>
+                        <div class="schema-card-meta"><span>PK: id</span><span>Recurring</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">trasferte</div>
+                        <div class="schema-card-desc">Trasferte e spostamenti tra sedi</div>
+                        <div class="schema-card-meta"><span>PK: id</span><span>Trackable</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">installazioni</div>
+                        <div class="schema-card-desc">Nuove installazioni robot Lely</div>
+                        <div class="schema-card-meta"><span>PK: id</span><span>Project</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">notifiche</div>
+                        <div class="schema-card-desc">Notifiche in-app con read status</div>
+                        <div class="schema-card-meta"><span>PK: id</span><span>In-App</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">chat_canali</div>
+                        <div class="schema-card-desc">Canali chat per comunicazione team</div>
+                        <div class="schema-card-meta"><span>PK: id</span><span>Messaging</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">chat_messaggi</div>
+                        <div class="schema-card-desc">Messaggi con metadata e reazioni</div>
+                        <div class="schema-card-meta"><span>PK: id</span><span>Threaded</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">workflow_log</div>
+                        <div class="schema-card-desc">Audit trail completo di tutte le azioni</div>
+                        <div class="schema-card-meta"><span>PK: auto</span><span>Immutable</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">kpi_log</div>
+                        <div class="schema-card-desc">Snapshots KPI per analytics</div>
+                        <div class="schema-card-meta"><span>PK: auto</span><span>Timeseries</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">sla_config</div>
+                        <div class="schema-card-desc">Configurazione SLA per urgenze</div>
+                        <div class="schema-card-meta"><span>PK: id</span><span>SLA Rules</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">config</div>
+                        <div class="schema-card-desc">Configurazione chiave/valore globale</div>
+                        <div class="schema-card-meta"><span>PK: chiave</span><span>Settings</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">anagrafica_clienti</div>
+                        <div class="schema-card-desc">Master data clienti da M3</div>
+                        <div class="schema-card-meta"><span>PK: codice_m3</span><span>Sync</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">anagrafica_assets</div>
+                        <div class="schema-card-desc">Master data macchine Lely</div>
+                        <div class="schema-card-meta"><span>PK: id</span><span>Sync</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">checklist_template</div>
+                        <div class="schema-card-desc">Template checklist per interventi</div>
+                        <div class="schema-card-meta"><span>PK: id</span><span>Template</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">documenti</div>
+                        <div class="schema-card-desc">Documenti allegati a interventi</div>
+                        <div class="schema-card-meta"><span>PK: id</span><span>Files</span></div>
+                    </div>
+                    <div class="schema-card">
+                        <div class="schema-card-name">kpi_snapshot</div>
+                        <div class="schema-card-desc">Backup snapshots per analytics</div>
+                        <div class="schema-card-meta"><span>PK: id</span><span>Backup</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tech Stack Section -->
+            <div class="tech-stack-section">
+                <h2 class="section-title">Technology Stack</h2>
+                <div class="tech-scroll">
+                    <div class="tech-card">
+                        <div class="tech-icon">☁️</div>
+                        <div class="tech-name">Cloudflare Workers</div>
+                        <div class="tech-desc">Serverless edge computing, 3,042 lines, zero framework</div>
+                    </div>
+                    <div class="tech-card">
+                        <div class="tech-icon">🗄️</div>
+                        <div class="tech-name">Supabase PostgreSQL</div>
+                        <div class="tech-desc">22 tables, 100% SQL, JSON support, realtime</div>
+                    </div>
+                    <div class="tech-card">
+                        <div class="tech-icon">📱</div>
+                        <div class="tech-name">Progressive Web App</div>
+                        <div class="tech-desc">Offline-first, installable, push notifications</div>
+                    </div>
+                    <div class="tech-card">
+                        <div class="tech-icon">🗺️</div>
+                        <div class="tech-name">Leaflet.js</div>
+                        <div class="tech-desc">Interactive mapping, location tracking, geocaching</div>
+                    </div>
+                    <div class="tech-card">
+                        <div class="tech-icon">📊</div>
+                        <div class="tech-name">Chart.js</div>
+                        <div class="tech-desc">Real-time KPI dashboards, responsive charts</div>
+                    </div>
+                    <div class="tech-card">
+                        <div class="tech-icon">🤖</div>
+                        <div class="tech-name">Google Gemini API</div>
+                        <div class="tech-desc">AI photo analysis, smart planning, natural language</div>
+                    </div>
+                    <div class="tech-card">
+                        <div class="tech-icon">💬</div>
+                        <div class="tech-name">Telegram Bot</div>
+                        <div class="tech-desc">Quick actions, push notifications, webhooks</div>
+                    </div>
+                    <div class="tech-card">
+                        <div class="tech-icon">📧</div>
+                        <div class="tech-name">Resend Email</div>
+                        <div class="tech-desc">Email notifications, SLA alerts, transactional</div>
+                    </div>
+                    <div class="tech-card">
+                        <div class="tech-icon">📑</div>
+                        <div class="tech-name">SheetJS Excel</div>
+                        <div class="tech-desc">Excel import/export, data reconciliation</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="footer">
+                <p>MRS Lely Center Emilia Romagna — Marzo 2026 — Click nodes to explore components</p>
+            </div>
+        </div>
     </div>
-    <div class="stack-card">
-      <div class="stack-icon">🐘</div>
-      <div class="stack-name">Supabase PostgreSQL</div>
-      <div class="stack-desc">Database relazionale managed, REST API auto-generata, RLS policies, real-time subscriptions.</div>
+
+    <!-- Detail Panel -->
+    <div class="detail-panel" id="detailPanel">
+        <button class="detail-close" onclick="closeDetail()">✕</button>
+        <div id="detailContent"></div>
     </div>
-    <div class="stack-card">
-      <div class="stack-icon">📱</div>
-      <div class="stack-name">PWA Progressive Web App</div>
-      <div class="stack-desc">Installabile su mobile, Service Worker per offline, Web Push notifications. Nessun app store.</div>
-    </div>
-    <div class="stack-card">
-      <div class="stack-icon">✈️</div>
-      <div class="stack-name">Telegram Bot API</div>
-      <div class="stack-desc">18 comandi, webhook real-time, AI vision per analisi foto, notifiche gruppo + private.</div>
-    </div>
-    <div class="stack-card">
-      <div class="stack-icon">🤖</div>
-      <div class="stack-name">Google Gemini AI</div>
-      <div class="stack-desc">Vision per analisi immagini, NLP per dispatching intelligente, suggerimenti manutenzione.</div>
-    </div>
-    <div class="stack-card">
-      <div class="stack-icon">🔐</div>
-      <div class="stack-name">JWT Authentication</div>
-      <div class="stack-desc">HMAC-SHA256, scadenza 8h, role-based access control (admin/caposquadra/tecnico).</div>
-    </div>
-    <div class="stack-card">
-      <div class="stack-icon">📧</div>
-      <div class="stack-name">Resend Email API</div>
-      <div class="stack-desc">Email transazionali, notifiche urgenze, report automatici, template HTML.</div>
-    </div>
-    <div class="stack-card">
-      <div class="stack-icon">🗺️</div>
-      <div class="stack-name">Leaflet Maps</div>
-      <div class="stack-desc">Mappa operativa interattiva, posizioni clienti, geocoding cache, clustering zone.</div>
-    </div>
-  </div>
-</div>
 
-<div class="footer">
-  <span>SYNTONIQA</span> v1.0 — Solution Architecture Document · MRS Lely Center Emilia Romagna · 2026
-</div>
+    <script>
+        // Particle Background
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
 
-<!-- DETAIL PANEL -->
-<div class="overlay" id="overlay"></div>
-<div class="detail-panel" id="detailPanel">
-  <button class="close-btn" id="closePanel">✕</button>
-  <div id="detailContent"></div>
-</div>
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
 
-<script>
-// ─── DETAIL DATA ─────────────────────────────────────────
-const DETAILS = {
-  admin: {
-    icon: '🖥️', title: 'Admin Dashboard', sub: 'Single Page Application — admin_v1.html',
-    sections: [
-      { title: 'Caratteristiche', items: [
-        '9.250 righe di codice · 33 sezioni · 17 modali',
-        'Dark theme nativo con palette brand personalizzabile',
-        'Lazy rendering per performance ottimale',
-        'Chart.js per grafici KPI interattivi',
-        'Leaflet per mappa operativa real-time',
-        'SheetJS per import/export Excel on-demand'
-      ]},
-      { title: 'Sezioni Principali', items: [
-        'Dashboard panoramica con KPI live',
-        'Gestione Urgenze con state machine visuale',
-        'Piano Interventi con drag-and-drop',
-        'AI Planner con vincoli personalizzabili',
-        'PM Scheduling con cicli manutenzione',
-        'Piano Mensile intelligente',
-        'Gestione Ordini ricambi',
-        'Anagrafica Clienti + Macchine + Automezzi',
-        'Reperibilità + Trasferte + Installazioni',
-        'Chat interna real-time',
-        'Notifiche multi-canale',
-        'KPI Dashboard avanzata',
-        'Configurazione completa (TG, Email, PM, SLA)',
-        'Audit Log + Backup'
-      ]},
-      { title: 'Tecnologie', tags: ['HTML5', 'CSS3', 'Vanilla JS', 'Chart.js', 'Leaflet', 'SheetJS'] }
-    ]
-  },
-  mobile: {
-    icon: '📱', title: 'PWA Mobile Tecnici', sub: 'Progressive Web App — index_v2.html',
-    sections: [
-      { title: 'Caratteristiche', items: [
-        '2.855 righe · 18 pagine · Bottom navigation',
-        'Installabile su iOS/Android senza app store',
-        'Service Worker per funzionamento offline',
-        'Push notifications native',
-        'Geolocalizzazione per mappa live',
-        'Swipe gestures e sheet modali'
-      ]},
-      { title: 'Pagine', items: [
-        'Home — dashboard personale del tecnico',
-        'Urgenze — lista urgenze assegnate',
-        'Interventi — piano giornaliero/settimanale',
-        'Calendario — vista calendario completa',
-        'Mappa — posizioni clienti e navigazione',
-        'Ordini — richiesta ricambi da campo',
-        'Catalogo — ricerca ricambi searchable',
-        'Chat — messaggistica team real-time',
-        'Notifiche — centro notifiche',
-        'Profilo — gestione account e preferenze'
-      ]},
-      { title: 'Tecnologie', tags: ['PWA', 'Service Worker', 'Web Push', 'Geolocation', 'Camera API'] }
-    ]
-  },
-  telegram: {
-    icon: '✈️', title: 'Telegram Bot', sub: '18 comandi · Webhook real-time · AI Vision',
-    sections: [
-      { title: 'Comandi Operativi', items: [
-        '/vado — Prendi prossima urgenza disponibile',
-        '/incorso — Segna urgenza in corso',
-        '/risolto [note] — Chiudi urgenza con note',
-        '/ordine codice qt cliente — Crea ordine ricambi',
-        '/catalogo keyword — Cerca nel catalogo ricambi'
-      ]},
-      { title: 'Comandi Informativi', items: [
-        '/oggi — Interventi di oggi',
-        '/settimana — Piano settimanale',
-        '/stato — Stato urgenze aperte',
-        '/dove — Posizione prossimo intervento',
-        '/kpi — KPI personali',
-        '/report — Report giornaliero'
-      ]},
-      { title: 'Comandi Admin', items: [
-        '/pianifica — Genera piano AI',
-        '/assegna URGID TECID — Assegna urgenza',
-        '/disponibile — Mostra tecnici disponibili'
-      ]},
-      { title: 'AI Features', items: [
-        'Foto → Gemini Vision analizza e suggerisce azione',
-        'Testo libero → NLP estrae intento e crea record',
-        'Notifiche proattive: nuove urgenze, escalation, reminder'
-      ]}
-    ]
-  },
-  worker: {
-    icon: '⚡', title: 'Cloudflare Worker', sub: 'Backend completo — 7.086 righe · Zero dipendenze runtime',
-    sections: [
-      { title: 'Metriche', metrics: [
-        ['Endpoint GET', '8'], ['Endpoint POST', '89+'], ['Cron Jobs', '2 (ogni 15 min)'],
-        ['Linee di codice', '7.086'], ['Dipendenze runtime', '0'], ['Cold start', '~0ms']
-      ]},
-      { title: 'Architettura Interna', items: [
-        'CORS handler con origins dinamiche',
-        'normalizeBody() — PascalCase ↔ snake_case transform',
-        'getFields() — estrazione campi con sanitizzazione',
-        'JWT auth middleware con role-based access',
-        'State machine validata per Piano e Urgenze',
-        'Supabase REST client con retry e limit management',
-        'Notification dispatcher multi-canale',
-        'AI proxy con anonymization layer'
-      ]},
-      { title: 'State Machines', items: [
-        'Piano: pianificato → in_corso → completato | annullato → pianificato',
-        'Urgenza: aperta → assegnata → schedulata → in_corso → risolta → chiusa',
-        'Reject: assegnata/schedulata → aperta'
-      ]}
-    ]
-  },
-  database: {
-    icon: '🗄️', title: 'Supabase PostgreSQL', sub: '22 tabelle · Multi-tenant · Soft delete',
-    sections: [
-      { title: 'Metriche', metrics: [
-        ['Tabelle', '22'], ['Tenant support', 'Multi-tenant via tenant_id'],
-        ['Soft delete', 'obsoleto flag su tutte'], ['Audit', 'created_at + updated_at auto']
-      ]},
-      { title: 'Tabelle Core', items: [
-        'utenti — Tecnici + admin (TEC_xxx, USR001)',
-        'clienti — Allevamenti/clienti (CLI_xxx)',
-        'macchine — Robot Lely installati (MAC_xxx)',
-        'piano — Interventi pianificati (INT_xxx)',
-        'urgenze — Emergenze (URG_xxx)',
-        'ordini — Ordini ricambi (ORD_xxx)'
-      ]},
-      { title: 'Tabelle Supporto', items: [
-        'automezzi, reperibilita, trasferte, installazioni',
-        'notifiche, chat_canali, chat_messaggi',
-        'workflow_log, kpi_log, kpi_snapshot',
-        'sla_config, config, documenti',
-        'anagrafica_clienti, anagrafica_assets',
-        'checklist_template, checklist_compilata'
-      ]}
-    ]
-  },
-  ai: {
-    icon: '🤖', title: 'AI Engine', sub: 'Google Gemini Pro · Vision · Smart Dispatching',
-    sections: [
-      { title: 'Capabilities', items: [
-        'Smart Dispatching — assegna tecnico ottimale basandosi su competenze, posizione, carico lavoro',
-        'Vision Analysis — analisi foto da Telegram per diagnosi automatica',
-        'NLP Intent — estrae azioni da testo libero',
-        'PM Prediction — suggerimenti manutenzione preventiva',
-        'Report Generation — report giornalieri automatici'
-      ]},
-      { title: 'Sicurezza AI', items: [
-        'Anonymization layer — zero dati personali verso API esterne',
-        'Rate limiting per utente (non solo IP)',
-        'Fallback multi-engine con ranking configurabile',
-        'Audit trail completo di tutte le richieste AI'
-      ]},
-      { title: 'Tecnologie', tags: ['Gemini Pro', 'Gemini Vision', 'Anonymization', 'Multi-engine'] }
-    ]
-  },
-  notify: {
-    icon: '🔔', title: 'Notification Hub', sub: '4 canali · Smart routing · Anti-duplicato',
-    sections: [
-      { title: 'Canali', items: [
-        'Email — Resend API, template HTML, notifiche urgenze e report',
-        'Telegram — Messaggi gruppo + privati, bottoni inline, escalation',
-        'Web Push — VAPID keys, subscription management, notifiche native',
-        'In-App — Centro notifiche con mark read/unread, badge counter'
-      ]},
-      { title: 'Smart Features', items: [
-        'Anti-duplicato: notification ID unico per giorno',
-        'Escalation automatica: urgenza non presa dopo 4h → reminder tecnico + admin',
-        'Routing intelligente: urgenze critiche → tutti i canali, info → solo in-app',
-        'Digest giornaliero: riepilogo mattutino per admin'
-      ]}
-    ]
-  },
-  cron: {
-    icon: '⏰', title: 'Cron Scheduler', sub: 'Ogni 15 minuti · SLA Engine · Reminders',
-    sections: [
-      { title: 'checkInterventoReminders()', items: [
-        'Interventi di domani senza tecnico → notifica admin',
-        'Interventi in ritardo (data passata, non completati) → notifica admin + tecnico',
-        'Ordini vecchi >7 giorni in "richiesto" → reminder'
-      ]},
-      { title: 'checkSLAUrgenze()', items: [
-        'Calcola scadenza SLA per ogni urgenza attiva',
-        'Aggiorna sla_stato: ok → warning → critical → breach',
-        'Urgenze assegnate >4h senza inizio → escalation privata',
-        'Anti-duplicato via notification ID per giorno'
-      ]},
-      { title: 'Configurazione', items: [
-        'Trigger: */15 * * * * (ogni 15 minuti)',
-        'Timezone: Europe/Rome via Intl.DateTimeFormat',
-        'Piattaforma: Cloudflare Cron Triggers (affidabile, no cold start)'
-      ]}
-    ]
-  }
-};
+        const particles = [];
 
-// ─── DB SCHEMA DATA ──────────────────────────────────────
-const TABLES = [
-  { name: 'utenti', desc: 'Tecnici e admin', key: 'TEC_xxx / USR001' },
-  { name: 'clienti', desc: 'Clienti e allevamenti', key: 'CLI_xxx' },
-  { name: 'macchine', desc: 'Robot Lely installati', key: 'MAC_xxx' },
-  { name: 'piano', desc: 'Interventi pianificati', key: 'INT_xxx' },
-  { name: 'urgenze', desc: 'Emergenze e urgenze', key: 'URG_xxx' },
-  { name: 'ordini', desc: 'Ordini ricambi', key: 'ORD_xxx' },
-  { name: 'automezzi', desc: 'Furgoni e veicoli', key: 'FURG_x / AUT_xxx' },
-  { name: 'reperibilita', desc: 'Turni reperibilità', key: 'REP_xxx' },
-  { name: 'trasferte', desc: 'Trasferte tecnici', key: 'TRA_xxx' },
-  { name: 'installazioni', desc: 'Installazioni nuove', key: 'INS_xxx' },
-  { name: 'notifiche', desc: 'Notifiche in-app', key: 'NOT_xxx' },
-  { name: 'chat_canali', desc: 'Canali chat', key: 'CH_xxx' },
-  { name: 'chat_messaggi', desc: 'Messaggi chat', key: 'MSG_xxx' },
-  { name: 'workflow_log', desc: 'Audit trail', key: 'auto' },
-  { name: 'kpi_log', desc: 'KPI snapshots', key: 'auto' },
-  { name: 'kpi_snapshot', desc: 'Backup snapshots', key: 'auto' },
-  { name: 'sla_config', desc: 'Configurazione SLA', key: 'id' },
-  { name: 'config', desc: 'Config chiave/valore', key: 'chiave' },
-  { name: 'anagrafica_clienti', desc: 'Master data clienti', key: 'codice_m3' },
-  { name: 'anagrafica_assets', desc: 'Master data macchine', key: 'id' },
-  { name: 'checklist_template', desc: 'Template checklist', key: 'id' },
-  { name: 'documenti', desc: 'Documenti allegati', key: 'id' },
-];
+        class Particle {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.vx = (Math.random() - 0.5) * 0.5;
+                this.vy = (Math.random() - 0.5) * 0.5;
+                this.radius = Math.random() * 1.5;
+                this.opacity = Math.random() * 0.5;
+            }
 
-// ─── COUNTER ANIMATION ──────────────────────────────────
-function animateCounters() {
-  document.querySelectorAll('.stat .num').forEach(el => {
-    const target = parseInt(el.dataset.target);
-    const duration = 2000;
-    const start = performance.now();
-    function tick(now) {
-      const pct = Math.min((now - start) / duration, 1);
-      const ease = 1 - Math.pow(1 - pct, 3);
-      el.textContent = Math.round(target * ease).toLocaleString();
-      if (pct < 1) requestAnimationFrame(tick);
-    }
-    requestAnimationFrame(tick);
-  });
-}
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
 
-// ─── NODE ENTRANCE ───────────────────────────────────────
-function animateNodes() {
-  const nodes = document.querySelectorAll('.node');
-  nodes.forEach((n, i) => {
-    setTimeout(() => n.classList.add('visible'), 200 + i * 150);
-  });
-}
+                if (this.x < 0) this.x = canvas.width;
+                if (this.x > canvas.width) this.x = 0;
+                if (this.y < 0) this.y = canvas.height;
+                if (this.y > canvas.height) this.y = 0;
+            }
 
-// ─── CONNECTION LINES ────────────────────────────────────
-function drawConnections() {
-  const svg = document.getElementById('connections');
-  const container = document.getElementById('archContainer');
-  const rect = container.getBoundingClientRect();
-
-  const connections = [
-    ['nodeAdmin', 'nodeWorker'],
-    ['nodeMobile', 'nodeWorker'],
-    ['nodeTelegram', 'nodeWorker'],
-    ['nodeWorker', 'nodeDB'],
-    ['nodeWorker', 'nodeAI'],
-    ['nodeWorker', 'nodeNotify'],
-    ['nodeCron', 'nodeWorker'],
-    ['nodeCron', 'nodeDB'],
-  ];
-
-  svg.innerHTML = '';
-  svg.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
-
-  connections.forEach(([fromId, toId], i) => {
-    const from = document.getElementById(fromId);
-    const to = document.getElementById(toId);
-    if (!from || !to) return;
-
-    const fRect = from.getBoundingClientRect();
-    const tRect = to.getBoundingClientRect();
-
-    const x1 = fRect.left - rect.left + fRect.width / 2;
-    const y1 = fRect.top - rect.top + fRect.height / 2;
-    const x2 = tRect.left - rect.left + tRect.width / 2;
-    const y2 = tRect.top - rect.top + tRect.height / 2;
-
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', x1);
-    line.setAttribute('y1', y1);
-    line.setAttribute('x2', x2);
-    line.setAttribute('y2', y2);
-    line.dataset.from = fromId;
-    line.dataset.to = toId;
-    svg.appendChild(line);
-
-    setTimeout(() => line.classList.add('visible'), 1200 + i * 100);
-  });
-}
-
-// ─── PARTICLE ANIMATION ─────────────────────────────────
-function spawnParticle() {
-  const container = document.getElementById('archContainer');
-  const rect = container.getBoundingClientRect();
-  const svg = document.getElementById('connections');
-  const lines = svg.querySelectorAll('line.visible');
-  if (!lines.length) return;
-
-  const line = lines[Math.floor(Math.random() * lines.length)];
-  const x1 = parseFloat(line.getAttribute('x1'));
-  const y1 = parseFloat(line.getAttribute('y1'));
-  const x2 = parseFloat(line.getAttribute('x2'));
-  const y2 = parseFloat(line.getAttribute('y2'));
-
-  const particle = document.createElement('div');
-  particle.className = 'particle';
-  const colors = ['var(--brand)', 'var(--blue)', 'var(--green)', 'var(--amber)'];
-  const color = colors[Math.floor(Math.random() * colors.length)];
-  particle.style.background = color;
-  particle.style.boxShadow = `0 0 10px ${color.replace('var(', '').replace(')', '')}`;
-  container.appendChild(particle);
-
-  const duration = 1500 + Math.random() * 1000;
-  const start = performance.now();
-
-  function move(now) {
-    const pct = (now - start) / duration;
-    if (pct > 1) { particle.remove(); return; }
-    const x = x1 + (x2 - x1) * pct;
-    const y = y1 + (y2 - y1) * pct;
-    particle.style.left = x + 'px';
-    particle.style.top = y + 'px';
-    particle.style.opacity = pct < 0.1 ? pct * 10 : pct > 0.9 ? (1 - pct) * 10 : 1;
-    requestAnimationFrame(move);
-  }
-  requestAnimationFrame(move);
-}
-
-// ─── DETAIL PANEL ────────────────────────────────────────
-function openDetail(key) {
-  const d = DETAILS[key];
-  if (!d) return;
-
-  let html = `<h2>${d.icon} ${d.title}</h2><p class="detail-sub">${d.sub}</p>`;
-
-  d.sections.forEach(s => {
-    html += `<h3>${s.title}</h3>`;
-    if (s.items) {
-      html += '<ul>' + s.items.map(i => `<li>${i}</li>`).join('') + '</ul>';
-    }
-    if (s.tags) {
-      html += '<div style="margin-top:8px">' + s.tags.map(t => `<span class="tech-tag">${t}</span>`).join('') + '</div>';
-    }
-    if (s.metrics) {
-      html += s.metrics.map(([k, v]) => `<div class="metric"><span>${k}</span><span class="val">${v}</span></div>`).join('');
-    }
-  });
-
-  document.getElementById('detailContent').innerHTML = html;
-  document.getElementById('detailPanel').classList.add('open');
-  document.getElementById('overlay').classList.add('open');
-}
-
-function closeDetail() {
-  document.getElementById('detailPanel').classList.remove('open');
-  document.getElementById('overlay').classList.remove('open');
-}
-
-// ─── FLOW ANIMATION ─────────────────────────────────────
-function animateFlow() {
-  const steps = document.querySelectorAll('.flow-step');
-  const arrows = document.querySelectorAll('.flow-arrow');
-  let idx = 0;
-
-  function next() {
-    // Remove previous active
-    steps.forEach(s => s.classList.remove('active'));
-
-    if (idx < steps.length) {
-      steps[idx].classList.add('visible');
-      steps[idx].classList.add('active');
-      if (idx > 0 && arrows[idx - 1]) arrows[idx - 1].classList.add('visible');
-      idx++;
-      setTimeout(next, 600);
-    } else {
-      // Loop
-      setTimeout(() => {
-        idx = 0;
-        steps.forEach(s => { s.classList.remove('visible', 'active'); });
-        arrows.forEach(a => a.classList.remove('visible'));
-        setTimeout(next, 500);
-      }, 3000);
-    }
-  }
-
-  // Start when scrolled into view
-  const observer = new IntersectionObserver(entries => {
-    if (entries[0].isIntersecting) {
-      observer.disconnect();
-      next();
-    }
-  }, { threshold: 0.3 });
-  observer.observe(document.getElementById('flowTimeline'));
-}
-
-// ─── DB SCHEMA RENDER ────────────────────────────────────
-function renderSchema() {
-  const grid = document.getElementById('schemaGrid');
-  grid.innerHTML = TABLES.map(t => `
-    <div class="schema-table">
-      <div class="tbl-name">${t.name}</div>
-      <div class="tbl-desc">${t.desc}</div>
-      <div class="tbl-key">PK: ${t.key}</div>
-    </div>
-  `).join('');
-}
-
-// ─── NODE HOVER HIGHLIGHT ────────────────────────────────
-function setupNodeHover() {
-  document.querySelectorAll('.node').forEach(node => {
-    node.addEventListener('mouseenter', () => {
-      const id = node.id;
-      document.querySelectorAll('#connections line').forEach(line => {
-        if (line.dataset.from === id || line.dataset.to === id) {
-          line.classList.add('active');
+            draw() {
+                ctx.fillStyle = `rgba(195, 10, 20, ${this.opacity})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
-      });
-    });
-    node.addEventListener('mouseleave', () => {
-      document.querySelectorAll('#connections line.active').forEach(l => l.classList.remove('active'));
-    });
-  });
-}
 
-// ─── INIT ────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  animateCounters();
-  animateNodes();
-  renderSchema();
+        for (let i = 0; i < 50; i++) {
+            particles.push(new Particle());
+        }
 
-  setTimeout(() => {
-    drawConnections();
-    setupNodeHover();
-  }, 500);
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+            requestAnimationFrame(animateParticles);
+        }
 
-  animateFlow();
+        animateParticles();
 
-  // Particles
-  setInterval(spawnParticle, 400);
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
 
-  // Click to open detail
-  document.querySelectorAll('.node[data-detail]').forEach(n => {
-    n.addEventListener('click', () => openDetail(n.dataset.detail));
-  });
+        // Detail Panel Functions
+        const details = {
+            admin: {
+                title: 'Admin Dashboard',
+                description: 'Comprehensive admin interface for managing all operations',
+                tech: 'HTML5 + JavaScript (5,548 lines), Leaflet, Chart.js, SheetJS',
+                features: [
+                    '📊 Real-time KPI dashboard',
+                    '👥 Team & technician management',
+                    '🗺️ Interactive map with live locations',
+                    '📈 Performance analytics',
+                    '⚙️ System configuration',
+                    '🔔 Notification center'
+                ]
+            },
+            mobile: {
+                title: 'Mobile PWA',
+                description: 'Offline-first progressive web app for technicians',
+                tech: 'HTML5 + JavaScript (2,071 lines), Service Worker, IndexedDB',
+                features: [
+                    '📱 Native app-like experience',
+                    '🔌 Offline functionality',
+                    '📸 Photo capture & upload',
+                    '📋 Checklist templates',
+                    '💬 In-app messaging',
+                    '🎯 Quick action buttons'
+                ]
+            },
+            telegram: {
+                title: 'Telegram Bot',
+                description: 'Quick actions and notifications via Telegram',
+                tech: 'Telegram Bot API, Webhook integration',
+                features: [
+                    '⚡ /vado - Pick up urgency',
+                    '▶️ /incorso - Mark in progress',
+                    '✅ /risolto - Resolve with notes',
+                    '📅 /oggi - Today interventions',
+                    '📸 Photo AI analysis',
+                    '🔔 Real-time notifications'
+                ]
+            },
+            worker: {
+                title: 'Cloudflare Worker',
+                description: 'Serverless backend processing all API requests',
+                tech: '3,042 lines, zero dependencies, 97 endpoints',
+                features: [
+                    '🔒 State machine validation',
+                    '🔐 Token-based auth',
+                    '📊 SLA monitoring (cron)',
+                    '🤖 Gemini AI integration',
+                    '📧 Email/Push/Telegram delivery',
+                    '⚡ <100ms response time'
+                ]
+            },
+            db: {
+                title: 'Supabase PostgreSQL',
+                description: 'Primary database with 22 tables and full audit trail',
+                tech: 'PostgreSQL 15+, Row-level security, JSON support',
+                features: [
+                    '📋 22 production tables',
+                    '🔄 Realtime subscriptions',
+                    '🛡️ Row-level security',
+                    '📜 Audit logging',
+                    '⚙️ Automated backups',
+                    '📊 Full-text search'
+                ]
+            },
+            gemini: {
+                title: 'Google Gemini AI',
+                description: 'AI-powered analysis and planning automation',
+                tech: 'Gemini 2.0 API, Vision model for image analysis',
+                features: [
+                    '📸 Photo damage detection',
+                    '🤖 Smart intervention planning',
+                    '📝 Natural language processing',
+                    '🎯 AI scheduling optimizer',
+                    '💡 Insight generation',
+                    '⚙️ Maintenance predictions'
+                ]
+            },
+            notifications: {
+                title: 'Multi-channel Notifications',
+                description: 'Email, push notifications, and Telegram integration',
+                tech: 'Resend API, Web Push API, Telegram Bot API',
+                features: [
+                    '📧 Transactional email',
+                    '🔔 Push notifications',
+                    '💬 Telegram alerts',
+                    '⏰ Scheduled delivery',
+                    '📊 Delivery tracking',
+                    '🎯 Targeted messaging'
+                ]
+            }
+        };
 
-  document.getElementById('closePanel').addEventListener('click', closeDetail);
-  document.getElementById('overlay').addEventListener('click', closeDetail);
+        function showDetail(component) {
+            const detail = details[component];
+            const content = document.getElementById('detailContent');
 
-  // Redraw connections on resize
-  window.addEventListener('resize', () => {
-    drawConnections();
-    setupNodeHover();
-  });
-});
-</script>
+            content.innerHTML = `
+                <div class="detail-title">${detail.title}</div>
+                <div class="detail-section">
+                    <div class="detail-label">Description</div>
+                    <div class="detail-content">${detail.description}</div>
+                </div>
+                <div class="detail-section">
+                    <div class="detail-label">Tech Stack</div>
+                    <div class="detail-content">${detail.tech}</div>
+                </div>
+                <div class="detail-section">
+                    <div class="detail-label">Key Features</div>
+                    <div class="detail-content">
+                        ${detail.features.map(f => `<div style="margin-bottom: 0.5rem;">${f}</div>`).join('')}
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('detailPanel').classList.add('active');
+        }
+
+        function closeDetail() {
+            document.getElementById('detailPanel').classList.remove('active');
+        }
+
+        function animateFlow() {
+            alert('Urgency lifecycle animation:\n\n1. Admin creates urgency\n2. Worker validates & stores in DB\n3. Gemini analyzes if photo provided\n4. Notification sent to assigned tech\n5. Tech accepts via Mobile/Telegram\n6. Worker marks as "assegnata"\n7. Tech marks "in_corso" when starting\n8. Tech marks "risolto" with notes\n9. Admin can "risolto" → "chiusa"\n\nState transitions validated per state machine rules.');
+        }
+
+        function toggleDarkMode() {
+            document.body.style.filter = document.body.style.filter === 'invert(1)' ? 'none' : 'invert(1)';
+        }
+
+        function resetDiagram() {
+            document.getElementById('detailPanel').classList.remove('active');
+            alert('Diagram reset. Click on any node to view details.');
+        }
+
+        // Close detail panel on outside click
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'detailPanel') {
+                closeDetail();
+            }
+        });
+    </script>
 </body>
 </html>

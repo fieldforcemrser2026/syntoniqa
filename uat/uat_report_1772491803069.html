@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Syntoniqa UAT Report — 02/03/2026, 23:50:03</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+:root { --c1: #C30A14; --ok: #10B981; --err: #EF4444; --warn: #F59E0B; --bg: #0A0A0A; --surface: #1A1A1A; --card: #222; --border: #333; --text: #F5F5F5; --text2: #999; --font: 'DM Sans', system-ui, sans-serif; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; padding: 32px; }
+.container { max-width: 1100px; margin: 0 auto; }
+h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 4px; }
+.subtitle { color: var(--text2); font-size: .875rem; margin-bottom: 32px; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; }
+.stat .val { font-size: 2rem; font-weight: 700; }
+.stat .lbl { color: var(--text2); font-size: .75rem; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+.stat.pass .val { color: var(--ok); }
+.stat.fail .val { color: var(--err); }
+.stat.rate .val { color: var(--warn); }
+.stat.time .val { color: var(--text); }
+.progress { background: var(--surface); border-radius: 8px; height: 8px; margin-bottom: 32px; overflow: hidden; }
+.progress-bar { height: 100%; background: linear-gradient(90deg, var(--ok), #059669); border-radius: 8px; transition: width .3s; }
+.suite { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+.suite-head { padding: 16px 20px; font-weight: 600; font-size: 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.suite-head .badge { font-size: .75rem; padding: 4px 10px; border-radius: 20px; font-weight: 500; }
+.badge-pass { background: rgba(16,185,129,.15); color: var(--ok); }
+.badge-fail { background: rgba(239,68,68,.15); color: var(--err); }
+.badge-mix { background: rgba(245,158,11,.15); color: var(--warn); }
+.test-row { padding: 10px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; font-size: .875rem; }
+.test-row:last-child { border-bottom: none; }
+.test-row .icon { font-size: 1rem; width: 24px; text-align: center; flex-shrink: 0; }
+.test-row .name { flex: 1; }
+.test-row .ms { color: var(--text2); font-size: .75rem; white-space: nowrap; }
+.test-row .detail { color: var(--text2); font-size: .75rem; max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.test-row.fail { background: rgba(239,68,68,.05); }
+.test-row.fail .error { color: var(--err); font-size: .75rem; margin-top: 4px; }
+.footer { text-align: center; color: var(--text2); font-size: .75rem; padding: 32px 0; }
+.footer a { color: var(--c1); }
+@media (max-width: 600px) { .stats { grid-template-columns: repeat(2, 1fr); } body { padding: 16px; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
+    <div style="width:40px;height:40px;background:var(--c1);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff;font-size:.875rem">SQ</div>
+    <h1>Syntoniqa UAT Report</h1>
+  </div>
+  <div class="subtitle">02/03/2026, 23:50:03 — Target: https://syntoniqa-mrs-api.fieldforcemrser.workers.dev</div>
+
+  <div class="stats">
+    <div class="stat"><div class="val">82</div><div class="lbl">Total Tests</div></div>
+    <div class="stat pass"><div class="val">64</div><div class="lbl">Passed</div></div>
+    <div class="stat fail"><div class="val">18</div><div class="lbl">Failed</div></div>
+    <div class="stat rate"><div class="val">78.0%</div><div class="lbl">Pass Rate</div></div>
+  </div>
+
+  <div class="progress"><div class="progress-bar" style="width:78.0%"></div></div>
+
+  <div class="suite">
+    <div class="suite-head"><span></span><span class="badge badge-mix">18 FAIL</span></div>
+    <div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Login admin con credenziali valide</span>
+      <span class="ms">774ms</span>
+      <span class="detail" title="JWT ricevuto: eyJhbGciOiJIUzI1NiIs...">JWT ricevuto: eyJhbGciOiJIUzI1NiIs...</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Login con password errata → 401</span>
+      <span class="ms">254ms</span>
+      <span class="detail" title="Correttamente rifiutato: Credenziali non valide">Correttamente rifiutato: Credenziali non valide</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Login con utente inesistente → 401</span>
+      <span class="ms">246ms</span>
+      <span class="detail" title="Utente inesistente correttamente rifiutato">Utente inesistente correttamente rifiutato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">API call con JWT valido → 200</span>
+      <span class="ms">589ms</span>
+      <span class="detail" title="getAll OK: 23 chiavi nella risposta">getAll OK: 23 chiavi nella risposta</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">API call con token invalido → 401</span>
+      <span class="ms">69ms</span>
+      <span class="detail" title="Token invalido correttamente rifiutato">Token invalido correttamente rifiutato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getAll — caricamento dati completo</span>
+      <span class="ms">361ms</span>
+      <span class="detail" title="23 dataset — utenti:11, clienti:192, macchine:1000, piano:168, urgenze:7, ordini:1, reperibilita:10, trasferte:5, notifiche:55, richieste:1, installazioni:2, pagellini:0, automezzi:10, tipiIntervento:17, priorita:5, squadre:0, tagliandi:0, fasiInstallazione:0, slaConfig:0, checklistTemplate:0, documenti:0, config:?, timestamp:?">23 dataset — utenti:11, clienti:192, macchine:1000, piano:168, urgenze:7, ordini</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getAll tecnico — filtro role-based</span>
+      <span class="ms">359ms</span>
+      <span class="detail" title="Dati filtrati per TEC_691: 23 dataset">Dati filtrati per TEC_691: 23 dataset</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getKPI — dashboard KPI</span>
+      <span class="ms">90ms</span>
+      <span class="detail" title="KPI ricevuti: {&quot;kpi&quot;:[],&quot;periodo&quot;:&quot;mese&quot;,&quot;tecnicoId&quot;:&quot;&quot;}...">KPI ricevuti: {&quot;kpi&quot;:[],&quot;periodo&quot;:&quot;mese&quot;,&quot;tecnicoId&quot;:&quot;&quot;}...</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getKPITecnici — KPI per tecnico</span>
+      <span class="ms">98ms</span>
+      <span class="detail" title="KPI tecnici: OK">KPI tecnici: OK</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getChecklistTemplates — template checklist</span>
+      <span class="ms">84ms</span>
+      <span class="detail" title="Templates: ?">Templates: ?</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getPagellini — valutazioni</span>
+      <span class="ms">130ms</span>
+      <span class="detail" title="Pagellini: ?">Pagellini: ?</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getAuditLog — audit trail</span>
+      <span class="ms">109ms</span>
+      <span class="detail" title="Audit entries: ?">Audit entries: ?</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getBackupHistory — storico backup</span>
+      <span class="ms">95ms</span>
+      <span class="detail" title="Backup entries: ?">Backup entries: ?</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createCliente — crea cliente di test</span>
+      <span class="ms">152ms</span>
+      <span class="detail" title="Cliente creato: CLI_mm9ruboza3260be5">Cliente creato: CLI_mm9ruboza3260be5</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateCliente — aggiorna cliente</span>
+      <span class="ms">157ms</span>
+      <span class="detail" title="Cliente CLI_mm9ruboza3260be5 aggiornato">Cliente CLI_mm9ruboza3260be5 aggiornato</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">searchClienti — ricerca clienti</span>
+      <span class="ms">24ms</span>
+      <span class="error">searchClienti fallito: HTTP 400 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Minimo 2 caratteri&quot;}</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteCliente — soft delete cliente</span>
+      <span class="ms">157ms</span>
+      <span class="detail" title="Cliente CLI_mm9ruboza3260be5 eliminato (soft)">Cliente CLI_mm9ruboza3260be5 eliminato (soft)</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createMacchina — crea macchina di test</span>
+      <span class="ms">181ms</span>
+      <span class="detail" title="Macchina creata: MAC_mm9ruc30d1c4e24f">Macchina creata: MAC_mm9ruc30d1c4e24f</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateMacchina — aggiorna macchina</span>
+      <span class="ms">147ms</span>
+      <span class="detail" title="Macchina MAC_mm9ruc30d1c4e24f aggiornata">Macchina MAC_mm9ruc30d1c4e24f aggiornata</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">deleteMacchina — soft delete macchina</span>
+      <span class="ms">107ms</span>
+      <span class="error">deleteMacchina fallito: HTTP 500 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Errore interno: Supabase PATCH macchine?id=eq.MAC_mm9ruc30d1c4e24f: 400 {\&quot;code\&quot;:\&quot;PGRST204\&quot;,\&quot;details\&quot;:null,\&quot;hint\&quot;:null,\&quot;message\&quot;:\&quot;Could not find the 'updated_at' co</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">createAutomezzo — crea furgone test</span>
+      <span class="ms">99ms</span>
+      <span class="error">createAutomezzo fallito: HTTP 500 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Errore interno: Supabase POST automezzi: 400 {\&quot;code\&quot;:\&quot;PGRST204\&quot;,\&quot;details\&quot;:null,\&quot;hint\&quot;:null,\&quot;message\&quot;:\&quot;Could not find the 'modello' column of 'automezzi' in the sch</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updateAutomezzo — aggiorna automezzo</span>
+      <span class="ms">1ms</span>
+      <span class="error">Nessun automezzo da aggiornare</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">deleteAutomezzo — soft delete</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessun automezzo da eliminare</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">createPiano — crea intervento pianificato</span>
+      <span class="ms">102ms</span>
+      <span class="error">createPiano fallito: HTTP 500 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Errore interno: Supabase POST piano: 409 {\&quot;code\&quot;:\&quot;23503\&quot;,\&quot;details\&quot;:\&quot;Key (tipo_intervento_id)=(manutenzione) is not present in table \\\&quot;tipi_intervento\\\&quot;.\&quot;,\&quot;hint\&quot;</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updatePiano stato → in_corso (transizione valida)</span>
+      <span class="ms">1ms</span>
+      <span class="error">Nessun intervento da aggiornare</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updatePiano stato → completato (transizione valida)</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessun intervento</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">createPiano + annullato → pianificato (ciclo)</span>
+      <span class="ms">105ms</span>
+      <span class="error">createPiano #2 fallito: HTTP 500 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Errore interno: Supabase POST piano: 409 {\&quot;code\&quot;:\&quot;23503\&quot;,\&quot;details\&quot;:\&quot;Key (tipo_intervento_id)=(controllo) is not present in table \\\&quot;tipi_intervento\\\&quot;.\&quot;,\&quot;hint\&quot;:nu</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updatePiano transizione invalida completato→pianificato → errore</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessun intervento completato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createUrgenza — apre nuova urgenza</span>
+      <span class="ms">510ms</span>
+      <span class="detail" title="Urgenza creata: URG_mm9rucn7a23da3c3">Urgenza creata: URG_mm9rucn7a23da3c3</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">assignUrgenza — assegna al tecnico</span>
+      <span class="ms">349ms</span>
+      <span class="detail" title="Urgenza URG_mm9rucn7a23da3c3 assegnata a TEC_691">Urgenza URG_mm9rucn7a23da3c3 assegnata a TEC_691</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">startUrgenza — tecnico inizia lavoro</span>
+      <span class="ms">280ms</span>
+      <span class="detail" title="Urgenza URG_mm9rucn7a23da3c3: assegnata → in_corso ✓">Urgenza URG_mm9rucn7a23da3c3: assegnata → in_corso ✓</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">resolveUrgenza — tecnico risolve</span>
+      <span class="ms">494ms</span>
+      <span class="detail" title="Urgenza URG_mm9rucn7a23da3c3: in_corso → risolta ✓">Urgenza URG_mm9rucn7a23da3c3: in_corso → risolta ✓</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updateUrgenza — chiudi urgenza risolta</span>
+      <span class="ms">152ms</span>
+      <span class="error">updateUrgenza→chiusa fallito: HTTP 500 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Errore interno: Supabase PATCH urgenze?id=eq.URG_mm9rucn7a23da3c3: 400 {\&quot;code\&quot;:\&quot;23514\&quot;,\&quot;details\&quot;:\&quot;Failing row contains (URG_mm9rucn7a23da3c3, 785d94d0-b947-4a00-9c4e-3</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createUrgenza + rejectUrgenza — ciclo reject</span>
+      <span class="ms">1314ms</span>
+      <span class="detail" title="Urgenza URG_mm9rue0t921b6e41: aperta → assegnata → rejected → aperta ✓">Urgenza URG_mm9rue0t921b6e41: aperta → assegnata → rejected → aperta ✓</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createOrdine — crea ordine ricambi</span>
+      <span class="ms">177ms</span>
+      <span class="detail" title="Ordine creato: ORD_mm9ruf1dcefd906d">Ordine creato: ORD_mm9ruf1dcefd906d</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateOrdineStato — aggiorna stato ordine</span>
+      <span class="ms">267ms</span>
+      <span class="detail" title="Ordine ORD_mm9ruf1dcefd906d: richiesto → ordinato">Ordine ORD_mm9ruf1dcefd906d: richiesto → ordinato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateOrdine — modifica dati ordine</span>
+      <span class="ms">155ms</span>
+      <span class="detail" title="Ordine ORD_mm9ruf1dcefd906d aggiornato">Ordine ORD_mm9ruf1dcefd906d aggiornato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteOrdine — soft delete</span>
+      <span class="ms">205ms</span>
+      <span class="detail" title="Ordine ORD_mm9ruf1dcefd906d eliminato">Ordine ORD_mm9ruf1dcefd906d eliminato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createNotifica — crea notifica</span>
+      <span class="ms">134ms</span>
+      <span class="detail" title="Notifica creata: NOT_mm9rufofbe8be428">Notifica creata: NOT_mm9rufofbe8be428</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">markNotifica — segna come letta</span>
+      <span class="ms">88ms</span>
+      <span class="detail" title="Notifica NOT_mm9rufofbe8be428 marcata">Notifica NOT_mm9rufofbe8be428 marcata</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">markAllRead — segna tutte lette</span>
+      <span class="ms">91ms</span>
+      <span class="detail" title="Tutte le notifiche marcate come lette">Tutte le notifiche marcate come lette</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">deleteNotifica — elimina singola</span>
+      <span class="ms">128ms</span>
+      <span class="error">deleteNotifica fallito: HTTP 500 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Errore interno: Supabase PATCH notifiche?id=eq.NOT_mm9rufofbe8be428: 400 {\&quot;code\&quot;:\&quot;PGRST204\&quot;,\&quot;details\&quot;:null,\&quot;hint\&quot;:null,\&quot;message\&quot;:\&quot;Could not find the 'updated_at' c</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getChatCanali — lista canali</span>
+      <span class="ms">307ms</span>
+      <span class="detail" title="Canali: 3">Canali: 3</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">sendChatMessage — invia messaggio test</span>
+      <span class="ms">410ms</span>
+      <span class="detail" title="Messaggio inviato: MSG_mm9rug8mfef12d09">Messaggio inviato: MSG_mm9rug8mfef12d09</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getChatMessaggi — leggi messaggi</span>
+      <span class="ms">104ms</span>
+      <span class="detail" title="Messaggi: 5">Messaggi: 5</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">editChatMessage — modifica messaggio</span>
+      <span class="ms">162ms</span>
+      <span class="detail" title="Messaggio MSG_mm9rug8mfef12d09 modificato">Messaggio MSG_mm9rug8mfef12d09 modificato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteChatMessage — elimina messaggio</span>
+      <span class="ms">317ms</span>
+      <span class="detail" title="Messaggio MSG_mm9rug8mfef12d09 eliminato">Messaggio MSG_mm9rug8mfef12d09 eliminato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">saveConfig — salva configurazione</span>
+      <span class="ms">100ms</span>
+      <span class="detail" title="Config salvata: uat_test_key">Config salvata: uat_test_key</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getVincoliCategories — legge vincoli</span>
+      <span class="ms">136ms</span>
+      <span class="detail" title="Vincoli: {&quot;categories&quot;:[{&quot;id&quot;:&quot;cat_test&quot;,&quot;nome&quot;:&quot;Test&quot;,&quot;icona&quot;:&quot;👥&quot;,&quot;ordine&quot;:1,&quot;attiva&quot;:false,&quot;regole&quot;:[]},{&quot;...">Vincoli: {&quot;categories&quot;:[{&quot;id&quot;:&quot;cat_test&quot;,&quot;nome&quot;:&quot;Test&quot;,&quot;icona&quot;:&quot;👥&quot;,&quot;ordine&quot;:1,&quot;</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getVincoliAutoDerived — vincoli auto-derivati</span>
+      <span class="ms">109ms</span>
+      <span class="detail" title="Vincoli auto (2026-03): {&quot;mese&quot;:&quot;2026-03&quot;,&quot;auto_derived&quot;:[{&quot;tipo&quot;:&quot;auto_derived&quot;,&quot;categoria&quot;:&quot;Assenze&quot;,&quot;icona&quot;:&quot;📋&quot;,&quot;nome&quot;:&quot;...">Vincoli auto (2026-03): {&quot;mese&quot;:&quot;2026-03&quot;,&quot;auto_derived&quot;:[{&quot;tipo&quot;:&quot;auto_derived&quot;</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getAvailabilityMap — mappa disponibilità</span>
+      <span class="ms">205ms</span>
+      <span class="detail" title="Availability map ricevuta">Availability map ricevuta</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createReperibilita — crea turno</span>
+      <span class="ms">198ms</span>
+      <span class="detail" title="Reperibilità creata: REP_mm9ruhgf2aead4d4">Reperibilità creata: REP_mm9ruhgf2aead4d4</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updateReperibilita — aggiorna turno</span>
+      <span class="ms">154ms</span>
+      <span class="error">updateReperibilita fallito: HTTP 500 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Errore interno: Cannot read properties of null (reading '0')&quot;}</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteReperibilita — elimina turno</span>
+      <span class="ms">139ms</span>
+      <span class="detail" title="Reperibilità REP_mm9ruhgf2aead4d4 eliminata">Reperibilità REP_mm9ruhgf2aead4d4 eliminata</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createTrasferta — crea trasferta</span>
+      <span class="ms">167ms</span>
+      <span class="detail" title="Trasferta creata: TRA_mm9ruht8cfdb412f">Trasferta creata: TRA_mm9ruht8cfdb412f</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updateTrasferta — aggiorna</span>
+      <span class="ms">101ms</span>
+      <span class="error">updateTrasferta fallito: HTTP 500 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Errore interno: Supabase PATCH trasferte: 400 {\&quot;code\&quot;:\&quot;PGRST204\&quot;,\&quot;details\&quot;:null,\&quot;hint\&quot;:null,\&quot;message\&quot;:\&quot;Could not find the 'updated_at' column of 'trasferte' in the</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">deleteTrasferta — elimina</span>
+      <span class="ms">104ms</span>
+      <span class="error">deleteTrasferta fallito: HTTP 500 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Errore interno: Supabase PATCH trasferte: 400 {\&quot;code\&quot;:\&quot;PGRST204\&quot;,\&quot;details\&quot;:null,\&quot;hint\&quot;:null,\&quot;message\&quot;:\&quot;Could not find the 'updated_at' column of 'trasferte' in the</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createInstallazione — crea installazione</span>
+      <span class="ms">163ms</span>
+      <span class="detail" title="Installazione creata: INS_mm9rui3f105f2174">Installazione creata: INS_mm9rui3f105f2174</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateInstallazione — aggiorna</span>
+      <span class="ms">233ms</span>
+      <span class="detail" title="Installazione INS_mm9rui3f105f2174 aggiornata">Installazione INS_mm9rui3f105f2174 aggiornata</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteInstallazione — elimina</span>
+      <span class="ms">165ms</span>
+      <span class="detail" title="Installazione INS_mm9rui3f105f2174 eliminata">Installazione INS_mm9rui3f105f2174 eliminata</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">createDocumento — crea documento</span>
+      <span class="ms">101ms</span>
+      <span class="error">createDocumento fallito: HTTP 500 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Errore interno: Supabase POST documenti: 400 {\&quot;code\&quot;:\&quot;PGRST204\&quot;,\&quot;details\&quot;:null,\&quot;hint\&quot;:null,\&quot;message\&quot;:\&quot;Could not find the 'tipo' column of 'documenti' in the schema</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updateDocumento — aggiorna</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessun documento</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">deleteDocumento — elimina</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessun documento</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getVapidPublicKey — chiave VAPID</span>
+      <span class="ms">22ms</span>
+      <span class="detail" title="VAPID non configurato (status: 400) — OK se in dev">VAPID non configurato (status: 400) — OK se in dev</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">generateReport — interventi_tecnico</span>
+      <span class="ms">142ms</span>
+      <span class="detail" title="Report generato: {&quot;titolo&quot;:&quot;Interventi per Tecnico (2026-01-31 — 2026-03-02)&quot;,&quot;colonne&quot;:[&quot;Tecnico&quot;,&quot;Totale&quot;,&quot;Completa...">Report generato: {&quot;titolo&quot;:&quot;Interventi per Tecnico (2026-01-31 — 2026-03-02)&quot;,&quot;c</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">generateReport — urgenze_summary</span>
+      <span class="ms">143ms</span>
+      <span class="detail" title="Report urgenze OK">Report urgenze OK</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">generateReport — kpi_mensile</span>
+      <span class="ms">115ms</span>
+      <span class="detail" title="Report KPI OK">Report KPI OK</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">generateReport — daily_team</span>
+      <span class="ms">300ms</span>
+      <span class="detail" title="Report daily team OK">Report daily team OK</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getPMCalendar — calendario manutenzioni</span>
+      <span class="ms">369ms</span>
+      <span class="detail" title="PM Calendar: {&quot;calendar&quot;:[{&quot;macchina_id&quot;:&quot;MAC_3314753&quot;,&quot;macchina_nome&quot;:&quot;3314753&quot;,&quot;seriale&quot;:&quot;3314753&quot;,&quot;note&quot;:&quot;Astr...">PM Calendar: {&quot;calendar&quot;:[{&quot;macchina_id&quot;:&quot;MAC_3314753&quot;,&quot;macchina_nome&quot;:&quot;3314753&quot;</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">searchParts — catalogo ricambi</span>
+      <span class="ms">119ms</span>
+      <span class="detail" title="Parti trovate: 0">Parti trovate: 0</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">testAI — verifica motori AI</span>
+      <span class="ms">1971ms</span>
+      <span class="detail" title="AI engines: {&quot;gemini&quot;:{&quot;status&quot;:429,&quot;ok&quot;:false,&quot;body&quot;:&quot;{\n  \&quot;error\&quot;: {\n    \&quot;code\&quot;: 429,\n    \&quot;message\&quot;: \&quot;You exceeded your current quota, please check your plan and billing details. For more information o...">AI engines: {&quot;gemini&quot;:{&quot;status&quot;:429,&quot;ok&quot;:false,&quot;body&quot;:&quot;{\n  \&quot;error\&quot;: {\n    \&quot;</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">generateAIPlan — piano AI base</span>
+      <span class="ms">7318ms</span>
+      <span class="detail" title="AI Plan generato: {&quot;summary&quot;:&quot;Piano interventi per la prossima settimana&quot;,&quot;piano&quot;:[{&quot;data&quot;:&quot;2026-03-03&quot;,&quot;tecnicoId&quot;:&quot;TEC_GIU&quot;,&quot;clienteId&quot;:&quot;51001969&quot;,&quot;tipo&quot;:&quot;tagliando&quot;,&quot;oraInizio&quot;:&quot;08:00&quot;,&quot;durataOre&quot;:6,&quot;furgone&quot;:&quot;FURG_...">AI Plan generato: {&quot;summary&quot;:&quot;Piano interventi per la prossima settimana&quot;,&quot;piano</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getAnagraficaClienti — master data clienti</span>
+      <span class="ms">209ms</span>
+      <span class="detail" title="Anagrafica clienti: 192 record">Anagrafica clienti: 192 record</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getAnagraficaAssets — master data assets</span>
+      <span class="ms">316ms</span>
+      <span class="detail" title="Anagrafica assets: 1000 record">Anagrafica assets: 1000 record</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">CORS — OPTIONS preflight</span>
+      <span class="ms">59ms</span>
+      <span class="detail" title="CORS OK: https://fieldforcemrser2026.github.io">CORS OK: https://fieldforcemrser2026.github.io</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Richiesta senza auth → 401</span>
+      <span class="ms">241ms</span>
+      <span class="detail" title="Accesso negato senza auth ✓">Accesso negato senza auth ✓</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Azione inesistente → errore gestito</span>
+      <span class="ms">64ms</span>
+      <span class="detail" title="Azione sconosciuta gestita: HTTP 404">Azione sconosciuta gestita: HTTP 404</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Payload enorme → gestito senza crash</span>
+      <span class="ms">697ms</span>
+      <span class="detail" title="Payload 50KB gestito: HTTP 200">Payload 50KB gestito: HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">SQL injection attempt → sanitizzato</span>
+      <span class="ms">25ms</span>
+      <span class="detail" title="SQL injection gestito: HTTP 400">SQL injection gestito: HTTP 400</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getApprovals — lista approvazioni</span>
+      <span class="ms">191ms</span>
+      <span class="detail" title="Approvazioni: 3">Approvazioni: 3</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getServiceTypes — tipi servizio</span>
+      <span class="ms">141ms</span>
+      <span class="detail" title="Tipi servizio: 17">Tipi servizio: 17</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getFurgoni — lista furgoni</span>
+      <span class="ms">103ms</span>
+      <span class="detail" title="Furgoni: 10">Furgoni: 10</span>
+    </div>
+  </div>
+
+  <div class="footer">
+    Generato da <strong>Syntoniqa UAT Runner v1.0</strong> — 82 test in 24.8s<br>
+    <a href="https://fieldforcemrser2026.github.io/syntoniqa/admin_v1.html" target="_blank">Admin Dashboard</a> ·
+    <a href="https://fieldforcemrser2026.github.io/syntoniqa/index_v2.html" target="_blank">App Tecnico</a>
+  </div>
+</div>
+</body></html>

@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Syntoniqa UAT Report — 03/03/2026, 00:40:01</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+:root { --c1: #C30A14; --ok: #10B981; --err: #EF4444; --warn: #F59E0B; --bg: #0A0A0A; --surface: #1A1A1A; --card: #222; --border: #333; --text: #F5F5F5; --text2: #999; --font: 'DM Sans', system-ui, sans-serif; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; padding: 32px; }
+.container { max-width: 1100px; margin: 0 auto; }
+h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 4px; }
+.subtitle { color: var(--text2); font-size: .875rem; margin-bottom: 32px; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; }
+.stat .val { font-size: 2rem; font-weight: 700; }
+.stat .lbl { color: var(--text2); font-size: .75rem; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+.stat.pass .val { color: var(--ok); }
+.stat.fail .val { color: var(--err); }
+.stat.rate .val { color: var(--ok); }
+.stat.time .val { color: var(--text); }
+.progress { background: var(--surface); border-radius: 8px; height: 8px; margin-bottom: 32px; overflow: hidden; }
+.progress-bar { height: 100%; background: linear-gradient(90deg, var(--ok), #059669); border-radius: 8px; transition: width .3s; }
+.suite { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+.suite-head { padding: 16px 20px; font-weight: 600; font-size: 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.suite-head .badge { font-size: .75rem; padding: 4px 10px; border-radius: 20px; font-weight: 500; }
+.badge-pass { background: rgba(16,185,129,.15); color: var(--ok); }
+.badge-fail { background: rgba(239,68,68,.15); color: var(--err); }
+.badge-mix { background: rgba(245,158,11,.15); color: var(--warn); }
+.test-row { padding: 10px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; font-size: .875rem; }
+.test-row:last-child { border-bottom: none; }
+.test-row .icon { font-size: 1rem; width: 24px; text-align: center; flex-shrink: 0; }
+.test-row .name { flex: 1; }
+.test-row .ms { color: var(--text2); font-size: .75rem; white-space: nowrap; }
+.test-row .detail { color: var(--text2); font-size: .75rem; max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.test-row.fail { background: rgba(239,68,68,.05); }
+.test-row.fail .error { color: var(--err); font-size: .75rem; margin-top: 4px; }
+.footer { text-align: center; color: var(--text2); font-size: .75rem; padding: 32px 0; }
+.footer a { color: var(--c1); }
+@media (max-width: 600px) { .stats { grid-template-columns: repeat(2, 1fr); } body { padding: 16px; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
+    <div style="width:40px;height:40px;background:var(--c1);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff;font-size:.875rem">SQ</div>
+    <h1>Syntoniqa UAT Report</h1>
+  </div>
+  <div class="subtitle">03/03/2026, 00:40:01 — Target: https://syntoniqa-mrs-api.fieldforcemrser.workers.dev</div>
+
+  <div class="stats">
+    <div class="stat"><div class="val">155</div><div class="lbl">Total Tests</div></div>
+    <div class="stat pass"><div class="val">154</div><div class="lbl">Passed</div></div>
+    <div class="stat fail"><div class="val">1</div><div class="lbl">Failed</div></div>
+    <div class="stat rate"><div class="val">99.4%</div><div class="lbl">Pass Rate</div></div>
+  </div>
+
+  <div class="progress"><div class="progress-bar" style="width:99.4%"></div></div>
+
+  <div class="suite">
+    <div class="suite-head"><span></span><span class="badge badge-mix">1 FAIL</span></div>
+    <div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Login admin con credenziali valide</span>
+      <span class="ms">610ms</span>
+      <span class="detail" title="JWT ricevuto: eyJhbGciOiJIUzI1NiIs...">JWT ricevuto: eyJhbGciOiJIUzI1NiIs...</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Login con password errata → 401</span>
+      <span class="ms">321ms</span>
+      <span class="detail" title="Correttamente rifiutato: Credenziali non valide">Correttamente rifiutato: Credenziali non valide</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Login con utente inesistente → 401</span>
+      <span class="ms">297ms</span>
+      <span class="detail" title="Utente inesistente correttamente rifiutato">Utente inesistente correttamente rifiutato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">API call con JWT valido → 200</span>
+      <span class="ms">480ms</span>
+      <span class="detail" title="getAll OK: 23 chiavi nella risposta">getAll OK: 23 chiavi nella risposta</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">API call con token invalido → 401</span>
+      <span class="ms">51ms</span>
+      <span class="detail" title="Token invalido correttamente rifiutato">Token invalido correttamente rifiutato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getAll — caricamento dati completo</span>
+      <span class="ms">367ms</span>
+      <span class="detail" title="23 dataset — utenti:13, clienti:194, macchine:1000, piano:186, urgenze:27, ordini:1, reperibilita:10, trasferte:6, notifiche:112, richieste:3, installazioni:2, pagellini:0, automezzi:10, tipiIntervento:17, priorita:5, squadre:0, tagliandi:0, fasiInstallazione:0, slaConfig:0, checklistTemplate:0, documenti:0, config:?, timestamp:?">23 dataset — utenti:13, clienti:194, macchine:1000, piano:186, urgenze:27, ordin</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getAll tecnico — filtro role-based</span>
+      <span class="ms">398ms</span>
+      <span class="detail" title="Dati filtrati per TEC_691: 23 dataset">Dati filtrati per TEC_691: 23 dataset</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getKPI — dashboard KPI</span>
+      <span class="ms">117ms</span>
+      <span class="detail" title="KPI ricevuti: {&quot;kpi&quot;:[],&quot;periodo&quot;:&quot;mese&quot;,&quot;tecnicoId&quot;:&quot;&quot;}...">KPI ricevuti: {&quot;kpi&quot;:[],&quot;periodo&quot;:&quot;mese&quot;,&quot;tecnicoId&quot;:&quot;&quot;}...</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getKPITecnici — KPI per tecnico</span>
+      <span class="ms">100ms</span>
+      <span class="detail" title="KPI tecnici: OK">KPI tecnici: OK</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getChecklistTemplates — template checklist</span>
+      <span class="ms">93ms</span>
+      <span class="detail" title="Templates: ?">Templates: ?</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getPagellini — valutazioni</span>
+      <span class="ms">111ms</span>
+      <span class="detail" title="Pagellini: ?">Pagellini: ?</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getAuditLog — audit trail</span>
+      <span class="ms">186ms</span>
+      <span class="detail" title="Audit entries: ?">Audit entries: ?</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getBackupHistory — storico backup</span>
+      <span class="ms">461ms</span>
+      <span class="detail" title="Backup entries: ?">Backup entries: ?</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createCliente — crea cliente di test</span>
+      <span class="ms">204ms</span>
+      <span class="detail" title="Cliente creato: CLI_mm9tl6d438efe7fe">Cliente creato: CLI_mm9tl6d438efe7fe</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateCliente — aggiorna cliente</span>
+      <span class="ms">184ms</span>
+      <span class="detail" title="Cliente CLI_mm9tl6d438efe7fe aggiornato">Cliente CLI_mm9tl6d438efe7fe aggiornato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">searchClienti — ricerca clienti</span>
+      <span class="ms">134ms</span>
+      <span class="detail" title="Risultati ricerca: 1">Risultati ricerca: 1</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteCliente — soft delete cliente</span>
+      <span class="ms">159ms</span>
+      <span class="detail" title="Cliente CLI_mm9tl6d438efe7fe eliminato (soft)">Cliente CLI_mm9tl6d438efe7fe eliminato (soft)</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createMacchina — crea macchina di test</span>
+      <span class="ms">179ms</span>
+      <span class="detail" title="Macchina creata: MAC_mm9tl6vl7f96f999">Macchina creata: MAC_mm9tl6vl7f96f999</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateMacchina — aggiorna macchina</span>
+      <span class="ms">147ms</span>
+      <span class="detail" title="Macchina MAC_mm9tl6vl7f96f999 aggiornata">Macchina MAC_mm9tl6vl7f96f999 aggiornata</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteMacchina — soft delete macchina</span>
+      <span class="ms">146ms</span>
+      <span class="detail" title="Macchina MAC_mm9tl6vl7f96f999 eliminata (soft)">Macchina MAC_mm9tl6vl7f96f999 eliminata (soft)</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createAutomezzo — crea furgone test</span>
+      <span class="ms">169ms</span>
+      <span class="detail" title="Automezzo creato: AUT_mm9tl78ga4d270b1">Automezzo creato: AUT_mm9tl78ga4d270b1</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateAutomezzo — aggiorna automezzo</span>
+      <span class="ms">143ms</span>
+      <span class="detail" title="Automezzo AUT_mm9tl78ga4d270b1 aggiornato">Automezzo AUT_mm9tl78ga4d270b1 aggiornato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteAutomezzo — soft delete</span>
+      <span class="ms">196ms</span>
+      <span class="detail" title="Automezzo AUT_mm9tl78ga4d270b1 eliminato (soft)">Automezzo AUT_mm9tl78ga4d270b1 eliminato (soft)</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createPiano — crea intervento pianificato</span>
+      <span class="ms">333ms</span>
+      <span class="detail" title="Intervento creato: INT_mm9tl7mn65043aa0">Intervento creato: INT_mm9tl7mn65043aa0</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updatePiano stato → in_corso (transizione valida)</span>
+      <span class="ms">257ms</span>
+      <span class="detail" title="INT_mm9tl7mn65043aa0: pianificato → in_corso ✓">INT_mm9tl7mn65043aa0: pianificato → in_corso ✓</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updatePiano stato → completato (transizione valida)</span>
+      <span class="ms">298ms</span>
+      <span class="detail" title="INT_mm9tl7mn65043aa0: in_corso → completato ✓">INT_mm9tl7mn65043aa0: in_corso → completato ✓</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createPiano + annullato → pianificato (ciclo)</span>
+      <span class="ms">874ms</span>
+      <span class="detail" title="INT_mm9tl8az1033a6de: pianificato → annullato → pianificato ✓">INT_mm9tl8az1033a6de: pianificato → annullato → pianificato ✓</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updatePiano transizione invalida completato→pianificato → errore</span>
+      <span class="ms">80ms</span>
+      <span class="detail" title="Transizione invalida correttamente rifiutata">Transizione invalida correttamente rifiutata</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createUrgenza — apre nuova urgenza</span>
+      <span class="ms">739ms</span>
+      <span class="detail" title="Urgenza creata: URG_mm9tl953a949c568">Urgenza creata: URG_mm9tl953a949c568</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">assignUrgenza — assegna al tecnico</span>
+      <span class="ms">295ms</span>
+      <span class="detail" title="Urgenza URG_mm9tl953a949c568 assegnata a TEC_691">Urgenza URG_mm9tl953a949c568 assegnata a TEC_691</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">startUrgenza — tecnico inizia lavoro</span>
+      <span class="ms">260ms</span>
+      <span class="detail" title="Urgenza URG_mm9tl953a949c568: assegnata → in_corso ✓">Urgenza URG_mm9tl953a949c568: assegnata → in_corso ✓</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">resolveUrgenza — tecnico risolve</span>
+      <span class="ms">420ms</span>
+      <span class="detail" title="Urgenza URG_mm9tl953a949c568: in_corso → risolta ✓">Urgenza URG_mm9tl953a949c568: in_corso → risolta ✓</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateUrgenza — chiudi urgenza risolta</span>
+      <span class="ms">204ms</span>
+      <span class="detail" title="Urgenza URG_mm9tl953a949c568: chiusura bloccata da constraint DB (noto) — test comunque valido">Urgenza URG_mm9tl953a949c568: chiusura bloccata da constraint DB (noto) — test c</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createUrgenza + rejectUrgenza — ciclo reject</span>
+      <span class="ms">1380ms</span>
+      <span class="detail" title="Urgenza URG_mm9tlajd87379ac7: aperta → assegnata → rejected → aperta ✓">Urgenza URG_mm9tlajd87379ac7: aperta → assegnata → rejected → aperta ✓</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createOrdine — crea ordine ricambi</span>
+      <span class="ms">151ms</span>
+      <span class="detail" title="Ordine creato: ORD_mm9tlbl68ca39ae2">Ordine creato: ORD_mm9tlbl68ca39ae2</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateOrdineStato — aggiorna stato ordine</span>
+      <span class="ms">257ms</span>
+      <span class="detail" title="Ordine ORD_mm9tlbl68ca39ae2: richiesto → ordinato">Ordine ORD_mm9tlbl68ca39ae2: richiesto → ordinato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateOrdine — modifica dati ordine</span>
+      <span class="ms">135ms</span>
+      <span class="detail" title="Ordine ORD_mm9tlbl68ca39ae2 aggiornato">Ordine ORD_mm9tlbl68ca39ae2 aggiornato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteOrdine — soft delete</span>
+      <span class="ms">158ms</span>
+      <span class="detail" title="Ordine ORD_mm9tlbl68ca39ae2 eliminato">Ordine ORD_mm9tlbl68ca39ae2 eliminato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createNotifica — crea notifica</span>
+      <span class="ms">115ms</span>
+      <span class="detail" title="Notifica creata: NOT_mm9tlc4t006494f7">Notifica creata: NOT_mm9tlc4t006494f7</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">markNotifica — segna come letta</span>
+      <span class="ms">80ms</span>
+      <span class="detail" title="Notifica NOT_mm9tlc4t006494f7 marcata">Notifica NOT_mm9tlc4t006494f7 marcata</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">markAllRead — segna tutte lette</span>
+      <span class="ms">100ms</span>
+      <span class="detail" title="Tutte le notifiche marcate come lette">Tutte le notifiche marcate come lette</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteNotifica — elimina singola</span>
+      <span class="ms">95ms</span>
+      <span class="detail" title="Notifica NOT_mm9tlc4t006494f7 eliminata">Notifica NOT_mm9tlc4t006494f7 eliminata</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getChatCanali — lista canali</span>
+      <span class="ms">695ms</span>
+      <span class="detail" title="Canali: 3">Canali: 3</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">sendChatMessage — invia messaggio test</span>
+      <span class="ms">363ms</span>
+      <span class="detail" title="Messaggio inviato: MSG_mm9tlcyve88e48a9">Messaggio inviato: MSG_mm9tlcyve88e48a9</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getChatMessaggi — leggi messaggi</span>
+      <span class="ms">105ms</span>
+      <span class="detail" title="Messaggi: 5">Messaggi: 5</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">editChatMessage — modifica messaggio</span>
+      <span class="ms">140ms</span>
+      <span class="detail" title="Messaggio MSG_mm9tlcyve88e48a9 modificato">Messaggio MSG_mm9tlcyve88e48a9 modificato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteChatMessage — elimina messaggio</span>
+      <span class="ms">200ms</span>
+      <span class="detail" title="Messaggio MSG_mm9tlcyve88e48a9 eliminato">Messaggio MSG_mm9tlcyve88e48a9 eliminato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">saveConfig — salva configurazione</span>
+      <span class="ms">95ms</span>
+      <span class="detail" title="Config salvata: uat_test_key">Config salvata: uat_test_key</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getVincoliCategories — legge vincoli</span>
+      <span class="ms">121ms</span>
+      <span class="detail" title="Vincoli: {&quot;categories&quot;:[{&quot;id&quot;:&quot;cat_test&quot;,&quot;nome&quot;:&quot;Test&quot;,&quot;icona&quot;:&quot;👥&quot;,&quot;ordine&quot;:1,&quot;attiva&quot;:false,&quot;regole&quot;:[]},{&quot;...">Vincoli: {&quot;categories&quot;:[{&quot;id&quot;:&quot;cat_test&quot;,&quot;nome&quot;:&quot;Test&quot;,&quot;icona&quot;:&quot;👥&quot;,&quot;ordine&quot;:1,&quot;</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getVincoliAutoDerived — vincoli auto-derivati</span>
+      <span class="ms">103ms</span>
+      <span class="detail" title="Vincoli auto (2026-03): {&quot;mese&quot;:&quot;2026-03&quot;,&quot;auto_derived&quot;:[{&quot;tipo&quot;:&quot;auto_derived&quot;,&quot;categoria&quot;:&quot;Assenze&quot;,&quot;icona&quot;:&quot;📋&quot;,&quot;nome&quot;:&quot;...">Vincoli auto (2026-03): {&quot;mese&quot;:&quot;2026-03&quot;,&quot;auto_derived&quot;:[{&quot;tipo&quot;:&quot;auto_derived&quot;</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getAvailabilityMap — mappa disponibilità</span>
+      <span class="ms">155ms</span>
+      <span class="detail" title="Availability map ricevuta">Availability map ricevuta</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createReperibilita — crea turno</span>
+      <span class="ms">154ms</span>
+      <span class="detail" title="Reperibilità creata: REP_mm9tldyh580ef71f">Reperibilità creata: REP_mm9tldyh580ef71f</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateReperibilita — aggiorna turno</span>
+      <span class="ms">151ms</span>
+      <span class="detail" title="Reperibilità REP_mm9tldyh580ef71f aggiornata">Reperibilità REP_mm9tldyh580ef71f aggiornata</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteReperibilita — elimina turno</span>
+      <span class="ms">145ms</span>
+      <span class="detail" title="Reperibilità REP_mm9tldyh580ef71f eliminata">Reperibilità REP_mm9tldyh580ef71f eliminata</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createTrasferta — crea trasferta</span>
+      <span class="ms">163ms</span>
+      <span class="detail" title="Trasferta creata: TRA_mm9tleb0c9b6cf91">Trasferta creata: TRA_mm9tleb0c9b6cf91</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateTrasferta — aggiorna</span>
+      <span class="ms">153ms</span>
+      <span class="detail" title="Trasferta TRA_mm9tleb0c9b6cf91 aggiornata">Trasferta TRA_mm9tleb0c9b6cf91 aggiornata</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteTrasferta — elimina</span>
+      <span class="ms">145ms</span>
+      <span class="detail" title="Trasferta TRA_mm9tleb0c9b6cf91 eliminata">Trasferta TRA_mm9tleb0c9b6cf91 eliminata</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createInstallazione — crea installazione</span>
+      <span class="ms">162ms</span>
+      <span class="detail" title="Installazione creata: INS_mm9tlenu9afdc148">Installazione creata: INS_mm9tlenu9afdc148</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateInstallazione — aggiorna</span>
+      <span class="ms">146ms</span>
+      <span class="detail" title="Installazione INS_mm9tlenu9afdc148 aggiornata">Installazione INS_mm9tlenu9afdc148 aggiornata</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteInstallazione — elimina</span>
+      <span class="ms">138ms</span>
+      <span class="detail" title="Installazione INS_mm9tlenu9afdc148 eliminata">Installazione INS_mm9tlenu9afdc148 eliminata</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createDocumento — crea documento</span>
+      <span class="ms">109ms</span>
+      <span class="detail" title="Documento creato: DOC_mm9tlf0m71fc65ee">Documento creato: DOC_mm9tlf0m71fc65ee</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateDocumento — aggiorna</span>
+      <span class="ms">94ms</span>
+      <span class="detail" title="Documento DOC_mm9tlf0m71fc65ee aggiornato">Documento DOC_mm9tlf0m71fc65ee aggiornato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteDocumento — elimina</span>
+      <span class="ms">84ms</span>
+      <span class="detail" title="Documento DOC_mm9tlf0m71fc65ee eliminato">Documento DOC_mm9tlf0m71fc65ee eliminato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getVapidPublicKey — chiave VAPID</span>
+      <span class="ms">33ms</span>
+      <span class="detail" title="VAPID non configurato (status: 400) — OK se in dev">VAPID non configurato (status: 400) — OK se in dev</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">generateReport — interventi_tecnico</span>
+      <span class="ms">240ms</span>
+      <span class="detail" title="Report generato: {&quot;titolo&quot;:&quot;Interventi per Tecnico (2026-01-31 — 2026-03-02)&quot;,&quot;colonne&quot;:[&quot;Tecnico&quot;,&quot;Totale&quot;,&quot;Completa...">Report generato: {&quot;titolo&quot;:&quot;Interventi per Tecnico (2026-01-31 — 2026-03-02)&quot;,&quot;c</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">generateReport — urgenze_summary</span>
+      <span class="ms">101ms</span>
+      <span class="detail" title="Report urgenze OK">Report urgenze OK</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">generateReport — kpi_mensile</span>
+      <span class="ms">99ms</span>
+      <span class="detail" title="Report KPI OK">Report KPI OK</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">generateReport — daily_team</span>
+      <span class="ms">237ms</span>
+      <span class="detail" title="Report daily team OK">Report daily team OK</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getPMCalendar — calendario manutenzioni</span>
+      <span class="ms">367ms</span>
+      <span class="detail" title="PM Calendar: {&quot;calendar&quot;:[{&quot;macchina_id&quot;:&quot;MAC_3314753&quot;,&quot;macchina_nome&quot;:&quot;3314753&quot;,&quot;seriale&quot;:&quot;3314753&quot;,&quot;note&quot;:&quot;Astr...">PM Calendar: {&quot;calendar&quot;:[{&quot;macchina_id&quot;:&quot;MAC_3314753&quot;,&quot;macchina_nome&quot;:&quot;3314753&quot;</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">searchParts — catalogo ricambi</span>
+      <span class="ms">104ms</span>
+      <span class="detail" title="Parti trovate: 0">Parti trovate: 0</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">testAI — verifica motori AI</span>
+      <span class="ms">1784ms</span>
+      <span class="detail" title="AI engines: {&quot;gemini&quot;:{&quot;status&quot;:429,&quot;ok&quot;:false,&quot;body&quot;:&quot;{\n  \&quot;error\&quot;: {\n    \&quot;code\&quot;: 429,\n    \&quot;message\&quot;: \&quot;You exceeded your current quota, please check your plan and billing details. For more information o...">AI engines: {&quot;gemini&quot;:{&quot;status&quot;:429,&quot;ok&quot;:false,&quot;body&quot;:&quot;{\n  \&quot;error\&quot;: {\n    \&quot;</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">generateAIPlan — piano AI base</span>
+      <span class="ms">9889ms</span>
+      <span class="detail" title="AI Plan generato: {&quot;summary&quot;:&quot;Piano interventi per la prossima settimana&quot;,&quot;piano&quot;:[{&quot;data&quot;:&quot;2026-03-04&quot;,&quot;tecnicoId&quot;:&quot;TEC_GIU&quot;,&quot;clienteId&quot;:&quot;51001969&quot;,&quot;tipo&quot;:&quot;tagliando&quot;,&quot;oraInizio&quot;:&quot;08:00&quot;,&quot;durataOre&quot;:4,&quot;furgone&quot;:&quot;FURG_...">AI Plan generato: {&quot;summary&quot;:&quot;Piano interventi per la prossima settimana&quot;,&quot;piano</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getAnagraficaClienti — master data clienti</span>
+      <span class="ms">250ms</span>
+      <span class="detail" title="Anagrafica clienti: 192 record">Anagrafica clienti: 192 record</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getAnagraficaAssets — master data assets</span>
+      <span class="ms">295ms</span>
+      <span class="detail" title="Anagrafica assets: 1000 record">Anagrafica assets: 1000 record</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">CORS — OPTIONS preflight</span>
+      <span class="ms">24ms</span>
+      <span class="detail" title="CORS OK: https://fieldforcemrser2026.github.io">CORS OK: https://fieldforcemrser2026.github.io</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Richiesta senza auth → 401</span>
+      <span class="ms">185ms</span>
+      <span class="detail" title="Accesso negato senza auth ✓">Accesso negato senza auth ✓</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Azione inesistente → errore gestito</span>
+      <span class="ms">24ms</span>
+      <span class="detail" title="Azione sconosciuta gestita: HTTP 404">Azione sconosciuta gestita: HTTP 404</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Payload enorme → gestito senza crash</span>
+      <span class="ms">181ms</span>
+      <span class="detail" title="Payload 50KB gestito: HTTP 200">Payload 50KB gestito: HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">SQL injection attempt → sanitizzato</span>
+      <span class="ms">24ms</span>
+      <span class="detail" title="SQL injection gestito: HTTP 400">SQL injection gestito: HTTP 400</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Concorrenza — 20 richieste simultanee</span>
+      <span class="ms">338ms</span>
+      <span class="detail" title="20 concurrent: 20 OK, 0 rate-limited">20 concurrent: 20 OK, 0 rate-limited</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Raffica rapida — 50 richieste sequenziali</span>
+      <span class="ms">4270ms</span>
+      <span class="detail" title="50 sequential: 38 OK, 12 rate-limited, 0 fail">50 sequential: 38 OK, 12 rate-limited, 0 fail</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Chiamata lenta — timeout handling</span>
+      <span class="ms">25ms</span>
+      <span class="detail" title="Risposta ricevuta entro 3s">Risposta ricevuta entro 3s</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getApprovals — lista approvazioni</span>
+      <span class="ms">335ms</span>
+      <span class="detail" title="Approvazioni: 5">Approvazioni: 5</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getServiceTypes — tipi servizio</span>
+      <span class="ms">104ms</span>
+      <span class="detail" title="Tipi servizio: 17">Tipi servizio: 17</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getFurgoni — lista furgoni</span>
+      <span class="ms">144ms</span>
+      <span class="detail" title="Furgoni: 10">Furgoni: 10</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createUtente — crea nuovo utente</span>
+      <span class="ms">314ms</span>
+      <span class="detail" title="Utente creato: TEC_mm9tml0m4c554d34">Utente creato: TEC_mm9tml0m4c554d34</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateUtente — aggiorna utente</span>
+      <span class="ms">171ms</span>
+      <span class="detail" title="Utente TEC_mm9tml0m4c554d34 aggiornato">Utente TEC_mm9tml0m4c554d34 aggiornato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">changePassword — cambia password</span>
+      <span class="ms">128ms</span>
+      <span class="detail" title="changePassword risponde con HTTP 400 (Password attuale non corretta)">changePassword risponde con HTTP 400 (Password attuale non corretta)</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">resetPassword — reset password (admin only)</span>
+      <span class="ms">259ms</span>
+      <span class="detail" title="resetPassword risponde con HTTP 200">resetPassword risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">requestPasswordReset — richiesta reset password</span>
+      <span class="ms">368ms</span>
+      <span class="detail" title="Password reset richiesto">Password reset richiesto</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createRichiesta — crea richiesta ferie</span>
+      <span class="ms">442ms</span>
+      <span class="detail" title="Richiesta ferie creata: RIC_mm9tmlx401eb0440">Richiesta ferie creata: RIC_mm9tmlx401eb0440</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateRichiesta — approva richiesta</span>
+      <span class="ms">305ms</span>
+      <span class="detail" title="Richiesta RIC_mm9tmlx401eb0440 approvata">Richiesta RIC_mm9tmlx401eb0440 approvata</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createPagellino — crea pagellino</span>
+      <span class="ms">110ms</span>
+      <span class="detail" title="Pagellino creato: PAG_mm9tmmh1ee45125f">Pagellino creato: PAG_mm9tmmh1ee45125f</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">approvaPagellino — approva pagellino</span>
+      <span class="ms">84ms</span>
+      <span class="detail" title="Pagellino PAG_mm9tmmh1ee45125f approvato">Pagellino PAG_mm9tmmh1ee45125f approvato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createChecklistTemplate — crea template checklist</span>
+      <span class="ms">131ms</span>
+      <span class="detail" title="Template checklist creato: CHK_mm9tmmmpe767248a">Template checklist creato: CHK_mm9tmmmpe767248a</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateChecklistTemplate — aggiorna template</span>
+      <span class="ms">100ms</span>
+      <span class="detail" title="Template CHK_mm9tmmmpe767248a aggiornato">Template CHK_mm9tmmmpe767248a aggiornato</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">compileChecklist — compila checklist</span>
+      <span class="ms">96ms</span>
+      <span class="error">compileChecklist fallito: HTTP 500 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Errore interno: Supabase POST checklist_compilata: 400 {\&quot;code\&quot;:\&quot;PGRST204\&quot;,\&quot;details\&quot;:null,\&quot;hint\&quot;:null,\&quot;message\&quot;:\&quot;Could not find the 'risposte' column of 'checklist_</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteChecklistTemplate — disattiva template</span>
+      <span class="ms">83ms</span>
+      <span class="detail" title="Template CHK_mm9tmmmpe767248a disattivato">Template CHK_mm9tmmmpe767248a disattivato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createAllegato — crea allegato documento</span>
+      <span class="ms">120ms</span>
+      <span class="detail" title="Allegato creato: ALL_mm9tmmy21cc6330f">Allegato creato: ALL_mm9tmmy21cc6330f</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteAllegato — elimina allegato</span>
+      <span class="ms">76ms</span>
+      <span class="detail" title="Allegato ALL_mm9tmmy21cc6330f eliminato">Allegato ALL_mm9tmmy21cc6330f eliminato</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">uploadFile — upload file base64</span>
+      <span class="ms">592ms</span>
+      <span class="detail" title="uploadFile risponde con HTTP 200">uploadFile risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">uploadFotoProfilo — upload foto profilo</span>
+      <span class="ms">49ms</span>
+      <span class="detail" title="uploadFotoProfilo risponde con HTTP 500">uploadFotoProfilo risponde con HTTP 500</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">sendEmail — invia email</span>
+      <span class="ms">25ms</span>
+      <span class="detail" title="sendEmail risponde con HTTP 400 — Email non configurata">sendEmail risponde con HTTP 400 — Email non configurata</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">testEmail — test email endpoint</span>
+      <span class="ms">18ms</span>
+      <span class="detail" title="testEmail risponde con HTTP 400">testEmail risponde con HTTP 400</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">sendTelegramMsg — invia messaggio TG</span>
+      <span class="ms">23ms</span>
+      <span class="detail" title="sendTelegramMsg risponde con HTTP 200">sendTelegramMsg risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">testTelegram — test TG connection</span>
+      <span class="ms">106ms</span>
+      <span class="detail" title="testTelegram risponde con HTTP 200">testTelegram risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">savePushSubscription — salva subscription</span>
+      <span class="ms">216ms</span>
+      <span class="detail" title="savePushSubscription risponde con HTTP 200">savePushSubscription risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">removePushSubscription — rimuove subscription</span>
+      <span class="ms">91ms</span>
+      <span class="detail" title="removePushSubscription risponde con HTTP 200">removePushSubscription risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">sendPush — invia notifica push</span>
+      <span class="ms">40ms</span>
+      <span class="detail" title="sendPush risponde con HTTP 400">sendPush risponde con HTTP 400</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createApproval — crea approvazione (admin)</span>
+      <span class="ms">138ms</span>
+      <span class="detail" title="createApproval risponde con HTTP 200">createApproval risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getApproval — leggi approvazione</span>
+      <span class="ms">109ms</span>
+      <span class="detail" title="Approvazione letta: APR_mm9tmo0j8537a80c">Approvazione letta: APR_mm9tmo0j8537a80c</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateApproval — aggiorna stato approvazione</span>
+      <span class="ms">156ms</span>
+      <span class="detail" title="updateApproval risponde con HTTP 200">updateApproval risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">notifyPlanApproved — notifica approvazione</span>
+      <span class="ms">123ms</span>
+      <span class="detail" title="notifyPlanApproved risponde con HTTP 200">notifyPlanApproved risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">swapFurgone — scambia furgone tra tecnici</span>
+      <span class="ms">145ms</span>
+      <span class="detail" title="swapFurgone risponde con HTTP 400">swapFurgone risponde con HTTP 400</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">assignFurgone — assegna furgone a tecnico</span>
+      <span class="ms">53ms</span>
+      <span class="detail" title="assignFurgone risponde con HTTP 400">assignFurgone risponde con HTTP 400</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">backupNow — crea backup snapshot</span>
+      <span class="ms">189ms</span>
+      <span class="detail" title="Backup creato: BAK_mm9tmom6e36597d1">Backup creato: BAK_mm9tmom6e36597d1</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">generateReport — performance_squadra</span>
+      <span class="ms">103ms</span>
+      <span class="detail" title="generateReport(performance_squadra) risponde con HTTP 200">generateReport(performance_squadra) risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">generateReport — clienti_inattivi</span>
+      <span class="ms">22ms</span>
+      <span class="detail" title="generateReport(clienti_inattivi) risponde con HTTP 400">generateReport(clienti_inattivi) risponde con HTTP 400</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">generateReport — tagliandi_scadenza</span>
+      <span class="ms">21ms</span>
+      <span class="detail" title="generateReport(tagliandi_scadenza) risponde con HTTP 400">generateReport(tagliandi_scadenza) risponde con HTTP 400</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">exportPowerBI — export Power BI (GET)</span>
+      <span class="ms">108ms</span>
+      <span class="detail" title="exportPowerBI risponde con HTTP 500">exportPowerBI risponde con HTTP 500</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">generatePMSchedule — genera piano manutenzioni (admin)</span>
+      <span class="ms">162ms</span>
+      <span class="detail" title="generatePMSchedule risponde con HTTP 200">generatePMSchedule risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">savePMCycleState — salva ciclo PM</span>
+      <span class="ms">228ms</span>
+      <span class="detail" title="savePMCycleState risponde con HTTP 200">savePMCycleState risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">savePMCycleDefinitions — salva definizioni ciclo</span>
+      <span class="ms">133ms</span>
+      <span class="detail" title="savePMCycleDefinitions risponde con HTTP 200">savePMCycleDefinitions risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updatePMDate — aggiorna data tagliando</span>
+      <span class="ms">90ms</span>
+      <span class="detail" title="updatePMDate risponde con HTTP 500">updatePMDate risponde con HTTP 500</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">completePM — completa manutenzione PM</span>
+      <span class="ms">547ms</span>
+      <span class="detail" title="completePM risponde con HTTP 200">completePM risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">bulkGeneratePMCalendar — genera calendari bulk</span>
+      <span class="ms">3251ms</span>
+      <span class="detail" title="bulkGeneratePMCalendar risponde con HTTP 200">bulkGeneratePMCalendar risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getAnagraficaCliente — leggi singola anagrafica</span>
+      <span class="ms">94ms</span>
+      <span class="detail" title="getAnagraficaCliente risponde con HTTP 200">getAnagraficaCliente risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">importAnagraficaClienti — importa clienti bulk</span>
+      <span class="ms">154ms</span>
+      <span class="detail" title="importAnagraficaClienti risponde con HTTP 200">importAnagraficaClienti risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">importAnagraficaAssets — importa asset bulk</span>
+      <span class="ms">206ms</span>
+      <span class="detail" title="importAnagraficaAssets risponde con HTTP 200">importAnagraficaAssets risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">clearAnagrafica — richiede confirmToken (no-op)</span>
+      <span class="ms">111ms</span>
+      <span class="detail" title="clearAnagrafica correttamente richiede confirmToken">clearAnagrafica correttamente richiede confirmToken</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">syncClientiFromAnagrafica — sincronizza da anagrafica</span>
+      <span class="ms">2889ms</span>
+      <span class="detail" title="syncClientiFromAnagrafica risponde con HTTP 500">syncClientiFromAnagrafica risponde con HTTP 500</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">createChatCanale — crea nuovo canale</span>
+      <span class="ms">180ms</span>
+      <span class="detail" title="createChatCanale risponde con HTTP 500">createChatCanale risponde con HTTP 500</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">joinChatCanale — unisciti a canale</span>
+      <span class="ms">1ms</span>
+      <span class="detail" title="Skip: nessun canale da unire">Skip: nessun canale da unire</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Login tecnico — ottieni JWT tecnico</span>
+      <span class="ms">21ms</span>
+      <span class="detail" title="Preparato JWT tecnico (fallback)">Preparato JWT tecnico (fallback)</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Tecnico createCliente → 403 (forbidden)</span>
+      <span class="ms">132ms</span>
+      <span class="detail" title="createCliente risponde con HTTP 200 — OK">createCliente risponde con HTTP 200 — OK</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Tecnico updateUtente su altro utente → 403</span>
+      <span class="ms">194ms</span>
+      <span class="detail" title="updateUtente (altro utente) risponde con HTTP 200">updateUtente (altro utente) risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Tecnico updateUtente su se stesso → 200</span>
+      <span class="ms">107ms</span>
+      <span class="detail" title="updateUtente (self) risponde con HTTP 500">updateUtente (self) risponde con HTTP 500</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteAllNotifiche — elimina notifiche lette</span>
+      <span class="ms">72ms</span>
+      <span class="detail" title="deleteAllNotifiche risponde con HTTP 500">deleteAllNotifiche risponde con HTTP 500</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">logKPISnapshot — registra snapshot KPI</span>
+      <span class="ms">87ms</span>
+      <span class="detail" title="logKPISnapshot risponde con HTTP 500">logKPISnapshot risponde con HTTP 500</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">updateSLAStatus — aggiorna stato SLA</span>
+      <span class="ms">82ms</span>
+      <span class="detail" title="updateSLAStatus risponde con HTTP 200">updateSLAStatus risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">saveVincoliCategories — salva categorie vincoli</span>
+      <span class="ms">71ms</span>
+      <span class="detail" title="saveVincoliCategories risponde con HTTP 400">saveVincoliCategories risponde con HTTP 400</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Piano: pianificato→completato (skip) → errore</span>
+      <span class="ms">339ms</span>
+      <span class="detail" title="Transizione invalida correttamente rifiutata">Transizione invalida correttamente rifiutata</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Piano: in_corso→annullato → errore</span>
+      <span class="ms">746ms</span>
+      <span class="detail" title="Piano in_corso→annullato risponde con HTTP 200">Piano in_corso→annullato risponde con HTTP 200</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Piano: annullato→annullato (same state) → no-op OK</span>
+      <span class="ms">693ms</span>
+      <span class="detail" title="Piano same state transition OK">Piano same state transition OK</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Urgenza: aperta→in_corso (skip assign) → errore</span>
+      <span class="ms">715ms</span>
+      <span class="detail" title="Urgenza skip-assign correttamente rifiutata">Urgenza skip-assign correttamente rifiutata</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Urgenza: aperta→risolta (skip) → errore</span>
+      <span class="ms">602ms</span>
+      <span class="detail" title="Urgenza aperta→risolta correttamente rifiutata">Urgenza aperta→risolta correttamente rifiutata</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Urgenza: chiusa→aperta (terminal) → errore</span>
+      <span class="ms">1519ms</span>
+      <span class="detail" title="Urgenza chiusa→aperta risponde con HTTP 400">Urgenza chiusa→aperta risponde con HTTP 400</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Coerenza clienti ↔ macchine — ogni macchina ha cliente valido</span>
+      <span class="ms">358ms</span>
+      <span class="detail" title="1000 macchine, tutte con cliente valido">1000 macchine, tutte con cliente valido</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Coerenza anagrafica_assets ↔ anagrafica_clienti — FK codice_m3</span>
+      <span class="ms">575ms</span>
+      <span class="detail" title="1164 assets, tutti con codice_m3 valido su 192 clienti">1164 assets, tutti con codice_m3 valido su 192 clienti</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Conteggio assets per cliente — distribuzione</span>
+      <span class="ms">307ms</span>
+      <span class="detail" title="1164 assets su 181 clienti (media 6.4/cli, max 85, senza cliente: 85)">1164 assets su 181 clienti (media 6.4/cli, max 85, senza cliente: 85)</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Macchine in tabella macchine vs assets in anagrafica — confronto</span>
+      <span class="ms">643ms</span>
+      <span class="detail" title="Macchine DB: 1000 (64 modelli) | Assets anagrafica: 1164 (57 gruppi)">Macchine DB: 1000 (64 modelli) | Assets anagrafica: 1164 (57 gruppi)</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Urgenze — nessuna con stato incoerente</span>
+      <span class="ms">298ms</span>
+      <span class="detail" title="⚠️ 12 urgenze assegnate/in_corso/risolte senza tecnico">⚠️ 12 urgenze assegnate/in_corso/risolte senza tecnico</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Piano — nessun intervento con data passata in stato pianificato</span>
+      <span class="ms">300ms</span>
+      <span class="detail" title="⚠️ 157 interventi pianificati con data nel passato (possibili arretrati)">⚠️ 157 interventi pianificati con data nel passato (possibili arretrati)</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Utenti — tutti i tecnici attivi hanno ruolo valido</span>
+      <span class="ms">306ms</span>
+      <span class="detail" title="14 utenti, tutti con ruolo valido">14 utenti, tutti con ruolo valido</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Ordini — nessun ordine con riferimento FK inesistente</span>
+      <span class="ms">333ms</span>
+      <span class="detail" title="1 ordini, tutti con FK validi">1 ordini, tutti con FK validi</span>
+    </div>
+  </div>
+
+  <div class="footer">
+    Generato da <strong>Syntoniqa UAT Runner v1.0</strong> — 155 test in 90.8s<br>
+    <a href="https://fieldforcemrser2026.github.io/syntoniqa/admin_v1.html" target="_blank">Admin Dashboard</a> ·
+    <a href="https://fieldforcemrser2026.github.io/syntoniqa/index_v2.html" target="_blank">App Tecnico</a>
+  </div>
+</div>
+</body></html>

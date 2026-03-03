@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Syntoniqa UAT Report — 02/03/2026, 23:22:27</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+:root { --c1: #C30A14; --ok: #10B981; --err: #EF4444; --warn: #F59E0B; --bg: #0A0A0A; --surface: #1A1A1A; --card: #222; --border: #333; --text: #F5F5F5; --text2: #999; --font: 'DM Sans', system-ui, sans-serif; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; padding: 32px; }
+.container { max-width: 1100px; margin: 0 auto; }
+h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 4px; }
+.subtitle { color: var(--text2); font-size: .875rem; margin-bottom: 32px; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; }
+.stat .val { font-size: 2rem; font-weight: 700; }
+.stat .lbl { color: var(--text2); font-size: .75rem; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+.stat.pass .val { color: var(--ok); }
+.stat.fail .val { color: var(--err); }
+.stat.rate .val { color: var(--err); }
+.stat.time .val { color: var(--text); }
+.progress { background: var(--surface); border-radius: 8px; height: 8px; margin-bottom: 32px; overflow: hidden; }
+.progress-bar { height: 100%; background: linear-gradient(90deg, var(--ok), #059669); border-radius: 8px; transition: width .3s; }
+.suite { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+.suite-head { padding: 16px 20px; font-weight: 600; font-size: 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.suite-head .badge { font-size: .75rem; padding: 4px 10px; border-radius: 20px; font-weight: 500; }
+.badge-pass { background: rgba(16,185,129,.15); color: var(--ok); }
+.badge-fail { background: rgba(239,68,68,.15); color: var(--err); }
+.badge-mix { background: rgba(245,158,11,.15); color: var(--warn); }
+.test-row { padding: 10px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; font-size: .875rem; }
+.test-row:last-child { border-bottom: none; }
+.test-row .icon { font-size: 1rem; width: 24px; text-align: center; flex-shrink: 0; }
+.test-row .name { flex: 1; }
+.test-row .ms { color: var(--text2); font-size: .75rem; white-space: nowrap; }
+.test-row .detail { color: var(--text2); font-size: .75rem; max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.test-row.fail { background: rgba(239,68,68,.05); }
+.test-row.fail .error { color: var(--err); font-size: .75rem; margin-top: 4px; }
+.footer { text-align: center; color: var(--text2); font-size: .75rem; padding: 32px 0; }
+.footer a { color: var(--c1); }
+@media (max-width: 600px) { .stats { grid-template-columns: repeat(2, 1fr); } body { padding: 16px; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
+    <div style="width:40px;height:40px;background:var(--c1);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff;font-size:.875rem">SQ</div>
+    <h1>Syntoniqa UAT Report</h1>
+  </div>
+  <div class="subtitle">02/03/2026, 23:22:27 — Target: https://syntoniqa-mrs-api.fieldforcemrser.workers.dev</div>
+
+  <div class="stats">
+    <div class="stat"><div class="val">82</div><div class="lbl">Total Tests</div></div>
+    <div class="stat pass"><div class="val">11</div><div class="lbl">Passed</div></div>
+    <div class="stat fail"><div class="val">71</div><div class="lbl">Failed</div></div>
+    <div class="stat rate"><div class="val">13.4%</div><div class="lbl">Pass Rate</div></div>
+  </div>
+
+  <div class="progress"><div class="progress-bar" style="width:13.4%"></div></div>
+
+  <div class="suite">
+    <div class="suite-head"><span></span><span class="badge badge-mix">71 FAIL</span></div>
+    <div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">Login admin con credenziali valide</span>
+      <span class="ms">608ms</span>
+      <span class="error">Login fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Credenziali non valide&quot;}</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Login con password errata → 401</span>
+      <span class="ms">392ms</span>
+      <span class="detail" title="Correttamente rifiutato: Credenziali non valide">Correttamente rifiutato: Credenziali non valide</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Login con utente inesistente → 401</span>
+      <span class="ms">159ms</span>
+      <span class="detail" title="Utente inesistente correttamente rifiutato">Utente inesistente correttamente rifiutato</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">API call con JWT valido → 200</span>
+      <span class="ms">0ms</span>
+      <span class="error">JWT non disponibile</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">API call con token invalido → 401</span>
+      <span class="ms">19ms</span>
+      <span class="detail" title="Token invalido correttamente rifiutato">Token invalido correttamente rifiutato</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getAll — caricamento dati completo</span>
+      <span class="ms">26ms</span>
+      <span class="error">getAll fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getAll tecnico — filtro role-based</span>
+      <span class="ms">51ms</span>
+      <span class="error">getAll tecnico fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getKPI — dashboard KPI</span>
+      <span class="ms">60ms</span>
+      <span class="error">getKPI fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getKPITecnici — KPI per tecnico</span>
+      <span class="ms">102ms</span>
+      <span class="error">getKPITecnici fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getChecklistTemplates — template checklist</span>
+      <span class="ms">100ms</span>
+      <span class="error">getChecklistTemplates fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getPagellini — valutazioni</span>
+      <span class="ms">55ms</span>
+      <span class="error">getPagellini fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getAuditLog — audit trail</span>
+      <span class="ms">91ms</span>
+      <span class="error">getAuditLog fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getBackupHistory — storico backup</span>
+      <span class="ms">54ms</span>
+      <span class="error">getBackupHistory fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">createCliente — crea cliente di test</span>
+      <span class="ms">52ms</span>
+      <span class="error">createCliente fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updateCliente — aggiorna cliente</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessun cliente da aggiornare</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">searchClienti — ricerca clienti</span>
+      <span class="ms">47ms</span>
+      <span class="error">searchClienti fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">deleteCliente — soft delete cliente</span>
+      <span class="ms">1ms</span>
+      <span class="error">Nessun cliente da eliminare</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">createMacchina — crea macchina di test</span>
+      <span class="ms">51ms</span>
+      <span class="error">createMacchina fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updateMacchina — aggiorna macchina</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessuna macchina da aggiornare</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">deleteMacchina — soft delete macchina</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessuna macchina da eliminare</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">createAutomezzo — crea furgone test</span>
+      <span class="ms">49ms</span>
+      <span class="error">createAutomezzo fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updateAutomezzo — aggiorna automezzo</span>
+      <span class="ms">1ms</span>
+      <span class="error">Nessun automezzo da aggiornare</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">deleteAutomezzo — soft delete</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessun automezzo da eliminare</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">createPiano — crea intervento pianificato</span>
+      <span class="ms">52ms</span>
+      <span class="error">createPiano fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updatePiano stato → in_corso (transizione valida)</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessun intervento da aggiornare</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updatePiano stato → completato (transizione valida)</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessun intervento</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">createPiano + annullato → pianificato (ciclo)</span>
+      <span class="ms">54ms</span>
+      <span class="error">createPiano #2 fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updatePiano transizione invalida completato→pianificato → errore</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessun intervento completato</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">createUrgenza — apre nuova urgenza</span>
+      <span class="ms">58ms</span>
+      <span class="error">createUrgenza fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">assignUrgenza — assegna al tecnico</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessuna urgenza da assegnare</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">startUrgenza — tecnico inizia lavoro</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessuna urgenza</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">resolveUrgenza — tecnico risolve</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessuna urgenza</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updateUrgenza — chiudi urgenza risolta</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessuna urgenza</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">createUrgenza + rejectUrgenza — ciclo reject</span>
+      <span class="ms">101ms</span>
+      <span class="error">createUrgenza #2 fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">createOrdine — crea ordine ricambi</span>
+      <span class="ms">42ms</span>
+      <span class="error">createOrdine fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updateOrdineStato — aggiorna stato ordine</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessun ordine</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updateOrdine — modifica dati ordine</span>
+      <span class="ms">1ms</span>
+      <span class="error">Nessun ordine</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">deleteOrdine — soft delete</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessun ordine</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">createNotifica — crea notifica</span>
+      <span class="ms">63ms</span>
+      <span class="error">createNotifica fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">markNotifica — segna come letta</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessuna notifica</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">markAllRead — segna tutte lette</span>
+      <span class="ms">71ms</span>
+      <span class="error">markAllRead fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">deleteNotifica — elimina singola</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessuna notifica</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getChatCanali — lista canali</span>
+      <span class="ms">31ms</span>
+      <span class="error">getChatCanali fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">sendChatMessage — invia messaggio test</span>
+      <span class="ms">58ms</span>
+      <span class="error">sendChatMessage fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getChatMessaggi — leggi messaggi</span>
+      <span class="ms">85ms</span>
+      <span class="error">getChatMessaggi fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">editChatMessage — modifica messaggio</span>
+      <span class="ms">0ms</span>
+      <span class="detail" title="Skip: nessun messaggio da modificare">Skip: nessun messaggio da modificare</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">deleteChatMessage — elimina messaggio</span>
+      <span class="ms">0ms</span>
+      <span class="detail" title="Skip: nessun messaggio da eliminare">Skip: nessun messaggio da eliminare</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">saveConfig — salva configurazione</span>
+      <span class="ms">56ms</span>
+      <span class="error">saveConfig fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getVincoliCategories — legge vincoli</span>
+      <span class="ms">46ms</span>
+      <span class="error">getVincoliCategories fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getVincoliAutoDerived — vincoli auto-derivati</span>
+      <span class="ms">50ms</span>
+      <span class="error">getVincoliAutoDerived fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getAvailabilityMap — mappa disponibilità</span>
+      <span class="ms">53ms</span>
+      <span class="error">getAvailabilityMap fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">createReperibilita — crea turno</span>
+      <span class="ms">52ms</span>
+      <span class="error">createReperibilita fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updateReperibilita — aggiorna turno</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessun turno</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">deleteReperibilita — elimina turno</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessun turno</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">createTrasferta — crea trasferta</span>
+      <span class="ms">44ms</span>
+      <span class="error">createTrasferta fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updateTrasferta — aggiorna</span>
+      <span class="ms">1ms</span>
+      <span class="error">Nessuna trasferta</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">deleteTrasferta — elimina</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessuna trasferta</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">createInstallazione — crea installazione</span>
+      <span class="ms">57ms</span>
+      <span class="error">createInstallazione fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updateInstallazione — aggiorna</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessuna installazione</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">deleteInstallazione — elimina</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessuna installazione</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">createDocumento — crea documento</span>
+      <span class="ms">49ms</span>
+      <span class="error">createDocumento fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">updateDocumento — aggiorna</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessun documento</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">deleteDocumento — elimina</span>
+      <span class="ms">0ms</span>
+      <span class="error">Nessun documento</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">getVapidPublicKey — chiave VAPID</span>
+      <span class="ms">49ms</span>
+      <span class="detail" title="VAPID non configurato (status: 401) — OK se in dev">VAPID non configurato (status: 401) — OK se in dev</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">generateReport — interventi_tecnico</span>
+      <span class="ms">53ms</span>
+      <span class="error">Report interventi_tecnico fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">generateReport — urgenze_summary</span>
+      <span class="ms">51ms</span>
+      <span class="error">Report urgenze_summary fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">generateReport — kpi_mensile</span>
+      <span class="ms">22ms</span>
+      <span class="error">Report kpi_mensile fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">generateReport — daily_team</span>
+      <span class="ms">28ms</span>
+      <span class="error">Report daily_team fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getPMCalendar — calendario manutenzioni</span>
+      <span class="ms">55ms</span>
+      <span class="error">getPMCalendar fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">searchParts — catalogo ricambi</span>
+      <span class="ms">100ms</span>
+      <span class="error">searchParts fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">testAI — verifica motori AI</span>
+      <span class="ms">49ms</span>
+      <span class="error">testAI fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">generateAIPlan — piano AI base</span>
+      <span class="ms">62ms</span>
+      <span class="error">generateAIPlan fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getAnagraficaClienti — master data clienti</span>
+      <span class="ms">95ms</span>
+      <span class="error">getAnagraficaClienti fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getAnagraficaAssets — master data assets</span>
+      <span class="ms">27ms</span>
+      <span class="error">getAnagraficaAssets fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">CORS — OPTIONS preflight</span>
+      <span class="ms">25ms</span>
+      <span class="detail" title="CORS OK: https://fieldforcemrser2026.github.io">CORS OK: https://fieldforcemrser2026.github.io</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Richiesta senza auth → 401</span>
+      <span class="ms">52ms</span>
+      <span class="detail" title="Accesso negato senza auth ✓">Accesso negato senza auth ✓</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Azione inesistente → errore gestito</span>
+      <span class="ms">56ms</span>
+      <span class="detail" title="Azione sconosciuta gestita: HTTP 401">Azione sconosciuta gestita: HTTP 401</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">Payload enorme → gestito senza crash</span>
+      <span class="ms">125ms</span>
+      <span class="detail" title="Payload 50KB gestito: HTTP 401">Payload 50KB gestito: HTTP 401</span>
+    </div><div class="test-row ">
+      <span class="icon">✅</span>
+      <span class="name">SQL injection attempt → sanitizzato</span>
+      <span class="ms">21ms</span>
+      <span class="detail" title="SQL injection gestito: HTTP 401">SQL injection gestito: HTTP 401</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getApprovals — lista approvazioni</span>
+      <span class="ms">29ms</span>
+      <span class="error">getApprovals fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getServiceTypes — tipi servizio</span>
+      <span class="ms">26ms</span>
+      <span class="error">getServiceTypes fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div><div class="test-row fail">
+      <span class="icon">❌</span>
+      <span class="name">getFurgoni — lista furgoni</span>
+      <span class="ms">46ms</span>
+      <span class="error">getFurgoni fallito: HTTP 401 — {&quot;success&quot;:false,&quot;error&quot;:&quot;Non autorizzato&quot;}</span>
+    </div>
+  </div>
+
+  <div class="footer">
+    Generato da <strong>Syntoniqa UAT Runner v1.0</strong> — 82 test in 3.9s<br>
+    <a href="https://fieldforcemrser2026.github.io/syntoniqa/admin_v1.html" target="_blank">Admin Dashboard</a> ·
+    <a href="https://fieldforcemrser2026.github.io/syntoniqa/index_v2.html" target="_blank">App Tecnico</a>
+  </div>
+</div>
+</body></html>
