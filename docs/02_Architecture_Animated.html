@@ -1,12 +1,9 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SYNTONIQA v1.0 — System Architecture</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -14,939 +11,1009 @@
             box-sizing: border-box;
         }
 
-        :root {
-            --mrs-red: #C30A14;
-            --mrs-blue: #3B7EF7;
-            --dark-bg: #0A0A0A;
-            --surface: #1A1A1A;
-            --card: #2A2A2A;
-            --text-primary: #FFFFFF;
-            --text-secondary: #B0B0B0;
-            --text-muted: #808080;
-            --success: #22C55E;
-            --warning: #F59E0B;
-            --telegram: #0088CC;
-            --gemini: #9333EA;
-        }
-
-        html, body {
-            width: 100%;
-            height: 100%;
-            background-color: var(--dark-bg);
-            color: var(--text-primary);
-            font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #0A0A0A 0%, #1A1A1A 100%);
+            color: #E0E0E0;
             overflow-x: hidden;
+            min-height: 100vh;
+            position: relative;
         }
 
-        /* Particle Background */
-        #particleCanvas {
+        /* Animated background */
+        body::before {
+            content: '';
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(195, 10, 20, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(59, 126, 247, 0.05) 0%, transparent 50%);
+            pointer-events: none;
             z-index: 0;
-            opacity: 0.15;
         }
 
         .container {
             position: relative;
             z-index: 1;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
+            max-width: 100%;
+            margin: 0 auto;
+            padding: 40px 20px;
         }
 
-        /* Header */
         .header {
-            background: linear-gradient(135deg, var(--surface) 0%, rgba(195, 10, 20, 0.1) 100%);
-            border-bottom: 2px solid var(--mrs-red);
-            padding: 2rem;
             text-align: center;
-            box-shadow: 0 8px 32px rgba(195, 10, 20, 0.2);
+            margin-bottom: 60px;
+            animation: slideDown 0.8s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .header h1 {
             font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #C30A14, #3B7EF7, #22C55E);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
             font-weight: 700;
-            margin-bottom: 0.5rem;
-            background: linear-gradient(135deg, var(--mrs-red), var(--text-primary));
+            letter-spacing: -0.5px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            color: #888;
+            font-weight: 300;
+        }
+
+        .subtitle {
+            font-size: 0.95rem;
+            color: #666;
+            margin-top: 15px;
+        }
+
+        /* Main architecture canvas */
+        .canvas {
+            position: relative;
+            background: #1A1A1A;
+            border: 1px solid #2A2A2A;
+            border-radius: 20px;
+            padding: 60px 40px;
+            margin-bottom: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 
+                        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            overflow: hidden;
+            min-height: 600px;
+        }
+
+        /* Three-column layout */
+        .architecture {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr 1fr;
+            gap: 40px;
+            align-items: start;
+            position: relative;
+            z-index: 2;
+        }
+
+        .layer {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            position: relative;
+        }
+
+        .layer-label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #3B7EF7;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(59, 126, 247, 0.3);
+        }
+
+        .component {
+            background: #2A2A2A;
+            border: 1px solid #3A3A3A;
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            position: relative;
+            overflow: hidden;
+            animation: fadeInUp 0.6s ease-out forwards;
+            opacity: 0;
+        }
+
+        .component::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transition: left 0.6s ease;
+        }
+
+        .component:hover::before {
+            left: 100%;
+        }
+
+        .component:hover {
+            border-color: #C30A14;
+            box-shadow: 0 0 20px rgba(195, 10, 20, 0.3),
+                        0 0 40px rgba(59, 126, 247, 0.1);
+            transform: translateY(-5px);
+        }
+
+        .component:nth-child(2) { animation-delay: 0.1s; }
+        .component:nth-child(3) { animation-delay: 0.2s; }
+        .component:nth-child(4) { animation-delay: 0.3s; }
+        .component:nth-child(5) { animation-delay: 0.4s; }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .component-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .component-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+
+        .component.frontend .component-icon {
+            background: rgba(59, 126, 247, 0.3);
+            color: #3B7EF7;
+        }
+
+        .component.backend .component-icon {
+            background: rgba(195, 10, 20, 0.3);
+            color: #C30A14;
+        }
+
+        .component.data .component-icon {
+            background: rgba(34, 197, 94, 0.3);
+            color: #22C55E;
+        }
+
+        .component-subtitle {
+            font-size: 0.75rem;
+            color: #999;
+            margin-bottom: 12px;
+        }
+
+        .component-stats {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .stat {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            color: #AAA;
+        }
+
+        .stat-value {
+            font-weight: 700;
+            color: #E0E0E0;
+        }
+
+        /* SVG Flow Lines */
+        .flow-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .flow-line {
+            stroke: url(#lineGradient);
+            stroke-width: 2;
+            fill: none;
+            stroke-linecap: round;
+            filter: drop-shadow(0 0 4px rgba(59, 126, 247, 0.3));
+            opacity: 0.6;
+            animation: flowAnimation 3s ease-in-out infinite;
+        }
+
+        @keyframes flowAnimation {
+            0%, 100% { stroke-dashoffset: 0; opacity: 0.4; }
+            50% { opacity: 0.8; }
+        }
+
+        .flow-particle {
+            animation: particleFlow 3s ease-in-out infinite;
+        }
+
+        @keyframes particleFlow {
+            0% { offset-distance: 0%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { offset-distance: 100%; opacity: 0; }
+        }
+
+        /* Tooltip/Popup */
+        .popup {
+            position: fixed;
+            background: #2A2A2A;
+            border: 1px solid #C30A14;
+            border-radius: 12px;
+            padding: 20px;
+            max-width: 350px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8),
+                        0 0 30px rgba(195, 10, 20, 0.3);
+            display: none;
+            z-index: 1000;
+            animation: popupAppear 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            pointer-events: auto;
+        }
+
+        @keyframes popupAppear {
+            from {
+                opacity: 0;
+                transform: scale(0.8) translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .popup.show {
+            display: block;
+        }
+
+        .popup-title {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: #C30A14;
+        }
+
+        .popup-content {
+            font-size: 0.85rem;
+            line-height: 1.6;
+            color: #BBB;
+            margin-bottom: 12px;
+        }
+
+        .popup-details {
+            display: grid;
+            gap: 8px;
+            font-size: 0.8rem;
+            padding-top: 12px;
+            border-top: 1px solid #3A3A3A;
+        }
+
+        .popup-detail {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .popup-detail-label {
+            color: #888;
+        }
+
+        .popup-detail-value {
+            color: #3B7EF7;
+            font-weight: 700;
+        }
+
+        .popup-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #888;
+            transition: color 0.2s;
+            font-size: 1.3rem;
+            line-height: 1;
+        }
+
+        .popup-close:hover {
+            color: #C30A14;
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            background: #2A2A2A;
+            border: 1px solid #3A3A3A;
+            border-radius: 12px;
+            padding: 25px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 30px;
+            text-align: center;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            animation: slideUp 0.8s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #C30A14, #3B7EF7);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
 
-        .header-subtitle {
-            font-size: 1rem;
-            color: var(--text-secondary);
-            letter-spacing: 0.05em;
-        }
-
-        /* Controls */
-        .controls {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-            padding: 1.5rem;
-            background: var(--surface);
-            border-bottom: 1px solid rgba(195, 10, 20, 0.3);
-            flex-wrap: wrap;
-        }
-
-        .btn {
-            padding: 0.75rem 1.5rem;
-            border: 2px solid var(--mrs-red);
-            background: transparent;
-            color: var(--text-primary);
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 0.95rem;
-            transition: all 0.3s ease;
-            font-family: inherit;
-        }
-
-        .btn:hover {
-            background: var(--mrs-red);
-            box-shadow: 0 0 20px rgba(195, 10, 20, 0.5);
-            transform: translateY(-2px);
-        }
-
-        .btn.active {
-            background: var(--mrs-red);
-            box-shadow: 0 0 20px rgba(195, 10, 20, 0.5);
-        }
-
-        /* Main Content */
-        .content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
-            padding: 2rem;
-        }
-
-        .diagram-section {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 600px;
-            margin-bottom: 3rem;
-        }
-
-        /* SVG Diagram */
-        .diagram {
-            width: 100%;
-            max-width: 900px;
-            filter: drop-shadow(0 0 30px rgba(195, 10, 20, 0.3));
-        }
-
-        @keyframes pulse {
-            0%, 100% {
-                filter: drop-shadow(0 0 20px currentColor);
-            }
-            50% {
-                filter: drop-shadow(0 0 40px currentColor);
-            }
-        }
-
-        @keyframes flowDot {
-            0% {
-                offset-distance: 0%;
-            }
-            100% {
-                offset-distance: 100%;
-            }
-        }
-
-        @keyframes float {
-            0%, 100% {
-                transform: translateY(0px);
-            }
-            50% {
-                transform: translateY(-10px);
-            }
-        }
-
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateX(400px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-
-        /* Node Styling */
-        .diagram-node {
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .diagram-node:hover circle,
-        .diagram-node:hover rect {
-            filter: drop-shadow(0 0 30px currentColor);
-        }
-
-        .diagram-node text {
-            transition: all 0.3s ease;
-        }
-
-        .diagram-node:hover text {
-            font-weight: 600;
-        }
-
-        /* Detail Panel */
-        .detail-panel {
-            position: fixed;
-            right: 0;
-            top: 0;
-            width: 400px;
-            height: 100%;
-            background: var(--surface);
-            border-left: 3px solid var(--mrs-red);
-            padding: 2rem;
-            overflow-y: auto;
-            z-index: 1000;
-            transform: translateX(450px);
-            transition: transform 0.3s ease;
-            box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
-        }
-
-        .detail-panel.active {
-            transform: translateX(0);
-            animation: slideIn 0.3s ease;
-        }
-
-        .detail-close {
-            position: absolute;
-            top: 1.5rem;
-            right: 1.5rem;
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            font-size: 1.5rem;
-            cursor: pointer;
-            transition: color 0.3s ease;
-        }
-
-        .detail-close:hover {
-            color: var(--mrs-red);
-        }
-
-        .detail-title {
-            font-size: 1.8rem;
-            font-weight: 700;
-            margin-bottom: 1rem;
-            color: var(--mrs-red);
-            margin-top: 1.5rem;
-        }
-
-        .detail-section {
-            margin-bottom: 2rem;
-        }
-
-        .detail-label {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
+        .stat-label {
+            font-size: 0.8rem;
+            color: #888;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 0.5rem;
-            font-weight: 600;
-        }
-
-        .detail-content {
-            font-size: 0.95rem;
-            color: var(--text-primary);
-            line-height: 1.6;
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 0.4rem 0.8rem;
-            background: rgba(195, 10, 20, 0.2);
-            border: 1px solid var(--mrs-red);
-            border-radius: 6px;
-            font-size: 0.8rem;
-            margin: 0.25rem;
-            color: var(--mrs-red);
-        }
-
-        /* Schema Grid */
-        .schema-section {
-            margin-top: 3rem;
-            padding-top: 2rem;
-            border-top: 2px solid rgba(195, 10, 20, 0.3);
-        }
-
-        .section-title {
-            font-size: 1.8rem;
-            font-weight: 700;
-            margin-bottom: 1.5rem;
-            color: var(--text-primary);
-        }
-
-        .schema-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 1.5rem;
-        }
-
-        .schema-card {
-            background: var(--card);
-            border: 1px solid rgba(195, 10, 20, 0.3);
-            border-top: 4px solid var(--mrs-red);
-            border-radius: 12px;
-            padding: 1.5rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .schema-card:hover {
-            transform: translateY(-8px);
-            border-color: var(--mrs-red);
-            box-shadow: 0 0 30px rgba(195, 10, 20, 0.3);
-        }
-
-        .schema-card-name {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: var(--mrs-red);
-            margin-bottom: 0.75rem;
-            font-family: 'Courier New', monospace;
-        }
-
-        .schema-card-desc {
-            font-size: 0.9rem;
-            color: var(--text-secondary);
-            line-height: 1.5;
-            margin-bottom: 1rem;
-        }
-
-        .schema-card-meta {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.8rem;
-            color: var(--text-muted);
-        }
-
-        /* Tech Stack */
-        .tech-stack-section {
-            margin-top: 3rem;
-            padding-top: 2rem;
-            border-top: 2px solid rgba(195, 10, 20, 0.3);
-        }
-
-        .tech-scroll {
-            display: flex;
-            gap: 1.5rem;
-            overflow-x: auto;
-            padding: 1rem 0;
-            scroll-behavior: smooth;
-        }
-
-        .tech-card {
-            flex: 0 0 280px;
-            background: var(--card);
-            border: 1px solid rgba(195, 10, 20, 0.3);
-            border-radius: 12px;
-            padding: 1.5rem;
-            text-align: center;
-            transition: all 0.3s ease;
-        }
-
-        .tech-card:hover {
-            transform: translateY(-8px);
-            border-color: var(--mrs-red);
-            box-shadow: 0 0 30px rgba(195, 10, 20, 0.3);
-        }
-
-        .tech-icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-        }
-
-        .tech-name {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: var(--mrs-red);
-            margin-bottom: 0.5rem;
-        }
-
-        .tech-desc {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            line-height: 1.5;
-        }
-
-        /* Footer */
-        .footer {
-            text-align: center;
-            margin-top: 3rem;
-            padding: 2rem;
-            border-top: 1px solid rgba(195, 10, 20, 0.3);
-            color: var(--text-muted);
+            letter-spacing: 0.5px;
         }
 
         /* Responsive */
+        @media (max-width: 1200px) {
+            .architecture {
+                grid-template-columns: 1fr;
+                gap: 30px;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .canvas {
+                padding: 40px 20px;
+                min-height: auto;
+            }
+        }
+
         @media (max-width: 768px) {
             .header h1 {
-                font-size: 1.8rem;
+                font-size: 1.5rem;
             }
 
-            .detail-panel {
-                width: 100%;
-                transform: translateX(100%);
+            .component {
+                padding: 15px;
             }
 
-            .schema-grid {
-                grid-template-columns: 1fr;
+            .component-title {
+                font-size: 0.85rem;
             }
 
-            .controls {
-                flex-direction: column;
+            .stats-bar {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 15px;
+                padding: 15px;
             }
 
-            .btn {
-                width: 100%;
+            .stat-number {
+                font-size: 1.5rem;
+            }
+
+            .popup {
+                max-width: 280px;
             }
         }
 
-        /* Scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
+        /* Hover effect for flow lines */
+        .flow-line:hover {
+            opacity: 1;
+            filter: drop-shadow(0 0 8px rgba(59, 126, 247, 0.6));
         }
 
-        ::-webkit-scrollbar-track {
-            background: var(--surface);
+        /* Smooth transitions */
+        * {
+            transition-property: color, background-color, border-color, box-shadow;
+            transition-duration: 0.3s;
+            transition-timing-function: ease;
         }
 
-        ::-webkit-scrollbar-thumb {
-            background: var(--mrs-red);
-            border-radius: 4px;
+        /* Glow effect on active component */
+        .component.active {
+            border-color: #C30A14;
+            box-shadow: 0 0 20px rgba(195, 10, 20, 0.5),
+                        0 0 40px rgba(59, 126, 247, 0.2);
         }
 
-        ::-webkit-scrollbar-thumb:hover {
-            background: #ff1424;
+        .footer {
+            text-align: center;
+            color: #666;
+            font-size: 0.85rem;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #2A2A2A;
+        }
+
+        .footer a {
+            color: #3B7EF7;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .footer a:hover {
+            color: #C30A14;
+        }
+
+        /* Pulse animation for active elements */
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(195, 10, 20, 0.7);
+            }
+            50% {
+                box-shadow: 0 0 0 10px rgba(195, 10, 20, 0);
+            }
+        }
+
+        .component.pulse {
+            animation: pulse 2s infinite;
+        }
+
+        /* Section divider */
+        .divider {
+            width: 2px;
+            background: linear-gradient(180deg, transparent, rgba(59, 126, 247, 0.3), transparent);
+            height: 80%;
+            margin: 0 20px;
+            animation: expandHeight 0.8s ease-out 0.3s both;
+        }
+
+        @keyframes expandHeight {
+            from {
+                height: 0;
+            }
+            to {
+                height: 80%;
+            }
         }
     </style>
 </head>
 <body>
-    <canvas id="particleCanvas"></canvas>
-
     <div class="container">
         <div class="header">
             <h1>SYNTONIQA v1.0</h1>
-            <p class="header-subtitle">System Architecture & Component Overview</p>
+            <p>Field Service Management PWA — System Architecture</p>
+            <div class="subtitle">MRS Lely Center Emilia Romagna • Zero Framework • 10,726 Lines of Code</div>
         </div>
 
-        <div class="controls">
-            <button class="btn" onclick="animateFlow()">Animate Urgency Flow</button>
-            <button class="btn" onclick="toggleDarkMode()">Theme</button>
-            <button class="btn" onclick="resetDiagram()">Reset Diagram</button>
-        </div>
-
-        <div class="content">
-            <div class="diagram-section">
-                <svg class="diagram" viewBox="0 0 900 600" xmlns="http://www.w3.org/2000/svg">
-                    <!-- Background -->
-                    <defs>
-                        <filter id="glow-red">
-                            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-                            <feMerge>
-                                <feMergeNode in="coloredBlur"/>
-                                <feMergeNode in="SourceGraphic"/>
-                            </feMerge>
-                        </filter>
-                        <marker id="arrowHead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-                            <polygon points="0 0, 10 3, 0 6" fill="#C30A14"/>
-                        </marker>
-                    </defs>
-
-                    <!-- Connections with animation -->
-                    <g class="connections">
-                        <!-- Admin to Worker -->
-                        <line x1="150" y1="150" x2="450" y2="300" stroke="#C30A14" stroke-width="2" stroke-dasharray="5,5" opacity="0.6"/>
-                        <circle cx="150" cy="150" r="3" fill="#C30A14" opacity="0.8">
-                            <animate attributeName="cy" values="150;300" dur="3s" repeatCount="indefinite"/>
-                        </circle>
-
-                        <!-- Mobile to Worker -->
-                        <line x1="450" y1="150" x2="450" y2="280" stroke="#3B7EF7" stroke-width="2" stroke-dasharray="5,5" opacity="0.6"/>
-                        <circle cx="450" cy="150" r="3" fill="#3B7EF7" opacity="0.8">
-                            <animate attributeName="cy" values="150;280" dur="3s" repeatCount="indefinite"/>
-                        </circle>
-
-                        <!-- Telegram to Worker -->
-                        <line x1="750" y1="150" x2="450" y2="300" stroke="#0088CC" stroke-width="2" stroke-dasharray="5,5" opacity="0.6"/>
-                        <circle cx="750" cy="150" r="3" fill="#0088CC" opacity="0.8">
-                            <animate attributeName="cy" values="150;300" dur="3s" repeatCount="indefinite"/>
-                        </circle>
-
-                        <!-- Worker to DB -->
-                        <line x1="380" y1="380" x2="250" y2="480" stroke="#22C55E" stroke-width="2" stroke-dasharray="5,5" opacity="0.6"/>
-                        <circle cx="380" cy="380" r="3" fill="#22C55E" opacity="0.8">
-                            <animate attributeName="cx" values="380;250" dur="3s" repeatCount="indefinite"/>
-                        </circle>
-
-                        <!-- Worker to Gemini -->
-                        <line x1="450" y1="380" x2="450" y2="480" stroke="#9333EA" stroke-width="2" stroke-dasharray="5,5" opacity="0.6"/>
-                        <circle cx="450" cy="380" r="3" fill="#9333EA" opacity="0.8">
-                            <animate attributeName="cy" values="380;480" dur="3s" repeatCount="indefinite"/>
-                        </circle>
-
-                        <!-- Worker to Notifications -->
-                        <line x1="520" y1="380" x2="650" y2="480" stroke="#F59E0B" stroke-width="2" stroke-dasharray="5,5" opacity="0.6"/>
-                        <circle cx="520" cy="380" r="3" fill="#F59E0B" opacity="0.8">
-                            <animate attributeName="cx" values="520;650" dur="3s" repeatCount="indefinite"/>
-                        </circle>
-                    </g>
-
-                    <!-- Nodes -->
-                    <!-- Admin Dashboard -->
-                    <g class="diagram-node" onclick="showDetail('admin')">
-                        <rect x="80" y="110" width="140" height="80" rx="12" fill="#2A2A2A" stroke="#C30A14" stroke-width="2" opacity="0.7"/>
-                        <circle cx="150" cy="130" r="20" fill="#C30A14" opacity="0.2"/>
-                        <text x="150" y="165" text-anchor="middle" font-size="13" fill="#FFFFFF" font-weight="600">Admin Dashboard</text>
-                    </g>
-
-                    <!-- Mobile PWA -->
-                    <g class="diagram-node" onclick="showDetail('mobile')">
-                        <rect x="380" y="110" width="140" height="80" rx="12" fill="#2A2A2A" stroke="#3B7EF7" stroke-width="2" opacity="0.7"/>
-                        <circle cx="450" cy="130" r="20" fill="#3B7EF7" opacity="0.2"/>
-                        <text x="450" y="165" text-anchor="middle" font-size="13" fill="#FFFFFF" font-weight="600">Mobile PWA</text>
-                    </g>
-
-                    <!-- Telegram Bot -->
-                    <g class="diagram-node" onclick="showDetail('telegram')">
-                        <rect x="680" y="110" width="140" height="80" rx="12" fill="#2A2A2A" stroke="#0088CC" stroke-width="2" opacity="0.7"/>
-                        <circle cx="750" cy="130" r="20" fill="#0088CC" opacity="0.2"/>
-                        <text x="750" y="165" text-anchor="middle" font-size="13" fill="#FFFFFF" font-weight="600">Telegram Bot</text>
-                    </g>
-
-                    <!-- Central Worker -->
-                    <g class="diagram-node" onclick="showDetail('worker')">
-                        <circle cx="450" cy="330" r="60" fill="#C30A14" opacity="0.3" stroke="#C30A14" stroke-width="3"/>
-                        <circle cx="450" cy="330" r="55" fill="none" stroke="#C30A14" stroke-width="2" stroke-dasharray="8,4">
-                            <animate attributeName="stroke-dashoffset" from="0" to="-12" dur="2s" repeatCount="indefinite"/>
-                        </circle>
-                        <text x="450" y="325" text-anchor="middle" font-size="11" fill="#FFFFFF" font-weight="700">Cloudflare</text>
-                        <text x="450" y="340" text-anchor="middle" font-size="11" fill="#FFFFFF" font-weight="700">Worker</text>
-                    </g>
-
-                    <!-- Database -->
-                    <g class="diagram-node" onclick="showDetail('db')">
-                        <rect x="200" y="470" width="100" height="70" rx="8" fill="#2A2A2A" stroke="#22C55E" stroke-width="2" opacity="0.7"/>
-                        <text x="250" y="500" text-anchor="middle" font-size="12" fill="#22C55E" font-weight="600">Supabase</text>
-                        <text x="250" y="520" text-anchor="middle" font-size="11" fill="#B0B0B0">PostgreSQL</text>
-                    </g>
-
-                    <!-- Gemini AI -->
-                    <g class="diagram-node" onclick="showDetail('gemini')">
-                        <rect x="400" y="470" width="100" height="70" rx="8" fill="#2A2A2A" stroke="#9333EA" stroke-width="2" opacity="0.7"/>
-                        <text x="450" y="500" text-anchor="middle" font-size="12" fill="#9333EA" font-weight="600">Gemini AI</text>
-                        <text x="450" y="520" text-anchor="middle" font-size="11" fill="#B0B0B0">Analysis</text>
-                    </g>
-
-                    <!-- Notifications -->
-                    <g class="diagram-node" onclick="showDetail('notifications')">
-                        <rect x="600" y="470" width="100" height="70" rx="8" fill="#2A2A2A" stroke="#F59E0B" stroke-width="2" opacity="0.7"/>
-                        <text x="650" y="495" text-anchor="middle" font-size="12" fill="#F59E0B" font-weight="600">Email, Push</text>
-                        <text x="650" y="515" text-anchor="middle" font-size="11" fill="#F59E0B" font-weight="600">Telegram</text>
-                    </g>
-
-                    <!-- Stats -->
-                    <g opacity="0.6">
-                        <text x="20" y="580" font-size="12" fill="#B0B0B0">📊 10,726 lines • 3,042 worker • 22 tables</text>
-                        <text x="20" y="600" font-size="12" fill="#B0B0B0">⚡ 97 API endpoints • 2 cron jobs • Zero framework</text>
-                    </g>
-                </svg>
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="stat-number">10,726</div>
+                <div class="stat-label">Lines of Code</div>
             </div>
+            <div class="stat-item">
+                <div class="stat-number">22</div>
+                <div class="stat-label">Database Tables</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">97</div>
+                <div class="stat-label">API Endpoints</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">59</div>
+                <div class="stat-label">Git Commits</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">7</div>
+                <div class="stat-label">Telegram Commands</div>
+            </div>
+        </div>
 
-            <!-- Database Schema Section -->
-            <div class="schema-section">
-                <h2 class="section-title">Database Schema (22 Tables)</h2>
-                <div class="schema-grid">
-                    <div class="schema-card">
-                        <div class="schema-card-name">utenti</div>
-                        <div class="schema-card-desc">Tecnici & Admin con ruoli e permessi</div>
-                        <div class="schema-card-meta"><span>PK: id</span><span>10 record</span></div>
+        <div class="canvas">
+            <svg class="flow-container" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMid slice">
+                <defs>
+                    <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#3B7EF7;stop-opacity:0.2" />
+                        <stop offset="50%" style="stop-color:#C30A14;stop-opacity:0.8" />
+                        <stop offset="100%" style="stop-color:#22C55E;stop-opacity:0.2" />
+                    </linearGradient>
+                    <filter id="glow">
+                        <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                        <feMerge>
+                            <feMergeNode in="coloredBlur"/>
+                            <feMergeNode in="SourceGraphic"/>
+                        </feMerge>
+                    </filter>
+                </defs>
+
+                <!-- Flow lines from frontend to worker -->
+                <path class="flow-line" d="M 320 150 Q 400 120 480 140" stroke-dasharray="10,5" stroke-dashoffset="0" filter="url(#glow)"/>
+                <path class="flow-line" d="M 320 220 Q 400 240 480 220" stroke-dasharray="10,5" stroke-dashoffset="0" filter="url(#glow)"/>
+                
+                <!-- Flow lines from worker to data layer -->
+                <path class="flow-line" d="M 720 140 Q 800 120 880 160" stroke-dasharray="10,5" stroke-dashoffset="0" filter="url(#glow)"/>
+                <path class="flow-line" d="M 720 220 Q 800 240 880 200" stroke-dasharray="10,5" stroke-dashoffset="0" filter="url(#glow)"/>
+                <path class="flow-line" d="M 720 280 Q 800 300 880 280" stroke-dasharray="10,5" stroke-dashoffset="0" filter="url(#glow)"/>
+
+                <!-- Response flow back -->
+                <path class="flow-line" d="M 880 300 Q 800 320 720 300" stroke-dasharray="10,5" stroke-dashoffset="0" filter="url(#glow)" opacity="0.5"/>
+                <path class="flow-line" d="M 480 300 Q 400 280 320 280" stroke-dasharray="10,5" stroke-dashoffset="0" filter="url(#glow)" opacity="0.5"/>
+
+                <!-- Animated particles -->
+                <circle class="flow-particle" cx="320" cy="150" r="3" fill="#3B7EF7" style="offset-path: path('M 320 150 Q 400 120 480 140')"/>
+                <circle class="flow-particle" cx="320" cy="220" r="3" fill="#C30A14" style="offset-path: path('M 320 220 Q 400 240 480 220')" style="animation-delay: 0.5s"/>
+                <circle class="flow-particle" cx="720" cy="140" r="3" fill="#22C55E" style="offset-path: path('M 720 140 Q 800 120 880 160')" style="animation-delay: 1s"/>
+            </svg>
+
+            <div class="architecture">
+                <!-- Layer 1: Frontend -->
+                <div class="layer">
+                    <div class="layer-label">Frontend Layer</div>
+                    
+                    <div class="component frontend" onclick="showPopup(event, 'admin')">
+                        <div class="component-title">
+                            <span class="component-icon">📊</span>
+                            Admin Dashboard
+                        </div>
+                        <div class="component-subtitle">admin_v1.html</div>
+                        <div class="component-stats">
+                            <span class="stat"><span class="stat-value">5548</span> lines</span>
+                            <span class="stat"><span class="stat-value">33</span> sections</span>
+                            <span class="stat"><span class="stat-value">17</span> modals</span>
+                        </div>
                     </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">clienti</div>
-                        <div class="schema-card-desc">Allevamenti e strutture con anagrafe master</div>
-                        <div class="schema-card-meta"><span>PK: id</span><span>70+ record</span></div>
+
+                    <div class="component frontend" onclick="showPopup(event, 'mobile')">
+                        <div class="component-title">
+                            <span class="component-icon">📱</span>
+                            Mobile PWA
+                        </div>
+                        <div class="component-subtitle">index_v2.html</div>
+                        <div class="component-stats">
+                            <span class="stat"><span class="stat-value">2071</span> lines</span>
+                            <span class="stat"><span class="stat-value">17</span> pages</span>
+                            <span class="stat"><span class="stat-value">Sheet</span> nav</span>
+                        </div>
                     </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">macchine</div>
-                        <div class="schema-card-desc">Robot Lely installati presso clienti</div>
-                        <div class="schema-card-meta"><span>PK: id</span><span>150+ record</span></div>
+
+                    <div class="component frontend" onclick="showPopup(event, 'config')">
+                        <div class="component-title">
+                            <span class="component-icon">⚙️</span>
+                            White-Label Config
+                        </div>
+                        <div class="component-subtitle">white_label_config.js</div>
+                        <div class="component-stats">
+                            <span class="stat">Colors</span>
+                            <span class="stat">Toggles</span>
+                            <span class="stat">Brand</span>
+                        </div>
                     </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">piano</div>
-                        <div class="schema-card-desc">Interventi pianificati (pianificato → in_corso → completato)</div>
-                        <div class="schema-card-meta"><span>PK: id</span><span>State Machine</span></div>
+                </div>
+
+                <!-- Layer 2: Backend -->
+                <div class="layer">
+                    <div class="layer-label">Backend Layer</div>
+                    
+                    <div class="component backend" onclick="showPopup(event, 'worker')">
+                        <div class="component-title">
+                            <span class="component-icon">⚡</span>
+                            Cloudflare Worker
+                        </div>
+                        <div class="component-subtitle">cloudflare_worker.js</div>
+                        <div class="component-stats">
+                            <span class="stat"><span class="stat-value">3042</span> lines</span>
+                            <span class="stat"><span class="stat-value">8</span> GET</span>
+                            <span class="stat"><span class="stat-value">89</span> POST</span>
+                        </div>
                     </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">urgenze</div>
-                        <div class="schema-card-desc">Emergenze/urgenze con SLA monitoring</div>
-                        <div class="schema-card-meta"><span>PK: id</span><span>SLA Tracked</span></div>
+
+                    <div class="component backend" onclick="showPopup(event, 'router')">
+                        <div class="component-title">
+                            <span class="component-icon">🔀</span>
+                            Router & Auth
+                        </div>
+                        <div class="component-subtitle">Request Dispatch</div>
+                        <div class="component-stats">
+                            <span class="stat">normalizeBody</span>
+                            <span class="stat">JWT</span>
+                            <span class="stat">RBAC</span>
+                        </div>
                     </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">ordini</div>
-                        <div class="schema-card-desc">Richieste di ricambi (richiesto → spedito → consegnato)</div>
-                        <div class="schema-card-meta"><span>PK: id</span><span>Audit trail</span></div>
+
+                    <div class="component backend" onclick="showPopup(event, 'statemachine')">
+                        <div class="component-title">
+                            <span class="component-icon">🔄</span>
+                            State Machine
+                        </div>
+                        <div class="component-subtitle">Workflow Engine</div>
+                        <div class="component-stats">
+                            <span class="stat">Piano</span>
+                            <span class="stat">Urgenze</span>
+                            <span class="stat">SLA</span>
+                        </div>
                     </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">automezzi</div>
-                        <div class="schema-card-desc">Furgoni per tecnici con tracking</div>
-                        <div class="schema-card-meta"><span>PK: id</span><span>Locationable</span></div>
+
+                    <div class="component backend" onclick="showPopup(event, 'cron')">
+                        <div class="component-title">
+                            <span class="component-icon">⏱️</span>
+                            Cron Jobs
+                        </div>
+                        <div class="component-subtitle">Scheduled Tasks</div>
+                        <div class="component-stats">
+                            <span class="stat">15m</span>
+                            <span class="stat">Reminders</span>
+                            <span class="stat">SLA Check</span>
+                        </div>
                     </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">reperibilita</div>
-                        <div class="schema-card-desc">Turni reperibilità con calendari</div>
-                        <div class="schema-card-meta"><span>PK: id</span><span>Recurring</span></div>
+                </div>
+
+                <!-- Layer 3: Data & Services -->
+                <div class="layer">
+                    <div class="layer-label">Data & Services</div>
+                    
+                    <div class="component data" onclick="showPopup(event, 'supabase')">
+                        <div class="component-title">
+                            <span class="component-icon">🗄️</span>
+                            Supabase PostgreSQL
+                        </div>
+                        <div class="component-subtitle">Primary Database</div>
+                        <div class="component-stats">
+                            <span class="stat"><span class="stat-value">22</span> tables</span>
+                            <span class="stat">RBAC</span>
+                            <span class="stat">RLS</span>
+                        </div>
                     </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">trasferte</div>
-                        <div class="schema-card-desc">Trasferte e spostamenti tra sedi</div>
-                        <div class="schema-card-meta"><span>PK: id</span><span>Trackable</span></div>
+
+                    <div class="component data" onclick="showPopup(event, 'telegram')">
+                        <div class="component-title">
+                            <span class="component-icon">📲</span>
+                            Telegram Bot
+                        </div>
+                        <div class="component-subtitle">Webhook Handler</div>
+                        <div class="component-stats">
+                            <span class="stat"><span class="stat-value">7</span> commands</span>
+                            <span class="stat">Notifications</span>
+                            <span class="stat">Group/DM</span>
+                        </div>
                     </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">installazioni</div>
-                        <div class="schema-card-desc">Nuove installazioni robot Lely</div>
-                        <div class="schema-card-meta"><span>PK: id</span><span>Project</span></div>
+
+                    <div class="component data" onclick="showPopup(event, 'gemini')">
+                        <div class="component-title">
+                            <span class="component-icon">🧠</span>
+                            Gemini AI
+                        </div>
+                        <div class="component-subtitle">AI Planning & Media</div>
+                        <div class="component-stats">
+                            <span class="stat">Image</span>
+                            <span class="stat">Analysis</span>
+                            <span class="stat">Planning</span>
+                        </div>
                     </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">notifiche</div>
-                        <div class="schema-card-desc">Notifiche in-app con read status</div>
-                        <div class="schema-card-meta"><span>PK: id</span><span>In-App</span></div>
-                    </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">chat_canali</div>
-                        <div class="schema-card-desc">Canali chat per comunicazione team</div>
-                        <div class="schema-card-meta"><span>PK: id</span><span>Messaging</span></div>
-                    </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">chat_messaggi</div>
-                        <div class="schema-card-desc">Messaggi con metadata e reazioni</div>
-                        <div class="schema-card-meta"><span>PK: id</span><span>Threaded</span></div>
-                    </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">workflow_log</div>
-                        <div class="schema-card-desc">Audit trail completo di tutte le azioni</div>
-                        <div class="schema-card-meta"><span>PK: auto</span><span>Immutable</span></div>
-                    </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">kpi_log</div>
-                        <div class="schema-card-desc">Snapshots KPI per analytics</div>
-                        <div class="schema-card-meta"><span>PK: auto</span><span>Timeseries</span></div>
-                    </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">sla_config</div>
-                        <div class="schema-card-desc">Configurazione SLA per urgenze</div>
-                        <div class="schema-card-meta"><span>PK: id</span><span>SLA Rules</span></div>
-                    </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">config</div>
-                        <div class="schema-card-desc">Configurazione chiave/valore globale</div>
-                        <div class="schema-card-meta"><span>PK: chiave</span><span>Settings</span></div>
-                    </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">anagrafica_clienti</div>
-                        <div class="schema-card-desc">Master data clienti da M3</div>
-                        <div class="schema-card-meta"><span>PK: codice_m3</span><span>Sync</span></div>
-                    </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">anagrafica_assets</div>
-                        <div class="schema-card-desc">Master data macchine Lely</div>
-                        <div class="schema-card-meta"><span>PK: id</span><span>Sync</span></div>
-                    </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">checklist_template</div>
-                        <div class="schema-card-desc">Template checklist per interventi</div>
-                        <div class="schema-card-meta"><span>PK: id</span><span>Template</span></div>
-                    </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">documenti</div>
-                        <div class="schema-card-desc">Documenti allegati a interventi</div>
-                        <div class="schema-card-meta"><span>PK: id</span><span>Files</span></div>
-                    </div>
-                    <div class="schema-card">
-                        <div class="schema-card-name">kpi_snapshot</div>
-                        <div class="schema-card-desc">Backup snapshots per analytics</div>
-                        <div class="schema-card-meta"><span>PK: id</span><span>Backup</span></div>
+
+                    <div class="component data" onclick="showPopup(event, 'resend')">
+                        <div class="component-title">
+                            <span class="component-icon">📧</span>
+                            Email & Push
+                        </div>
+                        <div class="component-subtitle">Notifications</div>
+                        <div class="component-stats">
+                            <span class="stat">Resend</span>
+                            <span class="stat">Web Push</span>
+                            <span class="stat">Web</span>
+                        </div>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Tech Stack Section -->
-            <div class="tech-stack-section">
-                <h2 class="section-title">Technology Stack</h2>
-                <div class="tech-scroll">
-                    <div class="tech-card">
-                        <div class="tech-icon">☁️</div>
-                        <div class="tech-name">Cloudflare Workers</div>
-                        <div class="tech-desc">Serverless edge computing, 3,042 lines, zero framework</div>
-                    </div>
-                    <div class="tech-card">
-                        <div class="tech-icon">🗄️</div>
-                        <div class="tech-name">Supabase PostgreSQL</div>
-                        <div class="tech-desc">22 tables, 100% SQL, JSON support, realtime</div>
-                    </div>
-                    <div class="tech-card">
-                        <div class="tech-icon">📱</div>
-                        <div class="tech-name">Progressive Web App</div>
-                        <div class="tech-desc">Offline-first, installable, push notifications</div>
-                    </div>
-                    <div class="tech-card">
-                        <div class="tech-icon">🗺️</div>
-                        <div class="tech-name">Leaflet.js</div>
-                        <div class="tech-desc">Interactive mapping, location tracking, geocaching</div>
-                    </div>
-                    <div class="tech-card">
-                        <div class="tech-icon">📊</div>
-                        <div class="tech-name">Chart.js</div>
-                        <div class="tech-desc">Real-time KPI dashboards, responsive charts</div>
-                    </div>
-                    <div class="tech-card">
-                        <div class="tech-icon">🤖</div>
-                        <div class="tech-name">Google Gemini API</div>
-                        <div class="tech-desc">AI photo analysis, smart planning, natural language</div>
-                    </div>
-                    <div class="tech-card">
-                        <div class="tech-icon">💬</div>
-                        <div class="tech-name">Telegram Bot</div>
-                        <div class="tech-desc">Quick actions, push notifications, webhooks</div>
-                    </div>
-                    <div class="tech-card">
-                        <div class="tech-icon">📧</div>
-                        <div class="tech-name">Resend Email</div>
-                        <div class="tech-desc">Email notifications, SLA alerts, transactional</div>
-                    </div>
-                    <div class="tech-card">
-                        <div class="tech-icon">📑</div>
-                        <div class="tech-name">SheetJS Excel</div>
-                        <div class="tech-desc">Excel import/export, data reconciliation</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="footer">
-                <p>MRS Lely Center Emilia Romagna — Marzo 2026 — Click nodes to explore components</p>
-            </div>
+        <div class="footer">
+            <p>
+                Built for <strong>MRS Lely Center</strong> • 
+                <a href="https://github.com/fieldforcemrser2026/syntoniqa" target="_blank">GitHub Repo</a> • 
+                <a href="https://syntoniqa-mrs-api.fieldforcemrser.workers.dev" target="_blank">Worker API</a>
+            </p>
+            <p style="margin-top: 10px; font-size: 0.75rem;">
+                Click any component to learn more about its architecture and features.
+            </p>
         </div>
     </div>
 
-    <!-- Detail Panel -->
-    <div class="detail-panel" id="detailPanel">
-        <button class="detail-close" onclick="closeDetail()">✕</button>
-        <div id="detailContent"></div>
+    <!-- Popup -->
+    <div class="popup" id="popup">
+        <span class="popup-close" onclick="closePopup()">×</span>
+        <div class="popup-title" id="popupTitle"></div>
+        <div class="popup-content" id="popupContent"></div>
+        <div class="popup-details" id="popupDetails"></div>
     </div>
 
     <script>
-        // Particle Background
-        const canvas = document.getElementById('particleCanvas');
-        const ctx = canvas.getContext('2d');
-
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-
-        const particles = [];
-
-        class Particle {
-            constructor() {
-                this.x = Math.random() * canvas.width;
-                this.y = Math.random() * canvas.height;
-                this.vx = (Math.random() - 0.5) * 0.5;
-                this.vy = (Math.random() - 0.5) * 0.5;
-                this.radius = Math.random() * 1.5;
-                this.opacity = Math.random() * 0.5;
-            }
-
-            update() {
-                this.x += this.vx;
-                this.y += this.vy;
-
-                if (this.x < 0) this.x = canvas.width;
-                if (this.x > canvas.width) this.x = 0;
-                if (this.y < 0) this.y = canvas.height;
-                if (this.y > canvas.height) this.y = 0;
-            }
-
-            draw() {
-                ctx.fillStyle = `rgba(195, 10, 20, ${this.opacity})`;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-
-        for (let i = 0; i < 50; i++) {
-            particles.push(new Particle());
-        }
-
-        function animateParticles() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            particles.forEach(p => {
-                p.update();
-                p.draw();
-            });
-            requestAnimationFrame(animateParticles);
-        }
-
-        animateParticles();
-
-        window.addEventListener('resize', () => {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        });
-
-        // Detail Panel Functions
-        const details = {
+        // Component data
+        const componentData = {
             admin: {
-                title: 'Admin Dashboard',
-                description: 'Comprehensive admin interface for managing all operations',
-                tech: 'HTML5 + JavaScript (5,548 lines), Leaflet, Chart.js, SheetJS',
-                features: [
-                    '📊 Real-time KPI dashboard',
-                    '👥 Team & technician management',
-                    '🗺️ Interactive map with live locations',
-                    '📈 Performance analytics',
-                    '⚙️ System configuration',
-                    '🔔 Notification center'
+                title: 'Admin Dashboard (admin_v1.html)',
+                content: 'Full-featured admin SPA with 33 sections for managing technicians, clients, machines, interventions, urgencies, and KPIs. Includes Leaflet interactive maps, Chart.js analytics dashboards, and real-time notifications.',
+                details: [
+                    { label: 'Lines of Code', value: '5,548' },
+                    { label: 'Sections', value: '33' },
+                    { label: 'Modals', value: '17' },
+                    { label: 'Charts', value: 'Chart.js 4.4.0' },
+                    { label: 'Maps', value: 'Leaflet 1.9.4' },
+                    { label: 'Role', value: 'Admin only' }
                 ]
             },
             mobile: {
-                title: 'Mobile PWA',
-                description: 'Offline-first progressive web app for technicians',
-                tech: 'HTML5 + JavaScript (2,071 lines), Service Worker, IndexedDB',
-                features: [
-                    '📱 Native app-like experience',
-                    '🔌 Offline functionality',
-                    '📸 Photo capture & upload',
-                    '📋 Checklist templates',
-                    '💬 In-app messaging',
-                    '🎯 Quick action buttons'
+                title: 'Mobile PWA (index_v2.html)',
+                content: 'Progressive Web App for field technicians with 17 pages, responsive bottom navigation, offline caching, and real-time intervention tracking. Optimized for mobile-first experience.',
+                details: [
+                    { label: 'Lines of Code', value: '2,071' },
+                    { label: 'Pages', value: '17' },
+                    { label: 'Navigation', value: 'Bottom Sheet' },
+                    { label: 'PWA', value: 'Offline-first' },
+                    { label: 'Target', value: 'Field Technicians' },
+                    { label: 'Responsive', value: 'Mobile optimized' }
                 ]
             },
-            telegram: {
-                title: 'Telegram Bot',
-                description: 'Quick actions and notifications via Telegram',
-                tech: 'Telegram Bot API, Webhook integration',
-                features: [
-                    '⚡ /vado - Pick up urgency',
-                    '▶️ /incorso - Mark in progress',
-                    '✅ /risolto - Resolve with notes',
-                    '📅 /oggi - Today interventions',
-                    '📸 Photo AI analysis',
-                    '🔔 Real-time notifications'
+            config: {
+                title: 'White-Label Configuration',
+                content: 'Centralized configuration file managing brand identity, color schemes, API endpoints, feature toggles, and PWA manifest. Supports multi-tenant deployments.',
+                details: [
+                    { label: 'Features', value: '12+ toggles' },
+                    { label: 'Brand Colors', value: '5 primary' },
+                    { label: 'File', value: 'white_label_config.js' },
+                    { label: 'Tenants', value: 'Multi-tenant ready' },
+                    { label: 'Dark Theme', value: 'Built-in' },
+                    { label: 'Localization', value: 'i18n prepared' }
                 ]
             },
             worker: {
-                title: 'Cloudflare Worker',
-                description: 'Serverless backend processing all API requests',
-                tech: '3,042 lines, zero dependencies, 97 endpoints',
-                features: [
-                    '🔒 State machine validation',
-                    '🔐 Token-based auth',
-                    '📊 SLA monitoring (cron)',
-                    '🤖 Gemini AI integration',
-                    '📧 Email/Push/Telegram delivery',
-                    '⚡ <100ms response time'
+                title: 'Cloudflare Workers (cloudflare_worker.js)',
+                content: 'Serverless backend handling all API requests. Zero dependencies, full request routing, JWT authentication, normalization pipelines, and integration with external services. Deployed globally on Cloudflare edge.',
+                details: [
+                    { label: 'Lines of Code', value: '3,042' },
+                    { label: 'GET Handlers', value: '8' },
+                    { label: 'POST Handlers', value: '89' },
+                    { label: 'Cron Jobs', value: '2 (15-min)' },
+                    { label: 'Runtime', value: 'Cloudflare Edge' },
+                    { label: 'Dependencies', value: 'Zero' }
                 ]
             },
-            db: {
-                title: 'Supabase PostgreSQL',
-                description: 'Primary database with 22 tables and full audit trail',
-                tech: 'PostgreSQL 15+, Row-level security, JSON support',
-                features: [
-                    '📋 22 production tables',
-                    '🔄 Realtime subscriptions',
-                    '🛡️ Row-level security',
-                    '📜 Audit logging',
-                    '⚙️ Automated backups',
-                    '📊 Full-text search'
+            router: {
+                title: 'Router & Authentication',
+                content: 'Central request dispatcher with normalizeBody() pipeline converting PascalCase to snake_case, JWT token validation, role-based access control (RBAC), and CORS handling via mutable global headers.',
+                details: [
+                    { label: 'Auth Method', value: 'JWT + Token Header' },
+                    { label: 'Case Transform', value: 'PascalCase ↔ snake_case' },
+                    { label: 'CORS Scope', value: 'GitHub Pages + app.syntoniqa.app' },
+                    { label: 'Rate Limiting', value: 'Cloudflare native' },
+                    { label: 'Validation', value: 'normalizeBody()' },
+                    { label: 'Error Handling', value: 'Structured JSON' }
+                ]
+            },
+            statemachine: {
+                title: 'State Machine & Workflow',
+                content: 'Validates state transitions for Piano interventions (pianificato→in_corso→completato) and Urgenze (aperta→assegnata→schedulata→in_corso→risolta→chiusa). Prevents invalid transitions and logs workflow changes.',
+                details: [
+                    { label: 'Piano States', value: '5 states' },
+                    { label: 'Urgenza States', value: '6 states' },
+                    { label: 'Transitions', value: 'Validated' },
+                    { label: 'Rejections', value: 'Allowed' },
+                    { label: 'DB Constraints', value: 'CHECK' },
+                    { label: 'Audit Trail', value: 'workflow_log' }
+                ]
+            },
+            cron: {
+                title: 'Scheduled Tasks (Cron)',
+                content: 'Two cron jobs running every 15 minutes: checkInterventoReminders() sends notifications for pending/overdue interventions, and checkSLAUrgenze() monitors SLA compliance and escalates critical issues.',
+                details: [
+                    { label: 'Frequency', value: 'Every 15 min' },
+                    { label: 'Timezone', value: 'Europe/Rome' },
+                    { label: 'Job 1', value: 'Intervention reminders' },
+                    { label: 'Job 2', value: 'SLA monitoring' },
+                    { label: 'Escalation', value: 'TG + Admin' },
+                    { label: 'Anti-Duplicate', value: 'notification ID/day' }
+                ]
+            },
+            supabase: {
+                title: 'Supabase PostgreSQL Database',
+                content: 'Primary data layer with 22 tables managing interventions, technicians, clients, machines, urgencies, orders, and more. Includes row-level security (RLS), real-time subscriptions, and automatic timestamping.',
+                details: [
+                    { label: 'Tables', value: '22' },
+                    { label: 'Security', value: 'RLS + RBAC' },
+                    { label: 'Soft Delete', value: 'obsoleto column' },
+                    { label: 'Multi-tenant', value: 'tenant_id column' },
+                    { label: 'Real-time', value: 'Subscriptions' },
+                    { label: 'Backup', value: 'Automatic' }
+                ]
+            },
+            telegram: {
+                title: 'Telegram Bot Integration',
+                content: '7 bot commands: /vado (pick urgency), /incorso (start), /risolto (resolve), /oggi (today), /settimana (week), /ordine (create), plus free-text AI analysis. Webhook-based with private + group notifications.',
+                details: [
+                    { label: 'Commands', value: '7 main' },
+                    { label: 'Webhook', value: 'REST POST' },
+                    { label: 'Group Chat', value: 'Notifications' },
+                    { label: 'Private DM', value: 'Assignments' },
+                    { label: 'AI', value: 'Gemini integration' },
+                    { label: 'Media', value: 'Photo analysis' }
                 ]
             },
             gemini: {
                 title: 'Google Gemini AI',
-                description: 'AI-powered analysis and planning automation',
-                tech: 'Gemini 2.0 API, Vision model for image analysis',
-                features: [
-                    '📸 Photo damage detection',
-                    '🤖 Smart intervention planning',
-                    '📝 Natural language processing',
-                    '🎯 AI scheduling optimizer',
-                    '💡 Insight generation',
-                    '⚙️ Maintenance predictions'
+                content: 'Multimodal AI engine for image analysis (technician photos during interventions), automatic action creation, planning optimization, and free-text command interpretation. Improves workflow intelligence.',
+                details: [
+                    { label: 'Capabilities', value: 'Vision + Text' },
+                    { label: 'Use Cases', value: 'Media analysis' },
+                    { label: 'Trigger', value: 'TG text/image' },
+                    { label: 'Output', value: 'Auto-actions' },
+                    { label: 'Accuracy', value: 'Context-aware' },
+                    { label: 'Cost', value: 'Per-request' }
                 ]
             },
-            notifications: {
-                title: 'Multi-channel Notifications',
-                description: 'Email, push notifications, and Telegram integration',
-                tech: 'Resend API, Web Push API, Telegram Bot API',
-                features: [
-                    '📧 Transactional email',
-                    '🔔 Push notifications',
-                    '💬 Telegram alerts',
-                    '⏰ Scheduled delivery',
-                    '📊 Delivery tracking',
-                    '🎯 Targeted messaging'
+            resend: {
+                title: 'Email & Web Push Notifications',
+                content: 'Resend handles transactional emails (order updates, SLA alerts), while Web Push provides real-time browser notifications to technicians. Dual-channel notification strategy for critical events.',
+                details: [
+                    { label: 'Email Service', value: 'Resend API' },
+                    { label: 'Push Type', value: 'Web Push' },
+                    { label: 'Triggers', value: 'Orders, SLA, Assign' },
+                    { label: 'Delivery', value: '99.9% uptime' },
+                    { label: 'Templates', value: 'HTML + Plain' },
+                    { label: 'Channels', value: 'Dual-channel' }
                 ]
             }
         };
 
-        function showDetail(component) {
-            const detail = details[component];
-            const content = document.getElementById('detailContent');
+        // Show popup with component details
+        function showPopup(event, componentId) {
+            const data = componentData[componentId];
+            if (!data) return;
 
-            content.innerHTML = `
-                <div class="detail-title">${detail.title}</div>
-                <div class="detail-section">
-                    <div class="detail-label">Description</div>
-                    <div class="detail-content">${detail.description}</div>
+            const popup = document.getElementById('popup');
+            const title = document.getElementById('popupTitle');
+            const content = document.getElementById('popupContent');
+            const details = document.getElementById('popupDetails');
+
+            title.textContent = data.title;
+            content.textContent = data.content;
+
+            details.innerHTML = data.details.map(detail => `
+                <div class="popup-detail">
+                    <span class="popup-detail-label">${detail.label}</span>
+                    <span class="popup-detail-value">${detail.value}</span>
                 </div>
-                <div class="detail-section">
-                    <div class="detail-label">Tech Stack</div>
-                    <div class="detail-content">${detail.tech}</div>
-                </div>
-                <div class="detail-section">
-                    <div class="detail-label">Key Features</div>
-                    <div class="detail-content">
-                        ${detail.features.map(f => `<div style="margin-bottom: 0.5rem;">${f}</div>`).join('')}
-                    </div>
-                </div>
-            `;
+            `).join('');
 
-            document.getElementById('detailPanel').classList.add('active');
+            popup.classList.add('show');
+
+            // Position popup near click
+            const rect = event.currentTarget.getBoundingClientRect();
+            popup.style.left = Math.min(rect.right + 20, window.innerWidth - 370) + 'px';
+            popup.style.top = rect.top + 'px';
+
+            // Close on outside click
+            document.addEventListener('click', closePopupOnOutside);
         }
 
-        function closeDetail() {
-            document.getElementById('detailPanel').classList.remove('active');
+        // Close popup
+        function closePopup() {
+            document.getElementById('popup').classList.remove('show');
+            document.removeEventListener('click', closePopupOnOutside);
         }
 
-        function animateFlow() {
-            alert('Urgency lifecycle animation:\n\n1. Admin creates urgency\n2. Worker validates & stores in DB\n3. Gemini analyzes if photo provided\n4. Notification sent to assigned tech\n5. Tech accepts via Mobile/Telegram\n6. Worker marks as "assegnata"\n7. Tech marks "in_corso" when starting\n8. Tech marks "risolto" with notes\n9. Admin can "risolto" → "chiusa"\n\nState transitions validated per state machine rules.');
+        function closePopupOnOutside(e) {
+            const popup = document.getElementById('popup');
+            if (!popup.contains(e.target) && !e.target.closest('.component')) {
+                closePopup();
+            }
         }
 
-        function toggleDarkMode() {
-            document.body.style.filter = document.body.style.filter === 'invert(1)' ? 'none' : 'invert(1)';
-        }
+        // Animate components on load
+        window.addEventListener('load', () => {
+            document.querySelectorAll('.component').forEach((el, idx) => {
+                el.style.animationDelay = (idx * 0.1) + 's';
+            });
 
-        function resetDiagram() {
-            document.getElementById('detailPanel').classList.remove('active');
-            alert('Diagram reset. Click on any node to view details.');
-        }
+            // Add pulse effect to worker component
+            const workerComponent = document.querySelector('.component.backend');
+            if (workerComponent) {
+                setTimeout(() => {
+                    workerComponent.classList.add('pulse');
+                }, 1000);
+            }
+        });
 
-        // Close detail panel on outside click
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'detailPanel') {
-                closeDetail();
+        // Smooth scroll for footer links
+        document.querySelectorAll('a').forEach(a => {
+            a.addEventListener('mouseenter', (e) => {
+                e.target.style.transform = 'translateY(-2px)';
+            });
+            a.addEventListener('mouseleave', (e) => {
+                e.target.style.transform = 'translateY(0)';
+            });
+        });
+
+        // Keyboard shortcut: Escape to close popup
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closePopup();
+            }
+        });
+
+        // Add interactivity to SVG flow lines
+        const flowLines = document.querySelectorAll('.flow-line');
+        flowLines.forEach(line => {
+            line.addEventListener('mouseenter', () => {
+                line.style.opacity = '1';
+                line.style.filter = 'drop-shadow(0 0 8px rgba(59, 126, 247, 0.8))';
+            });
+            line.addEventListener('mouseleave', () => {
+                line.style.opacity = '0.6';
+                line.style.filter = 'drop-shadow(0 0 4px rgba(59, 126, 247, 0.3))';
+            });
+        });
+
+        // Responsive popup positioning
+        window.addEventListener('resize', () => {
+            const popup = document.getElementById('popup');
+            if (popup.classList.contains('show')) {
+                const rect = popup.getBoundingClientRect();
+                if (rect.right > window.innerWidth) {
+                    popup.style.left = (window.innerWidth - 350) + 'px';
+                }
             }
         });
     </script>
