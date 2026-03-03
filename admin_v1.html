@@ -6202,11 +6202,9 @@ async function importAnagXlsx(file){
             // TipoFoglio: SEMPRE aggiornato al foglio prodotto (fonte autorevole del tipo)
             existing.TipoFoglio=effectiveTipoFoglio;
             // GruppoAttrezzatura: preserva il valore originale dal foglio Assets base
-            // CodiceM3: se manca, risolvi dal foglio prodotto (client name + movex col)
-            if(!existing.CodiceM3){
-              const m3=resolveM3(cli,cfg.mc!=null?row[cfg.mc]:null);
-              if(m3)existing.CodiceM3=m3;
-            }
+            // CodiceM3: il foglio prodotto (ROBOT, VECTOR, ecc.) è più autorevole del foglio Assets base
+            // → sovrascrive sempre se risolviamo un M3 valido (il foglio Assets base può avere Movex errati)
+            {const m3=resolveM3(cli,cfg.mc!=null?row[cfg.mc]:null);if(m3)existing.CodiceM3=m3;}
             enriched++;
             continue;
           }
