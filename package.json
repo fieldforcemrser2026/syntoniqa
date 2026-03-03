@@ -1,0 +1,9 @@
+{
+  "devDependencies": {
+    "wrangler": "^4.69.0",
+    "xlsx": "^0.18.5"
+  },
+  "dependencies": {
+    "docx": "^9.6.0"
+  }
+}
