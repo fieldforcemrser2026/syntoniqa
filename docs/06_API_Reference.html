@@ -1,0 +1,2122 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Syntoniqa API Reference v1.0</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #050505;
+      color: #F5F5F5;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    header {
+      background: linear-gradient(135deg, #1A1A1A 0%, #2A2A2A 100%);
+      border-bottom: 2px solid #C30A14;
+      padding: 2rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 4px 20px rgba(195, 10, 20, 0.15);
+    }
+
+    .header-content {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .header-title {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: #F5F5F5;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .header-title::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      background: #C30A14;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { background: #C30A14; }
+      50% { background: #3B7EF7; }
+    }
+
+    .header-meta {
+      font-size: 0.9rem;
+      color: #B0B0B0;
+      margin-top: 0.5rem;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+
+    .stat-card {
+      background: #2A2A2A;
+      border-left: 3px solid #3B7EF7;
+      padding: 1rem;
+      border-radius: 4px;
+    }
+
+    .stat-card.get { border-left-color: #22C55E; }
+    .stat-card.post { border-left-color: #3B7EF7; }
+    .stat-card.telegram { border-left-color: #0088cc; }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #F5F5F5;
+    }
+
+    .stat-label {
+      font-size: 0.85rem;
+      color: #B0B0B0;
+      margin-top: 0.25rem;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+      display: grid;
+      grid-template-columns: 250px 1fr;
+      gap: 2rem;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 120px;
+      max-height: calc(100vh - 140px);
+      overflow-y: auto;
+      padding: 1.5rem;
+      background: #1A1A1A;
+      border-radius: 8px;
+      border: 1px solid #2A2A2A;
+    }
+
+    .sidebar::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .sidebar::-webkit-scrollbar-track {
+      background: #1A1A1A;
+    }
+
+    .sidebar::-webkit-scrollbar-thumb {
+      background: #3B7EF7;
+      border-radius: 3px;
+    }
+
+    .sidebar h3 {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: #B0B0B0;
+      margin-bottom: 1rem;
+      font-weight: 600;
+      letter-spacing: 1px;
+    }
+
+    .sidebar-link {
+      display: block;
+      padding: 0.5rem 0.75rem;
+      margin: 0.25rem 0;
+      color: #B0B0B0;
+      text-decoration: none;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+      border-left: 2px solid transparent;
+    }
+
+    .sidebar-link:hover {
+      background: #2A2A2A;
+      color: #F5F5F5;
+      border-left-color: #3B7EF7;
+    }
+
+    .sidebar-link.active {
+      background: #2A2A2A;
+      color: #3B7EF7;
+      border-left-color: #3B7EF7;
+      font-weight: 600;
+    }
+
+    .search-box {
+      margin-bottom: 2rem;
+      position: relative;
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 0.75rem;
+      background: #2A2A2A;
+      border: 1px solid #3A3A3A;
+      border-radius: 4px;
+      color: #F5F5F5;
+      font-size: 0.9rem;
+      transition: border 0.2s;
+    }
+
+    .search-box input:focus {
+      outline: none;
+      border-color: #3B7EF7;
+      box-shadow: 0 0 0 3px rgba(59, 126, 247, 0.1);
+    }
+
+    .filters {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 2rem;
+    }
+
+    .filter-btn {
+      padding: 0.5rem 1rem;
+      background: #2A2A2A;
+      border: 1px solid #3A3A3A;
+      color: #B0B0B0;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .filter-btn:hover, .filter-btn.active {
+      background: #3B7EF7;
+      color: #F5F5F5;
+      border-color: #3B7EF7;
+    }
+
+    .endpoints {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .endpoint-card {
+      background: #1A1A1A;
+      border: 1px solid #2A2A2A;
+      border-radius: 8px;
+      padding: 1.5rem;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: default;
+    }
+
+    .endpoint-card:hover {
+      border-color: #3A3A3A;
+      box-shadow: 0 8px 24px rgba(59, 126, 247, 0.15);
+      transform: translateY(-2px);
+    }
+
+    .endpoint-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .method-badge {
+      padding: 0.4rem 0.8rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    .method-badge.get {
+      background: rgba(34, 197, 94, 0.2);
+      color: #22C55E;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+
+    .method-badge.post {
+      background: rgba(59, 126, 247, 0.2);
+      color: #3B7EF7;
+      border: 1px solid rgba(59, 126, 247, 0.3);
+    }
+
+    .method-badge.telegram {
+      background: rgba(0, 136, 204, 0.2);
+      color: #0088cc;
+      border: 1px solid rgba(0, 136, 204, 0.3);
+    }
+
+    .endpoint-name {
+      flex: 1;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #F5F5F5;
+      word-break: break-word;
+    }
+
+    .endpoint-category {
+      display: inline-block;
+      font-size: 0.7rem;
+      background: #2A2A2A;
+      color: #B0B0B0;
+      padding: 0.3rem 0.6rem;
+      border-radius: 3px;
+      margin-bottom: 0.75rem;
+      text-transform: capitalize;
+    }
+
+    .endpoint-description {
+      color: #B0B0B0;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+      line-height: 1.5;
+    }
+
+    .params-section {
+      margin-bottom: 1rem;
+    }
+
+    .params-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: #22C55E;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      letter-spacing: 0.5px;
+    }
+
+    .param {
+      font-size: 0.85rem;
+      background: #2A2A2A;
+      padding: 0.5rem 0.75rem;
+      margin: 0.3rem 0;
+      border-radius: 3px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      color: #B0B0B0;
+      border-left: 2px solid #3B7EF7;
+    }
+
+    .param-name {
+      color: #3B7EF7;
+      font-weight: 600;
+    }
+
+    .param-type {
+      color: #22C55E;
+      font-weight: 600;
+    }
+
+    .curl-section {
+      margin-bottom: 1rem;
+    }
+
+    .curl-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: #C30A14;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      letter-spacing: 0.5px;
+    }
+
+    .curl-box {
+      background: #0F0F0F;
+      border: 1px solid #2A2A2A;
+      border-radius: 4px;
+      padding: 0.75rem;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 0.75rem;
+      color: #22C55E;
+      overflow-x: auto;
+      position: relative;
+      line-height: 1.4;
+    }
+
+    .curl-box::after {
+      content: 'Clicca per copiare';
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      font-size: 0.65rem;
+      background: #2A2A2A;
+      color: #B0B0B0;
+      padding: 0.25rem 0.5rem;
+      border-radius: 3px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+
+    .curl-box:hover::after {
+      opacity: 1;
+    }
+
+    .curl-box:hover {
+      cursor: copy;
+      border-color: #3B7EF7;
+    }
+
+    .response-section {
+      margin-bottom: 0;
+    }
+
+    .response-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: #F59E0B;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      letter-spacing: 0.5px;
+    }
+
+    .response-hint {
+      font-size: 0.85rem;
+      background: #2A2A2A;
+      padding: 0.5rem 0.75rem;
+      border-radius: 3px;
+      border-left: 2px solid #F59E0B;
+      color: #B0B0B0;
+      font-family: 'Monaco', 'Courier New', monospace;
+    }
+
+    footer {
+      background: #0F0F0F;
+      border-top: 1px solid #2A2A2A;
+      padding: 2rem;
+      text-align: center;
+      color: #B0B0B0;
+      font-size: 0.9rem;
+      margin-top: 4rem;
+    }
+
+    footer strong {
+      color: #F5F5F5;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    @media (max-width: 1024px) {
+      .container {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: static;
+        max-height: none;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+      }
+
+      .endpoints {
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      .endpoints {
+        grid-template-columns: 1fr;
+      }
+
+      .header-title {
+        font-size: 1.5rem;
+      }
+
+      .stats {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-content">
+      <div class="header-title">SYNTONIQA API Reference v1.0</div>
+      <div class="header-meta">Field Service Management PWA — MRS Lely Center Emilia Romagna</div>
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-value" id="totalCount">0</div>
+          <div class="stat-label">Total Endpoints</div>
+        </div>
+        <div class="stat-card get">
+          <div class="stat-value" id="getCount">0</div>
+          <div class="stat-label">GET Endpoints</div>
+        </div>
+        <div class="stat-card post">
+          <div class="stat-value" id="postCount">0</div>
+          <div class="stat-label">POST Endpoints</div>
+        </div>
+        <div class="stat-card telegram">
+          <div class="stat-value" id="tgCount">0</div>
+          <div class="stat-label">TG Commands</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="container">
+    <aside class="sidebar">
+      <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Cerca endpoint...">
+      </div>
+
+      <div>
+        <h3>Categoria</h3>
+        <div class="filters" id="categoryFilters"></div>
+      </div>
+
+      <div>
+        <h3>Metodo</h3>
+        <div class="filters" id="methodFilters"></div>
+      </div>
+
+      <div>
+        <h3>Collegamento Rapido</h3>
+        <div id="jumpLinks"></div>
+      </div>
+    </aside>
+
+    <main>
+      <div class="endpoints" id="endpointsList"></div>
+    </main>
+  </div>
+
+  <footer>
+    <p><strong>Syntoniqa v1.0</strong> — MRS Lely Center Emilia Romagna — 2026</p>
+    <p style="margin-top: 0.5rem; font-size: 0.85rem;">Base URL: <code>https://syntoniqa-mrs-api.fieldforcemrser.workers.dev</code><br>
+    Auth: JWT Bearer Token o X-Token header</p>
+  </footer>
+
+  <script>
+    // API Endpoints Database
+    const endpoints = [
+      // ========== GET ENDPOINTS (8) ==========
+      {
+        method: 'GET',
+        action: 'getAll',
+        category: 'Data Loading',
+        description: 'Carica tutti i dati per dashboard e login con filtraggio role-based per tecnici',
+        params: [
+          { name: 'userId', type: 'string (optional)', desc: 'Filtro per tecnico specifico' },
+          { name: 'periodo', type: 'string (optional)', desc: 'mese | settimana | anno' }
+        ],
+        response: '{ utenti[], clienti[], macchine[], piano[], urgenze[], ordini[], reperibilita[], ... }'
+      },
+      {
+        method: 'GET',
+        action: 'getKPI',
+        category: 'Reports',
+        description: 'Estrae KPI per periodo con filtro opzionale per tecnico',
+        params: [
+          { name: 'tecnicoId', type: 'string (optional)', desc: 'Filtra per tecnico' },
+          { name: 'periodo', type: 'string (optional)', desc: 'mese | settimana | anno (default: mese)' }
+        ],
+        response: '{ kpi[], periodo: string, tecnicoId: string }'
+      },
+      {
+        method: 'GET',
+        action: 'getKPITecnici',
+        category: 'Reports',
+        description: 'Aggregazione KPI per tutti i tecnici nel mese specificato',
+        params: [
+          { name: 'mese', type: 'string (optional)', desc: 'YYYY-MM (default: mese corrente)' }
+        ],
+        response: '{ kpiTecnici: { [tecnicoId]: { total, completati, ore, km } }, mese: string }'
+      },
+      {
+        method: 'GET',
+        action: 'getBackupHistory',
+        category: 'Admin',
+        description: 'Storico dei backup automatici ultimi 30 snapshot',
+        params: [],
+        response: '{ backups[] }'
+      },
+      {
+        method: 'GET',
+        action: 'getAuditLog',
+        category: 'Admin',
+        description: 'Audit trail di tutte le azioni con filtro entity type e user',
+        params: [
+          { name: 'entityType', type: 'string (optional)', desc: 'Es: utente, piano, urgenza' },
+          { name: 'userId', type: 'string (optional)', desc: 'Filtra per user' },
+          { name: 'limit', type: 'number (optional)', desc: 'Default 100' }
+        ],
+        response: '{ logs: { id, entity_type, entity_id, action, user_id, timestamp_at }[] }'
+      },
+      {
+        method: 'GET',
+        action: 'getChecklistTemplates',
+        category: 'Config',
+        description: 'Carica tutti i template checklist attivi',
+        params: [],
+        response: '{ templates[] }'
+      },
+      {
+        method: 'GET',
+        action: 'getPagellini',
+        category: 'Reports',
+        description: 'Valutazioni tecniche con filtro opzionale per tecnico',
+        params: [
+          { name: 'tecnicoId', type: 'string (optional)', desc: 'Filtra per tecnico' }
+        ],
+        response: '{ pagellini[], voci[] }'
+      },
+      {
+        method: 'GET',
+        action: 'exportPowerBI',
+        category: 'Reports',
+        description: 'Export dati per Power BI (solo admin). Fact interventi, urgenze, KPI + dimensioni',
+        params: [
+          { name: 'userId', type: 'string (optional)', desc: 'Admin check' }
+        ],
+        response: '{ fact_interventi[], fact_urgenze[], fact_kpi[], dim_tecnici[], dim_clienti[], dim_macchine[] }'
+      },
+
+      // ========== AUTH (4) ==========
+      {
+        method: 'POST',
+        action: 'login',
+        category: 'Auth',
+        description: 'Autentica utente e restituisce JWT token (opzionale con remember_me)',
+        params: [
+          { name: 'username', type: 'string', desc: 'Username' },
+          { name: 'password', type: 'string', desc: 'Password (hash PBKDF2)' },
+          { name: 'remember_me', type: 'boolean (optional)', desc: '30 giorni vs 8 ore' }
+        ],
+        response: '{ token: string, expiresIn: number, user: { id, nome, cognome, ruolo } }'
+      },
+      {
+        method: 'POST',
+        action: 'changePassword',
+        category: 'Auth',
+        description: 'Cambio password con verifica della vecchia password',
+        params: [
+          { name: 'userId', type: 'string', desc: 'User ID' },
+          { name: 'old_password', type: 'string', desc: 'Password attuale' },
+          { name: 'new_password', type: 'string', desc: 'Nuova password (min 6 car)' }
+        ],
+        response: '{ message: "Password aggiornata con successo" }'
+      },
+      {
+        method: 'POST',
+        action: 'resetPassword',
+        category: 'Auth',
+        description: 'Reset password da admin (opera_id obbligatorio)',
+        params: [
+          { name: 'userId', type: 'string', desc: 'User ID da resettare' },
+          { name: 'newPassword', type: 'string', desc: 'Nuova password' },
+          { name: 'operatoreId', type: 'string', desc: 'Admin che fa il reset' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'requestPasswordReset',
+        category: 'Auth',
+        description: 'Richiesta reset password: notifica admin e chat',
+        params: [
+          { name: 'username', type: 'string', desc: 'Username che richiede reset' }
+        ],
+        response: '{ message: "Richiesta inviata..." }'
+      },
+
+      // ========== INTERVENTI/PIANO (2) ==========
+      {
+        method: 'POST',
+        action: 'createPiano',
+        category: 'Piano',
+        description: 'Crea nuovo intervento pianificato con validazione stato',
+        params: [
+          { name: 'data', type: 'string (ISO)', desc: 'Data intervento (obbligatorio)' },
+          { name: 'tecnico_id', type: 'string', desc: 'Tecnico assegnato' },
+          { name: 'cliente_id', type: 'string', desc: 'Cliente' },
+          { name: 'macchina_id', type: 'string', desc: 'Macchina' },
+          { name: 'tipo_intervento_id', type: 'string', desc: 'Tipo intervento' },
+          { name: 'note', type: 'string', desc: 'Note intervento' }
+        ],
+        response: '{ piano: { id, data, tecnico_id, ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'updatePiano',
+        category: 'Piano',
+        description: 'Aggiorna intervento con validazione state machine (pianificato→in_corso→completato)',
+        params: [
+          { name: 'id', type: 'string', desc: 'Intervento ID (obbligatorio)' },
+          { name: 'stato', type: 'string', desc: 'Nuovo stato: pianificato | in_corso | completato | annullato' },
+          { name: 'ore_lavorate', type: 'number', desc: 'Ore lavorate' },
+          { name: 'km_percorsi', type: 'number', desc: 'Km percorsi' }
+        ],
+        response: '{ success: true }'
+      },
+
+      // ========== URGENZE (7) ==========
+      {
+        method: 'POST',
+        action: 'createUrgenza',
+        category: 'Urgenze',
+        description: 'Crea nuova urgenza/emergenza con SLA',
+        params: [
+          { name: 'cliente_id', type: 'string', desc: 'Cliente (obbligatorio)' },
+          { name: 'macchina_id', type: 'string', desc: 'Macchina coinvolta' },
+          { name: 'problema', type: 'string', desc: 'Descrizione problema (obbligatorio)' },
+          { name: 'priorita_id', type: 'string', desc: 'Livello priorità' },
+          { name: 'sla_scadenza', type: 'string (ISO)', desc: 'Deadline SLA' }
+        ],
+        response: '{ urgenza: { id, stato: "aperta", data_segnalazione, ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'assignUrgenza',
+        category: 'Urgenze',
+        description: 'Assegna urgenza a tecnico(i) con opzioni auto/manual + notifica TG',
+        params: [
+          { name: 'id', type: 'string', desc: 'Urgenza ID' },
+          { name: 'tecnico_assegnato', type: 'string', desc: 'Tecnico ID' },
+          { name: 'automezzo_id', type: 'string', desc: 'Automezzo assegnato (opzionale)' },
+          { name: 'data_prevista', type: 'string', desc: 'Data prevista intervento' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'rejectUrgenza',
+        category: 'Urgenze',
+        description: 'Rifiuta urgenza assegnata: torna ad aperta + notifica admin + email',
+        params: [
+          { name: 'id', type: 'string', desc: 'Urgenza ID' },
+          { name: 'motivo', type: 'string', desc: 'Motivo rifiuto' },
+          { name: 'operatoreId', type: 'string', desc: 'Chi rifiuta' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'startUrgenza',
+        category: 'Urgenze',
+        description: 'Marca urgenza come in_corso + notifica chat admin',
+        params: [
+          { name: 'id', type: 'string', desc: 'Urgenza ID' },
+          { name: 'operatoreId', type: 'string', desc: 'Tecnico che inizia' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'resolveUrgenza',
+        category: 'Urgenze',
+        description: 'Chiude urgenza come risolta con note risoluzione',
+        params: [
+          { name: 'id', type: 'string', desc: 'Urgenza ID' },
+          { name: 'note_risoluzione', type: 'string', desc: 'Come è stata risolta' },
+          { name: 'operatoreId', type: 'string', desc: 'Tecnico che risolve' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'updateUrgenza',
+        category: 'Urgenze',
+        description: 'Aggiorna campi urgenza con validazione transizione stato',
+        params: [
+          { name: 'id', type: 'string', desc: 'Urgenza ID' },
+          { name: 'stato', type: 'string', desc: 'Nuovo stato' },
+          { name: 'problema', type: 'string', desc: 'Descrizione' },
+          { name: 'note', type: 'string', desc: 'Note interne' }
+        ],
+        response: '{ success: true }'
+      },
+
+      // ========== ORDINI (4) ==========
+      {
+        method: 'POST',
+        action: 'createOrdine',
+        category: 'Ordini',
+        description: 'Crea ordine ricambio con tracking stato',
+        params: [
+          { name: 'cliente_id', type: 'string', desc: 'Cliente' },
+          { name: 'codice', type: 'string', desc: 'Codice ricambio' },
+          { name: 'descrizione', type: 'string', desc: 'Descrizione' },
+          { name: 'quantita', type: 'number', desc: 'Quantità' }
+        ],
+        response: '{ ordine: { id, stato: "richiesto", data_richiesta, ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'updateOrdineStato',
+        category: 'Ordini',
+        description: 'Aggiorna stato ordine + notifica tecnico (preso_in_carico, ordinato, arrivato, etc)',
+        params: [
+          { name: 'id', type: 'string', desc: 'Ordine ID' },
+          { name: 'stato', type: 'string', desc: 'preso_in_carico | ordinato | in_arrivo | arrivato' },
+          { name: 'operatoreId', type: 'string', desc: 'Chi aggiorna' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'updateOrdine',
+        category: 'Ordini',
+        description: 'Modifica ordine (solo admin)',
+        params: [
+          { name: 'id', type: 'string', desc: 'Ordine ID' },
+          { name: 'descrizione', type: 'string', desc: 'Nuova descrizione' },
+          { name: 'quantita', type: 'number', desc: 'Nuova quantità' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'deleteOrdine',
+        category: 'Ordini',
+        description: 'Soft delete ordine (obsoleto=true, solo admin)',
+        params: [
+          { name: 'id', type: 'string', desc: 'Ordine ID' }
+        ],
+        response: '{ deleted: true }'
+      },
+
+      // ========== UTENTI (2) ==========
+      {
+        method: 'POST',
+        action: 'createUtente',
+        category: 'Admin',
+        description: 'Crea nuovo utente (tecnico/admin) con password (min 8 car), solo admin',
+        params: [
+          { name: 'username', type: 'string', desc: 'Username univoco' },
+          { name: 'password', type: 'string', desc: 'Password (min 8 caratteri)' },
+          { name: 'nome', type: 'string', desc: 'Nome' },
+          { name: 'cognome', type: 'string', desc: 'Cognome' },
+          { name: 'ruolo', type: 'string', desc: 'admin | tecnico | caposquadra' },
+          { name: 'automezzo_id', type: 'string', desc: 'Furgone assegnato (opzionale)' }
+        ],
+        response: '{ utente: { id, username, nome, cognome, ruolo, ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'updateUtente',
+        category: 'Admin',
+        description: 'Aggiorna utente: self-service (limitato) o admin (full). Password upgrade PBKDF2 auto',
+        params: [
+          { name: 'id', type: 'string', desc: 'User ID' },
+          { name: 'password', type: 'string (optional)', desc: 'Nuova password' },
+          { name: 'nome', type: 'string', desc: 'Nome' },
+          { name: 'automezzo_id', type: 'string', desc: 'Automezzo assegnato' }
+        ],
+        response: '{ success: true }'
+      },
+
+      // ========== CLIENTI (3) ==========
+      {
+        method: 'POST',
+        action: 'createCliente',
+        category: 'CRUD',
+        description: 'Crea nuovo cliente/allevamento',
+        params: [
+          { name: 'nome', type: 'string', desc: 'Nome cliente' },
+          { name: 'citta', type: 'string', desc: 'Città' },
+          { name: 'provincia', type: 'string', desc: 'Provincia' },
+          { name: 'lat', type: 'number', desc: 'Latitudine' },
+          { name: 'lng', type: 'number', desc: 'Longitudine' }
+        ],
+        response: '{ cliente: { id, nome, citta, ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'updateCliente',
+        category: 'CRUD',
+        description: 'Aggiorna cliente',
+        params: [
+          { name: 'id', type: 'string', desc: 'Cliente ID' },
+          { name: 'nome', type: 'string', desc: 'Nome' },
+          { name: 'citta', type: 'string', desc: 'Città' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'deleteCliente',
+        category: 'CRUD',
+        description: 'Soft delete cliente',
+        params: [
+          { name: 'id', type: 'string', desc: 'Cliente ID' }
+        ],
+        response: '{ success: true }'
+      },
+
+      // ========== MACCHINE (3) ==========
+      {
+        method: 'POST',
+        action: 'createMacchina',
+        category: 'CRUD',
+        description: 'Crea robot Lely (Astronaut, Vector, Juno, etc)',
+        params: [
+          { name: 'cliente_id', type: 'string', desc: 'Cliente proprietario' },
+          { name: 'tipo', type: 'string', desc: 'Modello robot' },
+          { name: 'modello', type: 'string', desc: 'Versione modello' },
+          { name: 'anno_installazione', type: 'number', desc: 'Anno instalzione' }
+        ],
+        response: '{ macchina: { id, cliente_id, tipo, ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'updateMacchina',
+        category: 'CRUD',
+        description: 'Aggiorna macchina',
+        params: [
+          { name: 'id', type: 'string', desc: 'Macchina ID' },
+          { name: 'tipo', type: 'string', desc: 'Tipo' },
+          { name: 'modello', type: 'string', desc: 'Modello' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'deleteMacchina',
+        category: 'CRUD',
+        description: 'Soft delete macchina',
+        params: [
+          { name: 'id', type: 'string', desc: 'Macchina ID' }
+        ],
+        response: '{ success: true }'
+      },
+
+      // ========== AUTOMEZZI (3) ==========
+      {
+        method: 'POST',
+        action: 'createAutomezzo',
+        category: 'CRUD',
+        description: 'Crea automezzo (furgone/veicolo)',
+        params: [
+          { name: 'descrizione', type: 'string', desc: 'Es: FURG_1, Panda Blu' },
+          { name: 'targa', type: 'string', desc: 'Targa veicolo' },
+          { name: 'assegnatario_id', type: 'string', desc: 'Tecnico assegnato' }
+        ],
+        response: '{ automezzo: { id, descrizione, targa, ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'updateAutomezzo',
+        category: 'CRUD',
+        description: 'Aggiorna automezzo',
+        params: [
+          { name: 'id', type: 'string', desc: 'Automezzo ID' },
+          { name: 'descrizione', type: 'string', desc: 'Descrizione' },
+          { name: 'assegnatario_id', type: 'string', desc: 'Tecnico assegnato' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'deleteAutomezzo',
+        category: 'CRUD',
+        description: 'Soft delete automezzo',
+        params: [
+          { name: 'id', type: 'string', desc: 'Automezzo ID' }
+        ],
+        response: '{ success: true }'
+      },
+
+      // ========== NOTIFICHE (5) ==========
+      {
+        method: 'POST',
+        action: 'createNotifica',
+        category: 'Notifications',
+        description: 'Crea notifica in-app',
+        params: [
+          { name: 'tipo', type: 'string', desc: 'Tipo: urgenza | ordine | sistema' },
+          { name: 'oggetto', type: 'string', desc: 'Titolo' },
+          { name: 'testo', type: 'string', desc: 'Corpo messaggio' },
+          { name: 'destinatario_id', type: 'string', desc: 'User ID recipient' }
+        ],
+        response: '{ notifica: { id, tipo, oggetto, ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'markNotifica',
+        category: 'Notifications',
+        description: 'Marca notifica come letta',
+        params: [
+          { name: 'id', type: 'string', desc: 'Notifica ID' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'markAllRead',
+        category: 'Notifications',
+        description: 'Marca tutte le notifiche come lette per utente',
+        params: [
+          { name: 'userId', type: 'string', desc: 'User ID' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'deleteNotifica',
+        category: 'Notifications',
+        description: 'Soft delete singola notifica',
+        params: [
+          { name: 'id', type: 'string', desc: 'Notifica ID' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'deleteAllNotifiche',
+        category: 'Notifications',
+        description: 'Soft delete tutte le notifiche utente',
+        params: [
+          { name: 'userId', type: 'string', desc: 'User ID' }
+        ],
+        response: '{ success: true }'
+      },
+
+      // ========== CHAT (7) ==========
+      {
+        method: 'POST',
+        action: 'getChatCanali',
+        category: 'Chat',
+        description: 'Carica canali chat dove utente è iscritto',
+        params: [
+          { name: 'userId', type: 'string', desc: 'User ID' }
+        ],
+        response: '{ canali[] }'
+      },
+      {
+        method: 'POST',
+        action: 'getChatMessaggi',
+        category: 'Chat',
+        description: 'Carica messaggi per canale (last 100)',
+        params: [
+          { name: 'canale_id', type: 'string', desc: 'Canale ID' },
+          { name: 'limit', type: 'number', desc: 'Numero messaggi (default 100)' }
+        ],
+        response: '{ messaggi[] }'
+      },
+      {
+        method: 'POST',
+        action: 'sendChatMessage',
+        category: 'Chat',
+        description: 'Invia messaggio a canale + supporta comandi interni (/stato, /vado, /ordine)',
+        params: [
+          { name: 'canale_id', type: 'string', desc: 'Canale ID' },
+          { name: 'testo', type: 'string', desc: 'Messaggio' },
+          { name: 'mittente_id', type: 'string', desc: 'User ID mittente' }
+        ],
+        response: '{ messaggio: { id, canale_id, testo, ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'createChatCanale',
+        category: 'Chat',
+        description: 'Crea nuovo canale chat',
+        params: [
+          { name: 'nome', type: 'string', desc: 'Nome canale' },
+          { name: 'descrizione', type: 'string', desc: 'Descrizione' },
+          { name: 'tipo', type: 'string', desc: 'pubblico | privato' }
+        ],
+        response: '{ canale: { id, nome, descrizione, ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'joinChatCanale',
+        category: 'Chat',
+        description: 'Iscrivi utente a canale',
+        params: [
+          { name: 'canale_id', type: 'string', desc: 'Canale ID' },
+          { name: 'user_id', type: 'string', desc: 'User ID' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'editChatMessage',
+        category: 'Chat',
+        description: 'Modifica messaggio chat',
+        params: [
+          { name: 'id', type: 'string', desc: 'Messaggio ID' },
+          { name: 'testo', type: 'string', desc: 'Nuovo testo' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'deleteChatMessage',
+        category: 'Chat',
+        description: 'Soft delete messaggio chat',
+        params: [
+          { name: 'id', type: 'string', desc: 'Messaggio ID' }
+        ],
+        response: '{ success: true }'
+      },
+
+      // ========== INSTALLAZIONI (3) ==========
+      {
+        method: 'POST',
+        action: 'createInstallazione',
+        category: 'CRUD',
+        description: 'Crea nuovo progetto installazione macchina',
+        params: [
+          { name: 'cliente_id', type: 'string', desc: 'Cliente' },
+          { name: 'macchina_id', type: 'string', desc: 'Macchina da installare' },
+          { name: 'data_inizio', type: 'string', desc: 'Data inizio' },
+          { name: 'data_fine_prevista', type: 'string', desc: 'Data fine prevista' }
+        ],
+        response: '{ installazione: { id, cliente_id, ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'updateInstallazione',
+        category: 'CRUD',
+        description: 'Aggiorna installazione',
+        params: [
+          { name: 'id', type: 'string', desc: 'Installazione ID' },
+          { name: 'data_fine_prevista', type: 'string', desc: 'Nuova data fine' },
+          { name: 'stato_fase', type: 'string', desc: 'Fase installazione' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'deleteInstallazione',
+        category: 'CRUD',
+        description: 'Soft delete installazione',
+        params: [
+          { name: 'id', type: 'string', desc: 'Installazione ID' }
+        ],
+        response: '{ success: true }'
+      },
+
+      // ========== REPERIBILITA (3) ==========
+      {
+        method: 'POST',
+        action: 'createReperibilita',
+        category: 'CRUD',
+        description: 'Crea turno reperibilità notturna/festivo',
+        params: [
+          { name: 'tecnico_id', type: 'string', desc: 'Tecnico' },
+          { name: 'data_inizio', type: 'string', desc: 'Data inizio turno' },
+          { name: 'data_fine', type: 'string', desc: 'Data fine turno' },
+          { name: 'tipo', type: 'string', desc: 'notturno | festivo | weekend' }
+        ],
+        response: '{ reperibilita: { id, tecnico_id, ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'updateReperibilita',
+        category: 'CRUD',
+        description: 'Aggiorna turno reperibilità',
+        params: [
+          { name: 'id', type: 'string', desc: 'Reperibilita ID' },
+          { name: 'data_inizio', type: 'string', desc: 'Nuova data inizio' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'deleteReperibilita',
+        category: 'CRUD',
+        description: 'Soft delete turno reperibilità',
+        params: [
+          { name: 'id', type: 'string', desc: 'Reperibilita ID' }
+        ],
+        response: '{ success: true }'
+      },
+
+      // ========== TRASFERTE (3) ==========
+      {
+        method: 'POST',
+        action: 'createTrasferta',
+        category: 'CRUD',
+        description: 'Crea trasferta tecnico (multi-day assignment)',
+        params: [
+          { name: 'tecnico_id', type: 'string', desc: 'Tecnico' },
+          { name: 'data_inizio', type: 'string', desc: 'Data inizio' },
+          { name: 'data_fine', type: 'string', desc: 'Data fine' },
+          { name: 'citta_destinazione', type: 'string', desc: 'Città destinazione' }
+        ],
+        response: '{ trasferta: { id, tecnico_id, ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'updateTrasferta',
+        category: 'CRUD',
+        description: 'Aggiorna trasferta',
+        params: [
+          { name: 'id', type: 'string', desc: 'Trasferta ID' },
+          { name: 'data_fine', type: 'string', desc: 'Nuova data fine' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'deleteTrasferta',
+        category: 'CRUD',
+        description: 'Soft delete trasferta',
+        params: [
+          { name: 'id', type: 'string', desc: 'Trasferta ID' }
+        ],
+        response: '{ success: true }'
+      },
+
+      // ========== DOCUMENTI & ALLEGATI (5) ==========
+      {
+        method: 'POST',
+        action: 'createDocumento',
+        category: 'Documents',
+        description: 'Crea documento (SOP, manuale, etc)',
+        params: [
+          { name: 'titolo', type: 'string', desc: 'Titolo documento' },
+          { name: 'categoria', type: 'string', desc: 'Categoria' },
+          { name: 'url_file', type: 'string', desc: 'URL file' }
+        ],
+        response: '{ documento: { id, titolo, ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'updateDocumento',
+        category: 'Documents',
+        description: 'Aggiorna metadati documento',
+        params: [
+          { name: 'id', type: 'string', desc: 'Documento ID' },
+          { name: 'titolo', type: 'string', desc: 'Titolo' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'deleteDocumento',
+        category: 'Documents',
+        description: 'Soft delete documento',
+        params: [
+          { name: 'id', type: 'string', desc: 'Documento ID' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'uploadFile',
+        category: 'Documents',
+        description: 'Upload file base64 a Supabase Storage',
+        params: [
+          { name: 'file_name', type: 'string', desc: 'Nome file' },
+          { name: 'base64_data', type: 'string', desc: 'Contenuto base64' },
+          { name: 'mime_type', type: 'string', desc: 'Es: application/pdf' },
+          { name: 'riferimento_tipo', type: 'string', desc: 'Es: piano, urgenza' },
+          { name: 'riferimento_id', type: 'string', desc: 'ID risorsa' }
+        ],
+        response: '{ url: string, id: string, nome: string }'
+      },
+      {
+        method: 'POST',
+        action: 'uploadFotoProfilo',
+        category: 'Documents',
+        description: 'Upload foto profilo utente',
+        params: [
+          { name: 'userId', type: 'string', desc: 'User ID' },
+          { name: 'base64Data', type: 'string', desc: 'Foto base64' },
+          { name: 'mimeType', type: 'string', desc: 'image/jpeg, etc' }
+        ],
+        response: '{ url: string }'
+      },
+
+      // ========== RICHIESTE (2) ==========
+      {
+        method: 'POST',
+        action: 'createRichiesta',
+        category: 'Requests',
+        description: 'Crea richiesta ferie/permesso/malattia/cambio_turno con notifica admin',
+        params: [
+          { name: 'tecnico_id', type: 'string', desc: 'Tecnico' },
+          { name: 'tipo', type: 'string', desc: 'ferie | permesso | malattia | cambio_turno | generico' },
+          { name: 'data_inizio', type: 'string', desc: 'Data inizio' },
+          { name: 'data_fine', type: 'string', desc: 'Data fine' },
+          { name: 'motivo', type: 'string', desc: 'Descrizione' }
+        ],
+        response: '{ richiesta: { id, tipo, stato: "in_attesa", ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'updateRichiesta',
+        category: 'Requests',
+        description: 'Approva/nega richiesta + notifica tecnico',
+        params: [
+          { name: 'id', type: 'string', desc: 'Richiesta ID' },
+          { name: 'stato', type: 'string', desc: 'approvata | negata' },
+          { name: 'note_admin', type: 'string', desc: 'Note nega' },
+          { name: 'operatoreId', type: 'string', desc: 'Admin che approva' }
+        ],
+        response: '{ success: true }'
+      },
+
+      // ========== PAGELLINI (2) ==========
+      {
+        method: 'POST',
+        action: 'createPagellino',
+        category: 'Reports',
+        description: 'Crea valutazione tecnico (pagellino)',
+        params: [
+          { name: 'tecnico_id', type: 'string', desc: 'Tecnico' },
+          { name: 'valutazione', type: 'number', desc: '1-5 stelline' },
+          { name: 'note', type: 'string', desc: 'Commenti' }
+        ],
+        response: '{ pagellino: { id, tecnico_id, stato: "bozza", ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'approvaPagellino',
+        category: 'Reports',
+        description: 'Approva pagellino (cambio stato a approvato)',
+        params: [
+          { name: 'id', type: 'string', desc: 'Pagellino ID' }
+        ],
+        response: '{ success: true }'
+      },
+
+      // ========== CHECKLIST (4) ==========
+      {
+        method: 'POST',
+        action: 'createChecklistTemplate',
+        category: 'Config',
+        description: 'Crea template checklist per tipo intervento',
+        params: [
+          { name: 'nome', type: 'string', desc: 'Nome template' },
+          { name: 'voci', type: 'array', desc: 'Array voci checklist' }
+        ],
+        response: '{ template: { id, nome, ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'updateChecklistTemplate',
+        category: 'Config',
+        description: 'Aggiorna template checklist',
+        params: [
+          { name: 'id', type: 'string', desc: 'Template ID' },
+          { name: 'voci', type: 'array', desc: 'Nuove voci' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'compileChecklist',
+        category: 'Config',
+        description: 'Compila checklist durante intervento',
+        params: [
+          { name: 'template_id', type: 'string', desc: 'Template ID' },
+          { name: 'intervento_id', type: 'string', desc: 'Piano ID' },
+          { name: 'risposte', type: 'array', desc: 'Array risposte voci' }
+        ],
+        response: '{ checklist: { id, intervento_id, data_compilazione, ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'deleteChecklistTemplate',
+        category: 'Config',
+        description: 'Soft delete template checklist',
+        params: [
+          { name: 'id', type: 'string', desc: 'Template ID' }
+        ],
+        response: '{ success: true }'
+      },
+
+      // ========== EMAIL & TELEGRAM (4) ==========
+      {
+        method: 'POST',
+        action: 'sendEmail',
+        category: 'Notifications',
+        description: 'Invia email via Resend API',
+        params: [
+          { name: 'to', type: 'string', desc: 'Recipient email' },
+          { name: 'subject', type: 'string', desc: 'Oggetto' },
+          { name: 'html', type: 'string', desc: 'HTML body' }
+        ],
+        response: '{ result: { id, created_at } }'
+      },
+      {
+        method: 'POST',
+        action: 'testEmail',
+        category: 'Notifications',
+        description: 'Invia test email per verificare connessione',
+        params: [
+          { name: 'email', type: 'string', desc: 'Email test' }
+        ],
+        response: '{ result: { ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'sendTelegramMsg',
+        category: 'Notifications',
+        description: 'Invia messaggio Telegram',
+        params: [
+          { name: 'chatId', type: 'string', desc: 'Chat ID' },
+          { name: 'text', type: 'string', desc: 'Messaggio' }
+        ],
+        response: '{ result: { ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'testTelegram',
+        category: 'Notifications',
+        description: 'Test connessione Telegram bot',
+        params: [
+          { name: 'chat_id', type: 'string', desc: 'Chat ID test' }
+        ],
+        response: '{ sent: boolean, reason: string }'
+      },
+
+      // ========== PUSH NOTIFICATIONS (3) ==========
+      {
+        method: 'POST',
+        action: 'getVapidPublicKey',
+        category: 'Notifications',
+        description: 'Ottiene chiave pubblica VAPID per Web Push',
+        params: [],
+        response: '{ vapidPublicKey: string }'
+      },
+      {
+        method: 'POST',
+        action: 'savePushSubscription',
+        category: 'Notifications',
+        description: 'Registra subscription push notifiche browser',
+        params: [
+          { name: 'userId', type: 'string', desc: 'User ID' },
+          { name: 'subscription', type: 'object', desc: 'PushSubscription da browser API' }
+        ],
+        response: '{ id: string }'
+      },
+      {
+        method: 'POST',
+        action: 'removePushSubscription',
+        category: 'Notifications',
+        description: 'Disabilita push subscription',
+        params: [
+          { name: 'userId', type: 'string', desc: 'User ID' },
+          { name: 'endpoint', type: 'string (optional)', desc: 'Endpoint specifico' }
+        ],
+        response: '{ success: true }'
+      },
+
+      // ========== CONFIG & VINCOLI (4) ==========
+      {
+        method: 'POST',
+        action: 'saveConfig',
+        category: 'Config',
+        description: 'Salva coppie chiave/valore config generale',
+        params: [
+          { name: 'chiave', type: 'string', desc: 'Chiave config' },
+          { name: 'valore', type: 'string', desc: 'Valore (può essere JSON)' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'saveVincoliCategories',
+        category: 'Config',
+        description: 'Salva vincoli scheduling (assenze, affiancamenti)',
+        params: [
+          { name: 'categories', type: 'array', desc: 'Array categorie vincoli' },
+          { name: 'regole', type: 'array', desc: 'Array regole attive' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'getVincoliCategories',
+        category: 'Config',
+        description: 'Carica configurazione vincoli',
+        params: [],
+        response: '{ categories: [], regole: [] }'
+      },
+      {
+        method: 'POST',
+        action: 'getVincoliAutoDerived',
+        category: 'Config',
+        description: 'Calcola vincoli auto-derivati da richieste/trasferte/installazioni',
+        params: [],
+        response: '{ assenti: Set, affiancamenti: [], conflitti: [] }'
+      },
+
+      // ========== APPROVALS (4) ==========
+      {
+        method: 'POST',
+        action: 'createApproval',
+        category: 'Admin',
+        description: 'Crea bozza piano in attesa approvazione manager',
+        params: [
+          { name: 'mese', type: 'string', desc: 'YYYY-MM' },
+          { name: 'piano', type: 'array', desc: 'Array interventi proposti' },
+          { name: 'creato_da', type: 'string', desc: 'User ID creatore' }
+        ],
+        response: '{ approval: { id, stato: "in_attesa", mese, ... } }'
+      },
+      {
+        method: 'POST',
+        action: 'getApprovals',
+        category: 'Admin',
+        description: 'Carica tutte le approvazioni in attesa',
+        params: [
+          { name: 'filter', type: 'string (optional)', desc: 'in_attesa | approvato | rifiutato' }
+        ],
+        response: '{ approvals[] }'
+      },
+      {
+        method: 'POST',
+        action: 'updateApproval',
+        category: 'Admin',
+        description: 'Approva/nega piano con commenti opzionali + notifica Telegram',
+        params: [
+          { name: 'id', type: 'string', desc: 'Approval ID' },
+          { name: 'stato', type: 'string', desc: 'approvato | rifiutato' },
+          { name: 'approvato_da', type: 'string', desc: 'Manager ID' },
+          { name: 'note_approvazione', type: 'string', desc: 'Commenti approvatore' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'notifyPlanApproved',
+        category: 'Admin',
+        description: 'Invia notifica approvazione piano a Telegram gruppo',
+        params: [
+          { name: 'approval_id', type: 'string', desc: 'Approval ID' }
+        ],
+        response: '{ notified: boolean }'
+      },
+
+      // ========== ADMIN UTILITIES (5) ==========
+      {
+        method: 'POST',
+        action: 'backupNow',
+        category: 'Admin',
+        description: 'Crea snapshot backup manuale dati critici',
+        params: [],
+        response: '{ backupId: string, piano: number, urgenze: number, ordini: number }'
+      },
+      {
+        method: 'POST',
+        action: 'getServiceTypes',
+        category: 'Config',
+        description: 'Carica tipi intervento disponibili',
+        params: [],
+        response: '{ serviceTypes[] }'
+      },
+      {
+        method: 'POST',
+        action: 'getFurgoni',
+        category: 'Config',
+        description: 'Carica lista automezzi disponibili',
+        params: [],
+        response: '{ furgoni[] }'
+      },
+      {
+        method: 'POST',
+        action: 'swapFurgone',
+        category: 'Admin',
+        description: 'Scambia furgone tra due tecnici per una data',
+        params: [
+          { name: 'tecnico1_id', type: 'string', desc: 'Primo tecnico' },
+          { name: 'tecnico2_id', type: 'string', desc: 'Secondo tecnico' },
+          { name: 'data', type: 'string', desc: 'Data swap' }
+        ],
+        response: '{ swap: string, data: string }'
+      },
+      {
+        method: 'POST',
+        action: 'assignFurgone',
+        category: 'Admin',
+        description: 'Assegna furgone a tecnico (permanente o per data specifica)',
+        params: [
+          { name: 'tecnicoId', type: 'string', desc: 'Tecnico' },
+          { name: 'furgoneId', type: 'string', desc: 'Automezzo' },
+          { name: 'dataAssegna', type: 'string (optional)', desc: 'Se presente, solo per data' }
+        ],
+        response: '{ tecnicoId, furgoneId, data }'
+      },
+
+      // ========== AI PLANNING (5) ==========
+      {
+        method: 'POST',
+        action: 'testAI',
+        category: 'AI',
+        description: 'Test connessione AI (Gemini/Groq/Cerebras) + token count',
+        params: [
+          { name: 'prompt', type: 'string', desc: 'Prompt test' }
+        ],
+        response: '{ response: string, model: string, tokens_used: number }'
+      },
+      {
+        method: 'POST',
+        action: 'generateAIPlan',
+        category: 'AI',
+        description: 'Genera piano interventi mese intero via Gemini AI con chunking settimanale',
+        params: [
+          { name: 'mese', type: 'string', desc: 'YYYY-MM target' },
+          { name: 'testo', type: 'string', desc: 'Istruzioni aggiuntive' },
+          { name: 'modalita', type: 'string', desc: 'mese | vuoti | settimana' },
+          { name: 'settimana_num', type: 'number', desc: 'Se modalita=settimana' }
+        ],
+        response: '{ piano[], summary, warnings: [], mese }'
+      },
+      {
+        method: 'POST',
+        action: 'previewAIPlan',
+        category: 'AI',
+        description: 'Anteprima piano AI senza salvare (per validazione)',
+        params: [
+          { name: 'mese', type: 'string', desc: 'YYYY-MM' },
+          { name: 'testo', type: 'string', desc: 'Istruzioni' }
+        ],
+        response: '{ piano[], summary, warnings: [] }'
+      },
+      {
+        method: 'POST',
+        action: 'analyzeImage',
+        category: 'AI',
+        description: 'Analizza foto/documento via Gemini Vision (foto guasto, ricevute, etc)',
+        params: [
+          { name: 'base64_image', type: 'string', desc: 'Immagine base64' },
+          { name: 'context', type: 'string', desc: 'Contesto analisi' }
+        ],
+        response: '{ analysis: string, detected: [], confidence: number }'
+      },
+      {
+        method: 'POST',
+        action: 'applyAIPlan',
+        category: 'AI',
+        description: 'Applica piano AI generato al DB (salva come bozza o direttamente)',
+        params: [
+          { name: 'piano', type: 'array', desc: 'Array intervalli da applicare' },
+          { name: 'mese', type: 'string', desc: 'YYYY-MM' },
+          { name: 'replace', type: 'boolean', desc: 'Sostituisci piano esistente' }
+        ],
+        response: '{ saved: number, mese, warnings: [] }'
+      },
+
+      // ========== MAINTENANCE & SCHEDULING (5) ==========
+      {
+        method: 'POST',
+        action: 'getPMCalendar',
+        category: 'PM',
+        description: 'Carica calendario preventivi (tagliandi) per periodo',
+        params: [
+          { name: 'data_inizio', type: 'string', desc: 'Data inizio' },
+          { name: 'data_fine', type: 'string', desc: 'Data fine' }
+        ],
+        response: '{ eventi[] }'
+      },
+      {
+        method: 'POST',
+        action: 'generatePMSchedule',
+        category: 'PM',
+        description: 'Genera automaticamente calendario tagliandi da ciclo manutentivo',
+        params: [
+          { name: 'cliente_id', type: 'string', desc: 'Cliente' },
+          { name: 'macchina_id', type: 'string', desc: 'Macchina' },
+          { name: 'ciclo_gg', type: 'number', desc: 'Giorni ciclo tagliando' }
+        ],
+        response: '{ schedule: [], mesi_generati: number }'
+      },
+      {
+        method: 'POST',
+        action: 'savePMCycleState',
+        category: 'PM',
+        description: 'Salva data/ore ultimo tagliando per macchina',
+        params: [
+          { name: 'macchina_id', type: 'string', desc: 'Macchina' },
+          { name: 'ultima_manutenzione', type: 'string', desc: 'Data ultimo tagliando' },
+          { name: 'ore_motore', type: 'number', desc: 'Ore motore attuale' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'completePM',
+        category: 'PM',
+        description: 'Marca intervento preventivo come completato',
+        params: [
+          { name: 'intervento_id', type: 'string', desc: 'Piano ID' },
+          { name: 'ore_lavorate', type: 'number', desc: 'Ore impiegate' },
+          { name: 'note_tecnico', type: 'string', desc: 'Note esecuzione' }
+        ],
+        response: '{ success: true }'
+      },
+      {
+        method: 'POST',
+        action: 'bulkGeneratePMCalendar',
+        category: 'PM',
+        description: 'Genera preventivi per TUTTE le macchine cliente',
+        params: [
+          { name: 'cliente_id', type: 'string', desc: 'Cliente' },
+          { name: 'mesi_forward', type: 'number', desc: 'Quanti mesi generare (default 3)' }
+        ],
+        response: '{ generated: number, mesi: string[] }'
+      },
+
+      // ========== ANAGRAFICA (6) ==========
+      {
+        method: 'POST',
+        action: 'getAnagraficaClienti',
+        category: 'Data',
+        description: 'Carica anagrafica master clienti (sincronizzazione master data)',
+        params: [],
+        response: '{ clienti[] }'
+      },
+      {
+        method: 'POST',
+        action: 'getAnagraficaAssets',
+        category: 'Data',
+        description: 'Carica anagrafica master macchine',
+        params: [],
+        response: '{ macchine[] }'
+      },
+      {
+        method: 'POST',
+        action: 'importAnagraficaClienti',
+        category: 'Data',
+        description: 'Importa clienti da file Excel/CSV + deduplica',
+        params: [
+          { name: 'file_base64', type: 'string', desc: 'File Excel/CSV base64' },
+          { name: 'sheet_index', type: 'number', desc: 'Indice sheet (0-based)' }
+        ],
+        response: '{ imported: number, duplicates: number, errors: [] }'
+      },
+      {
+        method: 'POST',
+        action: 'importAnagraficaAssets',
+        category: 'Data',
+        description: 'Importa macchine da file Excel + collegamento cliente',
+        params: [
+          { name: 'file_base64', type: 'string', desc: 'File Excel base64' },
+          { name: 'mapping', type: 'object', desc: 'Mapping colonne' }
+        ],
+        response: '{ imported: number, errors: [] }'
+      },
+      {
+        method: 'POST',
+        action: 'clearAnagrafica',
+        category: 'Data',
+        description: 'Pulisce tabelle anagrafica (ATTENZIONE: distruttivo)',
+        params: [
+          { name: 'type', type: 'string', desc: 'clienti | assets' }
+        ],
+        response: '{ cleared: true }'
+      },
+      {
+        method: 'POST',
+        action: 'syncClientiFromAnagrafica',
+        category: 'Data',
+        description: 'Sincronizza clienti da master data (merging intelligente)',
+        params: [
+          { name: 'force_full', type: 'boolean', desc: 'Full sync vs incremental' }
+        ],
+        response: '{ synced: number, merged: number, new: number }'
+      },
+
+      // ========== IMPORTS (3) ==========
+      {
+        method: 'POST',
+        action: 'importExcelPlan',
+        category: 'Data',
+        description: 'Importa piano interventi da file Excel',
+        params: [
+          { name: 'file_base64', type: 'string', desc: 'File Excel base64' },
+          { name: 'replace', type: 'boolean', desc: 'Sostituisci piano esistente' }
+        ],
+        response: '{ imported: number, mese, errors: [] }'
+      },
+      {
+        method: 'POST',
+        action: 'importLelyClienti',
+        category: 'Data',
+        description: 'Importa clienti da export Lely CRM',
+        params: [
+          { name: 'json_data', type: 'string', desc: 'JSON export Lely' }
+        ],
+        response: '{ imported: number }'
+      },
+      {
+        method: 'POST',
+        action: 'importLelyAssets',
+        category: 'Data',
+        description: 'Importa macchine da asset list Lely',
+        params: [
+          { name: 'json_data', type: 'string', desc: 'JSON asset list' }
+        ],
+        response: '{ imported: number }'
+      },
+
+      // ========== SEARCH & UTILITIES (2) ==========
+      {
+        method: 'POST',
+        action: 'searchClienti',
+        category: 'CRUD',
+        description: 'Ricerca clienti per nome (autocomplete, min 2 caratteri)',
+        params: [
+          { name: 'q', type: 'string', desc: 'Query ricerca (min 2 car)' }
+        ],
+        response: '{ results: [{ codice_m3, nome_account, nome_interno }] }'
+      },
+      {
+        method: 'POST',
+        action: 'searchParts',
+        category: 'Config',
+        description: 'Ricerca ricambi in catalogo Lely',
+        params: [
+          { name: 'q', type: 'string', desc: 'Codice o descrizione ricambio' }
+        ],
+        response: '{ parts: [{ codice, nome, descrizione }] }'
+      },
+
+      // ========== REPORTS (1) ==========
+      {
+        method: 'POST',
+        action: 'generateReport',
+        category: 'Reports',
+        description: 'Genera report PDF/Excel per vari tipi (interventi_tecnico, urgenze_summary, kpi_mensile, etc)',
+        params: [
+          { name: 'tipo', type: 'string', desc: 'interventi_tecnico | urgenze_summary | kpi_mensile | performance_squadra | daily_team | tagliandi_scadenza' },
+          { name: 'data_inizio', type: 'string', desc: 'Data inizio report' },
+          { name: 'data_fine', type: 'string', desc: 'Data fine report' },
+          { name: 'tecnico_id', type: 'string (optional)', desc: 'Filtro tecnico' }
+        ],
+        response: '{ report_url: string, tipo: string, periodo: string }'
+      },
+
+      // ========== TELEGRAM COMMANDS (18) ==========
+      {
+        method: 'TG',
+        action: '/start',
+        category: 'Telegram',
+        description: 'Auto-registrazione tecnico e welcome message',
+        params: [],
+        response: 'Welcome message con menu button'
+      },
+      {
+        method: 'TG',
+        action: '/help',
+        category: 'Telegram',
+        description: 'Lista comandi disponibili',
+        params: [],
+        response: 'Help text con comandi'
+      },
+      {
+        method: 'TG',
+        action: '/stato',
+        category: 'Telegram',
+        description: 'Visualizza urgenze assegnate al tecnico (stato, cliente, priorità)',
+        params: [],
+        response: 'Lista urgenze formattata'
+      },
+      {
+        method: 'TG',
+        action: '/oggi',
+        category: 'Telegram',
+        description: 'Mostra interventi pianificati per oggi',
+        params: [],
+        response: 'Piano giornale formattato'
+      },
+      {
+        method: 'TG',
+        action: '/settimana',
+        category: 'Telegram',
+        description: 'Mostra piano settimanale (lun-ven)',
+        params: [],
+        response: 'Piano settimanale raggruppato'
+      },
+      {
+        method: 'TG',
+        action: '/vado',
+        category: 'Telegram',
+        description: 'Lista urgenze aperte + bottoni rapida assegnazione',
+        params: [
+          { name: 'number (opzionale)', type: 'int', desc: 'Numero urgenza per scegliere subito' }
+        ],
+        response: 'Urgenze con inline buttons oppure conferma assegnazione'
+      },
+      {
+        method: 'TG',
+        action: '/incorso',
+        category: 'Telegram',
+        description: 'Marca ultima urgenza/intervento come in_corso',
+        params: [],
+        response: 'Conferma cambio stato'
+      },
+      {
+        method: 'TG',
+        action: '/risolto',
+        category: 'Telegram',
+        description: 'Chiude urgenza come risolta + prompt per note',
+        params: [
+          { name: 'note (opzionali)', type: 'text', desc: 'Come è stata risolta' }
+        ],
+        response: 'Conferma chiusura + notifica admin'
+      },
+      {
+        method: 'TG',
+        action: '/ordine',
+        category: 'Telegram',
+        description: 'Crea ordine ricambio: /ordine codice qt cliente',
+        params: [
+          { name: 'codice', type: 'string', desc: 'Codice ricambio' },
+          { name: 'quantita', type: 'number', desc: 'Quantità' },
+          { name: 'cliente', type: 'string', desc: 'Nome cliente' }
+        ],
+        response: 'Conferma ordine creato'
+      },
+      {
+        method: 'TG',
+        action: '/catalogo',
+        category: 'Telegram',
+        description: 'Mostra catalogo ricambi Lely disponibili per ricerca',
+        params: [],
+        response: 'Catalogo formattato con codici'
+      },
+      {
+        method: 'TG',
+        action: '/dove',
+        category: 'Telegram',
+        description: 'Localizzazione GPS ultimo cliente intervento',
+        params: [],
+        response: 'Link mappa + coordinate'
+      },
+      {
+        method: 'TG',
+        action: '/kpi',
+        category: 'Telegram',
+        description: 'KPI personali mese: ore, km, interventi completati, SLA',
+        params: [],
+        response: 'KPI card formattata'
+      },
+      {
+        method: 'TG',
+        action: '/report',
+        category: 'Telegram',
+        description: 'Genera report personale settimana/mese (PDF)',
+        params: [],
+        response: 'PDF report oppure link download'
+      },
+      {
+        method: 'TG',
+        action: '/pianifica',
+        category: 'Telegram',
+        description: 'Accesso a pianificazione: genera piano mese via AI Gemini + preview',
+        params: [
+          { name: 'mese (opzionale)', type: 'YYYY-MM', desc: 'Se non specificato = mese corrente' }
+        ],
+        response: 'Conversazione interattiva per piano'
+      },
+      {
+        method: 'TG',
+        action: '/assegna',
+        category: 'Telegram',
+        description: 'Assegna urgenza a tecnico specifico (autocomplete)',
+        params: [
+          { name: 'urgenza_id', type: 'string', desc: 'ID urgenza' },
+          { name: 'tecnico', type: 'string', desc: 'Nome tecnico' }
+        ],
+        response: 'Conferma assegnazione'
+      },
+      {
+        method: 'TG',
+        action: '/disponibile',
+        category: 'Telegram',
+        description: 'Gestione reperibilità: imposta disponibilità serale/festiva',
+        params: [],
+        response: 'Menu reperibilità interattivo'
+      },
+      {
+        method: 'TG',
+        action: '/tagliando',
+        category: 'Telegram',
+        description: 'Mostra tagliandi scaduti + promemoria manutenzione',
+        params: [],
+        response: 'Lista tagliandi urgenti'
+      },
+
+      // ========== MISC (4) ==========
+      {
+        method: 'POST',
+        action: 'logKPISnapshot',
+        category: 'Reports',
+        description: 'Salva snapshot KPI manuale',
+        params: [
+          { name: 'tipo_snapshot', type: 'string', desc: 'backup | checkpoint | etc' },
+          { name: 'dati', type: 'object', desc: 'Dati snapshot' }
+        ],
+        response: '{ snapshotId: string }'
+      },
+      {
+        method: 'POST',
+        action: 'updateSLAStatus',
+        category: 'Admin',
+        description: 'Cron job: aggiorna stato SLA urgenze (ok→warning→critical→breach)',
+        params: [],
+        response: '{ aggiornate: number, escalations: number }'
+      },
+      {
+        method: 'POST',
+        action: 'getAvailabilityMap',
+        category: 'Config',
+        description: 'Mappa disponibilità tecnici per planning (indisponibilità, trasferte, etc)',
+        params: [
+          { name: 'data_inizio', type: 'string', desc: 'Data inizio' },
+          { name: 'data_fine', type: 'string', desc: 'Data fine' }
+        ],
+        response: '{ tecnici: {[id]: { disponibile, motivo, date_range }} }'
+      },
+      {
+        method: 'POST',
+        action: 'geocodeAll',
+        category: 'Admin',
+        description: 'Batch geocoding clienti senza lat/lng da indirizzi',
+        params: [],
+        response: '{ geocoded: number, errors: [] }'
+      }
+    ];
+
+    // Initialize app
+    let filteredEndpoints = [...endpoints];
+    const categories = [...new Set(endpoints.map(e => e.category))].sort();
+    const methods = [...new Set(endpoints.map(e => e.method))];
+
+    function renderEndpoints(items) {
+      const list = document.getElementById('endpointsList');
+      list.innerHTML = '';
+      items.forEach(ep => {
+        const card = document.createElement('div');
+        card.className = 'endpoint-card';
+        const methodClass = ep.method === 'GET' ? 'get' : (ep.method === 'TG' ? 'telegram' : 'post');
+        const methodDisplay = ep.method === 'TG' ? 'Telegram' : ep.method;
+        const curlCmd = ep.method === 'TG'
+          ? `# Telegram command\n${ep.action}`
+          : ep.method === 'GET'
+          ? `curl -H "Authorization: Bearer <token>" \\\n  "https://syntoniqa-mrs-api.fieldforcemrser.workers.dev?action=${ep.action}&token=<token>"`
+          : `curl -X POST \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer <token>" \\\n  -d '{"action":"${ep.action}"}' \\\n  https://syntoniqa-mrs-api.fieldforcemrser.workers.dev`;
+
+        card.innerHTML = `
+          <div class="endpoint-header">
+            <span class="method-badge ${methodClass}">${methodDisplay}</span>
+            <span class="endpoint-name">${ep.action}</span>
+          </div>
+          <div class="endpoint-category">${ep.category}</div>
+          <p class="endpoint-description">${ep.description}</p>
+          ${ep.params && ep.params.length > 0 ? `
+            <div class="params-section">
+              <div class="params-title">Parametri</div>
+              ${ep.params.map(p => `<div class="param"><span class="param-name">${p.name}</span> <span class="param-type">${p.type}</span> — ${p.desc}</div>`).join('')}
+            </div>
+          ` : ''}
+          <div class="curl-section">
+            <div class="curl-title">cURL</div>
+            <div class="curl-box" onclick="navigator.clipboard.writeText(this.textContent.replace('Clicca per copiare', ''))">${curlCmd}</div>
+          </div>
+          <div class="response-section">
+            <div class="response-title">Response</div>
+            <div class="response-hint">${ep.response}</div>
+          </div>
+        `;
+        list.appendChild(card);
+      });
+      updateStats(items);
+    }
+
+    function updateStats(items) {
+      const total = items.length;
+      const getCount = items.filter(e => e.method === 'GET').length;
+      const postCount = items.filter(e => e.method === 'POST').length;
+      const tgCount = items.filter(e => e.method === 'TG').length;
+      document.getElementById('totalCount').textContent = endpoints.length;
+      document.getElementById('getCount').textContent = endpoints.filter(e => e.method === 'GET').length;
+      document.getElementById('postCount').textContent = endpoints.filter(e => e.method === 'POST').length;
+      document.getElementById('tgCount').textContent = endpoints.filter(e => e.method === 'TG').length;
+    }
+
+    function filter() {
+      const search = document.getElementById('searchInput').value.toLowerCase();
+      const activeCategory = document.querySelector('.filter-btn.active[data-type="category"]')?.dataset.value;
+      const activeMethod = document.querySelector('.filter-btn.active[data-type="method"]')?.dataset.value;
+
+      filteredEndpoints = endpoints.filter(e => {
+        const matchSearch = !search || e.action.toLowerCase().includes(search) || e.description.toLowerCase().includes(search);
+        const matchCategory = !activeCategory || e.category === activeCategory;
+        const matchMethod = !activeMethod || e.method === activeMethod;
+        return matchSearch && matchCategory && matchMethod;
+      });
+
+      renderEndpoints(filteredEndpoints);
+    }
+
+    // Setup filters
+    const filterContainer = document.getElementById('categoryFilters');
+    categories.forEach(cat => {
+      const btn = document.createElement('button');
+      btn.className = 'filter-btn';
+      btn.dataset.type = 'category';
+      btn.dataset.value = cat;
+      btn.textContent = cat;
+      btn.onclick = () => {
+        document.querySelectorAll('.filter-btn[data-type="category"]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        filter();
+      };
+      filterContainer.appendChild(btn);
+    });
+
+    const methodContainer = document.getElementById('methodFilters');
+    methods.forEach(method => {
+      const btn = document.createElement('button');
+      btn.className = 'filter-btn';
+      btn.dataset.type = 'method';
+      btn.dataset.value = method;
+      btn.textContent = method;
+      btn.onclick = () => {
+        document.querySelectorAll('.filter-btn[data-type="method"]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        filter();
+      };
+      methodContainer.appendChild(btn);
+    });
+
+    // Jump links
+    const jumpContainer = document.getElementById('jumpLinks');
+    categories.forEach(cat => {
+      const link = document.createElement('a');
+      link.className = 'sidebar-link';
+      link.textContent = cat;
+      link.href = '#';
+      link.onclick = (e) => {
+        e.preventDefault();
+        document.querySelectorAll('.filter-btn[data-type="category"]').forEach(b => b.classList.remove('active'));
+        document.querySelector(`[data-type="category"][data-value="${cat}"]`).classList.add('active');
+        filter();
+        document.querySelector('.endpoint-card')?.scrollIntoView({ behavior: 'smooth' });
+      };
+      jumpContainer.appendChild(link);
+    });
+
+    // Search
+    document.getElementById('searchInput').addEventListener('input', filter);
+
+    // Initial render
+    renderEndpoints(endpoints);
+  </script>
+</body>
+</html>
