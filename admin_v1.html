@@ -1318,10 +1318,10 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <div class="card-head" style="flex-wrap:wrap;gap:8px">
 <h3>🔧 PM Scheduling</h3>
 <div class="btn-group" style="flex-wrap:wrap">
-<button class="btn btn-ghost btn-sm" onclick="downloadPMTemplate()" title="Scarica template Excel compatibile LSSA">⬇ Template LSSA</button>
-<label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0" title="Importa file overdue da LSSA o template compilato">⬆ Import LSSA <input type="file" id="pmLssaFile" style="display:none" accept=".xlsx,.csv,.xls" onchange="importLSSAOverdue(this)"></label>
-<button class="btn btn-ghost btn-sm" onclick="exportPMPiano()" title="Esporta elenco PM in CSV">📥 Export CSV</button>
-<button class="btn btn-sm btn-ai" onclick="bulkGeneratePM()">⚡ Genera Piano 3M</button>
+<button class="btn btn-sm" style="background:#c8102e;color:#fff;border-color:#c8102e" onclick="showLSSASyncModal()" title="Sincronizza automaticamente da LSSA (bookmarklet)">🔄 Sync LSSA</button>
+<label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0" title="Importa file: Lely Template v5.x, LSSA export, o template Syntoniqa">⬆ Import file <input type="file" id="pmLssaFile" style="display:none" accept=".xlsx,.csv,.xls,.xlsm" onchange="importLSSAOverdue(this)"></label>
+<button class="btn btn-ghost btn-sm" onclick="exportPMPiano()" title="Esporta elenco PM in CSV">📥 Export</button>
+<button class="btn btn-sm btn-ai" onclick="bulkGeneratePM()">⚡ Piano 3M</button>
 <button class="btn btn-sm btn-outline" onclick="togglePMSettings()">⚙️ Cicli</button>
 </div>
 </div>
@@ -2270,6 +2270,42 @@ Workers AI è incluso in Cloudflare e non richiede chiavi aggiuntive.
 </div>
 
 <!-- MODAL: Nuovo Cliente -->
+<!-- ═══ MODAL LSSA SYNC ═══ -->
+<div class="modal-overlay" id="modalLSSASync">
+<div class="modal" style="max-width:560px">
+<div class="modal-head"><h2>🔄 Sync automatico da LSSA</h2><button class="close" onclick="closeModal('modalLSSASync')">✕</button></div>
+<div class="modal-body">
+  <div style="background:#fff8f0;border:1.5px solid #f97316;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:.82rem">
+    <strong>Come funziona:</strong> Salva il link qui sotto nei preferiti del browser. Quando sei loggato su LSSA, clicca quel link: estrae i dati PM in automatico e li importa direttamente in Syntoniqa — nessun download, nessun upload.
+  </div>
+  <div style="margin-bottom:16px">
+    <label style="font-weight:600;font-size:.82rem;display:block;margin-bottom:6px">1. Trascina questo link nella barra preferiti del browser:</label>
+    <div style="display:flex;align-items:center;gap:10px">
+      <a id="lssaBookmarkletLink" href="#" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#c8102e;color:#fff;border-radius:6px;font-weight:700;font-size:.85rem;text-decoration:none;cursor:grab" draggable="true" onclick="return false">🔄 Sync LSSA → Syntoniqa</a>
+      <span style="font-size:.75rem;color:var(--gray)">← trascina qui</span>
+    </div>
+  </div>
+  <div style="margin-bottom:16px">
+    <label style="font-weight:600;font-size:.82rem;display:block;margin-bottom:6px">2. Vai su <a href="https://lssa2.lelyonline.com/performance/preventive-maintenance-overdue" target="_blank" style="color:var(--c1)">LSSA → Performance → PM Overdue</a> (loggati se necessario)</label>
+  </div>
+  <div style="margin-bottom:16px">
+    <label style="font-weight:600;font-size:.82rem;display:block;margin-bottom:6px">3. Clicca il preferito "🔄 Sync LSSA → Syntoniqa" dalla barra</label>
+  </div>
+  <hr style="margin:12px 0;border-color:var(--gray4)">
+  <div style="font-size:.78rem;color:var(--gray)">
+    Il bookmarklet usa il JWT di LSSA già attivo nel browser — nessuna password aggiuntiva. Il token Syntoniqa è incluso nel link e cambia automaticamente se aggiorni questa pagina. Tenant: <strong id="bmTenantLabel"></strong>
+  </div>
+  <div style="margin-top:12px">
+    <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:4px">Codice bookmarklet (copia in alternativa):</label>
+    <textarea id="lssaBookmarkletCode" readonly style="width:100%;height:80px;font-family:monospace;font-size:.65rem;border:1px solid var(--gray3);border-radius:4px;padding:6px;resize:vertical;background:var(--gray5)"></textarea>
+  </div>
+</div>
+<div class="modal-foot">
+  <button class="btn btn-ghost" onclick="closeModal('modalLSSASync')">Chiudi</button>
+</div>
+</div>
+</div>
+
 <div class="modal-overlay" id="modalCliente">
 <div class="modal modal-lg">
 <div class="modal-head"><h2>🏢 Nuovo Cliente</h2><button class="close" onclick="closeModal('modalCliente')">✕</button></div>
@@ -8586,6 +8622,77 @@ function openPMCicloEdit(assetId,currentCiclo){
   apiCall('updateAssetCiclo',{asset_id:assetId,ciclo_pm:ciclo||null,intervallo_settimane:ciclo?intervMap[ciclo]:null},'POST')
     .then(()=>{toast(`Ciclo PM ${ciclo||'rimosso'}`,'ok');PM_OVERVIEW=null;loadPMOverview();})
     .catch(e=>toast(e.message,'err'));
+}
+
+// ── LSSA Bookmarklet generator ────────────────────────────────────────────────
+// White-label: legge API_URL e API_TOKEN dal config attivo, genera bookmarklet
+// dinamicamente. Funziona per qualsiasi tenant senza modifiche al codice.
+function showLSSASyncModal(){
+  const apiUrl = API_URL || 'https://syntoniqa-mrs-api.fieldforcemrser.workers.dev';
+  // Usa JWT se disponibile (admin loggato), altrimenti API_TOKEN base
+  // Nel bookmarklet usiamo API_TOKEN (Bearer) — sicuro perché è nel browser dell'admin
+  const apiToken = API_TOKEN || '';
+  const userId = USER?.ID || 'USR001';
+  const tenantId = window.SYNTONIQA_CONFIG?.tenant?.id || '';
+
+  // Endpoint LSSA scoperto: /api/js/data-source/v2/pms-to-be-done-soon
+  // Restituisce array con: DeviceSerialNumber (10 cifre), DaysSinceLastPM, DaysUntilNextPM,
+  // NextPMType (A/B/C/D/Unknown), CustomerNumber, CustomerName, DeviceType
+  const bm = `javascript:(function(){
+var _sq_url='${apiUrl.replace(/'/g,"\\'")}';
+var _sq_tok='${apiToken.replace(/'/g,"\\'")}';
+var _sq_usr='${userId}';
+if(window.location.hostname!=='lssa2.lelyonline.com'){alert('⚠️ Apri prima la pagina LSSA:\\nhttps://lssa2.lelyonline.com/performance/preventive-maintenance-overdue');return;}
+var auth;try{auth=JSON.parse(localStorage.getItem('LSSA::authData')||'{}');}catch(e){auth={};}
+var lssaTok=auth.accessToken;
+if(!lssaTok){alert('❌ Non sei loggato in LSSA — effettua il login e riprova.');return;}
+var btn=document.createElement('div');
+btn.style='position:fixed;top:16px;right:16px;z-index:99999;background:#c8102e;color:#fff;padding:10px 18px;border-radius:8px;font-family:sans-serif;font-size:14px;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,.3)';
+btn.textContent='🔄 Sincronizzazione LSSA in corso...';
+document.body.appendChild(btn);
+fetch('/api/js/data-source/v2/pms-to-be-done-soon',{headers:{Authorization:'Bearer '+lssaTok}})
+.then(function(r){if(!r.ok)throw new Error('LSSA HTTP '+r.status);return r.json();})
+.then(function(data){
+  var today=new Date();
+  var records=Object.values(data).map(function(d){
+    var sn=(d.DeviceSerialNumber||'').toString().trim();
+    if(!sn)return null;
+    var daysUntil=parseInt(d.DaysUntilNextPM);
+    var daysSince=parseInt(d.DaysSinceLastPM);
+    var nextPM=null,lastPM=null;
+    if(!isNaN(daysUntil)){var nd=new Date(today);nd.setDate(nd.getDate()+daysUntil);nextPM=nd.toISOString().split('T')[0];}
+    if(!isNaN(daysSince)&&daysSince>0){var ld=new Date(today);ld.setDate(ld.getDate()-daysSince);lastPM=ld.toISOString().split('T')[0];}
+    var ciclo=(d.NextPMType||'').toString().trim().toUpperCase();
+    if(!['A','B','C','D'].includes(ciclo))ciclo=null;
+    var rec={numero_serie:sn};
+    if(nextPM)rec.prossimo_controllo=nextPM;
+    if(lastPM)rec.ultimo_controllo=lastPM;
+    if(ciclo)rec.ciclo_pm=ciclo;
+    return rec;
+  }).filter(Boolean);
+  btn.textContent='📤 Invio '+records.length+' record a Syntoniqa...';
+  return fetch(_sq_url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_sq_tok},body:JSON.stringify({action:'importPMOverdue',records:records,userId:_sq_usr})});
+})
+.then(function(r){return r.json();})
+.then(function(res){
+  btn.style.background='#065F46';
+  btn.textContent='✅ '+res.updated+' aggiornati | '+(res.not_found||0)+' non trovati | '+res.total+' totali';
+  setTimeout(function(){btn.remove();},5000);
+})
+.catch(function(err){
+  btn.style.background='#991B1B';
+  btn.textContent='❌ Errore: '+err.message;
+  setTimeout(function(){btn.remove();},6000);
+});
+})();`.replace(/\s*\n\s*/g,' ');
+
+  const link=$('lssaBookmarkletLink');
+  const code=$('lssaBookmarkletCode');
+  const label=$('bmTenantLabel');
+  if(link)link.href=bm;
+  if(code)code.value=bm;
+  if(label)label.textContent=(window.SYNTONIQA_CONFIG?.brand?.name||'Syntoniqa')+' / '+apiUrl.replace('https://','').split('.')[0];
+  openModal('modalLSSASync');
 }
 
 /* Compatibilità backward con funzioni che usano il vecchio PM_DATA */
