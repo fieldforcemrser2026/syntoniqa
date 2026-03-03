@@ -1771,8 +1771,14 @@ Workers AI è incluso in Cloudflare e non richiede chiavi aggiuntive.
     <button class="btn btn-sm" onclick="anagView='list';updateAnagViewBtns();renderAnagClients(ANAG_FILTERED)" title="Mostra tabella clienti con dati e macchine" id="btnAnagList" style="font-size:.75rem">📋 Lista</button>
     <button class="btn btn-sm" onclick="anagView='map';updateAnagViewBtns();renderAnagClients(ANAG_FILTERED)" title="Mostra clienti sulla mappa geografica" id="btnAnagMap" style="font-size:.75rem">🗺️ Mappa</button>
     <button class="btn btn-sm" onclick="loadAnagClients()" title="Ricarica tutti i dati anagrafica dal server" style="font-size:.75rem">🔄 Ricarica</button>
-    <label class="btn btn-sm btn-primary" style="cursor:pointer">📤 Importa XLSX<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importAnagXlsx(this.files[0])"></label>
+    <label class="btn btn-sm btn-primary" style="cursor:pointer">📤 Importa XLSX<input type="file" id="anagFileInput" accept=".xlsx,.xls" style="display:none" onchange="const fn=this.files[0]?.name||'';document.getElementById('anagImportedFile').textContent=fn?'📁 '+fn:'';importAnagXlsx(this.files[0])"></label>
   </div>
+</div>
+<div style="display:flex;align-items:center;gap:16px;padding:5px 2px;font-size:.78rem;color:var(--text2);border-bottom:1px solid var(--border);margin-bottom:4px;flex-wrap:wrap">
+  <span style="font-weight:500">📄 Template:</span>
+  <a href="#" onclick="downloadAnagTemplate('clienti');return false" style="color:var(--primary);text-decoration:none;font-weight:500">⬇ Clienti.xlsx</a>
+  <a href="#" onclick="downloadAnagTemplate('assets');return false" style="color:var(--primary);text-decoration:none;font-weight:500">⬇ Assets.xlsx</a>
+  <span id="anagImportedFile" style="margin-left:auto;color:var(--text3);font-style:italic"></span>
 </div>
 <div id="anagStats" style="display:flex;gap:12px;margin:8px 0;flex-wrap:wrap"></div>
 <!-- MAP VIEW -->
@@ -6029,6 +6035,38 @@ function openAnagEdit(m3){
 }
 
 // Import XLSX via browser (SheetJS) — FULL parser for ALL asset sheets
+async function downloadAnagTemplate(tipo){
+  if(!window.XLSX){
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    document.head.appendChild(s);
+    await new Promise(r=>{s.onload=r;setTimeout(r,5000)});
+  }
+  if(!window.XLSX){toast('Errore caricamento libreria XLSX','err');return}
+  const wb=XLSX.utils.book_new();
+  if(tipo==='clienti'){
+    const header=[['Nome account','Numero cliente M3 OPT','id Account','Account Number ','Codice DANEA',
+      'Partita IVA OPT','Nome Danea','Nome Interno','lat','long','Titolare account','Telefono',
+      'E-mail di fatturazione','Stato del cliente','Status','Tipo di cliente','Data creazione',
+      'Via fatturazione','Città fatturazione','Stato/Provincia fatturazione','CAP fatturazione',
+      'Via spedizioni','Città spedizioni','Stato/Provincia spedizioni','CAP spedizioni',
+      'Service Area','Contratto di assi']];
+    const ws=XLSX.utils.aoa_to_sheet([['(riga 0 ignorata — NON eliminare)'],...header]);
+    const wscols=header[0].map(h=>({wch:Math.max(h.length+2,14)}));ws['!cols']=wscols;
+    XLSX.utils.book_append_sheet(wb,ws,'Clienti');
+    XLSX.writeFile(wb,'template_clienti.xlsx');
+  } else {
+    const header=[['Numero di serie','Movex','ID account','ID asset','Nome account','Titolare account',
+      'Nome asset','Modello','Gruppo Attrezzatura','Descrizione',
+      'Data di installazione','Data creazione','Data ultima modifica','Status']];
+    const ws=XLSX.utils.aoa_to_sheet(header);
+    const wscols=header[0].map(h=>({wch:Math.max(h.length+2,14)}));ws['!cols']=wscols;
+    XLSX.utils.book_append_sheet(wb,ws,'Assets');
+    XLSX.writeFile(wb,'template_assets.xlsx');
+  }
+  toast('Template scaricato','ok');
+}
+
 async function importAnagXlsx(file){
   if(!file)return;
   toast('Caricamento XLSX in corso...','info');
