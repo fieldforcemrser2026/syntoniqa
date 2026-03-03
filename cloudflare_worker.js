@@ -311,6 +311,25 @@ function checkToken(request, env, bodyToken) {
   return token === env.SQ_TOKEN;
 }
 
+// ============ SERIAL / M3 NORMALIZATION ============
+// LSSA export usa numeri senza zeri (3293257), Lely template usa zero-padded (0003082168)
+// Normalizzazione: stripping degli zeri iniziali → confronto numerico
+function normalizeSerial(s) {
+  if (!s) return '';
+  const num = (s + '').trim().replace(/[^0-9]/g, '');
+  if (!num) return (s + '').trim();
+  return String(parseInt(num, 10)); // rimuove leading zeros
+}
+function padSerial10(s) {
+  const num = (s + '').trim().replace(/[^0-9]/g, '');
+  return num ? num.padStart(10, '0') : (s + '').trim();
+}
+function normalizeM3(s) {
+  if (!s) return '';
+  const num = (s + '').trim().replace(/[^0-9]/g, '');
+  return num ? String(parseInt(num, 10)) : (s + '').trim();
+}
+
 // ============ JWT HELPERS ============
 
 function b64UrlEncode(buf) {
@@ -6234,7 +6253,7 @@ Rispondi SOLO con JSON valido:
     case 'getPMOverview': {
       const [assets, clienti] = await Promise.all([
         sb(env, 'anagrafica_assets', 'GET', null,
-          '?obsoleto=eq.false&select=id,codice_m3,nome_account,tipo_foglio,gruppo_attrezzatura,nome_asset,numero_serie,modello,prossimo_controllo,data_installazione,status&limit=1000&order=codice_m3.asc').catch(() => []),
+          '?obsoleto=eq.false&select=id,codice_m3,nome_account,tipo_foglio,gruppo_attrezzatura,nome_asset,numero_serie,modello,prossimo_controllo,ultimo_controllo,data_installazione,status,ciclo_pm,intervallo_settimane,schedule_type&limit=1000&order=codice_m3.asc').catch(() => []),
         sb(env, 'anagrafica_clienti', 'GET', null,
           '?select=codice_m3,nome_account,nome_interno,citta_fatturazione&limit=300').catch(() => [])
       ]);
@@ -6274,23 +6293,101 @@ Rispondi SOLO con JSON valido:
       const now = new Date().toISOString();
       for (const rec of records) {
         try {
-          const serial = (rec.numero_serie || rec.NumeroSerie || '').trim();
+          const rawSerial = (rec.numero_serie || rec.NumeroSerie || '').trim();
           const assetId = rec.asset_id || rec.AssetId;
           const prossimoControllo = rec.prossimo_controllo || rec.ProssimoControllo;
-          if (!prossimoControllo) continue;
-          const patch = { prossimo_controllo: prossimoControllo, updated_at: now };
+          const patch = {};
+          if (prossimoControllo) patch.prossimo_controllo = prossimoControllo;
+          if (rec.ultimo_controllo || rec.UltimoControllo) patch.ultimo_controllo = rec.ultimo_controllo || rec.UltimoControllo;
+          if (rec.ciclo_pm || rec.CicloPm) patch.ciclo_pm = rec.ciclo_pm || rec.CicloPm;
+          if (rec.intervallo_settimane != null) patch.intervallo_settimane = parseInt(rec.intervallo_settimane) || null;
+          if (!Object.keys(patch).length) continue;
+          patch.updated_at = now;
           let res;
           if (assetId) {
             res = await sb(env, `anagrafica_assets?id=eq.${encodeURIComponent(assetId)}&obsoleto=eq.false`, 'PATCH', patch);
-          } else if (serial) {
-            res = await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(serial)}&obsoleto=eq.false`, 'PATCH', patch);
+          } else if (rawSerial) {
+            // Tenta match: prima forma esatta, poi zero-padded 10 cifre, poi stripped
+            const stripped = normalizeSerial(rawSerial);
+            const padded = padSerial10(rawSerial);
+            // Prova 1: exact match
+            res = await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(rawSerial)}&obsoleto=eq.false`, 'PATCH', patch);
+            let cnt = Array.isArray(res) ? res.length : (res ? 1 : 0);
+            // Prova 2: zero-padded (0003293257)
+            if (!cnt && padded !== rawSerial) {
+              res = await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(padded)}&obsoleto=eq.false`, 'PATCH', patch);
+              cnt = Array.isArray(res) ? res.length : (res ? 1 : 0);
+            }
+            // Prova 3: stripped (senza zeri iniziali)
+            if (!cnt && stripped !== rawSerial && stripped !== padded) {
+              res = await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(stripped)}&obsoleto=eq.false`, 'PATCH', patch);
+              cnt = Array.isArray(res) ? res.length : (res ? 1 : 0);
+            }
+            if (cnt > 0) { updated++; } else { not_found++; }
+            continue;
           } else { not_found++; continue; }
-          const cnt = Array.isArray(res) ? res.length : (res ? 1 : 0);
-          if (cnt > 0) { updated++; } else { not_found++; }
+          const cnt2 = Array.isArray(res) ? res.length : (res ? 1 : 0);
+          if (cnt2 > 0) { updated++; } else { not_found++; }
         } catch (e) { errors++; }
       }
       await wlog('anagrafica_assets', 'bulk', `pm_import updated:${updated} not_found:${not_found}`, body.operatoreId || body.userId);
       return ok({ updated, not_found, errors, total: records.length });
+    }
+
+    // ═══ IMPORT PM TEMPLATE v5.x (Lely standard LC Data Template) ═══
+    case 'importPMTemplate': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const { records } = body; // [{serial_no, maintenance_type, standard_interval, weeks_months, schedule_type, next_pm_date, owner_m3}]
+      if (!records || !Array.isArray(records)) return err('records array richiesto');
+      let updated = 0, not_found = 0, errors = 0;
+      const now = new Date().toISOString();
+      for (const rec of records) {
+        try {
+          const rawSerial = (rec.serial_no || '').trim();
+          if (!rawSerial) { not_found++; continue; }
+          const patch = { updated_at: now };
+          if (rec.maintenance_type) patch.ciclo_pm = rec.maintenance_type;
+          if (rec.standard_interval) {
+            const intv = parseInt(rec.standard_interval);
+            if (rec.weeks_months && (rec.weeks_months+'').toLowerCase().includes('month')) {
+              patch.intervallo_settimane = intv * 4; // approx
+            } else {
+              patch.intervallo_settimane = intv;
+            }
+          }
+          if (rec.schedule_type) patch.schedule_type = rec.schedule_type;
+          if (rec.next_pm_date) patch.prossimo_controllo = rec.next_pm_date;
+          if (rec.asset_type) patch.tipo_foglio = rec.asset_type;
+          if (!Object.keys(patch).length || Object.keys(patch).length === 1) { not_found++; continue; }
+          // Try serial in multiple formats
+          const stripped = normalizeSerial(rawSerial);
+          const padded = padSerial10(rawSerial);
+          let cnt = 0;
+          for (const sn of [rawSerial, padded, stripped]) {
+            if (!sn) continue;
+            const res = await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(sn)}&obsoleto=eq.false`, 'PATCH', patch);
+            cnt = Array.isArray(res) ? res.length : (res ? 1 : 0);
+            if (cnt) break;
+          }
+          if (cnt > 0) { updated++; } else { not_found++; }
+        } catch (e) { errors++; }
+      }
+      await wlog('anagrafica_assets', 'bulk', `pm_template_import updated:${updated} not_found:${not_found}`, body.operatoreId || body.userId);
+      return ok({ updated, not_found, errors, total: records.length });
+    }
+
+    // ═══ UPDATE SINGLE ASSET CICLO PM ═══
+    case 'updateAssetCiclo': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const { asset_id, ciclo_pm, intervallo_settimane } = body;
+      if (!asset_id) return err('asset_id richiesto');
+      const patch = { updated_at: new Date().toISOString() };
+      if (ciclo_pm !== undefined) patch.ciclo_pm = ciclo_pm || null;
+      if (intervallo_settimane !== undefined) patch.intervallo_settimane = intervallo_settimane ? parseInt(intervallo_settimane) : null;
+      await sb(env, `anagrafica_assets?id=eq.${encodeURIComponent(asset_id)}`, 'PATCH', patch);
+      return ok({ ok: true });
     }
 
     case 'savePMCycleState': {

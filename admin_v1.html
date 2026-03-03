@@ -8251,6 +8251,16 @@ async function loadPMOverview(){
   }
 }
 
+function pmWindowFilter(days,filter){
+  if(filter==='scaduti')return days!==null&&days<0;
+  if(filter==='30gg')return days!==null&&days>=0&&days<=30;
+  if(filter==='60gg')return days!==null&&days>30&&days<=60;
+  if(filter==='90gg')return days!==null&&days>60&&days<=90;
+  if(filter==='ok')return days!==null&&days>90;
+  if(filter==='nodate')return days===null;
+  return true; // 'tutti'
+}
+
 function renderPMTree(){
   if(!PM_OVERVIEW){loadPMOverview();return;}
   const search=($('pmSearch')?.value||'').toLowerCase();
@@ -8260,11 +8270,9 @@ function renderPMTree(){
   // Copia e filtra
   let clienti=(PM_OVERVIEW.clienti||[]).map(c=>{
     let assets=(c.assets||[]);
-    if(typeF)assets=assets.filter(a=>{const t=assetType(a);return t===typeF||(t==='MFR'&&typeF==='MFR')||(typeF==='MFR'&&(a.GruppoAttrezzatura||'').toUpperCase().includes('MFR'))});
-    if(search)assets=assets.filter(a=>{const h=((a.nome_asset||a.NomeAsset||'')+(a.numero_serie||a.NumeroSerie||'')+(a.modello||a.Modello||'')+(c.nome||'')).toLowerCase();return h.includes(search);});
-    if(PM_FILTER==='scaduti')assets=assets.filter(a=>getPMAssetStatus(a.prossimo_controllo).days!==null&&getPMAssetStatus(a.prossimo_controllo).days<0);
-    if(PM_FILTER==='30gg')assets=assets.filter(a=>{const s=getPMAssetStatus(a.prossimo_controllo);return s.days!==null&&s.days>=0&&s.days<=30;});
-    if(PM_FILTER==='ok')assets=assets.filter(a=>{const s=getPMAssetStatus(a.prossimo_controllo);return s.days!==null&&s.days>30;});
+    if(typeF)assets=assets.filter(a=>{const t=assetType(a);return t===typeF||(typeF==='MFR'&&(a.gruppo_attrezzatura||'').toUpperCase().includes('MFR'))});
+    if(search)assets=assets.filter(a=>{const h=((a.nome_asset||'')+(a.numero_serie||'')+(a.modello||'')+(c.nome||'')+(a.ciclo_pm||'')).toLowerCase();return h.includes(search);});
+    if(PM_FILTER&&PM_FILTER!=='tutti')assets=assets.filter(a=>pmWindowFilter(getPMAssetStatus(a.prossimo_controllo).days,PM_FILTER));
     return{...c,assets};
   });
   if(cliF)clienti=clienti.filter(c=>c.codice_m3===cliF);
@@ -8272,18 +8280,19 @@ function renderPMTree(){
 
   // Stats totali (su tutti gli assets non filtrati)
   const allAssets=(PM_OVERVIEW.clienti||[]).flatMap(c=>c.assets||[]);
-  const scadutiN=allAssets.filter(a=>getPMAssetStatus(a.prossimo_controllo).days!==null&&getPMAssetStatus(a.prossimo_controllo).days<0).length;
-  const prossimiN=allAssets.filter(a=>{const s=getPMAssetStatus(a.prossimo_controllo);return s.days!==null&&s.days>=0&&s.days<=30;}).length;
-  const okN=allAssets.filter(a=>{const s=getPMAssetStatus(a.prossimo_controllo);return s.days!==null&&s.days>30;}).length;
-  const noPMN=allAssets.filter(a=>!a.prossimo_controllo).length;
+  const cnt=f=>allAssets.filter(a=>pmWindowFilter(getPMAssetStatus(a.prossimo_controllo).days,f)).length;
+  const scadutiN=cnt('scaduti'),prox30N=cnt('30gg'),prox60N=cnt('60gg'),prox90N=cnt('90gg'),okN=cnt('ok'),nodateN=cnt('nodate');
 
+  const fBtn=(f,icon,label,n,style)=>`<button onclick="PM_FILTER='${f}';renderPMTree()" class="btn-filter" style="${PM_FILTER===f?style:''}${n===0?'opacity:.45':''}">${icon} ${label} <strong>${n}</strong></button>`;
   const bar=$('pmStatsBar');
   if(bar)bar.innerHTML=`
-    <button onclick="PM_FILTER='scaduti';renderPMTree()" class="btn-filter" style="${PM_FILTER==='scaduti'?'border-color:var(--err);background:var(--err-light);color:var(--err)':''}">🔴 Scaduti (${scadutiN})</button>
-    <button onclick="PM_FILTER='30gg';renderPMTree()" class="btn-filter" style="${PM_FILTER==='30gg'?'border-color:var(--warn);background:var(--warn-light);color:var(--warn2)':''}">⚠️ Entro 30gg (${prossimiN})</button>
-    <button onclick="PM_FILTER='ok';renderPMTree()" class="btn-filter" style="${PM_FILTER==='ok'?'border-color:var(--ok);background:var(--ok-light);color:#065F46':''}">✅ OK (${okN})</button>
-    <button onclick="PM_FILTER='tutti';renderPMTree()" class="btn-filter" style="${PM_FILTER==='tutti'?'border-color:var(--c1);background:rgba(0,201,167,.1);color:var(--c1)':''}">📋 Tutti (${allAssets.length})</button>
-    ${noPMN>0?`<span style="font-size:.75rem;color:var(--gray);margin-left:8px">⚪ ${noPMN} senza data PM</span>`:''}`;
+    ${fBtn('scaduti','🔴','Scaduti',scadutiN,'border-color:var(--err);background:var(--err-light);color:var(--err)')}
+    ${fBtn('30gg','🟠','&lt;30gg',prox30N,'border-color:#f97316;background:#fff7ed;color:#c2410c')}
+    ${fBtn('60gg','🟡','31–60gg',prox60N,'border-color:#eab308;background:#fefce8;color:#a16207')}
+    ${fBtn('90gg','🔵','61–90gg',prox90N,'border-color:#3b82f6;background:#eff6ff;color:#1d4ed8')}
+    ${fBtn('ok','✅','OK&gt;90',okN,'border-color:var(--ok);background:var(--ok-light);color:#065F46')}
+    ${fBtn('nodate','⚪','No data',nodateN,'border-color:var(--gray3);background:var(--gray5);color:var(--gray)')}
+    ${fBtn('tutti','📋','Tutti',allAssets.length,'border-color:var(--c1);background:rgba(0,201,167,.1);color:var(--c1)')}`;
 
   const tb=$('pmTreeBody');if(!tb)return;
   if(!clienti.length){tb.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--gray);padding:24px">Nessun asset trovato con i filtri selezionati</td></tr>`;return;}
@@ -8292,11 +8301,12 @@ function renderPMTree(){
     const assets=c.assets||[];
     const robots=assets.filter(a=>assetType(a)==='ROBOT').length;
     const mfr=assets.filter(a=>assetType(a)==='MFR').length;
-    const scad=assets.filter(a=>getPMAssetStatus(a.prossimo_controllo).days!==null&&getPMAssetStatus(a.prossimo_controllo).days<0).length;
-    const pross=assets.filter(a=>{const s=getPMAssetStatus(a.prossimo_controllo);return s.days!==null&&s.days>=0&&s.days<=30;}).length;
-    const ok=assets.filter(a=>{const s=getPMAssetStatus(a.prossimo_controllo);return s.days!==null&&s.days>30;}).length;
+    const pc=a=>getPMAssetStatus(a.prossimo_controllo).days;
+    const scad=assets.filter(a=>pc(a)!==null&&pc(a)<0).length;
+    const pross=assets.filter(a=>pc(a)!==null&&pc(a)>=0&&pc(a)<=60).length;
+    const ok=assets.filter(a=>pc(a)!==null&&pc(a)>60).length;
     const rowBg=scad>0?'background:var(--err-light)':pross>0?'background:var(--warn-light)':'';
-    return `<tr class="anag-row" id="pmRow_${c.codice_m3}" onclick="togglePMTree('${esc(c.codice_m3)}')" style="cursor:pointer;${rowBg}" title="Espandi lista assets PM">
+    return `<tr class="anag-row" id="pmRow_${c.codice_m3}" onclick="togglePMTree('${esc(c.codice_m3)}')" style="cursor:pointer;${rowBg}" title="Espandi assets">
       <td><span id="pmArrow_${c.codice_m3}" style="display:inline-block;transition:transform .2s">▶</span></td>
       <td><strong>${esc(c.nome)}</strong><br><small style="color:var(--muted)">${esc(c.codice_m3||'')} — ${assets.length} assets</small></td>
       <td style="text-align:center">${robots||'<span style="color:#ddd">—</span>'}</td>
@@ -8326,23 +8336,36 @@ function renderPMAssetTable(c){
   const rows=assets.map((a,i)=>{
     const st=getPMAssetStatus(a.prossimo_controllo);
     const tipo=a.gruppo_attrezzatura||a.tipo_foglio||'-';
-    const prossimoFmt=a.prossimo_controllo?new Date(a.prossimo_controllo+'T00:00:00').toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'numeric'}):'—';
-    const stBadge=st.days===null?'<span class="tag tag-gray">No data</span>':
-      st.days<0?`<span class="tag tag-err">🔴 ${Math.abs(st.days)}gg</span>`:
-      st.days<=30?`<span class="tag tag-warn">⚠️ ${st.days}gg</span>`:
+    const fmtD=d=>d?new Date(d+'T00:00:00').toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'numeric'}):'—';
+    const prossimoFmt=fmtD(a.prossimo_controllo);
+    const ultimoFmt=fmtD(a.ultimo_controllo);
+    const stBadge=st.days===null?'<span class="tag tag-gray">⚪ No data</span>':
+      st.days<-30?`<span class="tag tag-err">🔴 ${Math.abs(st.days)}gg sc.</span>`:
+      st.days<0?`<span class="tag tag-err" style="background:#fff1f0">🟠 ${Math.abs(st.days)}gg sc.</span>`:
+      st.days<=30?`<span class="tag tag-warn">🟠 ${st.days}gg</span>`:
+      st.days<=60?`<span class="tag tag-warn" style="background:#fefce8;color:#a16207">🟡 ${st.days}gg</span>`:
+      st.days<=90?`<span class="tag" style="background:#eff6ff;color:#1d4ed8">🔵 ${st.days}gg</span>`:
       `<span class="tag tag-ok">✅ ${st.days}gg</span>`;
+    // Ciclo PM badge + click per cambio
+    const ciclo=a.ciclo_pm||'';
+    const cc=getCicloColor(ciclo);
+    const cicloBadge=ciclo?`<span style="cursor:pointer;padding:2px 7px;border-radius:8px;font-size:.7rem;font-weight:700;background:${cc}22;color:${cc};border:1.5px solid ${cc}55" onclick="event.stopPropagation();openPMCicloEdit('${a.id}','${ciclo}')" title="Clicca per cambiare ciclo">${ciclo}</span>`:
+      `<span style="cursor:pointer;padding:2px 7px;border-radius:8px;font-size:.7rem;color:var(--gray);border:1px dashed var(--gray3)" onclick="event.stopPropagation();openPMCicloEdit('${a.id}','')" title="Assegna ciclo PM">+ ciclo</span>`;
+    const intv=a.intervallo_settimane?`<span style="font-size:.65rem;color:var(--gray);margin-left:2px">${a.intervallo_settimane}w</span>`:'';
     return `<tr>
-      <td style="color:var(--gray);text-align:center;width:30px">${i+1}</td>
-      <td style="font-size:.75rem">${prodIcon(assetType(a),14)} ${esc(tipo)}</td>
+      <td style="color:var(--gray);text-align:center;width:26px;font-size:.7rem">${i+1}</td>
+      <td style="font-size:.73rem">${prodIcon(assetType(a),13)} ${esc(tipo)}</td>
       <td>${esc(a.modello||a.nome_asset||'-')}</td>
-      <td style="font-family:monospace;font-size:.75rem">${esc(a.numero_serie||'—')}</td>
-      <td>${prossimoFmt}</td>
+      <td style="font-family:monospace;font-size:.72rem">${esc(a.numero_serie||'—')}</td>
+      <td style="font-size:.75rem">${prossimoFmt}</td>
+      <td style="font-size:.72rem;color:var(--gray)">${ultimoFmt}</td>
       <td>${stBadge}</td>
-      <td><button class="btn btn-xs" onclick="event.stopPropagation();openPMEdit('${a.id}','${esc(c.codice_m3)}')" title="Imposta data PM">✏️</button></td>
+      <td>${cicloBadge}${intv}</td>
+      <td><button class="btn btn-xs" onclick="event.stopPropagation();openPMEdit('${a.id}','${esc(c.codice_m3)}')" title="Imposta date PM">✏️</button></td>
     </tr>`;
   }).join('');
-  return `<div style="padding:8px 16px 12px"><table class="tbl" style="font-size:.8rem">
-    <thead><tr><th>#</th><th>Tipo</th><th>Modello</th><th>N. Serie</th><th>Prossimo PM</th><th>Stato</th><th></th></tr></thead>
+  return `<div style="padding:8px 16px 12px;overflow-x:auto"><table class="tbl" style="font-size:.79rem;min-width:800px">
+    <thead><tr><th>#</th><th>Tipo</th><th>Modello</th><th>N. Serie</th><th>Prossimo PM</th><th>Ultimo PM</th><th>Stato</th><th>Ciclo</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
 
@@ -8399,53 +8422,169 @@ async function downloadPMTemplate(){
   toast('Template scaricato','ok');
 }
 
+// ── PM Import: auto-detect formato file ──────────────────────────────────────
 async function importLSSAOverdue(input){
   const file=input.files?.[0];if(!file)return;
   try{
     if(typeof XLSX==='undefined'){
       await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
     }
-    toast('Parsing file...','info');
+    toast('Rilevamento formato...','info');
     const buf=await file.arrayBuffer();
-    const wb=XLSX.read(buf,{type:'array',cellDates:true});
-    const sheetName=wb.SheetNames.find(s=>!s.toLowerCase().includes('istruz'))||wb.SheetNames[0];
-    const rows=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{raw:false});
-    if(!rows.length){toast('File vuoto o formato non riconosciuto','err');return;}
+    // Prova prima come xlsx; se fallisce come testo TSV (LSSA export)
+    let wb;
+    try{wb=XLSX.read(buf,{type:'array',cellDates:true,raw:false});}
+    catch(e){
+      // Tenta come TSV con BOM
+      const txt=new TextDecoder('utf-8').decode(buf).replace(/^\uFEFF/,'');
+      wb=XLSX.read(txt,{type:'string',cellDates:true,raw:false});
+    }
+    // Trova sheet principale (skip istruzioni/legenda/cheat/movex)
+    const sheetName=wb.SheetNames.find(s=>!/istruz|legenda|help|cheat|movex/i.test(s))||wb.SheetNames[0];
+    const ws=wb.Sheets[sheetName];
+    if(!ws){toast('Sheet non trovato','err');return;}
 
-    const nk=s=>s.trim().toLowerCase().replace(/[\s_\-]/g,'');
-    const normalizeDate=v=>{
+    // ── Auto-detect formato ───────────────────────────────────────────────────
+    // Lely v5.x template: headers su riga 3 (index 2), contiene "Serial no"
+    // LSSA overdue: headers su riga 1, contiene "DeviceSerialNumber"
+    // Syntoniqa template: headers su riga 1, contiene "SerialNumber"/"NextPMDate"
+    const scanRows=(maxR,maxC)=>{
+      const found={};
+      const range=XLSX.utils.decode_range(ws['!ref']||'A1:A1');
+      for(let r=0;r<=Math.min(maxR,range.e.r);r++){
+        for(let c=0;c<=Math.min(maxC,range.e.c);c++){
+          const cv=(ws[XLSX.utils.encode_cell({r,c})]?.v||'')+'';
+          const cvl=cv.trim().toLowerCase();
+          if(cvl==='serial no')found.lelyTemplateRow=r;
+          if(cvl.includes('deviceserialnumber'))found.lssaRow=r;
+        }
+      }
+      return found;
+    };
+    const det=scanRows(5,70);
+
+    const nDate=v=>{
       if(!v)return null;
       if(v instanceof Date&&!isNaN(v))return v.toISOString().split('T')[0];
-      if(typeof v==='string'){
-        if(v.match(/^\d{4}-\d{2}-\d{2}/))return v.substring(0,10);
-        if(v.match(/^\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{4}/)){const[d,m,y]=v.split(/[\/\-.]/);return`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}
-      }
+      const s=(v+'').trim();
+      if(s.match(/^\d{4}-\d{2}-\d{2}/))return s.substring(0,10);
+      if(s.match(/^\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{4}/)){const[d,m,y]=s.split(/[\/\-.]/);return`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}
+      // numero Excel seriale
+      if(s.match(/^\d{4,6}$/)){const d=XLSX.SSF.parse_date_code(parseInt(s));if(d&&d.y>2000)return`${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;}
       return null;
     };
+    const nk=s=>(s+'').trim().toLowerCase().replace(/[\s_\-]/g,'');
+    // Normalizza numero serie: stripping zeri iniziali poi ripadda a 10
+    const normSerial=s=>{const n=(s+'').replace(/[^0-9]/g,'');return n?n.padStart(10,'0'):(s+'').trim();};
 
+    // ── LELY TEMPLATE v5.x ────────────────────────────────────────────────────
+    if(det.lelyTemplateRow!=null){
+      toast('📋 Formato Lely Template v5.x rilevato...','info');
+      const rows=XLSX.utils.sheet_to_json(ws,{raw:false,header:1,range:det.lelyTemplateRow,defval:''});
+      if(rows.length<2){toast('Template vuoto','err');return;}
+      const headers=rows[0].map(h=>(h+'').trim());
+      const dataRows=rows.slice(1).filter(r=>r.some(v=>v!=''));
+      const col=name=>headers.findIndex(h=>h.toLowerCase()===name.toLowerCase());
+      const iSerial=col('Serial no'),iType=col('Type'),iMaintType=col('Maintenance type');
+      const iInterval=col('Standard interval'),iWM=col('Weeks/Months'),iSched=col('Schedule Type');
+      const iNextPM=col('Next PM date'),iOwner=col('Owner');
+      if(iSerial<0){toast('Colonna "Serial no" non trovata — verifica il file','err');return;}
+      const records=dataRows.map(r=>{
+        const serial=normSerial((r[iSerial]||'')+'');
+        if(!serial||(r[iSerial]+'').trim()==='')return null;
+        const maintType=(r[iMaintType]||'').toString().trim();
+        const interval=parseInt(r[iInterval])||null;
+        const wm=(r[iWM]||'').toString().trim();
+        const nextPM=nDate(r[iNextPM]);
+        return{serial_no:serial,maintenance_type:maintType||undefined,standard_interval:interval||undefined,weeks_months:wm||undefined,schedule_type:(r[iSched]||'').trim()||undefined,next_pm_date:nextPM||undefined,asset_type:(r[iType]||'').trim()||undefined,owner_m3:(r[iOwner]||'').toString().trim()||undefined};
+      }).filter(r=>r&&r.serial_no);
+      if(!records.length){toast('Nessun asset trovato nel template','err');return;}
+      toast(`Importo ${records.length} asset da template Lely...`,'info');
+      const res=await apiCall('importPMTemplate',{records},'POST');
+      toast(`✅ ${res.updated} aggiornati | ${res.not_found} non trovati${res.errors?', '+res.errors+' err':''}`,res.not_found>res.updated?'warn':'ok');
+      PM_OVERVIEW=null;await loadPMOverview();
+      return;
+    }
+
+    // ── LSSA OVERDUE EXPORT ───────────────────────────────────────────────────
+    const rows=XLSX.utils.sheet_to_json(ws,{raw:false,defval:''});
+    if(!rows.length){toast('File vuoto o formato non riconosciuto','err');return;}
+    const firstKeys=Object.keys(rows[0]).map(k=>(k+'').toLowerCase());
+    const isLSSA=firstKeys.some(k=>k.includes('deviceserialnumber')||k.includes('dayssince')||k.includes('daysuntil'));
+    const isSyntoniqaTemplate=firstKeys.some(k=>k.includes('serialnumber')||k.includes('nextpmdate'));
+
+    if(isLSSA){
+      toast('📥 Formato LSSA Overdue Export rilevato...','info');
+      // LSSA format: DeviceSerialNumber, DaysSinceLastPM, DaysUntilNextPM, NextPMType, CustomerName
+      const records=rows.map(r=>{
+        const n={};for(const[k,v]of Object.entries(r)){n[nk(k)]=v;}
+        const rawSN=(n['deviceserialnumber']||n['serialnumber']||n['sn']||'')+'';
+        const serial=normSerial(rawSN);
+        if(!serial||!rawSN.trim())return null;
+        // Calcola prossimo_controllo da DaysUntilNextPM
+        const daysUntil=parseInt(n['daysuntilnextpm']||n['daysuntil']||'');
+        let nextPM=nDate(n['nextpmdate']||n['nextservice']||'');
+        if(!nextPM&&!isNaN(daysUntil)){const d=new Date();d.setDate(d.getDate()+daysUntil);nextPM=d.toISOString().split('T')[0];}
+        const daysSince=parseInt(n['dayssincelastpm']||n['dayssince']||'');
+        let lastPM=null;
+        if(!isNaN(daysSince)&&daysSince>0){const d=new Date();d.setDate(d.getDate()-daysSince);lastPM=d.toISOString().split('T')[0];}
+        const ciclo=(n['nextpmtype']||n['maintenancetype']||'').toString().toUpperCase().trim();
+        return{numero_serie:serial,prossimo_controllo:nextPM||undefined,ultimo_controllo:lastPM||undefined,ciclo_pm:ciclo&&['A','B','C','D'].includes(ciclo)?ciclo:undefined};
+      }).filter(r=>r&&r.numero_serie&&(r.prossimo_controllo||r.ultimo_controllo));
+      if(!records.length){toast('Nessun record LSSA valido','err');return;}
+      toast(`Importo ${records.length} record LSSA...`,'info');
+      const res=await apiCall('importPMOverdue',{records},'POST');
+      toast(`✅ ${res.updated} aggiornati | ${res.not_found} non trovati`,res.not_found>res.updated?'warn':'ok');
+      PM_OVERVIEW=null;await loadPMOverview();
+      return;
+    }
+
+    // ── SYNTONIQA TEMPLATE (formato nostro) ───────────────────────────────────
     const records=rows.map(r=>{
       const n={};for(const[k,v]of Object.entries(r)){n[nk(k)]=v;}
-      const serial=(n['serialnumber']||n['serial']||n['numeroserie']||n['sn']||n['serialno']||'').trim();
-      const nextPM=normalizeDate(n['nextpmdate']||n['nextpm']||n['dataprossimopm']||n['prossimo']||n['nextservice']||n['nextpmdue']||'');
-      const lastPM=normalizeDate(n['lastpmdate']||n['lastpm']||n['dataultimopm']||n['ultimo']||n['lastservice']||'');
-      if(!serial||!nextPM)return null;
-      return{numero_serie:serial,prossimo_controllo:nextPM,ultimo_controllo:lastPM||undefined,note:n['notes']||n['note']||undefined};
-    }).filter(Boolean);
-
-    if(!records.length){toast('Nessun record valido (SerialNumber + NextPMDate obbligatori)','err');return;}
+      const serial=normSerial((n['serialnumber']||n['serial']||n['numeroserie']||n['sn']||n['serialno']||'').toString());
+      const nextPM=nDate(n['nextpmdate']||n['nextpm']||n['dataprossimopm']||n['prossimo']||'');
+      const lastPM=nDate(n['lastpmdate']||n['lastpm']||n['dataultimopm']||n['ultimo']||'');
+      if(!serial)return null;
+      const ciclo=(n['pmtype']||n['ciclo']||n['maintenancetype']||'').toString().toUpperCase().trim();
+      return{numero_serie:serial,prossimo_controllo:nextPM||undefined,ultimo_controllo:lastPM||undefined,ciclo_pm:ciclo&&['A','B','C','D'].includes(ciclo)?ciclo:undefined};
+    }).filter(r=>r&&r.numero_serie);
+    if(!records.length){toast('Nessun record valido trovato','err');return;}
     toast(`Importo ${records.length} record...`,'info');
     const res=await apiCall('importPMOverdue',{records},'POST');
-    toast(`✅ ${res.updated} aggiornati | ${res.not_found} non trovati${res.errors?', '+res.errors+' errori':''}`,res.not_found>0?'warn':'ok');
+    toast(`✅ ${res.updated} aggiornati | ${res.not_found} non trovati${res.errors?', '+res.errors+' err':''}`,res.not_found>res.updated?'warn':'ok');
     PM_OVERVIEW=null;await loadPMOverview();
   }catch(e){toast('Errore import: '+e.message,'err');}
   input.value='';
 }
 
 function openPMEdit(assetId,codiceM3){
-  const newDate=prompt('Data prossimo PM (YYYY-MM-DD):');
-  if(!newDate||!newDate.match(/^\d{4}-\d{2}-\d{2}$/)){if(newDate)toast('Formato non valido — usa YYYY-MM-DD','warn');return;}
-  apiCall('importPMOverdue',{records:[{asset_id:assetId,prossimo_controllo:newDate}]},'POST')
-    .then(r=>{toast('Data PM aggiornata','ok');PM_OVERVIEW=null;loadPMOverview();})
+  // Mostra mini-form inline tramite prompt (semplice ma efficace)
+  const nextDate=prompt('Prossimo PM (YYYY-MM-DD):\n(lascia vuoto per non cambiare)');
+  if(nextDate===null)return; // cancel
+  const lastDate=prompt('Ultimo PM (YYYY-MM-DD):\n(lascia vuoto per non cambiare)');
+  if(lastDate===null)return;
+  const rec={asset_id:assetId};
+  if(nextDate&&nextDate.match(/^\d{4}-\d{2}-\d{2}$/))rec.prossimo_controllo=nextDate;
+  else if(nextDate){toast('Formato data non valido — usa YYYY-MM-DD','warn');return;}
+  if(lastDate&&lastDate.match(/^\d{4}-\d{2}-\d{2}$/))rec.ultimo_controllo=lastDate;
+  else if(lastDate){toast('Formato data ultimo PM non valido','warn');return;}
+  if(!rec.prossimo_controllo&&!rec.ultimo_controllo){toast('Nessuna modifica','info');return;}
+  apiCall('importPMOverdue',{records:[rec]},'POST')
+    .then(()=>{toast('Date PM aggiornate','ok');PM_OVERVIEW=null;loadPMOverview();})
+    .catch(e=>toast(e.message,'err'));
+}
+
+function openPMCicloEdit(assetId,currentCiclo){
+  const CICLI=['A','B','C','D',''];
+  const opts=CICLI.map(c=>c?`${c} (${c==='A'?'Base':c==='B'?'Medio':c==='C'?'Grande':'Completo'})`:'Rimuovi ciclo').join('\n');
+  const choice=prompt(`Ciclo PM per questo asset:\n\nA = Base (~15 settimane)\nB = Medio (~30 settimane)\nC = Grande (~45 settimane)\nD = Completo (~60 settimane)\n\nCiclo attuale: ${currentCiclo||'—'}\n\nInserisci A, B, C, D o lascia vuoto per rimuovere:`,'');
+  if(choice===null)return;
+  const ciclo=choice.trim().toUpperCase();
+  if(ciclo&&!['A','B','C','D'].includes(ciclo)){toast('Ciclo non valido — usa A, B, C o D','warn');return;}
+  const intervMap={A:15,B:30,C:45,D:60};
+  apiCall('updateAssetCiclo',{asset_id:assetId,ciclo_pm:ciclo||null,intervallo_settimane:ciclo?intervMap[ciclo]:null},'POST')
+    .then(()=>{toast(`Ciclo PM ${ciclo||'rimosso'}`,'ok');PM_OVERVIEW=null;loadPMOverview();})
     .catch(e=>toast(e.message,'err'));
 }
 
