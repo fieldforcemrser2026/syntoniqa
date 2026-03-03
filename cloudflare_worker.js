@@ -1430,6 +1430,19 @@ async function handlePost(action, body, env) {
       return ok({ deleted: true });
     }
 
+    case 'deleteUtente': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const id = body.id || body.ID;
+      if (!id) return err('ID utente mancante');
+      // Rimuovi assegnazione automezzo
+      await sb(env, `automezzi?assegnatario_id=eq.${id}`, 'PATCH', { assegnatario_id: null, updated_at: new Date().toISOString() }).catch(() => {});
+      // Soft delete
+      await sb(env, `utenti?id=eq.${id}`, 'PATCH', { obsoleto: true, attivo: false, updated_at: new Date().toISOString() });
+      await wlog('utenti', id, 'deleted', body.operatoreId || body.userId);
+      return ok({ deleted: true });
+    }
+
     // -------- INSTALLAZIONI --------
 
     case 'createInstallazione': {

@@ -283,7 +283,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 
 /* ===== KPI CARDS ===== */
 .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:20px}
-.kpi{background:var(--white);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);border-left:4px solid var(--gray3)}
+.kpi{background:var(--white);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);border-left:4px solid var(--gray3);min-width:130px;flex-shrink:0}
 .kpi.red{border-left-color:var(--err)}
 .kpi.green{border-left-color:var(--ok)}
 .kpi.blue{border-left-color:var(--info)}
@@ -639,15 +639,16 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
   <div style="font-size:.75rem;color:var(--gray)">Ultimo aggiornamento: <span id="dashLastUpdate">—</span></div>
   <button class="btn btn-outline btn-sm" onclick="refreshData();toast('Aggiornamento...','info')" style="font-size:.75rem">🔄 Aggiorna</button>
 </div>
-<div class="kpi-grid" id="kpiDash"></div>
+<div id="kpiDash" style="display:flex;flex-wrap:nowrap;overflow-x:auto;gap:10px;margin-bottom:16px;padding-bottom:4px"></div>
+<!-- Tecnici attivi oggi -->
+<div class="card mb"><div class="card-head"><h3>👥 Stato Tecnici</h3></div><div class="card-body" id="tecniciDash" style="display:flex;flex-wrap:wrap;gap:8px;padding:8px"></div></div>
 <div class="grid-2 mb">
 <div class="card"><div class="card-head"><h3>📋 Interventi Oggi</h3><button class="btn btn-primary btn-sm" onclick="openModal('modalPiano')">+ Nuovo</button></div><div class="card-body np" style="max-height:360px;overflow-y:auto"><table class="tbl"><thead><tr><th>Ora</th><th>Tecnico</th><th>🚐</th><th>Cliente</th><th>Tipo</th><th>Stato</th><th></th></tr></thead><tbody id="tblOggi"></tbody></table></div></div>
 <div class="card"><div class="card-head"><h3>🚨 Urgenze Aperte</h3><button class="btn btn-err btn-sm" onclick="openModal('modalUrgenza')">+ Nuova Urgenza</button></div><div class="card-body np" style="max-height:360px;overflow-y:auto"><table class="tbl"><thead><tr><th>Priorità</th><th>Cliente</th><th>Problema</th><th>SLA</th><th>Stato</th><th></th></tr></thead><tbody id="tblUrgDash"></tbody></table></div></div>
 </div>
 <!-- Alert critici -->
 <div id="dashAlerts" class="mb" style="display:none"></div>
-<!-- Tecnici attivi oggi -->
-<div class="card mb"><div class="card-head"><h3>👥 Attività Tecnici</h3></div><div class="card-body" id="tecniciDash" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px"></div></div>
+
 <!-- Andamento settimanale (sparkline SVG) + Timeline giornata -->
 <div class="grid-2 mb">
 <div class="card"><div class="card-head"><h3>📈 Andamento 7 Giorni</h3></div><div class="card-body" id="sparkDash" style="height:180px"></div></div>
@@ -880,7 +881,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <div class="card-head"><h3>👥 Tecnici & Staff</h3>
 <button class="btn btn-primary btn-sm" onclick="openNewUtente()">+ Nuovo Utente</button>
 </div>
-<div class="card-body np">
+<div class="card-body np" style="max-height:500px;overflow-y:auto">
 <table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('tecnici','tblTecnici',this.checked)"></th><th>Foto</th><th>Nome</th><th>Ruolo</th><th>Squadra</th><th>Automezzo</th><th>Base</th><th>Telefono</th><th>Email</th><th>Attivo</th><th></th></tr></thead><tbody id="tblTecnici"></tbody></table>
 </div>
 </div>
@@ -3181,6 +3182,9 @@ async function batchAction(tableKey, actionName) {
     case 'deleteChecklist':
       await batchDeleteChecklist(ids, tableKey);
       break;
+    case 'deleteTecnici':
+      await batchDeleteTecnici(ids, tableKey);
+      break;
   }
 }
 
@@ -3411,6 +3415,29 @@ async function batchDeleteChecklist(ids, tableKey) {
   toast(`${ok} eliminati${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
   clearBatchSelection(tableKey);
   await refreshData(true);
+}
+
+async function batchDeleteTecnici(ids, tableKey) {
+  if (!confirm(`Eliminare ${ids.length} tecnico/i selezionati? Questa azione è irreversibile.`)) return;
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      await apiCall('deleteUtente', {id}, 'POST');
+      ok++;
+    } catch(e) { fail++; }
+  }
+  toast(`${ok} eliminati${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
+  clearBatchSelection(tableKey);
+  await refreshData(true);
+}
+
+async function deleteTecnico(id) {
+  if (!confirm('Eliminare questo tecnico?')) return;
+  try {
+    await apiCall('deleteUtente', {id}, 'POST');
+    toast('Tecnico eliminato', 'ok');
+    await refreshData(true);
+  } catch(e) { toast(e.message, 'err'); }
 }
 
 // ============ PIANO (INTERVENTI) ============
@@ -4094,9 +4121,11 @@ function renderMacchine(){
     const groups={};
     items.forEach(a=>{const k=assetType(a);if(!groups[k])groups[k]=[];groups[k].push(a)});
     let html='';
-    // Sort: ALTRI always last, rest by count desc
+    // Sort: gruppi con url info prodotto prima (per priorità commerciale), ALTRI sempre in fondo
     const sortedGroups=Object.entries(groups).sort((a,b)=>{
       if(a[0]==='ALTRI')return 1;if(b[0]==='ALTRI')return -1;
+      const aUrl=!!(PROD_CFG[a[0]]?.url), bUrl=!!(PROD_CFG[b[0]]?.url);
+      if(aUrl&&!bUrl)return -1;if(!aUrl&&bUrl)return 1;
       return b[1].length-a[1].length;
     });
     sortedGroups.forEach(([tipo,assets])=>{
@@ -4266,7 +4295,11 @@ function closeMacchMap(){
 
 // ============ AUTOMEZZI ============
 function renderAutomezzi(){
-  const items=(DATA.automezzi||[]).filter(f=>!f.Obsoleto);
+  const items=(DATA.automezzi||[]).filter(f=>!f.Obsoleto).sort((a,b)=>{
+    const numA=parseInt((a.ID||'').replace(/\D/g,''),10)||9999;
+    const numB=parseInt((b.ID||'').replace(/\D/g,''),10)||9999;
+    return numA-numB;
+  });
   $('furgGrid').innerHTML=items.length?'<div class="grid-auto">'+items.map(f=>{
     const d=today();const ctrl=f.ProssimoControllo&&f.ProssimoControllo<=d;
     return `<div class="card" style="border-left:4px solid ${f.Status==='attivo'?'var(--ok)':'var(--warn)'}">
@@ -4289,7 +4322,7 @@ function renderAutomezzi(){
 // ============ TECNICI ============
 function renderTecnici(){
   const items=(DATA.utenti||[]).filter(u=>!u.Obsoleto);
-  initBatchBar('tecnici','tblTecnici',[]);
+  initBatchBar('tecnici','tblTecnici',[{label:'Elimina',action:'deleteTecnici',cls:'err',icon:'🗑️'}]);
   $('tblTecnici').innerHTML=items.map(t=>{
     const sq=(DATA.squadre||[]).find(s=>s.ID===t.SquadraID);
     const ini=(t.Nome||'')[0]+''+(t.Cognome||'')[0];
@@ -4307,7 +4340,7 @@ function renderTecnici(){
     <td>${t.Telefono?`<a href="tel:${t.Telefono}">${t.Telefono}</a>`:'—'}</td>
     <td>${t.Email||'—'}</td>
     <td><button onclick="toggleTecnicoAttivo('${t.ID}',${!t.Attivo})" class="${t.Attivo&&t.Attivo!=='false'?'badge-ok':'badge-off'}">${t.Attivo&&t.Attivo!=='false'?'✅ Attivo':'⬜ Inattivo'}</button></td>
-    <td><button class="btn btn-ghost btn-xs" onclick="editUtente('${t.ID}')">✏️</button><label class="btn btn-outline btn-xs" style="cursor:pointer;margin-left:2px">📷<input type="file" accept="image/*" style="display:none" onchange="uploadFotoTec('${t.ID}',this)"></label></td>
+    <td><button class="btn btn-ghost btn-xs" onclick="editUtente('${t.ID}')">✏️</button><label class="btn btn-outline btn-xs" style="cursor:pointer;margin-left:2px">📷<input type="file" accept="image/*" style="display:none" onchange="uploadFotoTec('${t.ID}',this)"></label><button class="btn btn-ghost btn-xs" onclick="deleteTecnico('${t.ID}')" style="color:var(--err);margin-left:2px">🗑️</button></td>
   </tr>`}).join('');
 }
 async function uploadFotoTec(tecId,input){
