@@ -312,7 +312,7 @@ function checkToken(request, env, bodyToken) {
 }
 
 // ============ SERIAL / M3 NORMALIZATION ============
-// LSSA export usa numeri senza zeri (3293257), Lely template usa zero-padded (0003082168)
+// Il provider export usa numeri senza zeri (es. 3293257), il template vendor usa zero-padded (0003082168)
 // Normalizzazione: stripping degli zeri iniziali → confronto numerico
 function normalizeSerial(s) {
   if (!s) return '';
@@ -6283,7 +6283,7 @@ Rispondi SOLO con JSON valido:
       return ok({ clienti: clientiList, total_assets: assets.length, total_clienti: clientiList.length });
     }
 
-    // ═══ IMPORT PM OVERDUE: aggiorna prossimo_controllo da file LSSA ═══
+    // ═══ IMPORT PM OVERDUE: aggiorna prossimo_controllo da export provider PM ═══
     case 'importPMOverdue': {
       const adminErr = await requireAdmin(env, body);
       if (adminErr) return err(adminErr, 403);
@@ -6334,7 +6334,7 @@ Rispondi SOLO con JSON valido:
       return ok({ updated, not_found, errors, total: records.length });
     }
 
-    // ═══ IMPORT PM TEMPLATE v5.x (Lely standard LC Data Template) ═══
+    // ═══ IMPORT PM TEMPLATE v5.x (template standard LC Data con headers in riga 3) ═══
     case 'importPMTemplate': {
       const adminErr = await requireAdmin(env, body);
       if (adminErr) return err(adminErr, 403);

@@ -1318,8 +1318,8 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <div class="card-head" style="flex-wrap:wrap;gap:8px">
 <h3>🔧 PM Scheduling</h3>
 <div class="btn-group" style="flex-wrap:wrap">
-<button class="btn btn-sm" style="background:#c8102e;color:#fff;border-color:#c8102e" onclick="showLSSASyncModal()" title="Sincronizza automaticamente da LSSA (bookmarklet)">🔄 Sync LSSA</button>
-<label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0" title="Importa file: Lely Template v5.x, LSSA export, o template Syntoniqa">⬆ Import file <input type="file" id="pmLssaFile" style="display:none" accept=".xlsx,.csv,.xls,.xlsm" onchange="importLSSAOverdue(this)"></label>
+<button class="btn btn-sm" id="pmSyncBtn" onclick="showPMSyncModal()" title="Sincronizza automaticamente dal provider PM (bookmarklet)">🔄 Sync</button>
+<label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0" title="Importa file PM: template ufficiale, export provider, o template Syntoniqa">⬆ Import file <input type="file" id="pmLssaFile" style="display:none" accept=".xlsx,.csv,.xls,.xlsm" onchange="importPMFile(this)"></label>
 <button class="btn btn-ghost btn-sm" onclick="exportPMPiano()" title="Esporta elenco PM in CSV">📥 Export</button>
 <button class="btn btn-sm btn-ai" onclick="bulkGeneratePM()">⚡ Piano 3M</button>
 <button class="btn btn-sm btn-outline" onclick="togglePMSettings()">⚙️ Cicli</button>
@@ -2171,7 +2171,7 @@ Workers AI è incluso in Cloudflare e non richiede chiavi aggiuntive.
 <div class="field"><label>Pubblico</label><select id="mdPubblico"><option value="true">Sì — tutti</option><option value="false">No — solo admin</option></select></div>
 </div>
 <div class="field"><label>Descrizione</label><textarea id="mdDescrizione" rows="2"></textarea></div>
-<div class="field"><label>Tags (virgola separati)</label><input type="text" id="mdTags" placeholder="manutenzione, lely, robot"></div>
+<div class="field"><label>Tags (virgola separati)</label><input type="text" id="mdTags" placeholder="manutenzione, robot, service"></div>
 </div>
 <div class="modal-foot">
 <button class="btn btn-outline" onclick="closeModal('modalDocumento')">Annulla</button>
@@ -2270,38 +2270,38 @@ Workers AI è incluso in Cloudflare e non richiede chiavi aggiuntive.
 </div>
 
 <!-- MODAL: Nuovo Cliente -->
-<!-- ═══ MODAL LSSA SYNC ═══ -->
-<div class="modal-overlay" id="modalLSSASync">
+<!-- ═══ MODAL PM SYNC ═══ -->
+<div class="modal-overlay" id="modalPMSync">
 <div class="modal" style="max-width:560px">
-<div class="modal-head"><h2>🔄 Sync automatico da LSSA</h2><button class="close" onclick="closeModal('modalLSSASync')">✕</button></div>
+<div class="modal-head"><h2 id="pmSyncModalTitle">🔄 Sync automatico dati PM</h2><button class="close" onclick="closeModal('modalPMSync')">✕</button></div>
 <div class="modal-body">
   <div style="background:#fff8f0;border:1.5px solid #f97316;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:.82rem">
-    <strong>Come funziona:</strong> Salva il link qui sotto nei preferiti del browser. Quando sei loggato su LSSA, clicca quel link: estrae i dati PM in automatico e li importa direttamente in Syntoniqa — nessun download, nessun upload.
+    <strong>Come funziona:</strong> Salva il link qui sotto nei preferiti del browser. Quando sei loggato nel portale PM, clicca quel link: estrae i dati PM in automatico e li importa direttamente in Syntoniqa — nessun download, nessun upload.
   </div>
   <div style="margin-bottom:16px">
     <label style="font-weight:600;font-size:.82rem;display:block;margin-bottom:6px">1. Trascina questo link nella barra preferiti del browser:</label>
     <div style="display:flex;align-items:center;gap:10px">
-      <a id="lssaBookmarkletLink" href="#" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:#c8102e;color:#fff;border-radius:6px;font-weight:700;font-size:.85rem;text-decoration:none;cursor:grab" draggable="true" onclick="return false">🔄 Sync LSSA → Syntoniqa</a>
+      <a id="pmSyncBookmarkletLink" href="#" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;color:#fff;border-radius:6px;font-weight:700;font-size:.85rem;text-decoration:none;cursor:grab" draggable="true" onclick="return false">🔄 Sync PM → Syntoniqa</a>
       <span style="font-size:.75rem;color:var(--gray)">← trascina qui</span>
     </div>
   </div>
   <div style="margin-bottom:16px">
-    <label style="font-weight:600;font-size:.82rem;display:block;margin-bottom:6px">2. Vai su <a href="https://lssa2.lelyonline.com/performance/preventive-maintenance-overdue" target="_blank" style="color:var(--c1)">LSSA → Performance → PM Overdue</a> (loggati se necessario)</label>
+    <label style="font-weight:600;font-size:.82rem;display:block;margin-bottom:6px">2. Vai sul portale PM <a id="pmSyncProviderLink" href="#" target="_blank" style="color:var(--c1)" id="pmProviderLink">apri portale →</a> (loggati se necessario)</label>
   </div>
   <div style="margin-bottom:16px">
-    <label style="font-weight:600;font-size:.82rem;display:block;margin-bottom:6px">3. Clicca il preferito "🔄 Sync LSSA → Syntoniqa" dalla barra</label>
+    <label style="font-weight:600;font-size:.82rem;display:block;margin-bottom:6px">3. Clicca il preferito "🔄 Sync PM → Syntoniqa" dalla barra preferiti</label>
   </div>
   <hr style="margin:12px 0;border-color:var(--gray4)">
   <div style="font-size:.78rem;color:var(--gray)">
-    Il bookmarklet usa il JWT di LSSA già attivo nel browser — nessuna password aggiuntiva. Il token Syntoniqa è incluso nel link e cambia automaticamente se aggiorni questa pagina. Tenant: <strong id="bmTenantLabel"></strong>
+    Il bookmarklet usa il token di sessione già attivo nel browser — nessuna password aggiuntiva. Il token Syntoniqa è incluso nel link. Tenant: <strong id="pmSyncTenantLabel"></strong>
   </div>
   <div style="margin-top:12px">
     <label style="font-size:.78rem;font-weight:600;display:block;margin-bottom:4px">Codice bookmarklet (copia in alternativa):</label>
-    <textarea id="lssaBookmarkletCode" readonly style="width:100%;height:80px;font-family:monospace;font-size:.65rem;border:1px solid var(--gray3);border-radius:4px;padding:6px;resize:vertical;background:var(--gray5)"></textarea>
+    <textarea id="pmSyncBookmarkletCode" readonly style="width:100%;height:80px;font-family:monospace;font-size:.65rem;border:1px solid var(--gray3);border-radius:4px;padding:6px;resize:vertical;background:var(--gray5)"></textarea>
   </div>
 </div>
 <div class="modal-foot">
-  <button class="btn btn-ghost" onclick="closeModal('modalLSSASync')">Chiudi</button>
+  <button class="btn btn-ghost" onclick="closeModal('modalPMSync')">Chiudi</button>
 </div>
 </div>
 </div>
@@ -8431,14 +8431,17 @@ async function downloadPMTemplate(){
   if(typeof XLSX==='undefined'){
     await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
   }
+  const cfg=window.SYNTONIQA_CONFIG?.pmSync||{};
+  const providerName=cfg.providerName||'PM Provider';
+  const providerPageUrl=cfg.providerPageUrl||'';
   const wb=XLSX.utils.book_new();
   const headers=['SerialNumber','AssetType','CustomerName','NextPMDate','LastPMDate','DaysOverdue','Notes'];
-  const sample=['SN12345','ROBOT','Az. Ag. Esempio','2026-03-15','2025-03-15','','' ];
+  const sample=['SN12345','ROBOT','Az. Ag. Esempio','2026-03-15','2025-03-15','',''];
   const ws=XLSX.utils.aoa_to_sheet([headers,sample]);
   ws['!cols']=headers.map(()=>({wch:22}));
-  XLSX.utils.book_append_sheet(wb,ws,'LSSA_Overdue');
-  const inst=[
-    ['Istruzioni Importazione PM da LSSA'],[''],
+  XLSX.utils.book_append_sheet(wb,ws,'PM_Data');
+  const instRows=[
+    ['Istruzioni Importazione PM'],[''],
     ['Colonne OBBLIGATORIE:'],
     ['SerialNumber','Numero di serie del robot (es: SN12345)'],
     ['NextPMDate','Data prossimo PM — formato YYYY-MM-DD (es: 2026-03-15)'],[''],
@@ -8449,25 +8452,54 @@ async function downloadPMTemplate(){
     ['DaysOverdue','Giorni di ritardo (numero intero)'],
     ['Notes','Note libere'],[''],
     ['Fonte dati:'],
-    ['Esporta da LSSA2: https://lssa2.lelyonline.com/performance/preventive-maintenance-overdue'],
-    ['Copia la tabella in questo file e importa nella sezione PM Scheduling di Syntoniqa'],
   ];
-  const wsI=XLSX.utils.aoa_to_sheet(inst);wsI['!cols']=[{wch:25},{wch:65}];
+  if(providerPageUrl)instRows.push(['Esporta da '+providerName+': '+providerPageUrl],['Copia la tabella in questo file e importa nella sezione PM Scheduling di Syntoniqa']);
+  else instRows.push(['Importa da portale PM del provider nella sezione PM Scheduling di Syntoniqa']);
+  const wsI=XLSX.utils.aoa_to_sheet(instRows);wsI['!cols']=[{wch:25},{wch:65}];
   XLSX.utils.book_append_sheet(wb,wsI,'Istruzioni');
-  XLSX.writeFile(wb,'template_pm_lssa.xlsx');
+  XLSX.writeFile(wb,'template_pm.xlsx');
   toast('Template scaricato','ok');
 }
 
-// ── PM Import: auto-detect formato file ──────────────────────────────────────
-async function importLSSAOverdue(input){
+// ── PM Import: auto-detect formato file — white-label, parametri da config ───
+async function importPMFile(input){
+  return _importPMFileCore(input);
+}
+// alias backward-compat (da non usare in nuovo codice)
+async function importPMOverdue(input){ return importPMFile(input); }
+async function _importPMFileCore(input){
   const file=input.files?.[0];if(!file)return;
   try{
     if(typeof XLSX==='undefined'){
       await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
     }
+    // ── Lettura config white-label PM Sync ────────────────────────────────────
+    const cfg=window.SYNTONIQA_CONFIG?.pmSync||{};
+    const providerName=cfg.providerName||'PM Provider';
+    const fd=cfg.fileDetection||{};
+    const flds=cfg.fields||{};
+    // chiavi di rilevamento (confronto lowercase)
+    const tmplKey=(fd.templateHeaderKey||'Serial no').trim().toLowerCase();
+    const exportKey=(fd.exportColumnKey||'DeviceSerialNumber').trim().toLowerCase();
+    // colonne template vendor
+    const tc=fd.templateCols||{};
+    const colSerialNo  =tc.serialNo         ||'Serial no';
+    const colMaintType =tc.maintenanceType  ||'Maintenance type';
+    const colInterval  =tc.standardInterval ||'Standard interval';
+    const colWM        =tc.weeksMonths      ||'Weeks/Months';
+    const colSched     =tc.scheduleType     ||'Schedule Type';
+    const colNextPM    =tc.nextPMDate       ||'Next PM date';
+    const colDevType   =tc.deviceType       ||'Type';
+    const colOwner     =tc.ownerCode        ||'Owner';
+    // campi export provider
+    const fSN       =flds.serialNumber    ||'DeviceSerialNumber';
+    const fDaysUntil=flds.daysUntilNextPM ||'DaysUntilNextPM';
+    const fDaysSince=flds.daysSinceLastPM ||'DaysSinceLastPM';
+    const fNextType =flds.nextPMType      ||'NextPMType';
+
     toast('Rilevamento formato...','info');
     const buf=await file.arrayBuffer();
-    // Prova prima come xlsx; se fallisce come testo TSV (LSSA export)
+    // Prova prima come xlsx; se fallisce come testo TSV (export provider)
     let wb;
     try{wb=XLSX.read(buf,{type:'array',cellDates:true,raw:false});}
     catch(e){
@@ -8481,9 +8513,9 @@ async function importLSSAOverdue(input){
     if(!ws){toast('Sheet non trovato','err');return;}
 
     // ── Auto-detect formato ───────────────────────────────────────────────────
-    // Lely v5.x template: headers su riga 3 (index 2), contiene "Serial no"
-    // LSSA overdue: headers su riga 1, contiene "DeviceSerialNumber"
-    // Syntoniqa template: headers su riga 1, contiene "SerialNumber"/"NextPMDate"
+    // Template vendor: headers in riga profonda, contiene tmplKey (es. "Serial no")
+    // Export provider: headers in riga 1, contiene exportKey (es. "deviceserialnumber")
+    // Syntoniqa template: headers in riga 1, contiene "serialnumber"/"nextpmdate"
     const scanRows=(maxR,maxC)=>{
       const found={};
       const range=XLSX.utils.decode_range(ws['!ref']||'A1:A1');
@@ -8491,8 +8523,8 @@ async function importLSSAOverdue(input){
         for(let c=0;c<=Math.min(maxC,range.e.c);c++){
           const cv=(ws[XLSX.utils.encode_cell({r,c})]?.v||'')+'';
           const cvl=cv.trim().toLowerCase();
-          if(cvl==='serial no')found.lelyTemplateRow=r;
-          if(cvl.includes('deviceserialnumber'))found.lssaRow=r;
+          if(cvl===tmplKey)found.tmplHeaderRow=r;
+          if(cvl.includes(exportKey))found.providerExportRow=r;
         }
       }
       return found;
@@ -8513,18 +8545,18 @@ async function importLSSAOverdue(input){
     // Normalizza numero serie: stripping zeri iniziali poi ripadda a 10
     const normSerial=s=>{const n=(s+'').replace(/[^0-9]/g,'');return n?n.padStart(10,'0'):(s+'').trim();};
 
-    // ── LELY TEMPLATE v5.x ────────────────────────────────────────────────────
-    if(det.lelyTemplateRow!=null){
-      toast('📋 Formato Lely Template v5.x rilevato...','info');
-      const rows=XLSX.utils.sheet_to_json(ws,{raw:false,header:1,range:det.lelyTemplateRow,defval:''});
+    // ── VENDOR TEMPLATE (headers in riga profonda) ────────────────────────────
+    if(det.tmplHeaderRow!=null){
+      toast('📋 Formato template '+providerName+' rilevato...','info');
+      const rows=XLSX.utils.sheet_to_json(ws,{raw:false,header:1,range:det.tmplHeaderRow,defval:''});
       if(rows.length<2){toast('Template vuoto','err');return;}
       const headers=rows[0].map(h=>(h+'').trim());
       const dataRows=rows.slice(1).filter(r=>r.some(v=>v!=''));
       const col=name=>headers.findIndex(h=>h.toLowerCase()===name.toLowerCase());
-      const iSerial=col('Serial no'),iType=col('Type'),iMaintType=col('Maintenance type');
-      const iInterval=col('Standard interval'),iWM=col('Weeks/Months'),iSched=col('Schedule Type');
-      const iNextPM=col('Next PM date'),iOwner=col('Owner');
-      if(iSerial<0){toast('Colonna "Serial no" non trovata — verifica il file','err');return;}
+      const iSerial=col(colSerialNo),iType=col(colDevType),iMaintType=col(colMaintType);
+      const iInterval=col(colInterval),iWM=col(colWM),iSched=col(colSched);
+      const iNextPM=col(colNextPM),iOwner=col(colOwner);
+      if(iSerial<0){toast('Colonna "'+colSerialNo+'" non trovata — verifica il file','err');return;}
       const records=dataRows.map(r=>{
         const serial=normSerial((r[iSerial]||'')+'');
         if(!serial||(r[iSerial]+'').trim()==='')return null;
@@ -8535,40 +8567,43 @@ async function importLSSAOverdue(input){
         return{serial_no:serial,maintenance_type:maintType||undefined,standard_interval:interval||undefined,weeks_months:wm||undefined,schedule_type:(r[iSched]||'').trim()||undefined,next_pm_date:nextPM||undefined,asset_type:(r[iType]||'').trim()||undefined,owner_m3:(r[iOwner]||'').toString().trim()||undefined};
       }).filter(r=>r&&r.serial_no);
       if(!records.length){toast('Nessun asset trovato nel template','err');return;}
-      toast(`Importo ${records.length} asset da template Lely...`,'info');
+      toast(`Importo ${records.length} asset da template...`,'info');
       const res=await apiCall('importPMTemplate',{records},'POST');
       toast(`✅ ${res.updated} aggiornati | ${res.not_found} non trovati${res.errors?', '+res.errors+' err':''}`,res.not_found>res.updated?'warn':'ok');
       PM_OVERVIEW=null;await loadPMOverview();
       return;
     }
 
-    // ── LSSA OVERDUE EXPORT ───────────────────────────────────────────────────
+    // ── PROVIDER EXPORT ───────────────────────────────────────────────────────
     const rows=XLSX.utils.sheet_to_json(ws,{raw:false,defval:''});
     if(!rows.length){toast('File vuoto o formato non riconosciuto','err');return;}
     const firstKeys=Object.keys(rows[0]).map(k=>(k+'').toLowerCase());
-    const isLSSA=firstKeys.some(k=>k.includes('deviceserialnumber')||k.includes('dayssince')||k.includes('daysuntil'));
+    const isProviderExport=firstKeys.some(k=>k.includes(exportKey)||k.includes('dayssince')||k.includes('daysuntil'));
     const isSyntoniqaTemplate=firstKeys.some(k=>k.includes('serialnumber')||k.includes('nextpmdate'));
 
-    if(isLSSA){
-      toast('📥 Formato LSSA Overdue Export rilevato...','info');
-      // LSSA format: DeviceSerialNumber, DaysSinceLastPM, DaysUntilNextPM, NextPMType, CustomerName
+    if(isProviderExport){
+      toast('📥 Formato export '+providerName+' rilevato...','info');
+      const fSNnk=nk(fSN);
+      const fDaysUntilNk=nk(fDaysUntil);
+      const fDaysSinceNk=nk(fDaysSince);
+      const fNextTypeNk=nk(fNextType);
       const records=rows.map(r=>{
         const n={};for(const[k,v]of Object.entries(r)){n[nk(k)]=v;}
-        const rawSN=(n['deviceserialnumber']||n['serialnumber']||n['sn']||'')+'';
+        const rawSN=(n[fSNnk]||n['serialnumber']||n['sn']||'')+'';
         const serial=normSerial(rawSN);
         if(!serial||!rawSN.trim())return null;
         // Calcola prossimo_controllo da DaysUntilNextPM
-        const daysUntil=parseInt(n['daysuntilnextpm']||n['daysuntil']||'');
+        const daysUntil=parseInt(n[fDaysUntilNk]||n['daysuntil']||'');
         let nextPM=nDate(n['nextpmdate']||n['nextservice']||'');
         if(!nextPM&&!isNaN(daysUntil)){const d=new Date();d.setDate(d.getDate()+daysUntil);nextPM=d.toISOString().split('T')[0];}
-        const daysSince=parseInt(n['dayssincelastpm']||n['dayssince']||'');
+        const daysSince=parseInt(n[fDaysSinceNk]||n['dayssince']||'');
         let lastPM=null;
         if(!isNaN(daysSince)&&daysSince>0){const d=new Date();d.setDate(d.getDate()-daysSince);lastPM=d.toISOString().split('T')[0];}
-        const ciclo=(n['nextpmtype']||n['maintenancetype']||'').toString().toUpperCase().trim();
+        const ciclo=(n[fNextTypeNk]||n['maintenancetype']||'').toString().toUpperCase().trim();
         return{numero_serie:serial,prossimo_controllo:nextPM||undefined,ultimo_controllo:lastPM||undefined,ciclo_pm:ciclo&&['A','B','C','D'].includes(ciclo)?ciclo:undefined};
       }).filter(r=>r&&r.numero_serie&&(r.prossimo_controllo||r.ultimo_controllo));
-      if(!records.length){toast('Nessun record LSSA valido','err');return;}
-      toast(`Importo ${records.length} record LSSA...`,'info');
+      if(!records.length){toast('Nessun record valido nel file export','err');return;}
+      toast(`Importo ${records.length} record...`,'info');
       const res=await apiCall('importPMOverdue',{records},'POST');
       toast(`✅ ${res.updated} aggiornati | ${res.not_found} non trovati`,res.not_found>res.updated?'warn':'ok');
       PM_OVERVIEW=null;await loadPMOverview();
@@ -8624,45 +8659,68 @@ function openPMCicloEdit(assetId,currentCiclo){
     .catch(e=>toast(e.message,'err'));
 }
 
-// ── LSSA Bookmarklet generator ────────────────────────────────────────────────
-// White-label: legge API_URL e API_TOKEN dal config attivo, genera bookmarklet
-// dinamicamente. Funziona per qualsiasi tenant senza modifiche al codice.
-function showLSSASyncModal(){
-  const apiUrl = API_URL || 'https://syntoniqa-mrs-api.fieldforcemrser.workers.dev';
-  // Usa JWT se disponibile (admin loggato), altrimenti API_TOKEN base
-  // Nel bookmarklet usiamo API_TOKEN (Bearer) — sicuro perché è nel browser dell'admin
-  const apiToken = API_TOKEN || '';
-  const userId = USER?.ID || 'USR001';
-  const tenantId = window.SYNTONIQA_CONFIG?.tenant?.id || '';
+// ── PM Sync bookmarklet — 100% white-label, nessun riferimento vendor nel codice ──
+// Tutti i valori vendor-specific letti da SYNTONIQA_CONFIG.pmSync
+function showPMSyncModal(){
+  const cfg = window.SYNTONIQA_CONFIG?.pmSync || {};
+  const apiUrl     = API_URL || 'https://syntoniqa-mrs-api.fieldforcemrser.workers.dev';
+  const apiToken   = API_TOKEN || '';
+  const userId     = USER?.ID || 'USR001';
+  // Parametri provider da config (mai hardcoded)
+  const providerName    = cfg.providerName    || 'PM Provider';
+  const providerPageUrl = cfg.providerPageUrl || '';
+  const apiEndpoint     = cfg.apiEndpoint     || '';
+  const authKey         = cfg.authStorageKey  || '';
+  const authField       = cfg.authTokenField  || 'token';
+  const providerColor   = cfg.providerColor   || '#333';
+  const fields          = cfg.fields          || {};
+  const fSN   = fields.serialNumber    || 'serialNumber';
+  const fDU   = fields.daysUntilNextPM || 'daysUntilNextPM';
+  const fDS   = fields.daysSinceLastPM || 'daysSinceLastPM';
+  const fType = fields.nextPMType      || 'nextPMType';
+  // Hostname del provider per il check nel bookmarklet (derivato da providerPageUrl)
+  let providerHost = '';
+  try { providerHost = new URL(providerPageUrl).hostname; } catch(e){}
+  // Endpoint finale: se relativo, usa come path; se assoluto, usa direttamente
+  const endpointFull = apiEndpoint.startsWith('http') ? apiEndpoint : apiEndpoint;
 
-  // Endpoint LSSA scoperto: /api/js/data-source/v2/pms-to-be-done-soon
-  // Restituisce array con: DeviceSerialNumber (10 cifre), DaysSinceLastPM, DaysUntilNextPM,
-  // NextPMType (A/B/C/D/Unknown), CustomerNumber, CustomerName, DeviceType
+  // Genera bookmarklet — nessun vendor name hardcoded, tutto parametrizzato
+  const esc = s => (s+'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   const bm = `javascript:(function(){
-var _sq_url='${apiUrl.replace(/'/g,"\\'")}';
-var _sq_tok='${apiToken.replace(/'/g,"\\'")}';
-var _sq_usr='${userId}';
-if(window.location.hostname!=='lssa2.lelyonline.com'){alert('⚠️ Apri prima la pagina LSSA:\\nhttps://lssa2.lelyonline.com/performance/preventive-maintenance-overdue');return;}
-var auth;try{auth=JSON.parse(localStorage.getItem('LSSA::authData')||'{}');}catch(e){auth={};}
-var lssaTok=auth.accessToken;
-if(!lssaTok){alert('❌ Non sei loggato in LSSA — effettua il login e riprova.');return;}
-var btn=document.createElement('div');
-btn.style='position:fixed;top:16px;right:16px;z-index:99999;background:#c8102e;color:#fff;padding:10px 18px;border-radius:8px;font-family:sans-serif;font-size:14px;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,.3)';
-btn.textContent='🔄 Sincronizzazione LSSA in corso...';
-document.body.appendChild(btn);
-fetch('/api/js/data-source/v2/pms-to-be-done-soon',{headers:{Authorization:'Bearer '+lssaTok}})
-.then(function(r){if(!r.ok)throw new Error('LSSA HTTP '+r.status);return r.json();})
+var _sq_url='${esc(apiUrl)}';
+var _sq_tok='${esc(apiToken)}';
+var _sq_usr='${esc(userId)}';
+var _pm_host='${esc(providerHost)}';
+var _pm_ep='${esc(endpointFull)}';
+var _pm_akey='${esc(authKey)}';
+var _pm_afield='${esc(authField)}';
+var _pm_color='${esc(providerColor)}';
+var _f_sn='${esc(fSN)}';
+var _f_du='${esc(fDU)}';
+var _f_ds='${esc(fDS)}';
+var _f_type='${esc(fType)}';
+if(_pm_host&&window.location.hostname!==_pm_host){alert('⚠️ Apri prima il portale PM:\\n'+_pm_host);return;}
+var auth={};try{auth=JSON.parse(localStorage.getItem(_pm_akey)||'{}');}catch(e){}
+var tok=auth[_pm_afield];
+if(!tok){alert('❌ Sessione non trovata — effettua il login nel portale PM e riprova.');return;}
+var overlay=document.createElement('div');
+overlay.style='position:fixed;top:16px;right:16px;z-index:99999;background:'+_pm_color+';color:#fff;padding:10px 18px;border-radius:8px;font-family:sans-serif;font-size:14px;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,.3)';
+overlay.textContent='🔄 Sincronizzazione PM in corso...';
+document.body.appendChild(overlay);
+var epUrl=_pm_ep.startsWith('http')?_pm_ep:(window.location.origin+_pm_ep);
+fetch(epUrl,{headers:{Authorization:'Bearer '+tok}})
+.then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
 .then(function(data){
   var today=new Date();
   var records=Object.values(data).map(function(d){
-    var sn=(d.DeviceSerialNumber||'').toString().trim();
+    var sn=(d[_f_sn]||'').toString().trim();
     if(!sn)return null;
-    var daysUntil=parseInt(d.DaysUntilNextPM);
-    var daysSince=parseInt(d.DaysSinceLastPM);
+    var daysUntil=parseInt(d[_f_du]);
+    var daysSince=parseInt(d[_f_ds]);
     var nextPM=null,lastPM=null;
     if(!isNaN(daysUntil)){var nd=new Date(today);nd.setDate(nd.getDate()+daysUntil);nextPM=nd.toISOString().split('T')[0];}
     if(!isNaN(daysSince)&&daysSince>0){var ld=new Date(today);ld.setDate(ld.getDate()-daysSince);lastPM=ld.toISOString().split('T')[0];}
-    var ciclo=(d.NextPMType||'').toString().trim().toUpperCase();
+    var ciclo=(d[_f_type]||'').toString().trim().toUpperCase();
     if(!['A','B','C','D'].includes(ciclo))ciclo=null;
     var rec={numero_serie:sn};
     if(nextPM)rec.prossimo_controllo=nextPM;
@@ -8670,29 +8728,36 @@ fetch('/api/js/data-source/v2/pms-to-be-done-soon',{headers:{Authorization:'Bear
     if(ciclo)rec.ciclo_pm=ciclo;
     return rec;
   }).filter(Boolean);
-  btn.textContent='📤 Invio '+records.length+' record a Syntoniqa...';
+  overlay.textContent='📤 Invio '+records.length+' record...';
   return fetch(_sq_url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_sq_tok},body:JSON.stringify({action:'importPMOverdue',records:records,userId:_sq_usr})});
 })
 .then(function(r){return r.json();})
 .then(function(res){
-  btn.style.background='#065F46';
-  btn.textContent='✅ '+res.updated+' aggiornati | '+(res.not_found||0)+' non trovati | '+res.total+' totali';
-  setTimeout(function(){btn.remove();},5000);
+  overlay.style.background='#065F46';
+  overlay.textContent='✅ '+res.updated+' aggiornati | '+(res.not_found||0)+' non trovati | '+res.total+' totali';
+  setTimeout(function(){overlay.remove();},5000);
 })
 .catch(function(err){
-  btn.style.background='#991B1B';
-  btn.textContent='❌ Errore: '+err.message;
-  setTimeout(function(){btn.remove();},6000);
+  overlay.style.background='#991B1B';
+  overlay.textContent='❌ '+err.message;
+  setTimeout(function(){overlay.remove();},6000);
 });
 })();`.replace(/\s*\n\s*/g,' ');
 
-  const link=$('lssaBookmarkletLink');
-  const code=$('lssaBookmarkletCode');
-  const label=$('bmTenantLabel');
-  if(link)link.href=bm;
+  const link = $('pmSyncBookmarkletLink');
+  const code = $('pmSyncBookmarkletCode');
+  const label = $('pmSyncTenantLabel');
+  const title = $('pmSyncModalTitle');
+  const pLink = $('pmSyncProviderLink');
+  if(link){link.href=bm;link.style.background=providerColor;}
   if(code)code.value=bm;
-  if(label)label.textContent=(window.SYNTONIQA_CONFIG?.brand?.name||'Syntoniqa')+' / '+apiUrl.replace('https://','').split('.')[0];
-  openModal('modalLSSASync');
+  if(label)label.textContent=(window.SYNTONIQA_CONFIG?.brand?.nome||'Syntoniqa')+' / '+apiUrl.replace('https://','').split('.')[0];
+  if(title)title.textContent=`🔄 Sync automatico da ${providerName}`;
+  if(pLink){pLink.href=providerPageUrl;pLink.textContent=`Apri portale ${providerName} →`;}
+  // Applica colore provider al bottone Sync nella toolbar
+  const syncBtn=$('pmSyncBtn');
+  if(syncBtn){syncBtn.style.background=providerColor;syncBtn.style.borderColor=providerColor;syncBtn.style.color='#fff';syncBtn.textContent=`🔄 Sync ${providerName}`;}
+  openModal('modalPMSync');
 }
 
 /* Compatibilità backward con funzioni che usano il vecchio PM_DATA */

@@ -68,6 +68,53 @@ window.SYNTONIQA_CONFIG = {
     { nome: 'Zone Geografiche',          icona: '📍', desc: 'Clustering per zona, basi tecnici, viaggi' },
   ],
 
+  // ─── PM SYNC PROVIDER ───────────────────────────────────────────
+  // Configurazione del sistema esterno da cui sincronizzare i dati PM.
+  // Cambia questi valori per adattare a qualsiasi provider senza
+  // modificare il codice HTML/JS principale.
+  pmSync: {
+    // Nome visualizzato nell'interfaccia (es. "LSSA", "IFS", "SAP PM")
+    providerName:    'LSSA',
+    // URL della pagina del provider dove l'utente deve essere loggato
+    providerPageUrl: 'https://lssa2.lelyonline.com/performance/preventive-maintenance-overdue',
+    // Endpoint API del provider che restituisce i dati PM (relativo all'host o URL assoluto)
+    apiEndpoint:     '/api/js/data-source/v2/pms-to-be-done-soon',
+    // Chiave in localStorage del browser dove il provider salva il token JWT
+    authStorageKey:  'LSSA::authData',
+    // Campo nel JSON della chiave di storage che contiene il token Bearer
+    authTokenField:  'accessToken',
+    // Colore primario del provider (es. per bottone Sync e overlay)
+    providerColor:   '#c8102e',
+    // Mapping campi risposta API → campi interni Syntoniqa
+    fields: {
+      serialNumber:    'DeviceSerialNumber',  // numero serie robot/asset
+      daysUntilNextPM: 'DaysUntilNextPM',    // giorni al prossimo PM (negativo = scaduto)
+      daysSinceLastPM: 'DaysSinceLastPM',    // giorni dall'ultimo PM completato
+      nextPMType:      'NextPMType',          // tipo PM: A/B/C/D/Unknown
+      customerNumber:  'CustomerNumber',      // codice cliente (es. Movex)
+      customerName:    'CustomerName',        // nome cliente
+      deviceType:      'DeviceType',          // tipo macchina/asset
+    },
+    // Rilevamento automatico formato file importato (per "Import file")
+    fileDetection: {
+      // Colonna che identifica un export diretto dal provider
+      exportColumnKey:    'DeviceSerialNumber',
+      // Keyword nell'header del template ufficiale vendor (riga 3 nel template Lely v5.x)
+      templateHeaderKey:  'Serial no',
+      // Colonne manutenzione nel template ufficiale
+      templateCols: {
+        serialNo:          'Serial no',
+        maintenanceType:   'Maintenance type',
+        standardInterval:  'Standard interval',
+        weeksMonths:       'Weeks/Months',
+        scheduleType:      'Schedule Type',
+        nextPMDate:        'Next PM date',
+        deviceType:        'Type',
+        ownerCode:         'Owner',
+      },
+    },
+  },
+
   // ─── PWA MANIFEST ───────────────────────────────────────────────
   pwa: {
     name:             'MRS Lely Center Emilia Romagna',
