@@ -3379,7 +3379,7 @@ Rispondi SOLO con JSON valido:
   "diagnosi": "descrizione del problema identificato",
   "gravita": "alta|media|bassa",
   "ricambio_suggerito": "nome del pezzo di ricambio necessario",
-  "codice_ricambio": "codice Lely dal catalogo sopra se riconoscibile, altrimenti null",
+  "codice_ricambio": "codice dal catalogo sopra se riconoscibile, altrimenti null",
   "componente_identificato": "nome componente visibile nella foto",
   "danno_visibile": "tipo di danno: usura, rottura, corrosione, etc",
   "azione_consigliata": "cosa fare subito",
@@ -3609,15 +3609,15 @@ Rispondi SOLO con JSON valido:
       return ok({ created: created.length, errors });
     }
 
-    // ============ IMPORT/EXPORT LELY ============
+    // ============ IMPORT/EXPORT ERP ============
 
-    case 'importLelyClienti': {
-      // Import clienti from "Customers SMART to IFS" Excel format
+    case 'importErpClienti': {
+      // Import clienti from ERP Excel format (Customers)
       // Field mapping: Account Name → nome_account, M3 Customer Number → codice_m3,
       // Service Area → area_servizio, Billing City → citta_fatturazione,
       // Billing Address → indirizzo, Invoice Email → email
       const { rows } = body;
-      if (!rows || !rows.length) return err('rows richiesto (array di oggetti con campi Lely)');
+      if (!rows || !rows.length) return err('rows richiesto (array di oggetti)');
       if (rows.length > 500) return err('Massimo 500 righe');
       const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
       const now = new Date().toISOString();
@@ -3677,8 +3677,8 @@ Rispondi SOLO con JSON valido:
       return ok({ created: created.length, updated: updated.length, errors, total: rows.length });
     }
 
-    case 'importLelyAssets': {
-      // Import assets from "Maintenance Data Template" (Movex Items sheet)
+    case 'importErpAssets': {
+      // Import assets from ERP Excel (Maintenance Data / Items)
       // Field mapping: DeviceSerialNumber → numero_serie, DeviceType → tipo_macchina,
       // CustomerNumber → codice_m3, Model code → modello, Installation date → data_installazione
       const { rows } = body;
@@ -3735,68 +3735,38 @@ Rispondi SOLO con JSON valido:
       return ok({ created: created.length, updated: updated.length, errors, total: rows.length });
     }
 
-    case 'exportLelyTemplate': {
-      // Returns field definitions for Lely export templates
+    case 'exportErpTemplate': {
+      // Returns field definitions for ERP export templates
+      // Uses select=* to auto-detect available columns (avoids column-not-exist errors)
       const templateType = body.template_type || 'clienti';
-      const templates = {
-        clienti: {
-          name: 'Customers SMART to IFS',
-          columns: [
-            { header: 'Account Name', db_field: 'nome_account' },
-            { header: 'M3 Customer Number', db_field: 'codice_m3' },
-            { header: 'Service Area', db_field: 'area_servizio' },
-            { header: 'Billing City', db_field: 'citta_fatturazione' },
-            { header: 'Billing Address', db_field: 'indirizzo' },
-            { header: 'Invoice Email', db_field: 'email' },
-            { header: 'VAT Number', db_field: 'piva' },
-            { header: 'Phone', db_field: 'telefono' },
-            { header: 'Account Status', db_field: 'stato_account' }
-          ]
-        },
-        assets: {
-          name: 'Movex Items (Assets)',
-          columns: [
-            { header: 'DeviceSerialNumber', db_field: 'numero_serie' },
-            { header: 'DeviceType', db_field: 'tipo_macchina' },
-            { header: 'CustomerNumber', db_field: 'codice_m3' },
-            { header: 'CustomerName', db_field: 'nome_account' },
-            { header: 'Model code', db_field: 'modello' },
-            { header: 'EquipmentGroup', db_field: 'gruppo_attrezzatura' },
-            { header: 'Installation date', db_field: 'data_installazione' },
-            { header: 'Status', db_field: 'stato' }
-          ]
-        },
-        piano: {
-          name: 'Programmazione Mensile',
-          columns: [
-            { header: 'DATA', db_field: 'data' },
-            { header: 'FURGONE', db_field: 'automezzo_id' },
-            { header: 'TECNICO', db_field: 'tecnico_id', note: 'nome lookup' },
-            { header: 'REPERIBILITA', db_field: null, note: 'flag → record reperibilita' },
-            { header: 'ATTIVITA', db_field: 'note', note: 'CLIENTE - tipo' }
-          ]
-        }
-      };
 
-      const tpl = templates[templateType];
-      if (!tpl) return err('template_type non valido. Opzioni: clienti, assets, piano');
+      if (!['clienti', 'assets', 'piano'].includes(templateType))
+        return err('template_type non valido. Opzioni: clienti, assets, piano');
 
-      // If export_data=true, also fetch actual data
       if (body.export_data) {
         let data = [];
         if (templateType === 'clienti') {
-          data = await sb(env, 'anagrafica_clienti', 'GET', null, '?limit=500&select=' + tpl.columns.map(c=>c.db_field).filter(Boolean).join(','));
+          data = await sb(env, 'anagrafica_clienti', 'GET', null, '?select=*&order=nome_account.asc&limit=500');
         } else if (templateType === 'assets') {
-          data = await sb(env, 'anagrafica_assets', 'GET', null, '?limit=1000&select=' + tpl.columns.map(c=>c.db_field).filter(Boolean).join(','));
+          data = await sb(env, 'anagrafica_assets', 'GET', null, '?select=*&order=gruppo_attrezzatura.asc,nome_asset.asc&limit=1000');
+        } else if (templateType === 'piano') {
+          data = await sb(env, 'piano', 'GET', null, '?select=*&obsoleto=eq.false&order=data.desc&limit=500');
         }
-        return ok({ template: tpl, data: data.map(row => {
-          const mapped = {};
-          tpl.columns.forEach(col => { if(col.db_field) mapped[col.header] = row[col.db_field] || ''; });
-          return mapped;
-        })});
+        // Exclude internal fields from export
+        const excludeKeys = new Set(['tenant_id', 'obsoleto', 'created_at', 'updated_at', 'id']);
+        const cleanData = data.map(row => {
+          const clean = {};
+          for (const [k, v] of Object.entries(row)) {
+            if (!excludeKeys.has(k) && v !== null && v !== undefined && v !== '') clean[k] = v;
+          }
+          return clean;
+        });
+        // Collect all column names from data
+        const allCols = [...new Set(cleanData.flatMap(r => Object.keys(r)))];
+        return ok({ template: { name: templateType, columns: allCols.map(c => ({ header: c, db_field: c })) }, data: cleanData });
       }
 
-      return ok({ template: tpl });
+      return ok({ template: { name: templateType } });
     }
 
     // -------- WORKFLOW APPROVATIVO → spostato sotto dopo getVincoliCategories --------
@@ -4659,7 +4629,7 @@ Rispondi SOLO con JSON valido:
         }).then(r=>r.json()).catch(()=>null);
       }
 
-      // ---- Helper: carica catalogo parti Lely dal DB per contesto AI ----
+      // ---- Helper: carica catalogo parti dal DB per contesto AI ----
       async function loadPartsCatalog(env, macchina) {
         try {
           // Carica parti più comuni dal catalogo tagliandi
@@ -4759,7 +4729,7 @@ Rispondi SOLO con JSON valido:
             const imgBytes = [...new Uint8Array(imgBuf)];
             const visionRes = await env.AI.run('@cf/llava-hf/llava-1.5-7b-hf', {
               image: imgBytes,
-              prompt: systemPrompt + '\n\nMESSAGGIO UTENTE: ' + (text || 'Analizza questa foto di un guasto/macchina agricola Lely. Identifica il componente danneggiato e suggerisci il ricambio.'),
+              prompt: systemPrompt + '\n\nMESSAGGIO UTENTE: ' + (text || 'Analizza questa foto di un guasto/macchina. Identifica il componente danneggiato e suggerisci il ricambio.'),
               max_tokens: 768
             });
             const raw = (visionRes.description || visionRes.response || '').replace(/```json\n?|\n?```/g, '').trim();
@@ -5139,7 +5109,7 @@ Rispondi SOLO con JSON valido:
         }
 
         case '/catalogo': {
-          // Cerca nel catalogo parti Lely
+          // Cerca nel catalogo parti
           const searchTerm = parts.slice(1).join(' ').trim();
           if (!searchTerm) {
             reply = `🔍 *Catalogo Ricambi ${brand(env).shortName}*\n\n\`/catalogo [ricerca]\`\n\nEsempi:\n• \`/catalogo laser\`\n• \`/catalogo tilt sensor\`\n• \`/catalogo 9.1189\`\n• \`/catalogo milk pump\``;
@@ -6035,7 +6005,7 @@ Rispondi SOLO con JSON valido:
     }
 
     case 'searchParts': {
-      // Ricerca catalogo parti Lely da tagliandi + anagrafica_assets
+      // Ricerca catalogo parti da tagliandi + anagrafica_assets
       const { search, modello, gruppo, limit: maxResults } = body;
       if (!search && !modello && !gruppo) return err('Almeno uno tra search, modello, gruppo richiesto');
       const lim = Math.min(parseInt(maxResults) || 20, 50);
@@ -6056,7 +6026,7 @@ Rispondi SOLO con JSON valido:
     }
 
     case 'generatePMSchedule': {
-      // Auto-scheduling PM basato su cicli manutenzione Lely
+      // Auto-scheduling PM basato su cicli manutenzione
       // Cicli: A1=bimestrale(60gg), B2=trimestrale(90gg), C3=semestrale(180gg), D8=annuale(365gg)
       const adminErr = await requireAdmin(env, body);
       if (adminErr) return err(adminErr, 403);

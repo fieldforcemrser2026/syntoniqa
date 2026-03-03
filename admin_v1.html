@@ -22,9 +22,15 @@
   var r = document.documentElement.style;
   var co = cfg.colors||{};
   if(co.primary)       r.setProperty('--c1', co.primary);
-  if(co.primary_dark)  r.setProperty('--c2', co.primary_dark);
+  if(co.primary2||co.primary_dark) r.setProperty('--c2', co.primary2||co.primary_dark);
   if(co.primary_light) r.setProperty('--c3', co.primary_light);
-  if(co.accent)        r.setProperty('--c4', co.accent);
+  if(co.secondary||co.accent)      r.setProperty('--c4', co.secondary||co.accent);
+  if(co.bg)            r.setProperty('--bg', co.bg);
+  if(co.surface)       r.setProperty('--surface', co.surface);
+  if(co.card)          r.setProperty('--card-bg', co.card);
+  if(co.border)        r.setProperty('--gray3', co.border);
+  if(co.text)          r.setProperty('--dark', co.text);
+  if(co.textSec)       r.setProperty('--gray', co.textSec);
 
   /* -- Meta theme-color -- */
   var mt = document.querySelector('meta[name="theme-color"]');
@@ -1471,7 +1477,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <div class="cfg-panel active" id="cfgPan_generale">
 <div class="cfg-section-title">🏢 Identità Azienda</div>
 <div class="cfg-grid-2">
-<div class="cfg-field"><label>Nome Azienda</label><input type="text" id="cfg_azienda_nome" placeholder="MRS Lely Center"></div>
+<div class="cfg-field"><label>Nome Azienda</label><input type="text" id="cfg_azienda_nome" placeholder="Nome Azienda"></div>
 <div class="cfg-field"><label>Slogan / Sottotitolo</label><input type="text" id="cfg_azienda_slogan" placeholder="Field Service Management"></div>
 </div>
 <div class="cfg-grid-2">
@@ -1804,45 +1810,45 @@ Workers AI è incluso in Cloudflare e non richiede chiavi aggiuntive.
 </div>
 </div>
 
-<!-- ══════ IMPORT/EXPORT LELY ══════ -->
+<!-- ══════ IMPORT/EXPORT ERP ══════ -->
 <div class="card" style="margin-top:16px">
 <div class="card-head">
-<h3>🔄 Import/Export Lely (SMART→IFS)</h3>
-<button class="btn btn-sm btn-outline" onclick="$('lelyImportExportPanel').style.display=$('lelyImportExportPanel').style.display==='none'?'':'none'">📋 Mostra/Nascondi</button>
+<h3>🔄 Import/Export ERP</h3>
+<button class="btn btn-sm btn-outline" onclick="$('erpImportExportPanel').style.display=$('erpImportExportPanel').style.display==='none'?'':'none'">📋 Mostra/Nascondi</button>
 </div>
-<div class="card-body" id="lelyImportExportPanel" style="display:none">
+<div class="card-body" id="erpImportExportPanel" style="display:none">
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
 
 <!-- IMPORT -->
 <div style="border:1px solid #E5E7EB;border-radius:8px;padding:14px">
-<h4 style="font-size:.875rem;margin-bottom:10px">⬆️ Import da Excel Lely</h4>
+<h4 style="font-size:.875rem;margin-bottom:10px">⬆️ Import da Excel ERP</h4>
 <div style="margin-bottom:12px">
-<label style="font-size:.75rem;font-weight:600;display:block;margin-bottom:4px">Clienti (Customers SMART→IFS)</label>
-<div style="border:2px dashed #D1D5DB;border-radius:8px;padding:16px;text-align:center;cursor:pointer;font-size:.8125rem" onclick="$('lelyFileClienti').click()" ondragover="event.preventDefault();this.style.borderColor='#6366F1'" ondragleave="this.style.borderColor='#D1D5DB'" ondrop="event.preventDefault();handleLelyImport('clienti',event.dataTransfer.files[0]);this.style.borderColor='#D1D5DB'">
+<label style="font-size:.75rem;font-weight:600;display:block;margin-bottom:4px">Clienti (Customers)</label>
+<div style="border:2px dashed #D1D5DB;border-radius:8px;padding:16px;text-align:center;cursor:pointer;font-size:.8125rem" onclick="$('erpFileClienti').click()" ondragover="event.preventDefault();this.style.borderColor='#6366F1'" ondragleave="this.style.borderColor='#D1D5DB'" ondrop="event.preventDefault();handleErpImport('clienti',event.dataTransfer.files[0]);this.style.borderColor='#D1D5DB'">
 📎 Trascina Excel clienti o clicca
-<input type="file" id="lelyFileClienti" accept=".xlsx,.xls" style="display:none" onchange="handleLelyImport('clienti',this.files[0])">
+<input type="file" id="erpFileClienti" accept=".xlsx,.xls" style="display:none" onchange="handleErpImport('clienti',this.files[0])">
 </div>
 </div>
 <div style="margin-bottom:12px">
-<label style="font-size:.75rem;font-weight:600;display:block;margin-bottom:4px">Assets (Maintenance Data - Movex Items)</label>
-<div style="border:2px dashed #D1D5DB;border-radius:8px;padding:16px;text-align:center;cursor:pointer;font-size:.8125rem" onclick="$('lelyFileAssets').click()" ondragover="event.preventDefault();this.style.borderColor='#6366F1'" ondragleave="this.style.borderColor='#D1D5DB'" ondrop="event.preventDefault();handleLelyImport('assets',event.dataTransfer.files[0]);this.style.borderColor='#D1D5DB'">
+<label style="font-size:.75rem;font-weight:600;display:block;margin-bottom:4px">Assets (Maintenance Data)</label>
+<div style="border:2px dashed #D1D5DB;border-radius:8px;padding:16px;text-align:center;cursor:pointer;font-size:.8125rem" onclick="$('erpFileAssets').click()" ondragover="event.preventDefault();this.style.borderColor='#6366F1'" ondragleave="this.style.borderColor='#D1D5DB'" ondrop="event.preventDefault();handleErpImport('assets',event.dataTransfer.files[0]);this.style.borderColor='#D1D5DB'">
 📎 Trascina Excel assets o clicca
-<input type="file" id="lelyFileAssets" accept=".xlsx,.xls,.xlsm" style="display:none" onchange="handleLelyImport('assets',this.files[0])">
+<input type="file" id="erpFileAssets" accept=".xlsx,.xls,.xlsm" style="display:none" onchange="handleErpImport('assets',this.files[0])">
 </div>
 </div>
-<div id="lelyImportPreview" style="display:none;margin-top:8px"></div>
+<div id="erpImportPreview" style="display:none;margin-top:8px"></div>
 </div>
 
 <!-- EXPORT -->
 <div style="border:1px solid #E5E7EB;border-radius:8px;padding:14px">
-<h4 style="font-size:.875rem;margin-bottom:10px">⬇️ Export in formato Lely</h4>
+<h4 style="font-size:.875rem;margin-bottom:10px">⬇️ Export Dati</h4>
 <div style="display:flex;flex-direction:column;gap:8px">
-<button class="btn btn-sm btn-outline" onclick="exportLelyData('clienti')">📥 Download Clienti</button>
-<button class="btn btn-sm btn-outline" onclick="exportLelyData('assets')">📥 Download Assets</button>
-<button class="btn btn-sm btn-outline" onclick="exportLelyData('piano')">📥 Download Piano</button>
+<button class="btn btn-sm btn-outline" onclick="exportErpData('clienti')">📥 Download Clienti</button>
+<button class="btn btn-sm btn-outline" onclick="exportErpData('assets')">📥 Download Assets</button>
+<button class="btn btn-sm btn-outline" onclick="exportErpData('piano')">📥 Download Piano</button>
 </div>
 <div style="margin-top:12px;font-size:.75rem;color:var(--gray)">
-<details><summary style="cursor:pointer;color:#6366F1;font-size:.75rem">Field Mapping Lely↔Syntoniqa</summary>
+<details><summary style="cursor:pointer;color:#6366F1;font-size:.75rem">Field Mapping ERP↔Syntoniqa</summary>
 <div style="margin-top:4px;font-size:.7rem;font-family:monospace;background:var(--gray5);padding:8px;border-radius:4px">
 Account Name → nome_account<br>
 M3 Customer Number → codice_m3<br>
@@ -5350,8 +5356,8 @@ async function testAllEngines(){
 // Backward compatibility alias
 function renderConfig(){ renderConfigUnified(); }
 
-// ============ IMPORT/EXPORT LELY ============
-async function handleLelyImport(tipo, file){
+// ============ IMPORT/EXPORT ERP ============
+async function handleErpImport(tipo, file){
   if(!file) return;
   toast('Lettura file...','info');
 
@@ -5372,7 +5378,7 @@ async function handleLelyImport(tipo, file){
       let sheetName = '';
 
       if(tipo === 'clienti'){
-        // Try common sheet names for Customers SMART→IFS
+        // Try common sheet names for Customers
         const trySheets = ['Customers', 'Clienti', 'Sheet1', wb.SheetNames[0]];
         for(const sn of trySheets){
           if(wb.Sheets[sn]){ sheetName=sn; break; }
@@ -5392,7 +5398,7 @@ async function handleLelyImport(tipo, file){
       if(!rows.length){toast('Nessuna riga trovata nel foglio "'+sheetName+'"','warn');return}
 
       // Show preview
-      const preview = $('lelyImportPreview');
+      const preview = $('erpImportPreview');
       if(!preview) return;
       preview.style.display = '';
 
@@ -5406,14 +5412,14 @@ async function handleLelyImport(tipo, file){
         <tbody>${rows.slice(0,5).map(r=>'<tr>'+cols.slice(0,8).map(c=>'<td>'+(r[c]||'—')+'</td>').join('')+'</tr>').join('')}</tbody></table>
         </div>
         <div style="display:flex;gap:8px;margin-top:10px">
-          <button class="btn btn-sm btn-ok" onclick="confirmLelyImport('${tipo}')">✅ Conferma Import (${rows.length} righe)</button>
-          <button class="btn btn-sm btn-outline" onclick="$('lelyImportPreview').style.display='none'">❌ Annulla</button>
+          <button class="btn btn-sm btn-ok" onclick="confirmErpImport('${tipo}')">✅ Conferma Import (${rows.length} righe)</button>
+          <button class="btn btn-sm btn-outline" onclick="$('erpImportPreview').style.display='none'">❌ Annulla</button>
         </div>
       </div>`;
       preview.innerHTML = html;
 
       // Store rows for confirmation
-      window._lelyPendingImport = { tipo, rows };
+      window._erpPendingImport = { tipo, rows };
 
     } catch(e) {
       toast('Errore lettura file: '+e.message, 'err');
@@ -5422,11 +5428,11 @@ async function handleLelyImport(tipo, file){
   reader.readAsArrayBuffer(file);
 }
 
-async function confirmLelyImport(tipo){
-  const pending = window._lelyPendingImport;
+async function confirmErpImport(tipo){
+  const pending = window._erpPendingImport;
   if(!pending || pending.tipo !== tipo){ toast('Nessun import in sospeso','warn'); return; }
 
-  const action = tipo === 'clienti' ? 'importLelyClienti' : 'importLelyAssets';
+  const action = tipo === 'clienti' ? 'importErpClienti' : 'importErpAssets';
   toast(`Import ${tipo} in corso... (${pending.rows.length} righe)`,'info');
 
   try {
@@ -5447,7 +5453,7 @@ async function confirmLelyImport(tipo){
 
     // Show errors if any
     if(allErrors.length){
-      const preview = $('lelyImportPreview');
+      const preview = $('erpImportPreview');
       if(preview){
         preview.innerHTML += `<div style="margin-top:8px;padding:8px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:6px;font-size:.75rem;max-height:150px;overflow-y:auto">
           <strong>⚠️ ${allErrors.length} errori:</strong><br>
@@ -5458,13 +5464,13 @@ async function confirmLelyImport(tipo){
 
     // Reload anagrafica
     await loadAnagClients();
-    window._lelyPendingImport = null;
+    window._erpPendingImport = null;
   } catch(e){
     toast('Errore import: '+e.message, 'err');
   }
 }
 
-async function exportLelyData(tipo){
+async function exportErpData(tipo){
   toast('Preparazione export...','info');
 
   // Load XLSX lib
@@ -5477,7 +5483,7 @@ async function exportLelyData(tipo){
   if(!window.XLSX){toast('Errore caricamento libreria XLSX','err');return}
 
   try {
-    const r = await apiCall('exportLelyTemplate', { template_type: tipo, export_data: true }, 'POST');
+    const r = await apiCall('exportErpTemplate', { template_type: tipo, export_data: true }, 'POST');
     if(!r.template || !r.data){toast('Errore: nessun dato','err');return}
 
     const ws = XLSX.utils.json_to_sheet(r.data);
