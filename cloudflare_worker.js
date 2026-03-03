@@ -6230,6 +6230,69 @@ Rispondi SOLO con JSON valido:
       return ok({ calendar, cycle_definitions: cycleDefs, mese: pmMese || 'prossimi_6_mesi', total: calendar.length });
     }
 
+    // ═══ PM OVERVIEW: tutti gli assets raggruppati per cliente con stato PM ═══
+    case 'getPMOverview': {
+      const [assets, clienti] = await Promise.all([
+        sb(env, 'anagrafica_assets', 'GET', null,
+          '?obsoleto=eq.false&select=id,codice_m3,nome_account,tipo_foglio,gruppo_attrezzatura,nome_asset,numero_serie,modello,prossimo_controllo,data_installazione,status&limit=1000&order=codice_m3.asc').catch(() => []),
+        sb(env, 'anagrafica_clienti', 'GET', null,
+          '?select=codice_m3,nome_account,nome_interno,citta_fatturazione&limit=300').catch(() => [])
+      ]);
+      const cliMap = {};
+      clienti.forEach(c => { cliMap[c.codice_m3] = c; });
+      const groups = {};
+      for (const a of assets) {
+        const m3 = a.codice_m3 || '__unknown__';
+        if (!groups[m3]) {
+          const cli = cliMap[m3];
+          groups[m3] = {
+            codice_m3: m3,
+            nome: cli?.nome_interno || cli?.nome_account || a.nome_account || m3,
+            citta: cli?.citta_fatturazione || '',
+            assets: []
+          };
+        }
+        groups[m3].assets.push(a);
+      }
+      const oggiDate = new Date();
+      const clientiList = Object.values(groups).sort((a, b) => {
+        const aOvd = a.assets.filter(x => x.prossimo_controllo && new Date(x.prossimo_controllo) < oggiDate).length;
+        const bOvd = b.assets.filter(x => x.prossimo_controllo && new Date(x.prossimo_controllo) < oggiDate).length;
+        if (aOvd !== bOvd) return bOvd - aOvd;
+        return (a.nome || '').localeCompare(b.nome || '');
+      });
+      return ok({ clienti: clientiList, total_assets: assets.length, total_clienti: clientiList.length });
+    }
+
+    // ═══ IMPORT PM OVERDUE: aggiorna prossimo_controllo da file LSSA ═══
+    case 'importPMOverdue': {
+      const adminErr = await requireAdmin(env, body);
+      if (adminErr) return err(adminErr, 403);
+      const { records } = body;
+      if (!records || !Array.isArray(records)) return err('records array richiesto');
+      let updated = 0, not_found = 0, errors = 0;
+      const now = new Date().toISOString();
+      for (const rec of records) {
+        try {
+          const serial = (rec.numero_serie || rec.NumeroSerie || '').trim();
+          const assetId = rec.asset_id || rec.AssetId;
+          const prossimoControllo = rec.prossimo_controllo || rec.ProssimoControllo;
+          if (!prossimoControllo) continue;
+          const patch = { prossimo_controllo: prossimoControllo, updated_at: now };
+          let res;
+          if (assetId) {
+            res = await sb(env, `anagrafica_assets?id=eq.${encodeURIComponent(assetId)}&obsoleto=eq.false`, 'PATCH', patch);
+          } else if (serial) {
+            res = await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(serial)}&obsoleto=eq.false`, 'PATCH', patch);
+          } else { not_found++; continue; }
+          const cnt = Array.isArray(res) ? res.length : (res ? 1 : 0);
+          if (cnt > 0) { updated++; } else { not_found++; }
+        } catch (e) { errors++; }
+      }
+      await wlog('anagrafica_assets', 'bulk', `pm_import updated:${updated} not_found:${not_found}`, body.operatoreId || body.userId);
+      return ok({ updated, not_found, errors, total: records.length });
+    }
+
     case 'savePMCycleState': {
       // Admin salva stato ciclo per una o più macchine
       const adminErr = await requireAdmin(env, body);

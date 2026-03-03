@@ -295,7 +295,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 
 /* ===== TABLE ===== */
 .tbl{width:100%;border-collapse:collapse;font-size:0.8125rem}
-.tbl th{background:var(--gray5);font-weight:600;font-size:0.6875rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--gray);padding:8px 12px;text-align:left;border-bottom:1px solid #E5E7EB;position:sticky;top:0}
+.tbl th{background:var(--gray5);font-weight:600;font-size:0.6875rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--gray);padding:8px 12px;text-align:left;border-bottom:1px solid #E5E7EB;position:sticky;top:0;z-index:2}
 .tbl td{padding:8px 12px;border-bottom:1px solid #F3F4F6;vertical-align:middle}
 .tbl tr:hover td{background:var(--gray5)}
 .tbl .actions-cell{white-space:nowrap}
@@ -1313,26 +1313,61 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 
 <!-- ========== SEC: PM SCHEDULING ========== -->
 <section class="sec" id="secPm">
-<div class="card">
-<div class="card-head"><h3>🔧 PM Scheduling</h3>
-<div class="btn-group">
-<button class="btn btn-sm btn-ai" onclick="bulkGeneratePM()">⚡ Genera PM 3 mesi</button>
+<!-- Card toolbar -->
+<div class="card mb">
+<div class="card-head" style="flex-wrap:wrap;gap:8px">
+<h3>🔧 PM Scheduling</h3>
+<div class="btn-group" style="flex-wrap:wrap">
+<button class="btn btn-ghost btn-sm" onclick="downloadPMTemplate()" title="Scarica template Excel compatibile LSSA">⬇ Template LSSA</button>
+<label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0" title="Importa file overdue da LSSA o template compilato">⬆ Import LSSA <input type="file" id="pmLssaFile" style="display:none" accept=".xlsx,.csv,.xls" onchange="importLSSAOverdue(this)"></label>
+<button class="btn btn-ghost btn-sm" onclick="exportPMPiano()" title="Esporta elenco PM in CSV">📥 Export CSV</button>
+<button class="btn btn-sm btn-ai" onclick="bulkGeneratePM()">⚡ Genera Piano 3M</button>
 <button class="btn btn-sm btn-outline" onclick="togglePMSettings()">⚙️ Cicli</button>
 </div>
 </div>
-<div class="card-body">
-<!-- Status filter -->
-<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px" id="pmStatusBar"></div>
-<!-- Search + model filter -->
-<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
-<input type="text" id="pmSearch" placeholder="🔍 Cerca cliente/macchina..." oninput="renderPMTable()" style="flex:1;min-width:200px;padding:8px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem">
-<select id="pmModelFilter" onchange="renderPMTable()" style="padding:8px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem"><option value="">Tutti i modelli</option></select>
-</div>
-<!-- PM List -->
-<div id="pmListContainer"></div>
+<!-- Stats / filter bar -->
+<div style="padding:8px 16px;border-top:1px solid var(--gray4);display:flex;gap:8px;flex-wrap:wrap;align-items:center" id="pmStatsBar">
+<span style="color:var(--gray);font-size:.8rem">Caricamento...</span>
 </div>
 </div>
-<!-- Cycle definitions (collapsible) -->
+<!-- Card albero clienti/assets -->
+<div class="card">
+<div class="card-head" style="flex-wrap:wrap;gap:8px">
+<input type="text" id="pmSearch" placeholder="🔍 Cerca cliente / modello / seriale..." oninput="renderPMTree()" style="flex:1;min-width:200px;padding:7px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8125rem">
+<div class="btn-group">
+<select id="pmTypeFilter" onchange="renderPMTree()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8rem">
+<option value="">Tutti i tipi</option>
+<option value="ROBOT">🤖 Astronaut</option>
+<option value="JUNO">🦩 Juno</option>
+<option value="MFR">🚗 MFR/Vector</option>
+<option value="DISCOVERY">🔵 Discovery</option>
+<option value="CU">🖥️ Central Unit</option>
+<option value="COSMIX">🌀 Cosmix</option>
+<option value="NAUTILUS">🐚 Nautilus</option>
+</select>
+<select id="pmCliFilter" onchange="renderPMTree()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8rem">
+<option value="">Tutti i clienti</option>
+</select>
+</div>
+</div>
+<div class="card-body np" style="max-height:calc(100vh - 280px);overflow-y:auto" id="pmTreeScroll">
+<table class="tbl" id="pmTreeTable">
+<thead><tr>
+<th style="width:28px"></th>
+<th>Cliente</th>
+<th style="text-align:center;width:55px">Robot</th>
+<th style="text-align:center;width:55px">MFR</th>
+<th style="text-align:center;width:50px">Tot</th>
+<th style="text-align:center;width:65px">🔴 Scad</th>
+<th style="text-align:center;width:65px">⚠️ 30gg</th>
+<th style="text-align:center;width:65px">✅ OK</th>
+<th style="width:40px"></th>
+</tr></thead>
+<tbody id="pmTreeBody"></tbody>
+</table>
+</div>
+</div>
+<!-- Cicli (collapsibile) -->
 <div class="card" style="margin-top:16px;display:none" id="pmSettingsCard">
 <div class="card-head"><h3>⚙️ Cicli Manutenzione</h3></div>
 <div class="card-body" id="pmCycleDefsContainer"></div>
@@ -5900,11 +5935,25 @@ function renderAnagClients(list){
 async function toggleAnagTree(m3){
   const expandRow=document.getElementById('anagExpand_'+m3);
   const arrow=document.getElementById('anagArrow_'+m3);
+  const clientRow=document.getElementById('anagRow_'+m3);
   if(!expandRow)return;
   if(expandRow.style.display!=='none'){
-    expandRow.style.display='none';arrow.textContent='▶';return;
+    expandRow.style.display='none';arrow.textContent='▶';
+    // rimuovi sticky dal cliente collassato
+    if(clientRow){clientRow.style.position='';clientRow.style.top='';clientRow.style.zIndex='';clientRow.style.background='';clientRow.style.boxShadow='';}
+    return;
   }
   expandRow.style.display='';arrow.textContent='▼';
+  // Sticky level-2: il cliente rimane ancorato mentre si scrolla tra i suoi assets
+  if(clientRow){
+    const theadEl=document.querySelector('#anagClientiTable thead');
+    const theadH=theadEl?theadEl.offsetHeight:40;
+    clientRow.style.position='sticky';
+    clientRow.style.top=theadH+'px';
+    clientRow.style.zIndex='1';
+    clientRow.style.background='var(--white)';
+    clientRow.style.boxShadow='0 3px 6px rgba(0,0,0,.08)';
+  }
   const detailDiv=document.getElementById('anagDetail_'+m3);
   if(detailDiv.innerHTML)return;
 
@@ -8171,22 +8220,239 @@ let PM_DATA=[];
 let PM_FILTER='tutti';
 let PM_CYCLE_DEFS=[];
 let PM_OPEN_ROW=null;
+let PM_OVERVIEW=null; // {clienti:[{codice_m3,nome,assets:[...]}], total_assets, total_clienti}
 
-function initPMSection(){ loadPMList(); }
+function initPMSection(){ loadPMOverview(); }
 
-async function loadPMList(){
+/* ─── PM OVERVIEW: albero cliente/assets ─── */
+
+function getPMAssetStatus(prossimoControllo){
+  if(!prossimoControllo)return{cls:'gray',label:'—',days:null};
+  const days=Math.round((new Date(prossimoControllo)-new Date())/86400000);
+  if(days<0)return{cls:'err',label:`🔴 ${Math.abs(days)}gg scad.`,days};
+  if(days<=30)return{cls:'warn',label:`⚠️ ${days}gg`,days};
+  return{cls:'ok',label:`✅ ${days}gg`,days};
+}
+
+async function loadPMOverview(){
+  const tb=$('pmTreeBody');if(tb)tb.innerHTML='<tr><td colspan="9" style="text-align:center;padding:24px"><div class="loading" style="margin:auto"><div class="spin"></div></div></td></tr>';
   try{
-    const r=await apiCall('getPMCalendar',{mese:'all',userId:USER?.ID},'POST');
-    PM_DATA=r.calendar||[];
-    PM_CYCLE_DEFS=r.cycle_definitions||PM_CYCLE_DEFS;
-    // Populate model filter
-    const models=[...new Set(PM_DATA.map(m=>m.modello).filter(Boolean))].sort();
-    const sel=$('pmModelFilter');
-    if(sel){sel.innerHTML='<option value="">Tutti i modelli</option>'+models.map(m=>'<option value="'+m+'">'+m+'</option>').join('')}
-    renderPMTable();
+    const r=await apiCall('getPMOverview',{userId:USER?.ID},'POST');
+    PM_OVERVIEW=r;
+    // Popola filtro clienti
+    const sel=$('pmCliFilter');
+    if(sel){
+      const opts=(r.clienti||[]).map(c=>`<option value="${esc(c.codice_m3)}">${esc(c.nome)}</option>`).join('');
+      sel.innerHTML='<option value="">Tutti i clienti</option>'+opts;
+    }
+    renderPMTree();
   }catch(e){
-    $('pmListContainer').innerHTML='<p style="color:var(--err)">Errore caricamento PM: '+e.message+'</p>';
+    if(tb)tb.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--err);padding:16px">${e.message}</td></tr>`;
   }
+}
+
+function renderPMTree(){
+  if(!PM_OVERVIEW){loadPMOverview();return;}
+  const search=($('pmSearch')?.value||'').toLowerCase();
+  const typeF=$('pmTypeFilter')?.value||'';
+  const cliF=$('pmCliFilter')?.value||'';
+
+  // Copia e filtra
+  let clienti=(PM_OVERVIEW.clienti||[]).map(c=>{
+    let assets=(c.assets||[]);
+    if(typeF)assets=assets.filter(a=>{const t=assetType(a);return t===typeF||(t==='MFR'&&typeF==='MFR')||(typeF==='MFR'&&(a.GruppoAttrezzatura||'').toUpperCase().includes('MFR'))});
+    if(search)assets=assets.filter(a=>{const h=((a.nome_asset||a.NomeAsset||'')+(a.numero_serie||a.NumeroSerie||'')+(a.modello||a.Modello||'')+(c.nome||'')).toLowerCase();return h.includes(search);});
+    if(PM_FILTER==='scaduti')assets=assets.filter(a=>getPMAssetStatus(a.prossimo_controllo).days!==null&&getPMAssetStatus(a.prossimo_controllo).days<0);
+    if(PM_FILTER==='30gg')assets=assets.filter(a=>{const s=getPMAssetStatus(a.prossimo_controllo);return s.days!==null&&s.days>=0&&s.days<=30;});
+    if(PM_FILTER==='ok')assets=assets.filter(a=>{const s=getPMAssetStatus(a.prossimo_controllo);return s.days!==null&&s.days>30;});
+    return{...c,assets};
+  });
+  if(cliF)clienti=clienti.filter(c=>c.codice_m3===cliF);
+  clienti=clienti.filter(c=>c.assets.length>0);
+
+  // Stats totali (su tutti gli assets non filtrati)
+  const allAssets=(PM_OVERVIEW.clienti||[]).flatMap(c=>c.assets||[]);
+  const scadutiN=allAssets.filter(a=>getPMAssetStatus(a.prossimo_controllo).days!==null&&getPMAssetStatus(a.prossimo_controllo).days<0).length;
+  const prossimiN=allAssets.filter(a=>{const s=getPMAssetStatus(a.prossimo_controllo);return s.days!==null&&s.days>=0&&s.days<=30;}).length;
+  const okN=allAssets.filter(a=>{const s=getPMAssetStatus(a.prossimo_controllo);return s.days!==null&&s.days>30;}).length;
+  const noPMN=allAssets.filter(a=>!a.prossimo_controllo).length;
+
+  const bar=$('pmStatsBar');
+  if(bar)bar.innerHTML=`
+    <button onclick="PM_FILTER='scaduti';renderPMTree()" class="btn-filter" style="${PM_FILTER==='scaduti'?'border-color:var(--err);background:var(--err-light);color:var(--err)':''}">🔴 Scaduti (${scadutiN})</button>
+    <button onclick="PM_FILTER='30gg';renderPMTree()" class="btn-filter" style="${PM_FILTER==='30gg'?'border-color:var(--warn);background:var(--warn-light);color:var(--warn2)':''}">⚠️ Entro 30gg (${prossimiN})</button>
+    <button onclick="PM_FILTER='ok';renderPMTree()" class="btn-filter" style="${PM_FILTER==='ok'?'border-color:var(--ok);background:var(--ok-light);color:#065F46':''}">✅ OK (${okN})</button>
+    <button onclick="PM_FILTER='tutti';renderPMTree()" class="btn-filter" style="${PM_FILTER==='tutti'?'border-color:var(--c1);background:rgba(0,201,167,.1);color:var(--c1)':''}">📋 Tutti (${allAssets.length})</button>
+    ${noPMN>0?`<span style="font-size:.75rem;color:var(--gray);margin-left:8px">⚪ ${noPMN} senza data PM</span>`:''}`;
+
+  const tb=$('pmTreeBody');if(!tb)return;
+  if(!clienti.length){tb.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--gray);padding:24px">Nessun asset trovato con i filtri selezionati</td></tr>`;return;}
+
+  tb.innerHTML=clienti.map(c=>{
+    const assets=c.assets||[];
+    const robots=assets.filter(a=>assetType(a)==='ROBOT').length;
+    const mfr=assets.filter(a=>assetType(a)==='MFR').length;
+    const scad=assets.filter(a=>getPMAssetStatus(a.prossimo_controllo).days!==null&&getPMAssetStatus(a.prossimo_controllo).days<0).length;
+    const pross=assets.filter(a=>{const s=getPMAssetStatus(a.prossimo_controllo);return s.days!==null&&s.days>=0&&s.days<=30;}).length;
+    const ok=assets.filter(a=>{const s=getPMAssetStatus(a.prossimo_controllo);return s.days!==null&&s.days>30;}).length;
+    const rowBg=scad>0?'background:var(--err-light)':pross>0?'background:var(--warn-light)':'';
+    return `<tr class="anag-row" id="pmRow_${c.codice_m3}" onclick="togglePMTree('${esc(c.codice_m3)}')" style="cursor:pointer;${rowBg}" title="Espandi lista assets PM">
+      <td><span id="pmArrow_${c.codice_m3}" style="display:inline-block;transition:transform .2s">▶</span></td>
+      <td><strong>${esc(c.nome)}</strong><br><small style="color:var(--muted)">${esc(c.codice_m3||'')} — ${assets.length} assets</small></td>
+      <td style="text-align:center">${robots||'<span style="color:#ddd">—</span>'}</td>
+      <td style="text-align:center">${mfr||'<span style="color:#ddd">—</span>'}</td>
+      <td style="text-align:center"><strong>${assets.length}</strong></td>
+      <td style="text-align:center">${scad>0?`<span class="tag tag-err">${scad}</span>`:'<span style="color:#ddd">—</span>'}</td>
+      <td style="text-align:center">${pross>0?`<span class="tag tag-warn">${pross}</span>`:'<span style="color:#ddd">—</span>'}</td>
+      <td style="text-align:center">${ok>0?`<span class="tag tag-ok">${ok}</span>`:'<span style="color:#ddd">—</span>'}</td>
+      <td></td>
+    </tr>
+    <tr id="pmExpand_${c.codice_m3}" style="display:none"><td colspan="9" style="padding:0;background:#f8faff;border-bottom:2px solid var(--gray3)">
+      ${renderPMAssetTable(c)}
+    </td></tr>`;
+  }).join('');
+}
+
+function renderPMAssetTable(c){
+  const assets=(c.assets||[]).slice().sort((a,b)=>{
+    const sa=getPMAssetStatus(a.prossimo_controllo).days;
+    const sb=getPMAssetStatus(b.prossimo_controllo).days;
+    if(sa===null&&sb===null)return 0;
+    if(sa===null)return 1;
+    if(sb===null)return -1;
+    return sa-sb;
+  });
+  if(!assets.length)return'<div style="padding:12px;color:var(--gray)">Nessun asset.</div>';
+  const rows=assets.map((a,i)=>{
+    const st=getPMAssetStatus(a.prossimo_controllo);
+    const tipo=a.gruppo_attrezzatura||a.tipo_foglio||'-';
+    const prossimoFmt=a.prossimo_controllo?new Date(a.prossimo_controllo+'T00:00:00').toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'numeric'}):'—';
+    const stBadge=st.days===null?'<span class="tag tag-gray">No data</span>':
+      st.days<0?`<span class="tag tag-err">🔴 ${Math.abs(st.days)}gg</span>`:
+      st.days<=30?`<span class="tag tag-warn">⚠️ ${st.days}gg</span>`:
+      `<span class="tag tag-ok">✅ ${st.days}gg</span>`;
+    return `<tr>
+      <td style="color:var(--gray);text-align:center;width:30px">${i+1}</td>
+      <td style="font-size:.75rem">${prodIcon(assetType(a),14)} ${esc(tipo)}</td>
+      <td>${esc(a.modello||a.nome_asset||'-')}</td>
+      <td style="font-family:monospace;font-size:.75rem">${esc(a.numero_serie||'—')}</td>
+      <td>${prossimoFmt}</td>
+      <td>${stBadge}</td>
+      <td><button class="btn btn-xs" onclick="event.stopPropagation();openPMEdit('${a.id}','${esc(c.codice_m3)}')" title="Imposta data PM">✏️</button></td>
+    </tr>`;
+  }).join('');
+  return `<div style="padding:8px 16px 12px"><table class="tbl" style="font-size:.8rem">
+    <thead><tr><th>#</th><th>Tipo</th><th>Modello</th><th>N. Serie</th><th>Prossimo PM</th><th>Stato</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function togglePMTree(m3){
+  const expandRow=document.getElementById('pmExpand_'+m3);
+  const arrow=document.getElementById('pmArrow_'+m3);
+  const clientRow=document.getElementById('pmRow_'+m3);
+  if(!expandRow)return;
+  if(expandRow.style.display!=='none'){
+    expandRow.style.display='none';if(arrow)arrow.textContent='▶';
+    if(clientRow){clientRow.style.position='';clientRow.style.top='';clientRow.style.zIndex='';clientRow.style.background='';clientRow.style.boxShadow='';}
+    return;
+  }
+  expandRow.style.display='';if(arrow)arrow.textContent='▼';
+  if(clientRow){
+    const theadEl=document.querySelector('#pmTreeTable thead');
+    const theadH=theadEl?theadEl.offsetHeight:40;
+    clientRow.style.position='sticky';
+    clientRow.style.top=theadH+'px';
+    clientRow.style.zIndex='1';
+    clientRow.style.background='var(--white)';
+    clientRow.style.boxShadow='0 3px 6px rgba(0,0,0,.08)';
+  }
+}
+
+async function downloadPMTemplate(){
+  if(typeof XLSX==='undefined'){
+    await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+  }
+  const wb=XLSX.utils.book_new();
+  const headers=['SerialNumber','AssetType','CustomerName','NextPMDate','LastPMDate','DaysOverdue','Notes'];
+  const sample=['SN12345','ROBOT','Az. Ag. Esempio','2026-03-15','2025-03-15','','' ];
+  const ws=XLSX.utils.aoa_to_sheet([headers,sample]);
+  ws['!cols']=headers.map(()=>({wch:22}));
+  XLSX.utils.book_append_sheet(wb,ws,'LSSA_Overdue');
+  const inst=[
+    ['Istruzioni Importazione PM da LSSA'],[''],
+    ['Colonne OBBLIGATORIE:'],
+    ['SerialNumber','Numero di serie del robot (es: SN12345)'],
+    ['NextPMDate','Data prossimo PM — formato YYYY-MM-DD (es: 2026-03-15)'],[''],
+    ['Colonne opzionali:'],
+    ['AssetType','Tipo asset (ROBOT, MFR, JUNO, ecc.)'],
+    ['CustomerName','Nome cliente (solo riferimento)'],
+    ['LastPMDate','Data ultimo PM — formato YYYY-MM-DD'],
+    ['DaysOverdue','Giorni di ritardo (numero intero)'],
+    ['Notes','Note libere'],[''],
+    ['Fonte dati:'],
+    ['Esporta da LSSA2: https://lssa2.lelyonline.com/performance/preventive-maintenance-overdue'],
+    ['Copia la tabella in questo file e importa nella sezione PM Scheduling di Syntoniqa'],
+  ];
+  const wsI=XLSX.utils.aoa_to_sheet(inst);wsI['!cols']=[{wch:25},{wch:65}];
+  XLSX.utils.book_append_sheet(wb,wsI,'Istruzioni');
+  XLSX.writeFile(wb,'template_pm_lssa.xlsx');
+  toast('Template scaricato','ok');
+}
+
+async function importLSSAOverdue(input){
+  const file=input.files?.[0];if(!file)return;
+  try{
+    if(typeof XLSX==='undefined'){
+      await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+    }
+    toast('Parsing file...','info');
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array',cellDates:true});
+    const sheetName=wb.SheetNames.find(s=>!s.toLowerCase().includes('istruz'))||wb.SheetNames[0];
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{raw:false});
+    if(!rows.length){toast('File vuoto o formato non riconosciuto','err');return;}
+
+    const nk=s=>s.trim().toLowerCase().replace(/[\s_\-]/g,'');
+    const normalizeDate=v=>{
+      if(!v)return null;
+      if(v instanceof Date&&!isNaN(v))return v.toISOString().split('T')[0];
+      if(typeof v==='string'){
+        if(v.match(/^\d{4}-\d{2}-\d{2}/))return v.substring(0,10);
+        if(v.match(/^\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{4}/)){const[d,m,y]=v.split(/[\/\-.]/);return`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}
+      }
+      return null;
+    };
+
+    const records=rows.map(r=>{
+      const n={};for(const[k,v]of Object.entries(r)){n[nk(k)]=v;}
+      const serial=(n['serialnumber']||n['serial']||n['numeroserie']||n['sn']||n['serialno']||'').trim();
+      const nextPM=normalizeDate(n['nextpmdate']||n['nextpm']||n['dataprossimopm']||n['prossimo']||n['nextservice']||n['nextpmdue']||'');
+      const lastPM=normalizeDate(n['lastpmdate']||n['lastpm']||n['dataultimopm']||n['ultimo']||n['lastservice']||'');
+      if(!serial||!nextPM)return null;
+      return{numero_serie:serial,prossimo_controllo:nextPM,ultimo_controllo:lastPM||undefined,note:n['notes']||n['note']||undefined};
+    }).filter(Boolean);
+
+    if(!records.length){toast('Nessun record valido (SerialNumber + NextPMDate obbligatori)','err');return;}
+    toast(`Importo ${records.length} record...`,'info');
+    const res=await apiCall('importPMOverdue',{records},'POST');
+    toast(`✅ ${res.updated} aggiornati | ${res.not_found} non trovati${res.errors?', '+res.errors+' errori':''}`,res.not_found>0?'warn':'ok');
+    PM_OVERVIEW=null;await loadPMOverview();
+  }catch(e){toast('Errore import: '+e.message,'err');}
+  input.value='';
+}
+
+function openPMEdit(assetId,codiceM3){
+  const newDate=prompt('Data prossimo PM (YYYY-MM-DD):');
+  if(!newDate||!newDate.match(/^\d{4}-\d{2}-\d{2}$/)){if(newDate)toast('Formato non valido — usa YYYY-MM-DD','warn');return;}
+  apiCall('importPMOverdue',{records:[{asset_id:assetId,prossimo_controllo:newDate}]},'POST')
+    .then(r=>{toast('Data PM aggiornata','ok');PM_OVERVIEW=null;loadPMOverview();})
+    .catch(e=>toast(e.message,'err'));
+}
+
+/* Compatibilità backward con funzioni che usano il vecchio PM_DATA */
+async function loadPMList(){
+  // Rimandato a loadPMOverview
+  return loadPMOverview();
 }
 
 function getPMStatus(dataStr){
