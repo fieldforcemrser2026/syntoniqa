@@ -5686,10 +5686,11 @@ function normAssetType(tipo){
   // Tutto il resto è "ALTRI"
   return 'ALTRI';
 }
-// Tipo asset: usa TipoFoglio (foglio prodotto, più affidabile) poi GruppoAttrezzatura come fallback
+// Tipo asset: usa TipoFoglio (foglio prodotto, più affidabile) poi GruppoAttrezzatura, poi Modello come fallback
 function assetType(a){
   let t=normAssetType(a.TipoFoglio||'');
   if(t==='ALTRI') t=normAssetType(a.GruppoAttrezzatura||'');
+  if(t==='ALTRI') t=normAssetType(a.Modello||''); // fallback: Modello (es. A5, Astronaut A4, ecc.)
   return t;
 }
 // ============ FILTRO CONDIVISO ASSET (usato sia in Clienti che Macchine) ============
