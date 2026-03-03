@@ -496,6 +496,47 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 /* ===== AI PLANNER BUTTONS ===== */
 .btn-ghost-light{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.25)}
 .btn-ghost-light:hover{background:rgba(255,255,255,.25)}
+
+/* ===== MULTI-SELECT BATCH SYSTEM ===== */
+.sel-chk{width:16px;height:16px;cursor:pointer;accent-color:var(--c1)}
+tr.selected-row{background:rgba(195,10,20,.1) !important}
+.batch-bar{
+  position:sticky;bottom:0;left:0;right:0;
+  background:linear-gradient(180deg,rgba(15,15,26,.95),rgba(15,15,26,.98));
+  backdrop-filter:blur(12px);
+  border-top:1.5px solid rgba(195,10,20,.3);
+  padding:12px 16px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  z-index:50;
+  animation:slideUp .2s ease-out;
+  font-size:.8125rem;
+}
+.batch-bar.hidden{display:none}
+@keyframes slideUp{
+  from{transform:translateY(100%);opacity:0}
+  to{transform:translateY(0);opacity:1}
+}
+.batch-info{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  color:#fff;
+}
+.batch-count{
+  font-weight:700;
+  color:var(--c1);
+  font-size:.95rem;
+}
+.batch-actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.batch-actions .btn{padding:7px 14px;font-size:.75rem}
 </style>
 </head>
 <body>
@@ -655,7 +696,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 </div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
-<table class="tbl"><thead><tr><th>Data</th><th>Ora</th><th>Tecnico</th><th>🚐</th><th>Cliente</th><th>Macchina</th><th>Tipo</th><th>Stato</th><th>Km</th><th>Ore</th><th></th></tr></thead><tbody id="tblPiano"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('piano','tblPiano',this.checked)"></th><th>Data</th><th>Ora</th><th>Tecnico</th><th>🚐</th><th>Cliente</th><th>Macchina</th><th>Tipo</th><th>Stato</th><th>Km</th><th>Ore</th><th></th></tr></thead><tbody id="tblPiano"></tbody></table>
 </div>
 </div>
 </section>
@@ -674,7 +715,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 </div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
-<table class="tbl"><thead><tr><th>Priorità</th><th>Cliente</th><th>Macchina</th><th>Problema</th><th>Tecnico</th><th>SLA</th><th>Stato</th><th>Data</th><th></th></tr></thead><tbody id="tblUrgenze"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('urgenze','tblUrgenze',this.checked)"></th><th>Priorità</th><th>Cliente</th><th>Macchina</th><th>Problema</th><th>Tecnico</th><th>SLA</th><th>Stato</th><th>Data</th><th></th></tr></thead><tbody id="tblUrgenze"></tbody></table>
 </div>
 </div>
 </section>
@@ -701,7 +742,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 </div>
 <div class="card-body np" style="max-height:500px;overflow-y:auto">
-<table class="tbl"><thead><tr><th>Codice</th><th>Descrizione</th><th>Qtà</th><th>Tecnico</th><th>Cliente</th><th>Stato</th><th>Richiesto</th><th>ETA</th><th></th></tr></thead><tbody id="tblOrdini"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('ordini','tblOrdini',this.checked)"></th><th>Codice</th><th>Descrizione</th><th>Qtà</th><th>Tecnico</th><th>Cliente</th><th>Stato</th><th>Richiesto</th><th>ETA</th><th></th></tr></thead><tbody id="tblOrdini"></tbody></table>
 </div>
 </div>
 </section>
@@ -786,7 +827,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 </div>
 <div id="cliStats" style="padding:12px 16px;display:flex;gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--gray4)"></div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
-<table class="tbl"><thead><tr><th>Nome</th><th>Città</th><th>Prov</th><th>Indirizzo</th><th>Telefono</th><th>Contratto</th><th>📍</th><th></th></tr></thead><tbody id="tblClienti"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('clienti','tblClienti',this.checked)"></th><th>Nome</th><th>Città</th><th>Prov</th><th>Indirizzo</th><th>Telefono</th><th>Contratto</th><th>📍</th><th></th></tr></thead><tbody id="tblClienti"></tbody></table>
 </div>
 </div>
 </section>
@@ -2985,6 +3026,303 @@ function renderDashboard(){
   }).join('');
 }
 
+// ===== MULTI-SELECT BATCH SYSTEM =====
+const BATCH_SELECTED = {}; // { tableKey: Set of IDs }
+const BATCH_CONTAINERS = {}; // { tableKey: containerId }
+
+function initBatchBar(tableKey, containerId, actions) {
+  BATCH_CONTAINERS[tableKey] = containerId;
+  BATCH_SELECTED[tableKey] = new Set();
+
+  const container = $(containerId);
+  if (!container) return;
+
+  const barHtml = `<div id="batchBar_${tableKey}" class="batch-bar hidden">
+    <div class="batch-info">
+      <span>Selezionati: <span class="batch-count" id="batchCount_${tableKey}">0</span></span>
+    </div>
+    <div class="batch-actions">
+      ${actions.map((a, i) => `
+        <button class="btn btn-${a.cls}" onclick="batchAction('${tableKey}','${a.action}')" title="${a.label}">
+          ${a.icon} ${a.label}
+        </button>
+      `).join('')}
+      <button class="btn btn-ghost" onclick="clearBatchSelection('${tableKey}')">Annulla</button>
+    </div>
+  </div>`;
+
+  if (!document.getElementById(`batchBar_${tableKey}`)) {
+    container.insertAdjacentHTML('beforeend', barHtml);
+  }
+}
+
+function toggleSelectAll(tableKey, tbodyId, checked) {
+  const tbody = $(tbodyId);
+  if (!tbody) return;
+
+  const checkboxes = tbody.querySelectorAll('input.sel-chk');
+  const ids = [];
+
+  checkboxes.forEach(chk => {
+    const row = chk.closest('tr');
+    const id = row?.dataset.id;
+    if (id) {
+      chk.checked = checked;
+      if (checked) {
+        ids.push(id);
+        row.classList.add('selected-row');
+      } else {
+        row.classList.remove('selected-row');
+      }
+    }
+  });
+
+  if (checked) {
+    ids.forEach(id => BATCH_SELECTED[tableKey].add(id));
+  } else {
+    BATCH_SELECTED[tableKey].clear();
+  }
+
+  updateBatchBar(tableKey);
+}
+
+function toggleSelectRow(tableKey, id, checked) {
+  const row = document.getElementById(`row_${tableKey}_${id}`);
+  if (!row) return;
+
+  if (checked) {
+    BATCH_SELECTED[tableKey].add(id);
+    row.classList.add('selected-row');
+  } else {
+    BATCH_SELECTED[tableKey].delete(id);
+    row.classList.remove('selected-row');
+  }
+
+  updateBatchBar(tableKey);
+}
+
+function updateBatchBar(tableKey) {
+  const count = BATCH_SELECTED[tableKey]?.size || 0;
+  const bar = document.getElementById(`batchBar_${tableKey}`);
+  const countEl = document.getElementById(`batchCount_${tableKey}`);
+
+  if (bar) {
+    if (count > 0) {
+      bar.classList.remove('hidden');
+    } else {
+      bar.classList.add('hidden');
+    }
+  }
+
+  if (countEl) {
+    countEl.textContent = count;
+  }
+}
+
+function clearBatchSelection(tableKey) {
+  BATCH_SELECTED[tableKey] = new Set();
+  const containerId = BATCH_CONTAINERS[tableKey];
+  if (containerId) {
+    const tbody = document.querySelector(`#${containerId} tbody`);
+    if (tbody) {
+      tbody.querySelectorAll('tr').forEach(tr => {
+        tr.classList.remove('selected-row');
+        const chk = tr.querySelector('input.sel-chk');
+        if (chk) chk.checked = false;
+      });
+      const headerChk = document.querySelector(`#${containerId} thead input.sel-chk`);
+      if (headerChk) headerChk.checked = false;
+    }
+  }
+  updateBatchBar(tableKey);
+}
+
+async function batchAction(tableKey, actionName) {
+  const ids = [...(BATCH_SELECTED[tableKey] || [])];
+  if (!ids.length) {
+    toast('Nessun elemento selezionato','warn');
+    return;
+  }
+
+  switch(actionName) {
+    case 'deleteUrgenze':
+      await batchDeleteUrgenze(ids, tableKey);
+      break;
+    case 'assignUrgenze':
+      await batchAssignUrgenze(ids, tableKey);
+      break;
+    case 'statoUrgenze':
+      await batchStatoUrgenze(ids, tableKey);
+      break;
+    case 'deletePiano':
+      await batchDeletePiano(ids, tableKey);
+      break;
+    case 'completePiano':
+      await batchCompletePiano(ids, tableKey);
+      break;
+    case 'statoPiano':
+      await batchStatoPiano(ids, tableKey);
+      break;
+    case 'deleteClienti':
+      await batchDeleteClienti(ids, tableKey);
+      break;
+    case 'deleteOrdini':
+      await batchDeleteOrdini(ids, tableKey);
+      break;
+    case 'statoOrdini':
+      await batchStatoOrdini(ids, tableKey);
+      break;
+    case 'deleteMacchine':
+      await batchDeleteMacchine(ids, tableKey);
+      break;
+  }
+}
+
+// Batch action implementations
+async function batchDeleteUrgenze(ids, tableKey) {
+  if (!confirm(`Eliminare ${ids.length} urgenze selezionate?`)) return;
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      await apiCall('updateUrgenza', {id, Obsoleto: true, userId: USER?.ID}, 'POST');
+      ok++;
+    } catch(e) { fail++; }
+  }
+  toast(`${ok} eliminate${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
+  clearBatchSelection(tableKey);
+  await refreshData(true);
+}
+
+async function batchAssignUrgenze(ids, tableKey) {
+  const tecnico = prompt('Inserisci ID tecnico da assegnare:');
+  if (!tecnico) return;
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      await apiCall('updateUrgenza', {id, TecnicoAssegnato: tecnico, Stato: 'assegnata', userId: USER?.ID}, 'POST');
+      ok++;
+    } catch(e) { fail++; }
+  }
+  toast(`${ok} assegnate${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
+  clearBatchSelection(tableKey);
+  await refreshData(true);
+}
+
+async function batchStatoUrgenze(ids, tableKey) {
+  const stato = prompt('Nuovo stato (aperta, assegnata, schedulata, in_corso, risolta, chiusa):');
+  if (!stato) return;
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      await apiCall('updateUrgenza', {id, Stato: stato, userId: USER?.ID}, 'POST');
+      ok++;
+    } catch(e) { fail++; }
+  }
+  toast(`${ok} aggiornate${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
+  clearBatchSelection(tableKey);
+  await refreshData(true);
+}
+
+async function batchDeletePiano(ids, tableKey) {
+  if (!confirm(`Eliminare ${ids.length} interventi selezionati?`)) return;
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      await apiCall('updatePiano', {id, Obsoleto: true, userId: USER?.ID}, 'POST');
+      ok++;
+    } catch(e) { fail++; }
+  }
+  toast(`${ok} eliminati${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
+  clearBatchSelection(tableKey);
+  await refreshData(true);
+}
+
+async function batchCompletePiano(ids, tableKey) {
+  if (!confirm(`Segnare ${ids.length} interventi come completati?`)) return;
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      await apiCall('updatePiano', {id, Stato: 'completato', userId: USER?.ID}, 'POST');
+      ok++;
+    } catch(e) { fail++; }
+  }
+  toast(`${ok} completati${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
+  clearBatchSelection(tableKey);
+  await refreshData(true);
+}
+
+async function batchStatoPiano(ids, tableKey) {
+  const stato = prompt('Nuovo stato (pianificato, in_corso, completato, annullato):');
+  if (!stato) return;
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      await apiCall('updatePiano', {id, Stato: stato, userId: USER?.ID}, 'POST');
+      ok++;
+    } catch(e) { fail++; }
+  }
+  toast(`${ok} aggiornati${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
+  clearBatchSelection(tableKey);
+  await refreshData(true);
+}
+
+async function batchDeleteClienti(ids, tableKey) {
+  if (!confirm(`Eliminare ${ids.length} clienti selezionati?`)) return;
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      await apiCall('updateCliente', {id, Obsoleto: true, userId: USER?.ID}, 'POST');
+      ok++;
+    } catch(e) { fail++; }
+  }
+  toast(`${ok} eliminati${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
+  clearBatchSelection(tableKey);
+  await refreshData(true);
+}
+
+async function batchDeleteOrdini(ids, tableKey) {
+  if (!confirm(`Eliminare ${ids.length} ordini selezionati?`)) return;
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      await apiCall('updateOrdine', {id, Obsoleto: true, userId: USER?.ID}, 'POST');
+      ok++;
+    } catch(e) { fail++; }
+  }
+  toast(`${ok} eliminati${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
+  clearBatchSelection(tableKey);
+  await refreshData(true);
+}
+
+async function batchStatoOrdini(ids, tableKey) {
+  const stato = prompt('Nuovo stato (richiesto, preso_in_carico, ordinato, in_arrivo, arrivato):');
+  if (!stato) return;
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      await apiCall('updateOrdineStato', {id, stato}, 'POST');
+      ok++;
+    } catch(e) { fail++; }
+  }
+  toast(`${ok} aggiornati${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
+  clearBatchSelection(tableKey);
+  await refreshData(true);
+}
+
+async function batchDeleteMacchine(ids, tableKey) {
+  if (!confirm(`Eliminare ${ids.length} macchine selezionate?`)) return;
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      await apiCall('updateMacchina', {id, Obsoleto: true, userId: USER?.ID}, 'POST');
+      ok++;
+    } catch(e) { fail++; }
+  }
+  toast(`${ok} eliminate${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
+  clearBatchSelection(tableKey);
+  await refreshData(true);
+}
+
 // ============ PIANO (INTERVENTI) ============
 let _lastPianoItems=[]; // per export CSV
 function renderPiano(){
@@ -3000,7 +3338,13 @@ function renderPiano(){
   if(dataA)items=items.filter(p=>(p.Data||'')<=dataA);
   items.sort((a,b)=>(b.Data||'').localeCompare(a.Data||''));
   _lastPianoItems=items;
-  $('tblPiano').innerHTML=items.length?items.map(p=>`<tr>
+  initBatchBar('piano','tblPiano',[
+    {label:'Elimina',action:'deletePiano',cls:'err',icon:'🗑️'},
+    {label:'Completa',action:'completePiano',cls:'ok',icon:'✅'},
+    {label:'Cambia stato',action:'statoPiano',cls:'warn',icon:'⚡'}
+  ]);
+  $('tblPiano').innerHTML=items.length?items.map(p=>`<tr id="row_piano_${p.ID}" data-id="${p.ID}">
+    <td><input type="checkbox" class="sel-chk" onchange="toggleSelectRow('piano','${p.ID}',this.checked)"></td>
     <td>${fmtDate(p.Data)}${p.DataFine&&p.DataFine!==p.Data?' → '+fmtDate(p.DataFine):''}</td>
     <td>${p.OraInizio||'—'}</td>
     <td>${getName(DATA.utenti||[],p.TecnicoID)}${p.TecniciIDs?'<br><span style="font-size:.6875rem;color:var(--gray)">+'+p.TecniciIDs.split(',').filter(Boolean).length+' altri</span>':''}</td>
@@ -3012,7 +3356,7 @@ function renderPiano(){
     <td>${p.KmPercorsi||'—'}</td>
     <td>${p.OreLavorate||'—'}</td>
     <td>${(p.Note||'').includes('DA CONFERMARE')?`<button class="btn btn-ok btn-xs" onclick="approvaInt('${p.ID}')">✅</button> <button class="btn btn-err btn-xs" onclick="rifiutaInt('${p.ID}')">❌</button> `:''}<button class="btn btn-ghost btn-xs" onclick="showDetail('piano','${p.ID}')">👁️</button></td>
-  </tr>`).join(''):'<tr><td colspan="11" class="empty"><p>Nessun intervento trovato</p></td></tr>';
+  </tr>`).join(''):'<tr><td colspan="12" class="empty"><p>Nessun intervento trovato</p></td></tr>';
 }
 
 function exportPianoCSV(){
@@ -3045,7 +3389,13 @@ function renderUrgenze(){
   if(dataA)items=items.filter(u=>(u.DataSegnalazione||'').substring(0,10)<=dataA);
   items.sort((a,b)=>(b.DataSegnalazione||'').localeCompare(a.DataSegnalazione||''));
   _lastUrgItems=items;
-  $('tblUrgenze').innerHTML=items.length?items.map(u=>`<tr>
+  initBatchBar('urgenze','tblUrgenze',[
+    {label:'Elimina',action:'deleteUrgenze',cls:'err',icon:'🗑️'},
+    {label:'Assegna',action:'assignUrgenze',cls:'primary',icon:'✅'},
+    {label:'Cambia stato',action:'statoUrgenze',cls:'warn',icon:'⚡'}
+  ]);
+  $('tblUrgenze').innerHTML=items.length?items.map(u=>`<tr id="row_urgenze_${u.ID}" data-id="${u.ID}">
+    <td><input type="checkbox" class="sel-chk" onchange="toggleSelectRow('urgenze','${u.ID}',this.checked)"></td>
     <td><span class="tag" style="background:${getColor(DATA.priorita||[],u.PrioritaID)}20;color:${getColor(DATA.priorita||[],u.PrioritaID)}">${getName(DATA.priorita||[],u.PrioritaID)}</span></td>
     <td>${getName(DATA.clienti||[],u.ClienteID)}</td>
     <td>${getName(DATA.macchine||[],u.MacchinaID,'Tipo')}</td>
@@ -3055,7 +3405,7 @@ function renderUrgenze(){
     <td>${statusTag(u.Stato)}</td>
     <td>${fmtDateTime(u.DataSegnalazione)}</td>
     <td class="actions-cell">${u.Stato==='aperta'?`<button class="btn btn-primary btn-xs" onclick="openAssegna('${u.ID}')">✅ Approva+Assegna</button>`:u.Stato==='assegnata'||u.Stato==='schedulata'?`<button class="btn btn-warn btn-xs" onclick="urgAction('${u.ID}','startUrgenza')">⚡ Inizia</button>`:u.Stato==='in_corso'?`<button class="btn btn-ok btn-xs" onclick="urgAction('${u.ID}','resolveUrgenza')">✅ Risolvi</button>`:''} <button class="btn btn-ghost btn-xs" onclick="showDetail('urgenza','${u.ID}')">👁️</button></td>
-  </tr>`).join(''):'<tr><td colspan="9" class="empty"><p>Nessuna urgenza</p></td></tr>';
+  </tr>`).join(''):'<tr><td colspan="10" class="empty"><p>Nessuna urgenza</p></td></tr>';
 }
 
 function exportUrgenzeCSV(){
@@ -3287,7 +3637,13 @@ function renderOrdini(){
   const stati=['richiesto','preso_in_carico','ordinato','in_arrivo','arrivato'];
   stati.forEach((s,i)=>{const el=$('wfOrd'+(i+1));if(el){const c=items.filter(o=>o.Stato===s).length;el.className='wf-step'+(c>0?' active':'');el.textContent=el.textContent.split('(')[0]+(c>0?' ('+c+')':'')}});
 
-  $('tblOrdini').innerHTML=items.length?items.map(o=>`<tr>
+  initBatchBar('ordini','tblOrdini',[
+    {label:'Elimina',action:'deleteOrdini',cls:'err',icon:'🗑️'},
+    {label:'Cambia stato',action:'statoOrdini',cls:'warn',icon:'⚡'}
+  ]);
+
+  $('tblOrdini').innerHTML=items.length?items.map(o=>`<tr id="row_ordini_${o.ID}" data-id="${o.ID}">
+    <td><input type="checkbox" class="sel-chk" onchange="toggleSelectRow('ordini','${o.ID}',this.checked)"></td>
     <td><strong>${o.Codice||'—'}</strong></td>
     <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.Descrizione||'—'}</td>
     <td>${o.Quantita||1}</td>
@@ -3297,7 +3653,7 @@ function renderOrdini(){
     <td>${fmtDate(o.DataRichiesta)}</td>
     <td>${fmtDate(o.DataArrivoPrevista)}</td>
     <td class="actions-cell">${nextOrdAction(o)}<button class="btn btn-ghost btn-xs" onclick="editOrdine('${o.ID}')">✏️</button><button class="btn btn-ghost btn-xs" onclick="deleteOrdine('${o.ID}')" style="color:var(--err)">🗑️</button><button class="btn btn-ghost btn-xs" onclick="showDetail('ordine','${o.ID}')">👁️</button></td>
-  </tr>`).join(''):'<tr><td colspan="9" class="empty"><p>Nessun ordine</p></td></tr>';
+  </tr>`).join(''):'<tr><td colspan="10" class="empty"><p>Nessun ordine</p></td></tr>';
 }
 
 // Filtro ordini cliccando sulle icone di stato (toggle)
@@ -3542,7 +3898,11 @@ function renderClienti(){
     <div style="font-size:.75rem;color:var(--gray);display:flex;align-items:center;gap:4px">📍 Top: ${topProv.map(([p,n])=>`${p}(${n})`).join(', ')}</div>`;
   let items=all;
   if(q)items=items.filter(c=>(c.Nome||'').toLowerCase().includes(q)||(c.Citta||'').toLowerCase().includes(q)||(c.Prov||'').toLowerCase().includes(q));
-  $('tblClienti').innerHTML=items.length?items.map(c=>`<tr>
+  initBatchBar('clienti','tblClienti',[
+    {label:'Elimina',action:'deleteClienti',cls:'err',icon:'🗑️'}
+  ]);
+  $('tblClienti').innerHTML=items.length?items.map(c=>`<tr id="row_clienti_${c.ID}" data-id="${c.ID}">
+    <td><input type="checkbox" class="sel-chk" onchange="toggleSelectRow('clienti','${c.ID}',this.checked)"></td>
     <td><strong>${c.Nome||'—'}</strong></td>
     <td>${c.Citta||'—'}</td>
     <td>${c.Prov||'—'}</td>
@@ -3551,7 +3911,7 @@ function renderClienti(){
     <td>${c.Contratto||'—'}</td>
     <td>${(c.Lat||c.Latitudine)&&(c.Lng||c.Longitudine)?'<span class="tag tag-ok">📍</span>':'<span class="tag tag-gray">—</span>'}</td>
     <td><button class="btn btn-ghost btn-xs" onclick="editCliente('${c.ID}')">✏️</button><button class="btn btn-ghost btn-xs" onclick="deleteCliente('${c.ID}')" style="color:var(--err)">🗑️</button><button class="btn btn-ghost btn-xs" onclick="showDetail('cliente','${c.ID}')">👁️</button></td>
-  </tr>`).join(''):'<tr><td colspan="8" class="empty"><p>Nessun cliente trovato</p></td></tr>';
+  </tr>`).join(''):'<tr><td colspan="9" class="empty"><p>Nessun cliente trovato</p></td></tr>';
   populateProductDropdowns();
 }
 function populateProductDropdowns(){
@@ -3686,6 +4046,7 @@ function renderMacchine(){
       const assetInfo=esc(a.NomeAsset||tipo)+' — SN:'+esc(a.NumeroSerie||'-');
       const cliName=esc(a.NomeAccount||'');
       return `<tr>
+      <td></td>
       <td>${prodIcon(tipo,24)}</td>
       <td style="color:${cfg.color||'#333'}"><strong>${a.Modello||'—'}</strong></td>
       <td>${a.NomeAsset||'—'}</td>
@@ -5762,7 +6123,7 @@ async function importAnagXlsx(file){
       toast(`Parsati: ${clienti.length} clienti, ${assets.length} assets. Importazione...`,'info');
 
       // 5. Clear existing + import
-      try{ await apiCall('clearAnagrafica',{confirmToken:'CLEAR_CONFIRMED'},'POST'); toast('Dati precedenti cancellati','info'); }catch(ce){ console.warn('Clear failed, continuing:',ce); }
+      try{ await apiCall('clearAnagrafica',{confirmToken:'CLEAR_CONFIRMED',userId:USER?.ID},'POST'); toast('Dati precedenti cancellati','info'); }catch(ce){ console.warn('Clear failed, continuing:',ce); }
       const r1=await apiCall('importAnagraficaClienti',{rows:clienti},'POST');
       if(r1.sampleErrors?.length) console.error('Clienti errors:',JSON.stringify(r1.sampleErrors));
       toast(`Clienti: ${r1.inserted} importati${r1.skipped?' ('+r1.skipped+' errori)':''}`,r1.skipped>0?'warn':'ok');

@@ -5894,8 +5894,8 @@ Rispondi SOLO con JSON valido:
       const rows = body.rows || [];
       if (!rows.length) return err('rows richiesto (array)');
       if (rows.length > 2000) return err('Massimo 2000 righe per importazione anagrafica.');
-      const results = { inserted: 0, skipped: 0, errors: [] };
-      // Batch insert (much faster than one-by-one)
+      const results = { inserted: 0, updated: 0, skipped: 0, errors: [] };
+      // Build batch with snake_case keys
       const batch = [];
       const allCliKeys = new Set();
       for (const row of rows) {
@@ -5912,23 +5912,27 @@ Rispondi SOLO con JSON valido:
       for (const row of batch) {
         for (const k of cliKeyList) { if (!(k in row)) row[k] = null; }
       }
-      // Insert in chunks of 50
-      for (let i = 0; i < batch.length; i += 50) {
-        const chunk = batch.slice(i, i + 50);
+      // UPSERT by codice_m3 (prevents duplicates on re-import)
+      for (const row of batch) {
         try {
-          await sb(env, 'anagrafica_clienti', 'POST', chunk, '', { 'Prefer': 'return=minimal' });
-          results.inserted += chunk.length;
-        } catch (e) {
-          // Fallback one by one
-          for (const row of chunk) {
-            try {
+          const m3 = row.codice_m3 || row.numero_cliente_m3_opt;
+          if (m3) {
+            const existing = await sb(env, 'anagrafica_clienti', 'GET', null, `?codice_m3=eq.${encodeURIComponent(m3)}&limit=1`).catch(()=>[]);
+            if (existing.length) {
+              await sb(env, `anagrafica_clienti?codice_m3=eq.${encodeURIComponent(m3)}`, 'PATCH', row);
+              results.updated++;
+            } else {
               await sb(env, 'anagrafica_clienti', 'POST', row, '', { 'Prefer': 'return=minimal' });
               results.inserted++;
-            } catch (e2) {
-              results.skipped++;
-              results.errors.push({ nome: row.nome_account || '?', err: e2.message });
             }
+          } else {
+            // No key — insert but risk dupe (rare: all rows should have codice_m3)
+            await sb(env, 'anagrafica_clienti', 'POST', row, '', { 'Prefer': 'return=minimal' });
+            results.inserted++;
           }
+        } catch (e2) {
+          results.skipped++;
+          results.errors.push({ nome: row.nome_account || '?', err: e2.message });
         }
       }
       results.sampleErrors = results.errors.slice(0, 5);
@@ -5943,15 +5947,15 @@ Rispondi SOLO con JSON valido:
       // Verify existing codice_m3
       const clienti = await sb(env, 'anagrafica_clienti?select=codice_m3', 'GET');
       const validM3 = new Set(clienti.filter(c => c.codice_m3).map(c => c.codice_m3));
-      const results = { inserted: 0, skipped: 0, errors: [] };
-      // Batch insert
+      const results = { inserted: 0, updated: 0, skipped: 0, errors: [] };
+      // Build batch with snake_case keys
       const batch = [];
       const allKeys = new Set();
       for (const row of rows) {
         const fields = {};
         for (const [k, v] of Object.entries(row)) {
           const sk = toSnake(k);
-          if (SKIP_ASSET_FIELDS.has(sk)) continue; // Skip fields not in DB
+          if (SKIP_ASSET_FIELDS.has(sk)) continue;
           fields[sk] = (v !== null && v !== undefined && v !== '') ? v : null;
           allKeys.add(sk);
         }
@@ -5960,33 +5964,34 @@ Rispondi SOLO con JSON valido:
         }
         batch.push(fields);
       }
-      // Ensure all objects have uniform keys (Supabase requires it)
+      // Uniform keys
       const keyList = [...allKeys];
       for (const row of batch) {
-        for (const k of keyList) {
-          if (!(k in row)) row[k] = null;
-        }
+        for (const k of keyList) { if (!(k in row)) row[k] = null; }
       }
-      // Insert in chunks of 100
-      for (let i = 0; i < batch.length; i += 100) {
-        const chunk = batch.slice(i, i + 100);
+      // UPSERT by numero_serie (prevents duplicates on re-import)
+      for (const row of batch) {
         try {
-          await sb(env, 'anagrafica_assets', 'POST', chunk, '', { 'Prefer': 'return=minimal' });
-          results.inserted += chunk.length;
-        } catch (e) {
-          // Fallback: one by one
-          for (const row of chunk) {
-            try {
+          const serie = row.numero_serie;
+          if (serie) {
+            const existing = await sb(env, 'anagrafica_assets', 'GET', null, `?numero_serie=eq.${encodeURIComponent(serie)}&limit=1`).catch(()=>[]);
+            if (existing.length) {
+              await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(serie)}`, 'PATCH', row);
+              results.updated++;
+            } else {
               await sb(env, 'anagrafica_assets', 'POST', row, '', { 'Prefer': 'return=minimal' });
               results.inserted++;
-            } catch (e2) {
-              results.skipped++;
-              results.errors.push({ serie: row.numero_serie || '?', err: e2.message });
             }
+          } else {
+            // No serie — insert (rare edge case)
+            await sb(env, 'anagrafica_assets', 'POST', row, '', { 'Prefer': 'return=minimal' });
+            results.inserted++;
           }
+        } catch (e2) {
+          results.skipped++;
+          results.errors.push({ serie: row.numero_serie || '?', err: e2.message });
         }
       }
-      // Include first 5 errors for debug
       results.sampleErrors = results.errors.slice(0, 5);
       return ok(results);
     }
