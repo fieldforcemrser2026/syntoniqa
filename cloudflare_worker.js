@@ -5912,28 +5912,41 @@ Rispondi SOLO con JSON valido:
       for (const row of batch) {
         for (const k of cliKeyList) { if (!(k in row)) row[k] = null; }
       }
-      // UPSERT by codice_m3 (prevents duplicates on re-import)
+      // FAST: fetch all existing codice_m3 in one query, then split into update vs insert
+      const existingCli = await sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3&limit=1000').catch(()=>[]);
+      const existingM3 = new Set(existingCli.filter(c=>c.codice_m3).map(c=>c.codice_m3));
+      const toInsert = [];
+      const toUpdate = [];
       for (const row of batch) {
+        const m3 = row.codice_m3 || row.numero_cliente_m3_opt;
+        if (m3 && existingM3.has(m3)) {
+          toUpdate.push(row);
+        } else {
+          toInsert.push(row);
+        }
+      }
+      // Batch INSERT new records in chunks of 50
+      for (let i = 0; i < toInsert.length; i += 50) {
+        const chunk = toInsert.slice(i, i + 50);
         try {
-          const m3 = row.codice_m3 || row.numero_cliente_m3_opt;
-          if (m3) {
-            const existing = await sb(env, 'anagrafica_clienti', 'GET', null, `?codice_m3=eq.${encodeURIComponent(m3)}&limit=1`).catch(()=>[]);
-            if (existing.length) {
-              await sb(env, `anagrafica_clienti?codice_m3=eq.${encodeURIComponent(m3)}`, 'PATCH', row);
-              results.updated++;
-            } else {
+          await sb(env, 'anagrafica_clienti', 'POST', chunk, '', { 'Prefer': 'return=minimal' });
+          results.inserted += chunk.length;
+        } catch (e) {
+          for (const row of chunk) {
+            try {
               await sb(env, 'anagrafica_clienti', 'POST', row, '', { 'Prefer': 'return=minimal' });
               results.inserted++;
-            }
-          } else {
-            // No key — insert but risk dupe (rare: all rows should have codice_m3)
-            await sb(env, 'anagrafica_clienti', 'POST', row, '', { 'Prefer': 'return=minimal' });
-            results.inserted++;
+            } catch (e2) { results.skipped++; results.errors.push({ nome: row.nome_account || '?', err: e2.message }); }
           }
-        } catch (e2) {
-          results.skipped++;
-          results.errors.push({ nome: row.nome_account || '?', err: e2.message });
         }
+      }
+      // PATCH existing records one by one (usually 0 on fresh import after clear)
+      for (const row of toUpdate) {
+        try {
+          const m3 = row.codice_m3 || row.numero_cliente_m3_opt;
+          await sb(env, `anagrafica_clienti?codice_m3=eq.${encodeURIComponent(m3)}`, 'PATCH', row);
+          results.updated++;
+        } catch (e2) { results.skipped++; results.errors.push({ nome: row.nome_account || '?', err: e2.message }); }
       }
       results.sampleErrors = results.errors.slice(0, 5);
       return ok(results);
@@ -5969,28 +5982,39 @@ Rispondi SOLO con JSON valido:
       for (const row of batch) {
         for (const k of keyList) { if (!(k in row)) row[k] = null; }
       }
-      // UPSERT by numero_serie (prevents duplicates on re-import)
+      // FAST: fetch all existing numero_serie in one query, split into update vs insert
+      const existingAssets = await sb(env, 'anagrafica_assets', 'GET', null, '?select=numero_serie&limit=1000').catch(()=>[]);
+      const existingSerie = new Set(existingAssets.filter(a=>a.numero_serie).map(a=>a.numero_serie));
+      const toInsertA = [];
+      const toUpdateA = [];
       for (const row of batch) {
+        if (row.numero_serie && existingSerie.has(row.numero_serie)) {
+          toUpdateA.push(row);
+        } else {
+          toInsertA.push(row);
+        }
+      }
+      // Batch INSERT new records in chunks of 100
+      for (let i = 0; i < toInsertA.length; i += 100) {
+        const chunk = toInsertA.slice(i, i + 100);
         try {
-          const serie = row.numero_serie;
-          if (serie) {
-            const existing = await sb(env, 'anagrafica_assets', 'GET', null, `?numero_serie=eq.${encodeURIComponent(serie)}&limit=1`).catch(()=>[]);
-            if (existing.length) {
-              await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(serie)}`, 'PATCH', row);
-              results.updated++;
-            } else {
+          await sb(env, 'anagrafica_assets', 'POST', chunk, '', { 'Prefer': 'return=minimal' });
+          results.inserted += chunk.length;
+        } catch (e) {
+          for (const row of chunk) {
+            try {
               await sb(env, 'anagrafica_assets', 'POST', row, '', { 'Prefer': 'return=minimal' });
               results.inserted++;
-            }
-          } else {
-            // No serie — insert (rare edge case)
-            await sb(env, 'anagrafica_assets', 'POST', row, '', { 'Prefer': 'return=minimal' });
-            results.inserted++;
+            } catch (e2) { results.skipped++; results.errors.push({ serie: row.numero_serie || '?', err: e2.message }); }
           }
-        } catch (e2) {
-          results.skipped++;
-          results.errors.push({ serie: row.numero_serie || '?', err: e2.message });
         }
+      }
+      // PATCH existing records (usually 0 after clear)
+      for (const row of toUpdateA) {
+        try {
+          await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(row.numero_serie)}`, 'PATCH', row);
+          results.updated++;
+        } catch (e2) { results.skipped++; results.errors.push({ serie: row.numero_serie || '?', err: e2.message }); }
       }
       results.sampleErrors = results.errors.slice(0, 5);
       return ok(results);

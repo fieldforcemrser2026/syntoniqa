@@ -752,7 +752,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <div class="card">
 <div class="card-head"><h3>🏗️ Installazioni in Corso</h3><button class="btn btn-primary btn-sm" onclick="EDITING.installazione=null;document.querySelector('#modalInstall .modal-head h2').textContent='🏗️ Nuova Installazione';openModal('modalInstall')">+ Nuova Installazione</button></div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
-<table class="tbl"><thead><tr><th>Cliente</th><th>Macchina</th><th>Inizio</th><th>Fine Prev.</th><th>Fase</th><th>Tecnici</th><th>Stato</th><th></th></tr></thead><tbody id="tblInstall"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('install','tblInstall',this.checked)"></th><th>Cliente</th><th>Macchina</th><th>Inizio</th><th>Fine Prev.</th><th>Fase</th><th>Tecnici</th><th>Stato</th><th></th></tr></thead><tbody id="tblInstall"></tbody></table>
 </div>
 </div>
 </section>
@@ -769,7 +769,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 </div>
 </div>
 <div class="card-body np" style="max-height:500px;overflow-y:auto">
-<table class="tbl"><thead><tr><th>Tecnico</th><th>Dal</th><th>Al</th><th>Turno</th><th>Tipo</th><th>Stato</th><th>Note</th><th></th></tr></thead><tbody id="tblRep"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('rep','tblRep',this.checked)"></th><th>Tecnico</th><th>Dal</th><th>Al</th><th>Turno</th><th>Tipo</th><th>Stato</th><th>Note</th><th></th></tr></thead><tbody id="tblRep"></tbody></table>
 </div>
 </div>
 </section>
@@ -779,7 +779,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <div class="card">
 <div class="card-head"><h3>🧳 Trasferte</h3><button class="btn btn-primary btn-sm" onclick="openModal('modalTrasf')">+ Nuova Trasferta</button></div>
 <div class="card-body np" style="max-height:500px;overflow-y:auto">
-<table class="tbl"><thead><tr><th>Tecnici</th><th>Cliente</th><th>Dal</th><th>Al</th><th>Automezzo</th><th>Motivo</th><th>Stato</th><th></th></tr></thead><tbody id="tblTrasf"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('trasf','tblTrasf',this.checked)"></th><th>Tecnici</th><th>Cliente</th><th>Dal</th><th>Al</th><th>Automezzo</th><th>Motivo</th><th>Stato</th><th></th></tr></thead><tbody id="tblTrasf"></tbody></table>
 </div>
 </div>
 </section>
@@ -794,7 +794,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 </div>
 </div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
-<table class="tbl"><thead><tr><th>Da</th><th>Tipo</th><th>Oggetto</th><th>Destinatario</th><th>Stato</th><th>Data</th><th></th></tr></thead><tbody id="tblNotifiche"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('notifiche','tblNotifiche',this.checked)"></th><th>Da</th><th>Tipo</th><th>Oggetto</th><th>Destinatario</th><th>Stato</th><th>Data</th><th></th></tr></thead><tbody id="tblNotifiche"></tbody></table>
 </div>
 </div>
 </section>
@@ -881,7 +881,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <button class="btn btn-primary btn-sm" onclick="openNewUtente()">+ Nuovo Utente</button>
 </div>
 <div class="card-body np">
-<table class="tbl"><thead><tr><th>Foto</th><th>Nome</th><th>Ruolo</th><th>Squadra</th><th>Automezzo</th><th>Base</th><th>Telefono</th><th>Email</th><th>Attivo</th><th></th></tr></thead><tbody id="tblTecnici"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('tecnici','tblTecnici',this.checked)"></th><th>Foto</th><th>Nome</th><th>Ruolo</th><th>Squadra</th><th>Automezzo</th><th>Base</th><th>Telefono</th><th>Email</th><th>Attivo</th><th></th></tr></thead><tbody id="tblTecnici"></tbody></table>
 </div>
 </div>
 </section>
@@ -3180,6 +3180,24 @@ async function batchAction(tableKey, actionName) {
     case 'deleteMacchine':
       await batchDeleteMacchine(ids, tableKey);
       break;
+    case 'deleteInstall':
+      await batchDeleteInstall(ids, tableKey);
+      break;
+    case 'deleteRep':
+      await batchDeleteRep(ids, tableKey);
+      break;
+    case 'deleteTrasf':
+      await batchDeleteTrasf(ids, tableKey);
+      break;
+    case 'deleteNotifiche':
+      await batchDeleteNotifiche(ids, tableKey);
+      break;
+    case 'deleteDocumenti':
+      await batchDeleteDocumenti(ids, tableKey);
+      break;
+    case 'deleteChecklist':
+      await batchDeleteChecklist(ids, tableKey);
+      break;
   }
 }
 
@@ -3324,6 +3342,90 @@ async function batchDeleteMacchine(ids, tableKey) {
     } catch(e) { fail++; }
   }
   toast(`${ok} eliminate${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
+  clearBatchSelection(tableKey);
+  await refreshData(true);
+}
+
+async function batchDeleteInstall(ids, tableKey) {
+  if (!confirm(`Eliminare ${ids.length} installazioni selezionate?`)) return;
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      await apiCall('deleteInstallazione', {id, userId: USER?.ID}, 'POST');
+      ok++;
+    } catch(e) { fail++; }
+  }
+  toast(`${ok} eliminate${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
+  clearBatchSelection(tableKey);
+  await refreshData(true);
+}
+
+async function batchDeleteRep(ids, tableKey) {
+  if (!confirm(`Eliminare ${ids.length} turni reperibilità selezionati?`)) return;
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      await apiCall('deleteReperibilita', {id, userId: USER?.ID}, 'POST');
+      ok++;
+    } catch(e) { fail++; }
+  }
+  toast(`${ok} eliminati${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
+  clearBatchSelection(tableKey);
+  await refreshData(true);
+}
+
+async function batchDeleteTrasf(ids, tableKey) {
+  if (!confirm(`Eliminare ${ids.length} trasferte selezionate?`)) return;
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      await apiCall('deleteTrasferta', {id, userId: USER?.ID}, 'POST');
+      ok++;
+    } catch(e) { fail++; }
+  }
+  toast(`${ok} eliminate${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
+  clearBatchSelection(tableKey);
+  await refreshData(true);
+}
+
+async function batchDeleteNotifiche(ids, tableKey) {
+  if (!confirm(`Eliminare ${ids.length} notifiche selezionate?`)) return;
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      await apiCall('deleteNotifica', {id}, 'POST');
+      ok++;
+    } catch(e) { fail++; }
+  }
+  toast(`${ok} eliminate${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
+  clearBatchSelection(tableKey);
+  await refreshData(true);
+}
+
+async function batchDeleteDocumenti(ids, tableKey) {
+  if (!confirm(`Eliminare ${ids.length} documenti selezionati?`)) return;
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      await apiCall('deleteDoc', {id}, 'POST');
+      ok++;
+    } catch(e) { fail++; }
+  }
+  toast(`${ok} eliminati${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
+  clearBatchSelection(tableKey);
+  await refreshData(true);
+}
+
+async function batchDeleteChecklist(ids, tableKey) {
+  if (!confirm(`Eliminare ${ids.length} template selezionati?`)) return;
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      await apiCall('deleteChecklistTemplate', {id}, 'POST');
+      ok++;
+    } catch(e) { fail++; }
+  }
+  toast(`${ok} eliminati${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
   clearBatchSelection(tableKey);
   await refreshData(true);
 }
@@ -3680,10 +3782,14 @@ async function advanceOrdine(id,stato){
 // ============ INSTALLAZIONI ============
 function renderInstallazioni(){
   const items=(DATA.installazioni||[]).filter(i=>!i.Obsoleto);
+  initBatchBar('install','tblInstall',[
+    {label:'Elimina',action:'deleteInstall',cls:'err',icon:'🗑️'}
+  ]);
   $('tblInstall').innerHTML=items.length?items.map(i=>{
     const fasi=(DATA.fasiInstallazione||[]).filter(f=>f.Attivo).sort((a,b)=>a.Ordine-b.Ordine);
     const corrente=fasi.find(f=>f.ID===i.FaseCorrenteID);
-    return `<tr>
+    return `<tr id="row_install_${i.ID}" data-id="${i.ID}">
+      <td><input type="checkbox" class="sel-chk" onchange="toggleSelectRow('install','${i.ID}',this.checked)"></td>
       <td>${getName(DATA.clienti||[],i.ClienteID)}</td>
       <td>${getName(DATA.macchine||[],i.MacchinaID,'Tipo')}</td>
       <td>${fmtDate(i.DataInizio)}</td>
@@ -3692,7 +3798,7 @@ function renderInstallazioni(){
       <td>${(i.TecniciIDs||'').split(',').filter(Boolean).map(id=>getName(DATA.utenti||[],id)).join(', ')||'—'}</td>
       <td>${statusTag(i.Stato)}</td>
       <td><button class="btn btn-ghost btn-xs" onclick="editInstallazione('${i.ID}')">✏️</button><button class="btn btn-ghost btn-xs" onclick="deleteInstallazione('${i.ID}')" style="color:var(--err)">🗑️</button><button class="btn btn-ghost btn-xs" onclick="showDetail('installazione','${i.ID}')">👁️</button></td>
-    </tr>`}).join(''):'<tr><td colspan="8" class="empty"><p>Nessuna installazione in corso</p></td></tr>';
+    </tr>`}).join(''):'<tr><td colspan="9" class="empty"><p>Nessuna installazione in corso</p></td></tr>';
 }
 
 // ============ REPERIBILITA ============
@@ -3711,7 +3817,11 @@ function renderReperibilita(){
     if(di<=d&&df>=d)return '<span class="tag tag-ok">🟢 In corso</span>';
     return '<span class="tag tag-info">📅 Futuro</span>';
   };
-  $('tblRep').innerHTML=items.length?items.map(r=>`<tr>
+  initBatchBar('rep','tblRep',[
+    {label:'Elimina',action:'deleteRep',cls:'err',icon:'🗑️'}
+  ]);
+  $('tblRep').innerHTML=items.length?items.map(r=>`<tr id="row_rep_${r.ID}" data-id="${r.ID}">
+    <td><input type="checkbox" class="sel-chk" onchange="toggleSelectRow('rep','${r.ID}',this.checked)"></td>
     <td>${getName(DATA.utenti||[],r.TecnicoID)}</td>
     <td>${fmtDate(r.DataInizio)}</td>
     <td>${fmtDate(r.DataFine)}</td>
@@ -3720,16 +3830,20 @@ function renderReperibilita(){
     <td>${repStatusLabel(r)}</td>
     <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.Note||'—'}</td>
     <td><button class="btn btn-outline btn-xs" onclick="editRep('${r.ID}')">✏️</button> <button class="btn btn-outline btn-xs" style="color:var(--err)" onclick="deleteRep('${r.ID}')">🗑️</button></td>
-  </tr>`).join(''):'<tr><td colspan="8" class="empty"><p>Nessun turno</p></td></tr>';
+  </tr>`).join(''):'<tr><td colspan="9" class="empty"><p>Nessun turno</p></td></tr>';
 }
 function repTab(f,btn){repFilter=f;document.querySelectorAll('#secReperibilita .tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');renderReperibilita()}
 
 // ============ TRASFERTE ============
 function renderTrasferte(){
   const items=(DATA.trasferte||[]).filter(t=>!t.Obsoleto).sort((a,b)=>(b.DataInizio||'').localeCompare(a.DataInizio||''));
+  initBatchBar('trasf','tblTrasf',[
+    {label:'Elimina',action:'deleteTrasf',cls:'err',icon:'🗑️'}
+  ]);
   $('tblTrasf').innerHTML=items.length?items.map(t=>{
     const tecIds=(t.TecniciIDs||t.TecnicoID||'').split(',').filter(Boolean);
-    return `<tr>
+    return `<tr id="row_trasf_${t.ID}" data-id="${t.ID}">
+      <td><input type="checkbox" class="sel-chk" onchange="toggleSelectRow('trasf','${t.ID}',this.checked)"></td>
       <td>${tecIds.map(id=>getName(DATA.utenti||[],id)).join(', ')}</td>
       <td>${getName(DATA.clienti||[],t.ClienteID)}</td>
       <td>${fmtDate(t.DataInizio)}</td>
@@ -3738,17 +3852,21 @@ function renderTrasferte(){
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.Motivo||'—'}</td>
       <td>${statusTag(t.Stato)}</td>
       <td><button class="btn btn-outline btn-xs" onclick="editTrasf('${t.ID}')">✏️</button> <button class="btn btn-outline btn-xs" style="color:var(--err)" onclick="deleteTrasf('${t.ID}')">🗑️</button></td>
-    </tr>`}).join(''):'<tr><td colspan="8" class="empty"><p>Nessuna trasferta</p></td></tr>';
+    </tr>`}).join(''):'<tr><td colspan="9" class="empty"><p>Nessuna trasferta</p></td></tr>';
 }
 
 // ============ NOTIFICHE ============
 function renderNotifiche(){
   const items=(DATA.notifiche||[]).filter(n=>!n.Obsoleto).sort((a,b)=>(b.DataInvio||'').localeCompare(a.DataInvio||''));
+  initBatchBar('notifiche','tblNotifiche',[
+    {label:'Elimina',action:'deleteNotifiche',cls:'err',icon:'🗑️'}
+  ]);
   $('tblNotifiche').innerHTML=items.length?items.map(n=>{
     const isNew=n.Stato==='inviata'&&(n.DestinatarioID===USER?.ID||(n.DestinatariIDs||'').includes(USER?.ID));
     const tipo=(n.Tipo||'messaggio');
     const rifId=n.RiferimentoID||n.UrgenzaID||n.InterventoID||'';
-    return`<tr style="${isNew?'background:#FEF3C7;font-weight:600':''}">
+    return`<tr id="row_notifiche_${n.ID}" data-id="${n.ID}" style="${isNew?'background:#FEF3C7;font-weight:600':''}">
+    <td><input type="checkbox" class="sel-chk" onchange="toggleSelectRow('notifiche','${n.ID}',this.checked)"></td>
     <td>${getName(DATA.utenti||[],n.MittenteID)}</td>
     <td><span class="tag tag-info">${tipo}</span></td>
     <td style="max-width:220px;cursor:pointer" onclick="gotoNotificaTarget('${tipo}','${rifId}')">
@@ -3763,7 +3881,7 @@ function renderNotifiche(){
       <button class="btn btn-ghost btn-xs" onclick="gotoNotificaTarget('${tipo}','${rifId}')" title="Vai alla sezione correlata">Vai ▸</button>
       <button class="btn btn-ghost btn-xs" onclick="deleteNotifica('${n.ID}')" style="color:var(--err)" title="Elimina">🗑️</button>
     </td>
-  </tr>`}).join(''):'<tr><td colspan="7" class="empty"><p>Nessuna notifica</p></td></tr>';
+  </tr>`}).join(''):'<tr><td colspan="8" class="empty"><p>Nessuna notifica</p></td></tr>';
 }
 function gotoNotificaTarget(tipo,rifId){
   const map={urgenza:'urgenze',urgenze:'urgenze',sla:'urgenze',
@@ -4188,13 +4306,15 @@ function renderAutomezzi(){
 // ============ TECNICI ============
 function renderTecnici(){
   const items=(DATA.utenti||[]).filter(u=>!u.Obsoleto);
+  initBatchBar('tecnici','tblTecnici',[]);
   $('tblTecnici').innerHTML=items.map(t=>{
     const sq=(DATA.squadre||[]).find(s=>s.ID===t.SquadraID);
     const ini=(t.Nome||'')[0]+''+(t.Cognome||'')[0];
     const foto=t.FotoURL
       ?`<img src="${t.FotoURL}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`
       :`<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--c2),var(--c1));display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:.7rem">${ini}</div>`;
-    return `<tr>
+    return `<tr id="row_tecnici_${t.ID}" data-id="${t.ID}">
+    <td><input type="checkbox" class="sel-chk" onchange="toggleSelectRow('tecnici','${t.ID}',this.checked)"></td>
     <td>${foto}</td>
     <td><strong>${(t.Nome||'')+' '+(t.Cognome||'')}</strong></td>
     <td><span class="tag ${t.Ruolo==='admin'?'tag-purple':t.Ruolo==='caposquadra'?'tag-info':'tag-gray'}">${t.Ruolo}</span></td>
@@ -7670,12 +7790,15 @@ async function updatePianoStato(id,stato){
 // ============ FEATURE 29: CHECKLIST ============
 function renderChecklist(){
   const templates=(DATA.checklistTemplate||DATA.ChecklistTemplate||[]).filter(t=>t.Attivo!==false&&t.Attivo!=='false');
-  let html='<table class="data-table"><thead><tr><th>Nome</th><th>Tipo Intervento</th><th>Voci</th><th>Azioni</th></tr></thead><tbody>';
-  if(!templates.length) html+='<tr><td colspan="4" style="text-align:center;color:var(--gray)">Nessun template. Crea il primo!</td></tr>';
+  initBatchBar('checklist','tblChecklist',[
+    {label:'Elimina',action:'deleteChecklist',cls:'err',icon:'🗑️'}
+  ]);
+  let html='<table class="data-table"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll(\'checklist\',\'tblChecklist\',this.checked)"></th><th>Nome</th><th>Tipo Intervento</th><th>Voci</th><th>Azioni</th></tr></thead><tbody>';
+  if(!templates.length) html+='<tr><td colspan="5" style="text-align:center;color:var(--gray)">Nessun template. Crea il primo!</td></tr>';
   templates.forEach(t=>{
     const tipo=(DATA.tipiIntervento||[]).find(ti=>ti.ID===t.TipoInterventoID);
     let voci=[];try{voci=JSON.parse(t.Voci||'[]')}catch(e){}
-    html+=`<tr><td><b>${t.Nome||''}</b></td><td>${tipo?tipo.Nome:'—'}</td><td>${voci.length} voci</td>
+    html+=`<tr id="row_checklist_${t.ID}" data-id="${t.ID}"><td><input type="checkbox" class="sel-chk" onchange="toggleSelectRow('checklist','${t.ID}',this.checked)"></td><td><b>${t.Nome||''}</b></td><td>${tipo?tipo.Nome:'—'}</td><td>${voci.length} voci</td>
     <td><button class="btn btn-outline btn-sm" onclick="viewChecklistTemplate('${t.ID}')">👁️</button>
     <button class="btn btn-outline btn-sm" onclick="editChecklistTpl('${t.ID}')">✏️</button>
     <button class="btn btn-outline btn-sm" onclick="deleteChecklistTpl('${t.ID}')" style="color:var(--err)">🗑️</button></td></tr>`;
@@ -7753,10 +7876,13 @@ function renderDocumenti(){
     if(cat&&d.Categoria!==cat)return false;
     return true;
   });
-  let html='<table class="data-table"><thead><tr><th>Nome</th><th>Categoria</th><th>Tags</th><th>Data</th><th>Azioni</th></tr></thead><tbody>';
-  if(!filtered.length) html+='<tr><td colspan="5" style="text-align:center;color:var(--gray)">Nessun documento trovato</td></tr>';
+  initBatchBar('documenti','tblDocumenti',[
+    {label:'Elimina',action:'deleteDocumenti',cls:'err',icon:'🗑️'}
+  ]);
+  let html='<table class="data-table"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll(\'documenti\',\'tblDocumenti\',this.checked)"></th><th>Nome</th><th>Categoria</th><th>Tags</th><th>Data</th><th>Azioni</th></tr></thead><tbody>';
+  if(!filtered.length) html+='<tr><td colspan="6" style="text-align:center;color:var(--gray)">Nessun documento trovato</td></tr>';
   filtered.forEach(d=>{
-    html+=`<tr><td><b>${d.Nome||''}</b><br><span style="font-size:.75rem;color:var(--gray)">${d.Descrizione||''}</span></td>
+    html+=`<tr id="row_documenti_${d.ID}" data-id="${d.ID}"><td><input type="checkbox" class="sel-chk" onchange="toggleSelectRow('documenti','${d.ID}',this.checked)"></td><td><b>${d.Nome||''}</b><br><span style="font-size:.75rem;color:var(--gray)">${d.Descrizione||''}</span></td>
     <td><span class="tag tag-info">${d.Categoria||'Altro'}</span></td>
     <td style="font-size:.75rem">${d.Tags||''}</td>
     <td style="font-size:.75rem">${(d.DataCaricamento||'').substring(0,10)}</td>
