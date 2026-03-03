@@ -3032,28 +3032,34 @@ const BATCH_CONTAINERS = {}; // { tableKey: containerId }
 
 function initBatchBar(tableKey, containerId, actions) {
   BATCH_CONTAINERS[tableKey] = containerId;
-  BATCH_SELECTED[tableKey] = new Set();
+  if (!BATCH_SELECTED[tableKey]) BATCH_SELECTED[tableKey] = new Set();
 
-  const container = $(containerId);
-  if (!container) return;
+  // Don't re-create if already exists
+  if (document.getElementById(`batchBar_${tableKey}`)) return;
 
-  const barHtml = `<div id="batchBar_${tableKey}" class="batch-bar hidden">
+  const tbody = $(containerId);
+  if (!tbody) return;
+  // Find the parent table, then insert batch bar BEFORE the table (not inside tbody)
+  const table = tbody.closest('table') || tbody.parentElement;
+  if (!table) return;
+
+  const barDiv = document.createElement('div');
+  barDiv.id = `batchBar_${tableKey}`;
+  barDiv.className = 'batch-bar';
+  barDiv.style.display = 'none';
+  barDiv.innerHTML = `
     <div class="batch-info">
-      <span>Selezionati: <span class="batch-count" id="batchCount_${tableKey}">0</span></span>
+      <span>Selezionati: <strong id="batchCount_${tableKey}">0</strong></span>
     </div>
     <div class="batch-actions">
-      ${actions.map((a, i) => `
-        <button class="btn btn-${a.cls}" onclick="batchAction('${tableKey}','${a.action}')" title="${a.label}">
+      ${actions.map(a => `
+        <button class="btn btn-${a.cls} btn-xs" onclick="batchAction('${tableKey}','${a.action}')">
           ${a.icon} ${a.label}
         </button>
       `).join('')}
-      <button class="btn btn-ghost" onclick="clearBatchSelection('${tableKey}')">Annulla</button>
-    </div>
-  </div>`;
-
-  if (!document.getElementById(`batchBar_${tableKey}`)) {
-    container.insertAdjacentHTML('beforeend', barHtml);
-  }
+      <button class="btn btn-ghost btn-xs" onclick="clearBatchSelection('${tableKey}')">✖ Annulla</button>
+    </div>`;
+  table.parentElement.insertBefore(barDiv, table);
 }
 
 function toggleSelectAll(tableKey, tbodyId, checked) {
@@ -3107,13 +3113,8 @@ function updateBatchBar(tableKey) {
   const countEl = document.getElementById(`batchCount_${tableKey}`);
 
   if (bar) {
-    if (count > 0) {
-      bar.classList.remove('hidden');
-    } else {
-      bar.classList.add('hidden');
-    }
+    bar.style.display = count > 0 ? 'flex' : 'none';
   }
-
   if (countEl) {
     countEl.textContent = count;
   }
@@ -3123,15 +3124,19 @@ function clearBatchSelection(tableKey) {
   BATCH_SELECTED[tableKey] = new Set();
   const containerId = BATCH_CONTAINERS[tableKey];
   if (containerId) {
-    const tbody = document.querySelector(`#${containerId} tbody`);
+    const tbody = $(containerId);
     if (tbody) {
       tbody.querySelectorAll('tr').forEach(tr => {
         tr.classList.remove('selected-row');
         const chk = tr.querySelector('input.sel-chk');
         if (chk) chk.checked = false;
       });
-      const headerChk = document.querySelector(`#${containerId} thead input.sel-chk`);
-      if (headerChk) headerChk.checked = false;
+      // Also uncheck the select-all checkbox in thead
+      const table = tbody.closest('table');
+      if (table) {
+        const headerChk = table.querySelector('thead input.sel-chk');
+        if (headerChk) headerChk.checked = false;
+      }
     }
   }
   updateBatchBar(tableKey);
