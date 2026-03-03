@@ -1774,33 +1774,43 @@ Workers AI è incluso in Cloudflare e non richiede chiavi aggiuntive.
     <label class="btn btn-sm btn-primary" style="cursor:pointer">📤 Importa XLSX<input type="file" id="anagFileInput" accept=".xlsx,.xls" style="display:none" onchange="const fn=this.files[0]?.name||'';document.getElementById('anagImportedFile').textContent=fn?'📁 '+fn:'';importAnagXlsx(this.files[0])"></label>
   </div>
 </div>
-<div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden;flex-wrap:wrap;font-size:.78rem">
-  <!-- TEMPLATE -->
-  <div style="display:flex;align-items:center;gap:10px;padding:7px 14px;border-right:1px solid var(--border);background:var(--gray5)">
-    <span style="font-weight:600;color:var(--text2)">📄 Template</span>
-    <a href="#" onclick="downloadAnagTemplate('clienti');return false" style="color:var(--primary);text-decoration:none;font-weight:500">⬇ Clienti</a>
-    <a href="#" onclick="downloadAnagTemplate('assets');return false" style="color:var(--primary);text-decoration:none;font-weight:500">⬇ Assets</a>
+<div style="display:flex;align-items:stretch;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:visible;flex-wrap:wrap;font-size:.78rem">
+  <!-- TEMPLATE VUOTO -->
+  <div style="display:flex;flex-direction:column;justify-content:center;gap:5px;padding:8px 14px;border-right:1px solid var(--border);background:var(--gray5)">
+    <span style="font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--gray)">📄 Template vuoto</span>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-sm btn-outline" onclick="downloadAnagTemplate('clienti')">⬇ Clienti</button>
+      <button class="btn btn-sm btn-outline" onclick="downloadAnagTemplate('assets')">⬇ Assets</button>
+    </div>
   </div>
   <!-- IMPORT ERP -->
-  <div style="display:flex;align-items:center;gap:10px;padding:7px 14px;border-right:1px solid var(--border)">
-    <span style="font-weight:600;color:var(--text2)">⬆ Import ERP</span>
-    <label style="cursor:pointer;color:var(--primary);font-weight:500">📋 Clienti<input type="file" id="erpFileClienti" accept=".xlsx,.xls" style="display:none" onchange="handleErpImport('clienti',this.files[0])"></label>
-    <label style="cursor:pointer;color:var(--primary);font-weight:500">🔧 Assets<input type="file" id="erpFileAssets" accept=".xlsx,.xls,.xlsm" style="display:none" onchange="handleErpImport('assets',this.files[0])"></label>
+  <div style="display:flex;flex-direction:column;justify-content:center;gap:5px;padding:8px 14px;border-right:1px solid var(--border)">
+    <span style="font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--gray)">⬆ Import ERP</span>
+    <div style="display:flex;gap:6px">
+      <label class="btn btn-sm btn-outline" style="cursor:pointer;margin:0">📋 Clienti<input type="file" id="erpFileClienti" accept=".xlsx,.xls" style="display:none" onchange="handleErpImport('clienti',this.files[0])"></label>
+      <label class="btn btn-sm btn-outline" style="cursor:pointer;margin:0">🔧 Assets<input type="file" id="erpFileAssets" accept=".xlsx,.xls,.xlsm" style="display:none" onchange="handleErpImport('assets',this.files[0])"></label>
+    </div>
   </div>
-  <!-- EXPORT -->
-  <div style="display:flex;align-items:center;gap:10px;padding:7px 14px;border-right:1px solid var(--border)">
-    <span style="font-weight:600;color:var(--text2)">⬇ Export</span>
-    <a href="#" onclick="exportErpData('clienti');return false" style="color:var(--primary);text-decoration:none;font-weight:500">Clienti</a>
-    <a href="#" onclick="exportErpData('assets');return false" style="color:var(--primary);text-decoration:none;font-weight:500">Assets</a>
-    <a href="#" onclick="exportErpData('piano');return false" style="color:var(--primary);text-decoration:none;font-weight:500">Piano</a>
+  <!-- EXPORT + FIELD MAP -->
+  <div style="display:flex;flex-direction:column;justify-content:center;gap:5px;padding:8px 14px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--gray)">⬇ Export</span>
+      <details style="position:relative;font-size:.7rem">
+        <summary style="cursor:pointer;color:var(--text3);list-style:none;font-size:.68rem">📋 field map ▾</summary>
+        <div style="position:absolute;top:120%;left:0;background:white;border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:monospace;font-size:.7rem;line-height:1.8;z-index:200;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.13)">
+          Account Name → nome_account<br>M3 Customer → codice_m3<br>Service Area → area_servizio<br>Billing City → citta_fatturazione<br><span style="color:var(--gray)">────────────────────</span><br>SerialNumber → numero_serie<br>DeviceType → tipo_macchina<br>Model → modello<br>Install date → data_installazione
+        </div>
+      </details>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-sm btn-outline" onclick="exportErpData('clienti')">📥 Clienti</button>
+      <button class="btn btn-sm btn-outline" onclick="exportErpData('assets')">📥 Assets</button>
+      <button class="btn btn-sm btn-outline" onclick="exportErpData('piano')">📥 Piano</button>
+    </div>
   </div>
-  <!-- FILE NAME + FIELD MAP -->
-  <div style="display:flex;align-items:center;gap:10px;padding:7px 14px;margin-left:auto;flex-wrap:wrap">
-    <span id="anagImportedFile" style="color:var(--text3);font-style:italic"></span>
-    <details style="font-size:.72rem"><summary style="cursor:pointer;color:var(--text3)">field map</summary>
-    <div style="position:absolute;background:white;border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-family:monospace;font-size:.7rem;line-height:1.6;z-index:50;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.12)">
-      Account Name → nome_account<br>M3 Customer Number → codice_m3<br>Service Area → area_servizio<br>Billing City → citta_fatturazione<br>───────<br>DeviceSerialNumber → numero_serie<br>DeviceType → tipo_macchina<br>Model code → modello<br>Installation date → data_installazione
-    </div></details>
+  <!-- FILE IMPORTATO -->
+  <div style="display:flex;align-items:center;padding:8px 14px;border-left:1px solid var(--border);margin-left:auto">
+    <span id="anagImportedFile" style="color:var(--text3);font-style:italic;font-size:.72rem"></span>
   </div>
 </div>
 <div id="erpImportPreview" style="display:none;margin-bottom:8px"></div>
