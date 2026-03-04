@@ -6450,7 +6450,7 @@ Rispondi SOLO con JSON valido:
       try {
         await sb(env, 'pm_sync_log', 'POST', {
           id: syncId,
-          tenant_id: env.TENANT_ID,
+          tenant_id: TENANT,
           utente_id: body.operatoreId || body.userId || null,
           records_raw: records,
           total_records: records.length,
@@ -6470,7 +6470,7 @@ Rispondi SOLO con JSON valido:
       if (adminErr) return err(adminErr, 403);
       const limit = Math.min(parseInt(body.limit) || 50, 100);
       const logs = await sb(env, 'pm_sync_log', 'GET', null,
-        `?tenant_id=eq.${env.TENANT_ID}&order=created_at.desc&limit=${limit}&select=id,utente_id,utente_nome,total_records,updated_count,not_found_count,errors_count,skipped_count,created_at`);
+        `?tenant_id=eq.${TENANT}&order=created_at.desc&limit=${limit}&select=id,utente_id,utente_nome,total_records,updated_count,not_found_count,errors_count,skipped_count,created_at`);
       return ok({ logs: Array.isArray(logs) ? logs : [] });
     }
 
@@ -6481,7 +6481,7 @@ Rispondi SOLO con JSON valido:
       const { sync_id } = body;
       if (!sync_id) return err('sync_id richiesto');
       const log = await sb(env, 'pm_sync_log', 'GET', null,
-        `?id=eq.${encodeURIComponent(sync_id)}&tenant_id=eq.${env.TENANT_ID}&select=id,records_raw,created_at,total_records,updated_count,not_found_count,skipped_count&limit=1`);
+        `?id=eq.${encodeURIComponent(sync_id)}&tenant_id=eq.${TENANT}&select=id,records_raw,created_at,total_records,updated_count,not_found_count,skipped_count&limit=1`);
       if (!log || !log[0]) return err('Sincronizzazione non trovata');
       return ok(log[0]);
     }
