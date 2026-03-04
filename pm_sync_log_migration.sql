@@ -1,37 +1,32 @@
 -- ═══════════════════════════════════════════════════════════════════
--- Syntoniqa — Migrazione: tabella pm_sync_log
+-- Syntoniqa — Migrazione: PM columns su anagrafica_assets
 -- Esegui questo script nell'editor SQL di Supabase
 -- Dashboard → SQL Editor → New query → incolla → Run
 -- ═══════════════════════════════════════════════════════════════════
 
-CREATE TABLE IF NOT EXISTS pm_sync_log (
-  id              TEXT         PRIMARY KEY,
-  tenant_id       UUID         NOT NULL,
-  utente_id       TEXT,
-  utente_nome     TEXT,
-  records_raw     JSONB        NOT NULL DEFAULT '[]',
-  total_records   INTEGER      DEFAULT 0,
-  updated_count   INTEGER      DEFAULT 0,
-  not_found_count INTEGER      DEFAULT 0,
-  errors_count    INTEGER      DEFAULT 0,
-  skipped_count   INTEGER      DEFAULT 0,
-  note            TEXT,
-  created_at      TIMESTAMPTZ  DEFAULT NOW(),
-  updated_at      TIMESTAMPTZ  DEFAULT NOW()
-);
+-- ── Aggiungi colonne PM a anagrafica_assets (se non esistono già) ────────
+ALTER TABLE anagrafica_assets
+  ADD COLUMN IF NOT EXISTS prossimo_controllo   DATE,
+  ADD COLUMN IF NOT EXISTS ultimo_controllo     DATE,
+  ADD COLUMN IF NOT EXISTS ciclo_pm             TEXT,
+  ADD COLUMN IF NOT EXISTS intervallo_settimane INTEGER,
+  ADD COLUMN IF NOT EXISTS schedule_type        TEXT,
+  ADD COLUMN IF NOT EXISTS status               TEXT;
 
--- Indice per recuperare storico per tenant, dal più recente
-CREATE INDEX IF NOT EXISTS idx_pm_sync_log_tenant_created
-  ON pm_sync_log(tenant_id, created_at DESC);
+-- Indici per query veloci sulla dashboard PM
+CREATE INDEX IF NOT EXISTS idx_anagrafica_assets_prossimo_controllo
+  ON anagrafica_assets(prossimo_controllo)
+  WHERE prossimo_controllo IS NOT NULL;
 
--- RLS: solo service_role può scrivere (il Worker usa service_role key)
-ALTER TABLE pm_sync_log ENABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS idx_anagrafica_assets_numero_serie
+  ON anagrafica_assets(numero_serie)
+  WHERE numero_serie IS NOT NULL;
 
-CREATE POLICY "service_role_all" ON pm_sync_log
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
--- Verifica
-SELECT 'pm_sync_log creata correttamente' AS status;
+-- ── Verifica finale ──────────────────────────────────────────────────────
+SELECT
+  column_name,
+  data_type
+FROM information_schema.columns
+WHERE table_name = 'anagrafica_assets'
+  AND column_name IN ('prossimo_controllo','ultimo_controllo','ciclo_pm','intervallo_settimane','schedule_type','status')
+ORDER BY column_name;
