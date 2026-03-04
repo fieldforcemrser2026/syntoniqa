@@ -6783,10 +6783,69 @@ Rispondi SOLO con JSON valido:
         }
       }
 
+      // ── FASE 2: genera anche da anagrafica_assets (import LSSA/bookmarklet) ──
+      const assets2 = await sb(env, 'anagrafica_assets', 'GET', null,
+        `?prossimo_controllo=not.is.null&prossimo_controllo=lte.${endDate2}&select=id,numero_serie,nome_asset,modello,gruppo_attrezzatura,codice_m3,prossimo_controllo,intervallo_settimane&limit=500`).catch(() => []);
+      if (assets2.length) {
+        // Lookup seriale → {id, cliente_id} da macchine
+        const allMacchineS = await sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&select=id,seriale,cliente_id&limit=1000').catch(() => []);
+        const seriMap = {};
+        for (const m of allMacchineS) {
+          if (m.seriale) { seriMap[m.seriale] = m; seriMap[padSerial10(m.seriale)] = m; seriMap[normalizeSerial(m.seriale)] = m; }
+        }
+        // Lookup codice_m3 → cliente_id da clienti
+        const allCli = await sb(env, 'clienti', 'GET', null, '?obsoleto=eq.false&select=id,codice_m3&limit=500').catch(() => []);
+        const m3Map = {};
+        for (const c of allCli) { if (c.codice_m3) m3Map[c.codice_m3] = c.id; }
+
+        for (const asset of assets2) {
+          const sn = (asset.numero_serie || '').trim();
+          const mac = sn ? (seriMap[sn] || seriMap[padSerial10(sn)] || seriMap[normalizeSerial(sn)]) : null;
+          const macchina_id = mac?.id || null;
+          const cliente_id = mac?.cliente_id || (asset.codice_m3 ? m3Map[asset.codice_m3] : null) || null;
+          const intervalDays = asset.intervallo_settimane ? asset.intervallo_settimane * 7 : 112;
+          let nextDate = asset.prossimo_controllo;
+          if (!nextDate || nextDate > endDate2) continue;
+          let safety = 0;
+          while (nextDate <= endDate2 && safety < 10) {
+            safety++;
+            nextDate = skipWeekend(nextDate);
+            const key = `AST_${asset.id}_${nextDate}`;
+            if (existingKeys.has(key)) { skipped++; nextDate = skipWeekend(addDays(nextDate, intervalDays)); continue; }
+            try {
+              const pianoId = secureId('PM');
+              await sb(env, 'piano', 'POST', {
+                id: pianoId, tenant_id: tid, macchina_id, cliente_id,
+                data: nextDate, stato: 'pianificato', tipo_intervento_id: 'TAGLIANDO',
+                note: `[PM LSSA] ${asset.gruppo_attrezzatura||asset.modello||''} S/N:${sn||'?'}`,
+                obsoleto: false, created_at: now
+              });
+              existingKeys.add(key); created2++;
+            } catch (e) { errors2.push({ asset: asset.id, err: e.message }); }
+            nextDate = skipWeekend(addDays(nextDate, intervalDays));
+          }
+        }
+      }
+
       await wlog('pm_bulk_generate', 'all', 'generated', body.userId || 'admin',
         `${created2} interventi PM generati, ${skipped} già esistenti`);
 
-      return ok({ created: created2, skipped, errors: errors2, mesi_avanti, total_macchine: macchine2.length });
+      return ok({ created: created2, skipped, errors: errors2, mesi_avanti, total_macchine: macchine2.length, total_assets: assets2.length });
+    }
+
+    case 'resetPMDates': {
+      const adminErr = requireRole(body, 'admin');
+      if (adminErr) return err(adminErr, 403);
+      const { codice_m3, confirm_token } = body;
+      if (confirm_token !== 'RESET_CONFIRMED') return err('Conferma richiesta: invia confirm_token="RESET_CONFIRMED"');
+      const patch = { prossimo_controllo: null, ultimo_controllo: null, ciclo_pm: null, intervallo_settimane: null, schedule_type: null, updated_at: new Date().toISOString() };
+      const filter = codice_m3
+        ? `anagrafica_assets?codice_m3=eq.${encodeURIComponent(codice_m3)}`
+        : `anagrafica_assets?numero_serie=not.is.null`;
+      const res = await sb(env, filter, 'PATCH', patch);
+      const count = Array.isArray(res) ? res.length : 0;
+      await wlog('anagrafica_assets', codice_m3 || 'all', 'pm_reset', body.operatoreId || body.userId);
+      return ok({ reset: count, scope: codice_m3 || 'all' });
     }
 
     default:

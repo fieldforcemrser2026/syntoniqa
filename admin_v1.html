@@ -1323,9 +1323,16 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <div class="btn-group" style="flex-wrap:wrap">
 <button class="btn btn-sm" id="pmSyncBtn" onclick="showPMSyncModal()" title="Sincronizza automaticamente dal provider PM (bookmarklet)">🔄 Sync</button>
 <label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0" title="Importa file PM: template ufficiale, export provider, o template Syntoniqa">⬆ Import file <input type="file" id="pmImportFile" style="display:none" accept=".xlsx,.csv,.xls,.xlsm,.json" onchange="importPMFile(this)"></label>
-<button class="btn btn-ghost btn-sm" onclick="exportPMPiano()" title="Esporta elenco PM in CSV">📥 Export</button>
+<button class="btn btn-ghost btn-sm" onclick="exportPMPiano()" title="Esporta i 99 record PM in XLSX (formato LSSA)">📥 Export XLSX</button>
 <button class="btn btn-ghost btn-sm" onclick="showPMSyncLog()" title="Storico sincronizzazioni PM da provider">📋 Storico Sync</button>
-<button class="btn btn-sm btn-ai" onclick="bulkGeneratePM()">⚡ Piano 3M</button>
+<button class="btn btn-ghost btn-sm btn-danger" onclick="resetPMDates()" title="Cancella tutte le date PM da anagrafica_assets">🗑️ Cancella PM</button>
+<select id="pmMesiSelect" style="padding:6px 8px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8rem" title="Orizzonte temporale piano">
+  <option value="3">3 mesi</option>
+  <option value="6" selected>6 mesi</option>
+  <option value="12">12 mesi</option>
+  <option value="24">24 mesi</option>
+</select>
+<button class="btn btn-sm btn-ai" onclick="bulkGeneratePM()" title="Genera interventi PM nel piano dalla data prossimo_controllo di ogni robot">⚡ Genera Piano</button>
 <button class="btn btn-sm btn-outline" onclick="togglePMSettings()">⚙️ Cicli</button>
 </div>
 </div>
@@ -8889,21 +8896,39 @@ setTimeout(function(){o.remove();},8000);
 }
 
 // ── Export PM corrente come CSV ──────────────────────────────────────────────
-function exportPMPiano(){
+async function exportPMPiano(){
   const allAssets=(PM_OVERVIEW?.clienti||[]).flatMap(c=>(c.assets||[]).map(a=>({...a,_cliente:c.nome||c.codice_m3||''})));
   if(!allAssets.length){toast('Nessun dato PM disponibile — carica prima la sezione PM','warn');return;}
-  const fmtD=d=>d?new Date(d+'T00:00:00').toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}):'';
-  const rows=[['Cliente','Numero Serie','Nome Asset','Tipo','Ciclo PM','Prossimo PM','Ultimo PM','Giorni al PM']];
-  for(const a of allAssets){
-    const {days}=getPMAssetStatus(a.prossimo_controllo);
-    rows.push([a._cliente,a.numero_serie||'',a.nome_asset||'',a.gruppo_attrezzatura||a.tipo_foglio||'',a.ciclo_pm||'',fmtD(a.prossimo_controllo),fmtD(a.ultimo_controllo),days===null?'':days]);
+  // Carica SheetJS se non disponibile
+  if(typeof XLSX==='undefined'){
+    await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
   }
-  const csv=rows.map(r=>r.map(v=>'"'+((''+v).replace(/"/g,'""'))+'"').join(',')).join('\r\n');
-  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download='pm_overview_'+new Date().toISOString().slice(0,10)+'.csv';
-  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
-  toast('CSV esportato ('+allAssets.length+' asset)','ok');
+  const fmtD=d=>d?new Date(d+'T00:00:00').toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}):'';
+  // Formato colonne compatibile con template LSSA
+  const rows=allAssets.map(a=>{
+    const{days,stato}=getPMAssetStatus(a.prossimo_controllo);
+    return{
+      'Numero Serie':a.numero_serie||'',
+      'Nome Asset':a.nome_asset||'',
+      'Tipo / Gruppo':a.gruppo_attrezzatura||a.tipo_foglio||'',
+      'Modello':a.modello||'',
+      'Cliente':a._cliente,
+      'Codice M3':a.codice_m3||'',
+      'Prossimo PM':fmtD(a.prossimo_controllo),
+      'Ultimo PM':fmtD(a.ultimo_controllo),
+      'Giorni al PM':days===null?'':days,
+      'Stato PM':stato||'',
+      'Ciclo PM':a.ciclo_pm||'',
+      'Intervallo (sett)':a.intervallo_settimane||''
+    };
+  });
+  const ws=XLSX.utils.json_to_sheet(rows);
+  // Larghezze colonne
+  ws['!cols']=[{wch:15},{wch:22},{wch:18},{wch:16},{wch:28},{wch:12},{wch:13},{wch:13},{wch:12},{wch:12},{wch:10},{wch:14}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,'PM Overview',ws);
+  XLSX.writeFile(wb,'pm_overview_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  toast('XLSX esportato ('+allAssets.length+' asset)','ok');
 }
 
 // ── Storico Sincronizzazioni PM ──────────────────────────────────────────────
@@ -9152,8 +9177,24 @@ async function completePMAction(macchinaId){
 }
 
 async function bulkGeneratePM(){
-  if(!confirm('Generare PM per i prossimi 3 mesi?'))return;
-  try{const r=await apiCall('bulkGeneratePMCalendar',{months:3,userId:USER?.ID},'POST');toast('PM generati: '+(r.created||0)+' nuovi','ok');await loadPMList()}catch(e){toast(e.message,'err')}
+  const mesi=parseInt($('pmMesiSelect')?.value||6);
+  if(!confirm(`Generare interventi PM nel piano per i prossimi ${mesi} mesi?\n\nVerranno creati interventi nella sezione Piano per ogni robot con prossimo_controllo impostato.\nInterventi già esistenti non verranno duplicati.`))return;
+  toast(`⚙️ Generazione piano PM ${mesi} mesi...`,'info',5000);
+  try{
+    const r=await apiCall('bulkGeneratePMCalendar',{mesi_avanti:mesi,userId:USER?.ID},'POST');
+    const msg=`✅ Piano PM: ${r.created||0} nuovi interventi`+(r.skipped?` | ${r.skipped} già presenti`:'')+(r.total_assets!=null?` | ${r.total_assets} asset LSSA processati`:'');
+    toast(msg,'ok',10000);
+    if(r.errors?.length)toast('⚠️ '+r.errors.length+' errori: '+r.errors[0]?.err,'warn',8000);
+  }catch(e){toast(e.message,'err')}
+}
+
+async function resetPMDates(){
+  if(!confirm('ATTENZIONE: cancellare tutte le date PM da anagrafica_assets?\n\nQuesto azzera prossimo_controllo, ultimo_controllo, ciclo_pm, intervallo_settimane per tutti i robot.\nI dati vanno reimportati da LSSA dopo.'))return;
+  try{
+    const r=await apiCall('resetPMDates',{confirm_token:'RESET_CONFIRMED',userId:USER?.ID},'POST');
+    toast(`🗑️ Date PM azzerate (${r.reset||0} record)`,'ok');
+    PM_OVERVIEW=null;await loadPMOverview();
+  }catch(e){toast(e.message,'err')}
 }
 
 function togglePMSettings(){
