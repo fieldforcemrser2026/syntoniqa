@@ -14,7 +14,7 @@ binding = "AI"
 # Creare in CF Dashboard → KV → "RATE_KV" → copiare l'ID qui
 [[kv_namespaces]]
 binding = "RATE_KV"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "9b7d282372684320b4e9d328f13c96e6"
 
 [vars]
 # Brand white-label (NON sono secrets — testo pubblico)
