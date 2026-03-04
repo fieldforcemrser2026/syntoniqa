@@ -8852,15 +8852,32 @@ fetch(epUrl,{headers:{Authorization:'Bearer '+tok}})
 .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
 .then(function(data){
   var today=new Date();
-  var records=Object.values(data).map(function(d){
-    var sn=(d[_f_sn]||'').toString().trim();
+  // Normalizza risposta: gestisce array [], {data:[...]}, {items:[...]}, o {key:obj,...}
+  var rawItems=Array.isArray(data)?data:(Array.isArray(data.data)?data.data:(Array.isArray(data.items)?data.items:Object.values(data)));
+  // DEBUG: logga struttura primo record in console (aprire DevTools per vedere)
+  if(rawItems.length>0){
+    var firstRec=rawItems[0];
+    console.log('[LSSA PM DEBUG] Chiavi primo record:',Object.keys(firstRec||{}));
+    console.log('[LSSA PM DEBUG] Primo record raw:',JSON.stringify(firstRec||{}));
+  }
+  var records=rawItems.map(function(d){
+    if(!d||typeof d!=='object')return null;
+    var sn=(d[_f_sn]||d['serialNumber']||d['SerialNumber']||d['serial_number']||'').toString().trim();
     if(!sn)return null;
-    var daysUntil=parseInt(d[_f_du]);
-    var daysSince=parseInt(d[_f_ds]);
+    // Giorni al prossimo PM (prova campo configurato, poi varianti comuni)
+    var daysUntil=parseFloat(d[_f_du]!=null?d[_f_du]:(d['DaysUntilPM']!=null?d['DaysUntilPM']:(d['daysUntilNextPm']!=null?d['daysUntilNextPm']:NaN)));
+    // Data prossimo PM diretta (fallback se DaysUntil non disponibile)
+    var nextPMRaw=d['NextPMDate']||d['nextPMDate']||d['NextServiceDate']||d['plannedDate']||d['PlannedDate']||d['scheduledDate']||d['ScheduledDate']||null;
     var nextPM=null,lastPM=null;
-    if(!isNaN(daysUntil)){var nd=new Date(today);nd.setDate(nd.getDate()+daysUntil);nextPM=nd.toISOString().split('T')[0];}
-    if(!isNaN(daysSince)&&daysSince>0){var ld=new Date(today);ld.setDate(ld.getDate()-daysSince);lastPM=ld.toISOString().split('T')[0];}
-    var ciclo=(d[_f_type]||'').toString().trim().toUpperCase();
+    if(!isNaN(daysUntil)){var nd=new Date(today);nd.setDate(nd.getDate()+Math.round(daysUntil));nextPM=nd.toISOString().split('T')[0];}
+    else if(nextPMRaw){try{var dt=new Date(nextPMRaw);if(!isNaN(dt.getTime()))nextPM=dt.toISOString().split('T')[0];}catch(e){}}
+    // Giorni dall'ultimo PM (prova campo configurato, poi varianti comuni)
+    var daysSince=parseFloat(d[_f_ds]!=null?d[_f_ds]:(d['DaysSincePM']!=null?d['DaysSincePM']:(d['daysSinceLastPm']!=null?d['daysSinceLastPm']:NaN)));
+    // Data ultimo PM diretta (fallback)
+    var lastPMRaw=d['LastPMDate']||d['lastPMDate']||d['LastServiceDate']||d['actualDate']||d['ActualDate']||d['completedDate']||d['CompletedDate']||null;
+    if(!isNaN(daysSince)&&daysSince>0){var ld=new Date(today);ld.setDate(ld.getDate()-Math.round(daysSince));lastPM=ld.toISOString().split('T')[0];}
+    else if(lastPMRaw){try{var dt2=new Date(lastPMRaw);if(!isNaN(dt2.getTime()))lastPM=dt2.toISOString().split('T')[0];}catch(e){}}
+    var ciclo=(d[_f_type]||d['PMType']||d['pmType']||d['maintenanceType']||'').toString().trim().toUpperCase();
     if(!['A','B','C','D'].includes(ciclo))ciclo=null;
     var rec={numero_serie:sn};
     if(nextPM)rec.prossimo_controllo=nextPM;
@@ -8868,11 +8885,15 @@ fetch(epUrl,{headers:{Authorization:'Bearer '+tok}})
     if(ciclo)rec.ciclo_pm=ciclo;
     return rec;
   }).filter(Boolean);
-  var blob=new Blob([JSON.stringify({records:records},null,2)],{type:'application/json'});
+  // Includi campione debug nel JSON scaricato per diagnostica
+  var debugSample=rawItems.slice(0,1).map(function(d){return{keys:Object.keys(d||{}),values_sample:d};});
+  var withDebug=records.length===0||records[0].prossimo_controllo?records:records;
+  var blob=new Blob([JSON.stringify({records:records,_debug_sample:debugSample,_stats:{total_raw:rawItems.length,with_next_pm:records.filter(function(r){return r.prossimo_controllo;}).length,without_date:records.filter(function(r){return !r.prossimo_controllo;}).length}},null,2)],{type:'application/json'});
   var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='pm_lssa_'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
-  overlay.style.background='#065F46';
-  overlay.textContent='OK: '+records.length+' record. Vai in admin > PM > Import file';
-  setTimeout(function(){overlay.remove();},8000);
+  var noDate=records.filter(function(r){return !r.prossimo_controllo;}).length;
+  overlay.style.background=noDate===records.length?'#B45309':'#065F46';
+  overlay.textContent='OK: '+records.length+' record'+(noDate>0?' ('+noDate+' senza data — apri console per debug)':'')+'. Vai in admin > PM > Import file';
+  setTimeout(function(){overlay.remove();},10000);
 })
 .catch(function(err){
   overlay.style.background='#991B1B';
