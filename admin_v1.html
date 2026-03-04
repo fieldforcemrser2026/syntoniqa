@@ -28,7 +28,7 @@
 
   /* -- Meta theme-color -- */
   var mt = document.querySelector('meta[name="theme-color"]');
-  if(mt && co.primary) mt.content = co.primary;
+  if(mt) mt.content = co.bg || co.primary || '#050505'; // FIX WL-01: usa config.colors.bg se disponibile
 
   /* -- Title -- */
   var br = cfg.brand||{};
@@ -74,7 +74,7 @@
     var featMap = {
       ai_planner:   "showSec\'ai\'",
       mappa:        "showSec\'mappa\'",
-      kpi_dashboard:"showSec\'kpi\'",
+      kpi:          "showSec\'kpi\'",          // FIX ADM-05: era "kpi_dashboard", chiave config è "kpi"
       trasferte:    "showSec\'trasferte\'",
       installazioni:"showSec\'installazioni\'",
       pagellini:    "showSec\'pagellini\'",

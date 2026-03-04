@@ -1,7 +1,7 @@
 # Syntoniqa v1.0 — Claude Code Handoff
 
 > FSM (Field Service Management) PWA per **MRS Lely Center Emilia Romagna**
-> 10.726 righe di codice · 59 commit · 3 file principali · Zero framework
+> 20.889 righe di codice · 3 file principali + 1 config · Zero framework
 
 ---
 
@@ -34,11 +34,11 @@ git push origin main
 ```
 ┌──────────────────────┐     ┌──────────────────────────┐
 │  admin_v1.html       │────▶│  Cloudflare Worker        │
-│  (5548 righe)        │     │  cloudflare_worker.js     │
-│  Dashboard Admin SPA │     │  (3042 righe)             │
+│  (10465 righe)       │     │  cloudflare_worker.js     │
+│  Dashboard Admin SPA │     │  (7296 righe)             │
 ├──────────────────────┤     │                            │
-│  index_v2.html       │────▶│  8 GET + 89 POST handlers │
-│  (2071 righe)        │     │  2 cron jobs (*/15 min)   │
+│  index_v2.html       │────▶│  8 GET + 126 POST handlers│
+│  (3001 righe)        │     │  3 cron jobs (*/15 min)   │
 │  PWA Mobile Tecnico  │     │  Telegram webhook         │
 └──────────────────────┘     └──────────┬───────────────┘
                                          │
@@ -71,50 +71,101 @@ git push origin main
 ### Worker Environment Variables (CF Dashboard)
 
 ```
-SUPABASE_URL = https://sajzbanhkehkkhhgztkq.supabase.co
-SUPABASE_SERVICE_KEY = <REDACTED>
-SQ_TOKEN = <REDACTED>
-GEMINI_KEY = <REDACTED>
-TELEGRAM_BOT_TOKEN = <REDACTED>
-RESEND_API_KEY = <REDACTED>
-TENANT_ID = 785d94d0-b947-4a00-9c4e-3b67833e7045
+# ── DATABASE ──────────────────────────────────────────────────
+SUPABASE_URL         = https://sajzbanhkehkkhhgztkq.supabase.co
+SUPABASE_SERVICE_KEY = <REDACTED>   (service_role key - accesso completo)
+TENANT_ID            = 785d94d0-b947-4a00-9c4e-3b67833e7045
+
+# ── AUTH ──────────────────────────────────────────────────────
+SQ_TOKEN             = <REDACTED>   (legacy token per Telegram/cron)
+JWT_SECRET           = <REDACTED>   (⚠️ OBBLIGATORIO - firma JWT login)
+JWT_EXPIRY_SECONDS   = 43200        (12h, opzionale)
+JWT_REMEMBER_ME_SECONDS = 2592000   (30gg, opzionale)
+
+# ── AI ENGINES (6 disponibili, cascata automatica) ─────────────
+GEMINI_KEY           = <REDACTED>   (Google Gemini 2.0 Flash - priorità 1)
+CEREBRAS_KEY         = <REDACTED>   (Cerebras Llama 3.3-70B - priorità 2)
+GROQ_KEY             = <REDACTED>   (Groq Llama 3.3-70B - priorità 3)
+MISTRAL_KEY          = <REDACTED>   (Mistral Small - priorità 4)
+DEEPSEEK_KEY         = <REDACTED>   (DeepSeek Chat - priorità 5)
+AI                   = [binding]    (Workers AI Llama+LLaVA - priorità 6, fallback)
+
+# ── COMUNICAZIONI ─────────────────────────────────────────────
+TELEGRAM_BOT_TOKEN      = <REDACTED>
+TELEGRAM_CHAT_ID        = -5236723213
+TELEGRAM_WEBHOOK_SECRET = <REDACTED>  (⚠️ OBBLIGATORIO per sicurezza webhook)
+RESEND_API_KEY          = <REDACTED>
+
+# ── PUSH NOTIFICATIONS ────────────────────────────────────────
+VAPID_PUBLIC_KEY     = <REDACTED>
+VAPID_PRIVATE_KEY    = <REDACTED>
+VAPID_SUBJECT        = mailto:noreply@syntoniqa.app
+
+# ── BRANDING (opzionali, override white_label_config.js) ───────
+BRAND_NAME           = MRS Lely Center Emilia Romagna
+BRAND_SHORT          = MRS Field
+BRAND_COLOR          = #C30A14
+BRAND_EMAIL          = noreply@syntoniqa.app
+BRAND_ADMIN_URL      = https://fieldforcemrser2026.github.io/syntoniqa/admin_v1.html
+BRAND_TECH_URL       = https://fieldforcemrser2026.github.io/syntoniqa/index_v2.html
+CORS_EXTRA           =              (domini aggiuntivi separati da virgola)
 ```
 
 ---
 
 ## File Principali
 
-### `cloudflare_worker.js` (3042 righe)
+### `cloudflare_worker.js` (7296 righe)
 Backend completo. Zero dipendenze runtime.
 
-**Struttura:**
+**Struttura reale:**
 ```
-Righe 1-80:     CORS, state machine, helpers (json/ok/err)
-Righe 80-200:   PascalCase/snake_case transform, normalizeBody, getFields
-Righe 200-215:  hashPassword, checkToken
-Righe 216-250:  Router (fetch + scheduled)
-Righe 250-400:  handleGet (8 azioni)
-Righe 400-1600: handlePost (89 azioni)
-Righe 1600-1800: Telegram webhook handler + AI media analysis
-Righe 1800-2100: Chat bot commands (/stato, /vado, /incorso, /risolto, /ordine)
-Righe 2100-2300: In-app chat bot mirror
-Righe 2300-2600: Notification helpers (email, TG, push)
-Righe 2600-3042: Cron jobs (checkInterventoReminders, checkSLAUrgenze)
+Righe 1-115:    Brand helper, CORS, state machine, ROLE_MATRIX, requireRole/isCapoSq
+Righe 115-460:  Auth helpers (JWT, PBKDF2 hash, checkToken), rate limiter
+Righe 460-550:  Router (fetch + scheduled) — 3 cron jobs
+Righe 550-700:  handleGet (8 azioni: getAll, getKPI, getKPITecnici, exportPowerBI…)
+Righe 700-2700: handlePost (126 azioni: CRUD completo tutte le entità)
+Righe 2700-3050: AI engines cascade (Gemini→Cerebras→Groq→Mistral→DeepSeek→Workers AI)
+Righe 3050-4000: AI Plan generation (generateAIPlan, previewAIPlan, generatePlanSmart)
+Righe 4000-4800: Telegram webhook handler + AI vision (LLaVA)
+Righe 4800-5000: Chat bot commands (/stato, /vado, /incorso, /risolto, /ordine)
+Righe 5000-5500: Notification helpers (email Resend, TG, Web Push VAPID)
+Righe 5500-7296: Cron jobs (checkInterventoReminders, checkSLAUrgenze, checkPMExpiry)
 ```
 
-### `admin_v1.html` (5548 righe)
-SPA admin completa. 33 sezioni, 17 modali.
+**AI Engine Cascade (6 motori, ranking configurabile da DB):**
+| Priorità | Engine | Modello | API Key |
+|----------|--------|---------|---------|
+| 1 | Gemini | gemini-2.0-flash | GEMINI_KEY |
+| 2 | Cerebras | llama-3.3-70b | CEREBRAS_KEY |
+| 3 | Groq | llama-3.3-70b-versatile | GROQ_KEY |
+| 4 | Mistral | mistral-small-latest | MISTRAL_KEY |
+| 5 | DeepSeek | deepseek-chat | DEEPSEEK_KEY |
+| 6 | Workers AI | llama-3.3-70b-fp8 + llava-1.5-7b | AI binding |
+
+Ranking override DB: `config.ai_engine_ranking = "gemini,cerebras,groq,mistral,deepseek,workersai"`
+Disabilitazione: `config.ai_engine_disabled = "groq,mistral"` (in caso di rate limit)
+
+### `admin_v1.html` (10465 righe)
+SPA admin completa. 35+ sezioni, 17 modali.
 
 **Librerie esterne (CDN):**
 - Leaflet 1.9.4 (mappa)
 - Chart.js 4.4.0 (grafici)
 - SheetJS 0.18.5 (Excel, caricato on-demand)
 
-### `index_v2.html` (2071 righe)
-PWA mobile per tecnici. 17 pagine, bottom nav, sheets.
+### `index_v2.html` (3001 righe)
+PWA mobile per tecnici. 19 pagine, bottom nav, sheets, dark mode, i18n, Service Worker.
 
-### `white_label_config.js` (65 righe)
-Configurazione white-label: brand, colori, API, feature toggles, PWA.
+**Funzionalità PWA:**
+- Service Worker (sw.js): cache app shell, sync queue offline, push notifications
+- Pull-to-refresh (touchstart/move/end)
+- Dark mode toggle (localStorage `sq2_theme`)
+- i18n it/en (localStorage `sq2_lang`)
+- Push notifications VAPID (PushManager)
+
+### `white_label_config.js` (127 righe)
+Configurazione white-label: brand, colori, API, feature toggles, PWA, pmSync provider.
 
 ---
 
@@ -167,7 +218,22 @@ Mutable global `corsHeaders` aggiornato da `setCorsForRequest(request)` a ogni r
 Cron usa `Europe/Rome` via `Intl.DateTimeFormat`.
 
 ### 10. Authorization
-`requireAdmin(env, body)` restituisce null se OK, stringa errore se no. Endpoint admin-only: tutti i create/update di clienti, macchine, automezzi, installazioni, reperibilità, trasferte, utenti (tranne self-update).
+`requireAdmin(env, body)` — legacy, usare `requireRole(body, 'admin')`. Endpoint admin-only: CRUD di clienti, macchine, automezzi, installazioni, reperibilità, trasferte, utenti (tranne self-update).
+`requireRole(body, ...roles)` — preferire questo. Se 'caposquadra' è incluso, admin è automaticamente autorizzato.
+
+### 11. AI Engine Cascade
+Il sistema AI usa 6 motori in cascata. Se un motore fallisce (429, timeout, errore) passa automaticamente al successivo. L'ordine è configurabile in DB (chiave `ai_engine_ranking`). Il ranking default è: `gemini → cerebras → groq → mistral → deepseek → workersai`. **Non specificare solo Gemini nel codice**: usare sempre la funzione `callAI(promptText)` che gestisce il cascade automaticamente.
+
+### 12. Workers AI timeout
+Workers AI (fallback finale) ha timeout di 30s via `Promise.race`. Gli altri motori non hanno timeout esplicito (dipendono dal CF Worker timeout globale di 30s CPU time).
+
+### 13. JWT_SECRET è OBBLIGATORIO
+Se `JWT_SECRET` non è configurato in CF Dashboard, `verifyJWT()` ritorna sempre null e tutti i login falliscono silenziosamente. **Impostarlo PRIMA del deploy.**
+
+### 14. Cron jobs — 3 job attivi
+- `checkInterventoReminders()` — interventi in ritardo, ordini vecchi
+- `checkSLAUrgenze()` — SLA ok/warning/critical/breach, escalation
+- `checkPMExpiry()` — PM scaduti, riepilogo TG alle 7-8 AM (Rome)
 
 ---
 
