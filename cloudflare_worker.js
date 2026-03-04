@@ -6398,13 +6398,13 @@ Rispondi SOLO con JSON valido:
       return ok({ clienti: clientiList, total_assets: assets.length, total_clienti: clientiList.length });
     }
 
-    // ═══ IMPORT PM OVERDUE: aggiorna prossimo_controllo da export provider PM ═══
+    // ═══ IMPORT PM OVERDUE: aggiorna prossimo_controllo da export provider PM + salva storico ═══
     case 'importPMOverdue': {
       const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const { records } = body;
       if (!records || !Array.isArray(records)) return err('records array richiesto');
-      let updated = 0, not_found = 0, errors = 0;
+      let updated = 0, not_found = 0, errors = 0, skipped = 0;
       const now = new Date().toISOString();
       for (const rec of records) {
         try {
@@ -6416,11 +6416,14 @@ Rispondi SOLO con JSON valido:
           if (rec.ultimo_controllo || rec.UltimoControllo) patch.ultimo_controllo = rec.ultimo_controllo || rec.UltimoControllo;
           if (rec.ciclo_pm || rec.CicloPm) patch.ciclo_pm = rec.ciclo_pm || rec.CicloPm;
           if (rec.intervallo_settimane != null) patch.intervallo_settimane = parseInt(rec.intervallo_settimane) || null;
-          if (!Object.keys(patch).length) continue;
+          // Nessun campo da aggiornare → salta (contato come skipped, non not_found)
+          if (!Object.keys(patch).length) { skipped++; continue; }
           patch.updated_at = now;
           let res;
           if (assetId) {
             res = await sb(env, `anagrafica_assets?id=eq.${encodeURIComponent(assetId)}`, 'PATCH', patch);
+            const cnt2 = Array.isArray(res) ? res.length : (res ? 1 : 0);
+            if (cnt2 > 0) { updated++; } else { not_found++; }
           } else if (rawSerial) {
             // Tenta match: prima forma esatta, poi zero-padded 10 cifre, poi stripped
             const stripped = normalizeSerial(rawSerial);
@@ -6439,14 +6442,48 @@ Rispondi SOLO con JSON valido:
               cnt = Array.isArray(res) ? res.length : (res ? 1 : 0);
             }
             if (cnt > 0) { updated++; } else { not_found++; }
-            continue;
-          } else { not_found++; continue; }
-          const cnt2 = Array.isArray(res) ? res.length : (res ? 1 : 0);
-          if (cnt2 > 0) { updated++; } else { not_found++; }
+          } else { skipped++; }
         } catch (e) { errors++; }
       }
-      await wlog('anagrafica_assets', 'bulk', `pm_import updated:${updated} not_found:${not_found}`, body.operatoreId || body.userId);
-      return ok({ updated, not_found, errors, total: records.length });
+      // Salva storico sincronizzazione in pm_sync_log
+      const syncId = secureId('SYNC');
+      try {
+        await sb(env, 'pm_sync_log', 'POST', {
+          id: syncId,
+          tenant_id: env.TENANT_ID,
+          utente_id: body.operatoreId || body.userId || null,
+          records_raw: records,
+          total_records: records.length,
+          updated_count: updated,
+          not_found_count: not_found,
+          errors_count: errors,
+          skipped_count: skipped,
+        });
+      } catch(e) { /* pm_sync_log non critico — non bloccare il flusso */ }
+      await wlog('anagrafica_assets', 'bulk', `pm_import updated:${updated} not_found:${not_found} skipped:${skipped}`, body.operatoreId || body.userId);
+      return ok({ updated, not_found, errors, skipped, total: records.length, sync_id: syncId });
+    }
+
+    // ═══ GET STORICO SINCRONIZZAZIONI PM ═══
+    case 'getPMSyncLog': {
+      const adminErr = requireRole(body, 'admin');
+      if (adminErr) return err(adminErr, 403);
+      const limit = Math.min(parseInt(body.limit) || 50, 100);
+      const logs = await sb(env, 'pm_sync_log', 'GET', null,
+        `?tenant_id=eq.${env.TENANT_ID}&order=created_at.desc&limit=${limit}&select=id,utente_id,utente_nome,total_records,updated_count,not_found_count,errors_count,skipped_count,created_at`);
+      return ok({ logs: Array.isArray(logs) ? logs : [] });
+    }
+
+    // ═══ GET RECORDS DI UNA SINGOLA SINCRONIZZAZIONE PM ═══
+    case 'getPMSyncRecords': {
+      const adminErr = requireRole(body, 'admin');
+      if (adminErr) return err(adminErr, 403);
+      const { sync_id } = body;
+      if (!sync_id) return err('sync_id richiesto');
+      const log = await sb(env, 'pm_sync_log', 'GET', null,
+        `?id=eq.${encodeURIComponent(sync_id)}&tenant_id=eq.${env.TENANT_ID}&select=id,records_raw,created_at,total_records,updated_count,not_found_count,skipped_count&limit=1`);
+      if (!log || !log[0]) return err('Sincronizzazione non trovata');
+      return ok(log[0]);
     }
 
     // ═══ IMPORT PM TEMPLATE v5.x (template standard LC Data con headers in riga 3) ═══
