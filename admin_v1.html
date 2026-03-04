@@ -8824,82 +8824,50 @@ function showPMSyncModal(){
   // Endpoint finale: se relativo, usa come path; se assoluto, usa direttamente
   const endpointFull = apiEndpoint.startsWith('http') ? apiEndpoint : apiEndpoint;
 
-  // Genera bookmarklet — nessun vendor name hardcoded, tutto parametrizzato
+  // Genera bookmarklet compatto (limite Chrome ~2KB per javascript: URL)
   const esc = s => (s+'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   const bm = `javascript:(function(){
-var _sq_url='${esc(apiUrl)}';
-var _sq_tok='${esc(apiToken)}';
-var _sq_usr='${esc(userId)}';
-var _pm_host='${esc(providerHost)}';
-var _pm_ep='${esc(endpointFull)}';
-var _pm_akey='${esc(authKey)}';
-var _pm_afield='${esc(authField)}';
-var _pm_color='${esc(providerColor)}';
-var _f_sn='${esc(fSN)}';
-var _f_du='${esc(fDU)}';
-var _f_ds='${esc(fDS)}';
-var _f_type='${esc(fType)}';
-if(_pm_host&&window.location.hostname!==_pm_host){alert('⚠️ Apri prima il portale PM:\\n'+_pm_host);return;}
-var auth={};try{auth=JSON.parse(localStorage.getItem(_pm_akey)||'{}');}catch(e){}
-var tok=auth[_pm_afield];
-if(!tok){alert('❌ Sessione non trovata — effettua il login nel portale PM e riprova.');return;}
-var overlay=document.createElement('div');
-overlay.style='position:fixed;top:16px;right:16px;z-index:99999;background:'+_pm_color+';color:#fff;padding:10px 18px;border-radius:8px;font-family:sans-serif;font-size:14px;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,.3)';
-overlay.textContent='🔄 Sincronizzazione PM in corso...';
-document.body.appendChild(overlay);
-var epUrl=_pm_ep.startsWith('http')?_pm_ep:(window.location.origin+_pm_ep);
-fetch(epUrl,{headers:{Authorization:'Bearer '+tok}})
-.then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
-.then(function(data){
-  var today=new Date();
-  // Normalizza risposta: gestisce array [], {data:[...]}, {items:[...]}, o {key:obj,...}
-  var rawItems=Array.isArray(data)?data:(Array.isArray(data.data)?data.data:(Array.isArray(data.items)?data.items:Object.values(data)));
-  // DEBUG: logga struttura primo record in console (aprire DevTools per vedere)
-  if(rawItems.length>0){
-    var firstRec=rawItems[0];
-    console.log('[LSSA PM DEBUG] Chiavi primo record:',Object.keys(firstRec||{}));
-    console.log('[LSSA PM DEBUG] Primo record raw:',JSON.stringify(firstRec||{}));
-  }
-  var records=rawItems.map(function(d){
-    if(!d||typeof d!=='object')return null;
-    var sn=(d[_f_sn]||d['serialNumber']||d['SerialNumber']||d['serial_number']||'').toString().trim();
-    if(!sn)return null;
-    // Giorni al prossimo PM (prova campo configurato, poi varianti comuni)
-    var daysUntil=parseFloat(d[_f_du]!=null?d[_f_du]:(d['DaysUntilPM']!=null?d['DaysUntilPM']:(d['daysUntilNextPm']!=null?d['daysUntilNextPm']:NaN)));
-    // Data prossimo PM diretta (fallback se DaysUntil non disponibile)
-    var nextPMRaw=d['NextPMDate']||d['nextPMDate']||d['NextServiceDate']||d['plannedDate']||d['PlannedDate']||d['scheduledDate']||d['ScheduledDate']||null;
-    var nextPM=null,lastPM=null;
-    if(!isNaN(daysUntil)){var nd=new Date(today);nd.setDate(nd.getDate()+Math.round(daysUntil));nextPM=nd.toISOString().split('T')[0];}
-    else if(nextPMRaw){try{var dt=new Date(nextPMRaw);if(!isNaN(dt.getTime()))nextPM=dt.toISOString().split('T')[0];}catch(e){}}
-    // Giorni dall'ultimo PM (prova campo configurato, poi varianti comuni)
-    var daysSince=parseFloat(d[_f_ds]!=null?d[_f_ds]:(d['DaysSincePM']!=null?d['DaysSincePM']:(d['daysSinceLastPm']!=null?d['daysSinceLastPm']:NaN)));
-    // Data ultimo PM diretta (fallback)
-    var lastPMRaw=d['LastPMDate']||d['lastPMDate']||d['LastServiceDate']||d['actualDate']||d['ActualDate']||d['completedDate']||d['CompletedDate']||null;
-    if(!isNaN(daysSince)&&daysSince>0){var ld=new Date(today);ld.setDate(ld.getDate()-Math.round(daysSince));lastPM=ld.toISOString().split('T')[0];}
-    else if(lastPMRaw){try{var dt2=new Date(lastPMRaw);if(!isNaN(dt2.getTime()))lastPM=dt2.toISOString().split('T')[0];}catch(e){}}
-    var ciclo=(d[_f_type]||d['PMType']||d['pmType']||d['maintenanceType']||'').toString().trim().toUpperCase();
-    if(!['A','B','C','D'].includes(ciclo))ciclo=null;
-    var rec={numero_serie:sn};
-    if(nextPM)rec.prossimo_controllo=nextPM;
-    if(lastPM)rec.ultimo_controllo=lastPM;
-    if(ciclo)rec.ciclo_pm=ciclo;
-    return rec;
-  }).filter(Boolean);
-  // Includi campione debug nel JSON scaricato per diagnostica
-  var debugSample=rawItems.slice(0,1).map(function(d){return{keys:Object.keys(d||{}),values_sample:d};});
-  var withDebug=records.length===0||records[0].prossimo_controllo?records:records;
-  var blob=new Blob([JSON.stringify({records:records,_debug_sample:debugSample,_stats:{total_raw:rawItems.length,with_next_pm:records.filter(function(r){return r.prossimo_controllo;}).length,without_date:records.filter(function(r){return !r.prossimo_controllo;}).length}},null,2)],{type:'application/json'});
-  var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='pm_lssa_'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
-  var noDate=records.filter(function(r){return !r.prossimo_controllo;}).length;
-  overlay.style.background=noDate===records.length?'#B45309':'#065F46';
-  overlay.textContent='OK: '+records.length+' record'+(noDate>0?' ('+noDate+' senza data — apri console per debug)':'')+'. Vai in admin > PM > Import file';
-  setTimeout(function(){overlay.remove();},10000);
-})
-.catch(function(err){
-  overlay.style.background='#991B1B';
-  overlay.textContent='❌ '+err.message;
-  setTimeout(function(){overlay.remove();},6000);
-});
+var H='${esc(providerHost)}',EP='${esc(endpointFull)}',AK='${esc(authKey)}',AF='${esc(authField)}',CLR='${esc(providerColor)}';
+var FSN='${esc(fSN)}',FDU='${esc(fDU)}',FDS='${esc(fDS)}',FTP='${esc(fType)}';
+if(H&&location.hostname!==H){alert('Apri '+H);return;}
+var a={};try{a=JSON.parse(localStorage.getItem(AK)||'{}');}catch(e){}
+var t=a[AF];if(!t){alert('Login scaduto');return;}
+var o=document.createElement('div');
+o.style='position:fixed;top:16px;right:16px;z-index:99999;background:'+CLR+';color:#fff;padding:10px 18px;border-radius:8px;font:700 14px sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.3)';
+o.textContent='🔄 PM sync...';document.body.appendChild(o);
+fetch(EP.startsWith('http')?EP:location.origin+EP,{headers:{Authorization:'Bearer '+t}})
+.then(function(r){if(!r.ok)throw new Error(r.status);return r.json();})
+.then(function(D){
+var I=Array.isArray(D)?D:(Array.isArray(D.data)?D.data:(Array.isArray(D.items)?D.items:Object.values(D)));
+if(I[0])console.log('[PM DEBUG]',JSON.stringify(I[0]));
+var N=new Date();
+var R=I.map(function(d){
+if(!d||typeof d!='object')return null;
+var sn=(d[FSN]||d.serialNumber||'').toString().trim();if(!sn)return null;
+var du=parseFloat(d[FDU]!=null?d[FDU]:(d.DaysUntilPM!=null?d.DaysUntilPM:NaN));
+var np=d.NextPMDate||d.NextServiceDate||null;
+var pm=null;
+if(!isNaN(du)){var x=new Date(N);x.setDate(x.getDate()+Math.round(du));pm=x.toISOString().slice(0,10);}
+else if(np){try{pm=new Date(np).toISOString().slice(0,10);}catch(e){}}
+var ds=parseFloat(d[FDS]!=null?d[FDS]:(d.DaysSincePM!=null?d.DaysSincePM:NaN));
+var lp=d.LastPMDate||d.LastServiceDate||null;
+var lm=null;
+if(!isNaN(ds)&&ds>0){var y=new Date(N);y.setDate(y.getDate()-Math.round(ds));lm=y.toISOString().slice(0,10);}
+else if(lp){try{lm=new Date(lp).toISOString().slice(0,10);}catch(e){}}
+var cy=(d[FTP]||'').toString().toUpperCase().trim();
+var r={numero_serie:sn};
+if(pm)r.prossimo_controllo=pm;
+if(lm)r.ultimo_controllo=lm;
+if('ABCD'.indexOf(cy)>=0&&cy.length===1)r.ciclo_pm=cy;
+return r;
+}).filter(Boolean);
+var nd=R.filter(function(r){return !r.prossimo_controllo;}).length;
+var bl=new Blob([JSON.stringify({records:R,_d:I.slice(0,1)},null,2)],{type:'application/json'});
+var u=URL.createObjectURL(bl);var lnk=document.createElement('a');lnk.href=u;lnk.download='pm_'+N.toISOString().slice(0,10)+'.json';document.body.appendChild(lnk);lnk.click();lnk.remove();URL.revokeObjectURL(u);
+o.style.background=nd===R.length?'#B45309':'#065F46';
+o.textContent=R.length+' rec'+(nd?' ('+nd+' no-date — vedi console)':'')+' OK — importa in admin';
+setTimeout(function(){o.remove();},8000);
+}).catch(function(e){o.style.background='#991B1B';o.textContent='ERR:'+e.message;setTimeout(function(){o.remove();},5000);});
 })();`.replace(/\s*\n\s*/g,' ');
 
   const link = $('pmSyncBookmarkletLink');
