@@ -6805,7 +6805,10 @@ Rispondi SOLO con JSON valido:
           const cliente_id = mac?.cliente_id || (asset.codice_m3 ? m3Map[asset.codice_m3] : null) || null;
           const intervalDays = asset.intervallo_settimane ? asset.intervallo_settimane * 7 : 112;
           let nextDate = asset.prossimo_controllo;
-          if (!nextDate || nextDate > endDate2) continue;
+          if (!nextDate) continue;
+          // Se la data è nel passato, avanza alla prossima occorrenza futura
+          while (nextDate < today2) { nextDate = addDays(nextDate, intervalDays); }
+          if (nextDate > endDate2) continue;
           let safety = 0;
           while (nextDate <= endDate2 && safety < 10) {
             safety++;
