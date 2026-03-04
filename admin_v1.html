@@ -2652,9 +2652,9 @@ function enterApp(){
   populateSelects();
   renderAll();
   loadAnagClients().then(()=>{renderMacchine();populateModalClientsFromAnag()}).catch(()=>{});
-  // Auto-refresh dashboard ogni 5 min (silenzioso, senza overlay)
+  // Auto-refresh dashboard ogni 60s (silenzioso, senza overlay)
   if(window._autoRefreshTimer) clearInterval(window._autoRefreshTimer);
-  window._autoRefreshTimer = setInterval(()=>{refreshData(true)},300000);
+  window._autoRefreshTimer = setInterval(()=>{refreshData(true)},60000);
 }
 
 // ============ POPULATE SELECTS ============

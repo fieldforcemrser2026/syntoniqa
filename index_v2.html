@@ -720,7 +720,7 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <input type="hidden" id="eiId">
 <div id="eiOwnNotice" style="display:none;background:#FEF3C7;padding:10px 14px;border-radius:var(--radius-sm);font-size:.8125rem;color:#92400E;margin-bottom:12px">⚠️ Non è il tuo intervento — la modifica richiede approvazione admin</div>
 <div class="field"><label>Note</label><textarea id="eiNote" rows="3" placeholder="Aggiorna le note..."></textarea></div>
-<div class="field"><label>Stato</label><select id="eiStato"><option value="pianificato">📅 Pianificato</option><option value="in_corso">⚡ In Corso</option></select></div>
+<div class="field"><label>Stato</label><select id="eiStato"><option value="pianificato">📅 Pianificato</option><option value="in_corso">⚡ In Corso</option><option value="completato" disabled>✅ Completato</option><option value="annullato" disabled>🚫 Annullato</option></select></div>
 <div class="field-row">
 <div class="field"><label>Data</label><input type="date" id="eiData"></div>
 <div class="field"><label>Ora Inizio</label><input type="time" id="eiOra"></div>
@@ -1079,9 +1079,9 @@ function enterApp(){
   $('hdrDate').textContent=new Date().toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'});
   fillSelects();
   renderAll();
-  // Auto-refresh silenzioso ogni 5 min (senza overlay)
+  // Auto-refresh silenzioso ogni 60s (senza overlay)
   if(window._autoRefreshTimer) clearInterval(window._autoRefreshTimer);
-  window._autoRefreshTimer = setInterval(()=>{refreshData(true)},300000);
+  window._autoRefreshTimer = setInterval(()=>{refreshData(true)},60000);
   // Init push notifications
   setTimeout(()=>PushMgr.init().catch(()=>{}),2000);
   // Init pull-to-refresh
@@ -2281,7 +2281,18 @@ function openEditInt(id){
   closeSheet('shInt');
   $('eiId').value=id;
   $('eiNote').value=p.Note||'';
-  $('eiStato').value=p.Stato==='completato'?'in_corso':p.Stato;
+  // Stati terminali: non permettere cambio stato
+  const terminal=['completato','annullato'].includes(p.Stato);
+  const statoField=$('eiStato').closest('.field');
+  if(terminal){
+    $('eiStato').value=p.Stato;
+    if(statoField)statoField.style.opacity='.45';
+    $('eiStato').disabled=true;
+  } else {
+    $('eiStato').value=p.Stato;
+    if(statoField)statoField.style.opacity='1';
+    $('eiStato').disabled=false;
+  }
   $('eiData').value=p.Data||'';
   $('eiOra').value=p.OraInizio||'';
   // Mostra avviso se non è il proprio intervento
@@ -2295,7 +2306,8 @@ async function saveEditInt(){
     const id=$('eiId').value;
     const p=(DATA.piano||[]).find(x=>x.ID===id);if(!p)return;
     const isOwn=p.TecnicoID===USER?.ID||p.TecnicoAssegnato===USER?.ID||(p.TecniciIDs||'').includes(USER?.ID);
-    const data={Note:$('eiNote').value,Stato:$('eiStato').value,Data:$('eiData').value,OraInizio:$('eiOra').value};
+    const data={Note:$('eiNote').value,Data:$('eiData').value,OraInizio:$('eiOra').value};
+    if(!$('eiStato').disabled)data.Stato=$('eiStato').value;
     await apiCall('updatePiano',{id,data},'POST');
     // Se non è il proprio intervento, notifica admin
     if(!isOwn){
@@ -2611,7 +2623,7 @@ const PushMgr={
       const reg=await navigator.serviceWorker.ready;
       const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:this.urlB64(this.vapidKey)});
       const j=sub.toJSON();
-      await apiCall('subscribePush',{userId:USER?.ID,subscription:{endpoint:j.endpoint,keys:j.keys},userAgent:navigator.userAgent},'POST');
+      await apiCall('savePushSubscription',{userId:USER?.ID,subscription:{endpoint:j.endpoint,keys:j.keys},userAgent:navigator.userAgent},'POST');
       toast('Notifiche attivate!','ok');return true;
     }catch(e){toast('Errore: '+e.message,'err');return false}
   },
@@ -2619,7 +2631,7 @@ const PushMgr={
     try{
       const reg=await navigator.serviceWorker.ready;
       const sub=await reg.pushManager.getSubscription();
-      if(sub){const ep=sub.endpoint;await sub.unsubscribe();await apiCall('unsubscribePush',{userId:USER?.ID,endpoint:ep},'POST')}
+      if(sub){const ep=sub.endpoint;await sub.unsubscribe();await apiCall('removePushSubscription',{userId:USER?.ID,endpoint:ep},'POST')}
       toast('Notifiche disattivate','ok');
     }catch(e){toast('Errore: '+e.message,'err')}
   },
