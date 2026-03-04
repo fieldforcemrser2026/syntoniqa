@@ -10,6 +10,12 @@ crons = ["*/15 * * * *"]
 [ai]
 binding = "AI"
 
+# KV Namespace per rate limiter persistente (sopravvive ai cold-start)
+# Creare in CF Dashboard → KV → "RATE_KV" → copiare l'ID qui
+[[kv_namespaces]]
+binding = "RATE_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
 [vars]
 # Brand white-label (NON sono secrets — testo pubblico)
 BRAND_NAME = "MRS Lely Center Emilia Romagna"

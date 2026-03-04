@@ -10,7 +10,8 @@ const API_CACHE = 'syntoniqa-api-v1';
 const APP_SHELL = [
   './',
   './index_v2.html',
-  './admin_v1.html',
+  // admin_v1.html escluso intenzionalmente: è il pannello admin, non deve
+  // essere cachato nei device dei tecnici per ragioni di sicurezza.
   './manifest.json',
   './white_label_config.js',
   './icons/icon-192.png',

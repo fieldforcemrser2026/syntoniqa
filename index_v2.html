@@ -6,6 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#C30A14">
+<meta http-equiv="Content-Security-Policy" content="frame-ancestors 'none'; object-src 'none'; base-uri 'self';">
 <link rel="manifest" href="manifest.json">
 <title>Syntoniqa Tecnico v2.0</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -787,6 +788,9 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
    Coerente 1:1 con admin_v1.html (API, nomi, strutture dati)
    ============================================================ */
 
+/* ── Security helpers ──────────────────────────────────────── */
+function escapeHtml(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+
 // ============ STATE ============
 let DATA={}, USER=null, intF='', urgF='', scAllegatiFiles=[], mapTec=null;
 
@@ -794,7 +798,7 @@ let DATA={}, USER=null, intF='', urgF='', scAllegatiFiles=[], mapTec=null;
 const API_URL = (window.SYNTONIQA_CONFIG&&window.SYNTONIQA_CONFIG.api&&window.SYNTONIQA_CONFIG.api.url)
   || 'https://syntoniqa-api.YOUR_SUBDOMAIN.workers.dev';
 const API_TOKEN = (window.SYNTONIQA_CONFIG&&window.SYNTONIQA_CONFIG.api&&window.SYNTONIQA_CONFIG.api.token)
-  || 'FF_TOKEN_CAMBIA_QUESTO_IN_PRODUZIONE';
+  || '';
 let JWT_TOKEN = null;
 
 // ============ i18n ============
