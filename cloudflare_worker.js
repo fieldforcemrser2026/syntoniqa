@@ -6426,16 +6426,16 @@ Rispondi SOLO con JSON valido:
             const stripped = normalizeSerial(rawSerial);
             const padded = padSerial10(rawSerial);
             // Prova 1: exact match
-            res = await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(rawSerial)}&obsoleto=neq.true`, 'PATCH', patch);
+            res = await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(rawSerial)}`, 'PATCH', patch);
             let cnt = Array.isArray(res) ? res.length : (res ? 1 : 0);
             // Prova 2: zero-padded (0003293257)
             if (!cnt && padded !== rawSerial) {
-              res = await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(padded)}&obsoleto=neq.true`, 'PATCH', patch);
+              res = await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(padded)}`, 'PATCH', patch);
               cnt = Array.isArray(res) ? res.length : (res ? 1 : 0);
             }
             // Prova 3: stripped (senza zeri iniziali)
             if (!cnt && stripped !== rawSerial && stripped !== padded) {
-              res = await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(stripped)}&obsoleto=neq.true`, 'PATCH', patch);
+              res = await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(stripped)}`, 'PATCH', patch);
               cnt = Array.isArray(res) ? res.length : (res ? 1 : 0);
             }
             if (cnt > 0) { updated++; } else { not_found++; }
