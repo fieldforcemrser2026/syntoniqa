@@ -25,6 +25,7 @@ BRAND_EMAIL_FROM = "MRS Lely Center <noreply@syntoniqa.app>"
 BRAND_ADMIN_URL = "https://fieldforcemrser2026.github.io/syntoniqa/admin_v1.html"
 BRAND_TECH_URL = "https://fieldforcemrser2026.github.io/syntoniqa/index_v2.html"
 BRAND_COLOR = "#C30A14"
+CORS_EXTRA = "https://lssa2.lelyonline.com"
 
 # Secrets (NON mettere valori reali qui — usa wrangler secret put NOME_SECRET)
 # SUPABASE_URL, SUPABASE_SERVICE_KEY, SQ_TOKEN, TELEGRAM_BOT_TOKEN,
