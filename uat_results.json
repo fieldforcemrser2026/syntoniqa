@@ -1,5 +1,5 @@
 {
-  "date": "2026-03-04T09:11:20.560Z",
+  "date": "2026-03-04T09:18:48.373Z",
   "score": 97,
   "total": 120,
   "passes": 116,
@@ -11,7 +11,7 @@
       "section": "1. FILE SORGENTE — Presenza & Dimensioni",
       "status": "PASS",
       "desc": "cloudflare_worker.js presente",
-      "detail": "7328 righe"
+      "detail": "7392 righe"
     },
     {
       "id": "F-02",

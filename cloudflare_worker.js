@@ -457,6 +457,45 @@ function rateLimit(identifier, bucket = 'default') {
 }
 
 // ──────────────────────────────────────────────────────────────
+// rateLimitKV — Rate limiter persistente via Cloudflare KV
+// FIX SCALA-02: Il rate limiter in-memory si azzera ad ogni cold-start.
+// Con CF KV il limite sopravvive ai riavvii del worker e funziona globalmente.
+// SETUP CF DASHBOARD: KV Namespaces → crea "RATE_KV" → aggiungi binding al worker.
+// FALLBACK AUTOMATICO: se RATE_KV non è configurato, usa il rate limiter in-memory.
+// Solo bucket critici (login, ai) usano KV — gli altri restano in-memory per performance.
+// ──────────────────────────────────────────────────────────────
+async function rateLimitKV(identifier, bucket, env) {
+  // Se non c'è il binding KV, fallback al rate limiter in-memory
+  if (!env.RATE_KV) return rateLimit(identifier, bucket);
+
+  const cfg = RATE_LIMITS[bucket] || RATE_LIMITS.default;
+  const windowMs = cfg.windowSec * 1000;
+  const now = Date.now();
+  const kvKey = `rl:${identifier}:${bucket}`;
+
+  try {
+    // Legge il contatore corrente dal KV (TTL = windowSec + 5s margine)
+    const raw = await env.RATE_KV.get(kvKey, 'text');
+    let hits = raw ? JSON.parse(raw) : [];
+    hits = hits.filter(t => t > now - windowMs); // Rimuove timestamp scaduti
+
+    if (hits.length >= cfg.max) {
+      const retryAfter = hits.length > 0
+        ? Math.ceil((hits[0] + windowMs - now) / 1000)
+        : Math.ceil(windowMs / 1000);
+      return { limited: true, retryAfter };
+    }
+    hits.push(now);
+    // Salva in KV con TTL auto-scadenza per evitare accumulo di chiavi
+    await env.RATE_KV.put(kvKey, JSON.stringify(hits), { expirationTtl: cfg.windowSec + 5 });
+    return { limited: false, remaining: cfg.max - hits.length };
+  } catch {
+    // Se KV fallisce (temporaneamente), fallback in-memory — mai blocca la richiesta
+    return rateLimit(identifier, bucket);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
 // sbPaginate — Supabase paginazione automatica (supera il limite 1000/richiesta)
 // Usa Range header PostgREST per fetchare tutti i record in batch da 1000.
 // MAX_PAGES = 20 → max 20.000 record per singola chiamata.
@@ -511,11 +550,13 @@ export default {
       return await handlePost(action, body, env);
     }
 
-    // Rate limit check
+    // Rate limit check — FIX SCALA-02: usa KV per login/ai (persistente), in-memory per default
     const bucket = action === 'login' ? 'login'
       : (action === 'generateAIPlan' || action === 'analyzeImage' || action === 'previewAIPlan') ? 'ai'
       : 'default';
-    const rl = rateLimit(clientIP, bucket);
+    const rl = (bucket === 'login' || bucket === 'ai')
+      ? await rateLimitKV(clientIP, bucket, env)
+      : rateLimit(clientIP, bucket);
     if (rl.limited) {
       return new Response(JSON.stringify({
         success: false,
@@ -721,16 +762,16 @@ async function handleGet(action, url, env, auth = {}) {
         const pbiCaller = await sb(env, 'utenti', 'GET', null, `?id=eq.${pbiUser}&select=ruolo`).catch(()=>[]);
         if (pbiCaller?.[0]?.ruolo !== 'admin') return err('Solo admin può esportare PowerBI', 403);
       }
-      // FIX SCALA-01: limit=5000/2000 violava il max 1000 di sb() → silently troncava.
-      // TODO scalabilità: implementare sbPaginate() per Power BI export completo multi-page.
+      // FIX SCALA-05: Power BI usa sbPaginate() per export COMPLETO oltre 1000 record.
+      // piano e urgenze possono crescere indefinitamente — sbPaginate() itera in batch da 1000.
       const _safeArrKPI = (r) => r.status === 'fulfilled' ? (Array.isArray(r.value) ? r.value : []) : [];
       const _kpiResults = await Promise.allSettled([
-        sb(env, 'piano',    'GET', null, '?select=*&obsoleto=eq.false&order=data.desc&limit=1000'),
-        sb(env, 'urgenze',  'GET', null, '?select=*&obsoleto=eq.false&order=data_segnalazione.desc&limit=1000'),
+        sbPaginate(env, 'piano',    '?select=*&obsoleto=eq.false&order=data.desc'),
+        sbPaginate(env, 'urgenze',  '?select=*&obsoleto=eq.false&order=data_segnalazione.desc'),
         sb(env, 'utenti',   'GET', null, '?select=id,nome,cognome,ruolo,squadra_id&obsoleto=eq.false'),
         sb(env, 'clienti',  'GET', null, '?select=id,nome,citta,prov&obsoleto=eq.false'),
         sb(env, 'macchine', 'GET', null, '?select=id,cliente_id,tipo,modello&obsoleto=eq.false'),
-        sb(env, 'kpi_log',  'GET', null, '?order=data.desc&limit=1000&obsoleto=eq.false'),
+        sbPaginate(env, 'kpi_log',  '?obsoleto=eq.false&order=data.desc'),
       ]);
       const [piano, urgenze, utenti, clienti, macchine, kpiLog] = _kpiResults.map(_safeArrKPI);
       return ok({ fact_interventi: piano, fact_urgenze: urgenze, fact_kpi: kpiLog, dim_tecnici: utenti, dim_clienti: clienti, dim_macchine: macchine });
@@ -2522,21 +2563,23 @@ async function handlePost(action, body, env) {
       const meseStart = meseTarget ? `${meseTarget}-01` : '';
       const meseEnd = meseTarget ? `${meseTarget}-31` : '';
 
-      const [allTecnici, allUrgenze, allClienti, vincoliCfg, allRep, allAutomezzi, allMacchine, allAssets, allRichieste, allTrasferte, allInstallazioni, allPianoDb] = await Promise.all([
-        sb(env, 'utenti', 'GET', null, '?attivo=eq.true&obsoleto=eq.false&select=id,nome,cognome,base,ruolo,automezzo_id').catch(()=>[]),
-        sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,schedulata)&order=data_segnalazione.desc&limit=20&select=id,problema,cliente_id,priorita_id').catch(()=>[]),
-        sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno,citta_fatturazione&limit=150').catch(()=>[]),
-        sb(env, 'config', 'GET', null, '?chiave=eq.vincoli_categories&limit=1').catch(()=>[]),
-        sb(env, 'reperibilita', 'GET', null, `?obsoleto=eq.false${repFilter}&select=id,tecnico_id,data_inizio,data_fine,turno,tipo&order=data_inizio.asc&limit=100`).catch(()=>[]),
-        sb(env, 'automezzi', 'GET', null, '?obsoleto=eq.false&select=id,targa,modello,stato&limit=20').catch(()=>[]),
-        sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,seriale,note,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&order=prossimo_tagliando.asc&limit=50').catch(()=>[]),
-        sb(env, 'anagrafica_assets', 'GET', null, '?prossimo_controllo=not.is.null&select=id,nome_asset,numero_serie,modello,gruppo_attrezzatura,codice_m3,nome_account,prossimo_controllo&order=prossimo_controllo.asc&limit=50').catch(()=>[]),
-        // NUOVI: richieste approvate, trasferte, installazioni, piano da DB
-        meseTarget ? sb(env, 'richieste', 'GET', null, `?stato=eq.approvata&obsoleto=eq.false&data_inizio=lte.${meseEnd}&data_fine=gte.${meseStart}&select=id,tecnico_id,tipo,data_inizio,data_fine,motivo&limit=100`).catch(()=>[]) : Promise.resolve([]),
-        meseTarget ? sb(env, 'trasferte', 'GET', null, `?obsoleto=eq.false&data_inizio=lte.${meseEnd}&data_fine=gte.${meseStart}&select=id,tecnico_id,tecnici_ids,cliente_id,data_inizio,data_fine&limit=50`).catch(()=>[]) : Promise.resolve([]),
-        meseTarget ? sb(env, 'installazioni', 'GET', null, `?obsoleto=eq.false&stato=in.(pianificato,in_corso,pianificata)&data_inizio=lte.${meseEnd}&select=id,tecnici_ids,cliente_id,data_inizio,data_fine_prevista,stato&limit=50`).catch(()=>[]) : Promise.resolve([]),
-        meseTarget ? sb(env, 'piano', 'GET', null, `?obsoleto=eq.false&stato=neq.annullato&data=gte.${meseStart}&data=lte.${meseEnd}&select=id,tecnico_id,tecnici_ids,cliente_id,data,ora_inizio,tipo_intervento_id,note,stato&limit=500`).catch(()=>[]) : Promise.resolve([])
+      // FIX SCALA-06: Promise.allSettled — 12 query protette individualmente + outer safe
+      const _safePS = (r) => r.status === 'fulfilled' ? (Array.isArray(r.value) ? r.value : []) : [];
+      const _psResults = await Promise.allSettled([
+        sb(env, 'utenti', 'GET', null, '?attivo=eq.true&obsoleto=eq.false&select=id,nome,cognome,base,ruolo,automezzo_id'),
+        sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,schedulata)&order=data_segnalazione.desc&limit=20&select=id,problema,cliente_id,priorita_id'),
+        sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno,citta_fatturazione&limit=150'),
+        sb(env, 'config', 'GET', null, '?chiave=eq.vincoli_categories&limit=1'),
+        sb(env, 'reperibilita', 'GET', null, `?obsoleto=eq.false${repFilter}&select=id,tecnico_id,data_inizio,data_fine,turno,tipo&order=data_inizio.asc&limit=100`),
+        sb(env, 'automezzi', 'GET', null, '?obsoleto=eq.false&select=id,targa,modello,stato&limit=20'),
+        sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,seriale,note,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&order=prossimo_tagliando.asc&limit=50'),
+        sb(env, 'anagrafica_assets', 'GET', null, '?prossimo_controllo=not.is.null&select=id,nome_asset,numero_serie,modello,gruppo_attrezzatura,codice_m3,nome_account,prossimo_controllo&order=prossimo_controllo.asc&limit=50'),
+        meseTarget ? sb(env, 'richieste', 'GET', null, `?stato=eq.approvata&obsoleto=eq.false&data_inizio=lte.${meseEnd}&data_fine=gte.${meseStart}&select=id,tecnico_id,tipo,data_inizio,data_fine,motivo&limit=100`) : Promise.resolve([]),
+        meseTarget ? sb(env, 'trasferte', 'GET', null, `?obsoleto=eq.false&data_inizio=lte.${meseEnd}&data_fine=gte.${meseStart}&select=id,tecnico_id,tecnici_ids,cliente_id,data_inizio,data_fine&limit=50`) : Promise.resolve([]),
+        meseTarget ? sb(env, 'installazioni', 'GET', null, `?obsoleto=eq.false&stato=in.(pianificato,in_corso,pianificata)&data_inizio=lte.${meseEnd}&select=id,tecnici_ids,cliente_id,data_inizio,data_fine_prevista,stato&limit=50`) : Promise.resolve([]),
+        meseTarget ? sb(env, 'piano', 'GET', null, `?obsoleto=eq.false&stato=neq.annullato&data=gte.${meseStart}&data=lte.${meseEnd}&select=id,tecnico_id,tecnici_ids,cliente_id,data,ora_inizio,tipo_intervento_id,note,stato&limit=500`) : Promise.resolve([])
       ]);
+      const [allTecnici, allUrgenze, allClienti, vincoliCfg, allRep, allAutomezzi, allMacchine, allAssets, allRichieste, allTrasferte, allInstallazioni, allPianoDb] = _psResults.map(_safePS);
 
       // Parse vincoli: NEW v2 format (manual_rules) + legacy categories
       let vincoliText = '';
@@ -6855,33 +6898,53 @@ async function createVapidJwt(env, audience) {
 async function sendWebPush(env, subscription, payload) {
   const endpoint = new URL(subscription.endpoint);
   const audience = `${endpoint.protocol}//${endpoint.host}`;
-
-  try {
+  // FIX SCALA-07: retry x2 per Web Push (TTL push server = 86400s, sicuro ritentare)
+  return sendWithRetry(async () => {
     const jwt = await createVapidJwt(env, audience);
-    const vapidPublicKey = env.VAPID_PUBLIC_KEY;
-
     const response = await fetch(subscription.endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/octet-stream',
         'Content-Encoding': 'aes128gcm',
         'TTL': '86400',
-        'Authorization': `vapid t=${jwt}, k=${vapidPublicKey}`,
+        'Authorization': `vapid t=${jwt}, k=${env.VAPID_PUBLIC_KEY}`,
         'Urgency': 'high'
       },
       body: payload
     });
+    if (!response.ok && response.status !== 410) throw new Error(`Push HTTP ${response.status}`);
+    // 410 Gone = subscription scaduta — non ritentare (utente si è disiscritto)
     return response;
-  } catch (e) {
-    return { ok: false, status: 0, statusText: e.message };
+  }, 'sendWebPush', 2);
+}
+
+// ──────────────────────────────────────────────────────────────
+// sendWithRetry — FIX SCALA-07: retry automatico per API esterne (email, push)
+// Tenta max `attempts` volte con backoff esponenziale (1s → 2s → 4s).
+// Se tutte le call falliscono, logga l'errore e ritorna null (non crasha il worker).
+// ──────────────────────────────────────────────────────────────
+async function sendWithRetry(fn, label = 'send', attempts = 3) {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const result = await fn();
+      return result;
+    } catch (e) {
+      const isLast = i === attempts - 1;
+      if (isLast) {
+        console.error(`[RETRY] ${label} fallito dopo ${attempts} tentativi: ${e.message}`);
+        return null;
+      }
+      // Backoff esponenziale: 1s, 2s (non blocca la risposta — solo cron/background)
+      await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
+    }
   }
 }
 
 // ============ EMAIL UTILITY ============
 async function sendEmailAlert(env, to, subject, bodyHtml) {
   if (!env.RESEND_API_KEY || !to) return null;
-  try {
-    const res = await fetch('https://api.resend.com/emails', {
+  return sendWithRetry(async () => {
+  const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -6899,8 +6962,9 @@ async function sendEmailAlert(env, to, subject, bodyHtml) {
         </div>`
       })
     });
+    if (!res.ok) throw new Error(`Resend HTTP ${res.status}`);
     return await res.json();
-  } catch(e) { console.error('Email error:', e.message); return null; }
+  }, 'sendEmail', 3); // ← chiude sendWithRetry — retry x3 con backoff 1s/2s
 }
 
 // Send email to all admins
