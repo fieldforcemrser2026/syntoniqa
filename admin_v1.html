@@ -8749,7 +8749,7 @@ function openPMCicloEdit(assetId,currentCiclo){
 function showPMSyncModal(){
   const cfg = window.SYNTONIQA_CONFIG?.pmSync || {};
   const apiUrl     = API_URL || 'https://syntoniqa-mrs-api.fieldforcemrser.workers.dev';
-  const apiToken   = API_TOKEN || '';
+  const apiToken   = JWT_TOKEN || API_TOKEN || '';
   const userId     = USER?.ID || 'USR001';
   // Parametri provider da config (mai hardcoded)
   const providerName    = cfg.providerName    || 'PM Provider';
