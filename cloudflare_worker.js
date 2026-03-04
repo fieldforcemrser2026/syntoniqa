@@ -6420,7 +6420,7 @@ Rispondi SOLO con JSON valido:
           patch.updated_at = now;
           let res;
           if (assetId) {
-            res = await sb(env, `anagrafica_assets?id=eq.${encodeURIComponent(assetId)}&obsoleto=eq.false`, 'PATCH', patch);
+            res = await sb(env, `anagrafica_assets?id=eq.${encodeURIComponent(assetId)}`, 'PATCH', patch);
           } else if (rawSerial) {
             // Tenta match: prima forma esatta, poi zero-padded 10 cifre, poi stripped
             const stripped = normalizeSerial(rawSerial);
@@ -6481,7 +6481,7 @@ Rispondi SOLO con JSON valido:
           let cnt = 0;
           for (const sn of [rawSerial, padded, stripped]) {
             if (!sn) continue;
-            const res = await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(sn)}&obsoleto=eq.false`, 'PATCH', patch);
+            const res = await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(sn)}`, 'PATCH', patch);
             cnt = Array.isArray(res) ? res.length : (res ? 1 : 0);
             if (cnt) break;
           }
