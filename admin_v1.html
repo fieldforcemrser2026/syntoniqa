@@ -1322,7 +1322,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <h3>🔧 PM Scheduling</h3>
 <div class="btn-group" style="flex-wrap:wrap">
 <button class="btn btn-sm" id="pmSyncBtn" onclick="showPMSyncModal()" title="Sincronizza automaticamente dal provider PM (bookmarklet)">🔄 Sync</button>
-<label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0" title="Importa file PM: template ufficiale, export provider, o template Syntoniqa">⬆ Import file <input type="file" id="pmImportFile" style="display:none" accept=".xlsx,.csv,.xls,.xlsm" onchange="importPMFile(this)"></label>
+<label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0" title="Importa file PM: template ufficiale, export provider, o template Syntoniqa">⬆ Import file <input type="file" id="pmImportFile" style="display:none" accept=".xlsx,.csv,.xls,.xlsm,.json" onchange="importPMFile(this)"></label>
 <button class="btn btn-ghost btn-sm" onclick="exportPMPiano()" title="Esporta elenco PM in CSV">📥 Export</button>
 <button class="btn btn-sm btn-ai" onclick="bulkGeneratePM()">⚡ Piano 3M</button>
 <button class="btn btn-sm btn-outline" onclick="togglePMSettings()">⚙️ Cicli</button>
@@ -8555,6 +8555,18 @@ async function importPMOverdue(input){ return importPMFile(input); }
 async function _importPMFileCore(input){
   const file=input.files?.[0];if(!file)return;
   try{
+    // ── JSON: formato Syntoniqa bookmarklet (export da portale PM) ────────────
+    if(file.name.toLowerCase().endsWith('.json')){
+      const txt=await file.text();
+      let json;try{json=JSON.parse(txt);}catch(e){toast('JSON non valido: '+e.message,'err');return;}
+      const records=(Array.isArray(json)?json:(json.records||[])).filter(r=>r&&r.numero_serie);
+      if(!records.length){toast('Nessun record valido nel file JSON','err');return;}
+      toast('Importo '+records.length+' record da JSON...','info');
+      const res=await apiCall('importPMOverdue',{records},'POST');
+      toast('✅ '+res.updated+' aggiornati | '+(res.not_found||0)+' non trovati',res.not_found>res.updated?'warn':'ok');
+      PM_OVERVIEW=null;await loadPMOverview();
+      return;
+    }
     if(typeof XLSX==='undefined'){
       await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
     }
@@ -8813,14 +8825,11 @@ fetch(epUrl,{headers:{Authorization:'Bearer '+tok}})
     if(ciclo)rec.ciclo_pm=ciclo;
     return rec;
   }).filter(Boolean);
-  overlay.textContent='📤 Invio '+records.length+' record...';
-  return fetch(_sq_url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_sq_tok},body:JSON.stringify({action:'importPMOverdue',records:records,userId:_sq_usr})});
-})
-.then(function(r){return r.json();})
-.then(function(res){
+  var blob=new Blob([JSON.stringify({records:records},null,2)],{type:'application/json'});
+  var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='pm_lssa_'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
   overlay.style.background='#065F46';
-  overlay.textContent='✅ '+res.updated+' aggiornati | '+(res.not_found||0)+' non trovati | '+res.total+' totali';
-  setTimeout(function(){overlay.remove();},5000);
+  overlay.textContent='✅ '+records.length+' record estratti — importa il file JSON nell\'admin (PM → Import file)';
+  setTimeout(function(){overlay.remove();},8000);
 })
 .catch(function(err){
   overlay.style.background='#991B1B';
