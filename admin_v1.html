@@ -8600,13 +8600,15 @@ async function _importPMFileCore(input){
       if(!records.length){toast('Nessun record valido nel file JSON','err');return;}
       toast('Importo '+records.length+' record da JSON...','info');
       const res=await apiCall('importPMOverdue',{records},'POST');
-      const sk=res.skipped||0;
-      const lvl=res.updated===0&&sk>0?'warn':res.not_found>res.updated?'warn':'ok';
+      const sk=res.skipped||0, er=res.errors||0;
+      const lvl=res.updated>0?'ok':er>0?'err':'warn';
       let msg='✅ '+res.updated+' aggiornati | '+(res.not_found||0)+' non trovati';
       if(sk>0)msg+=' | '+sk+' senza data';
+      if(er>0)msg+=' | ⚠️ '+er+' errori';
       if(res.sync_id)msg+=' — <a href="#" onclick="showPMSyncLog();return false" style="color:#fff;text-decoration:underline">📋 Storico</a>';
-      toast(msg,lvl,8000);
-      if(sk>0&&res.updated===0)toast('⚠️ I record del file non contengono data PM calcolata. Controlla che DaysUntilNextPM sia numerico nel portale.','warn',10000);
+      toast(msg,lvl,10000);
+      if(res.first_error)toast('❌ Errore PATCH: '+res.first_error,'err',15000);
+      if(res.first_sample)console.log('[PM IMPORT] Primo record inviato al Worker:',JSON.stringify(res.first_sample));
       PM_OVERVIEW=null;await loadPMOverview();
       return;
     }

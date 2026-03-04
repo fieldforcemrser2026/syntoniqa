@@ -6405,8 +6405,10 @@ Rispondi SOLO con JSON valido:
       const { records } = body;
       if (!records || !Array.isArray(records)) return err('records array richiesto');
       let updated = 0, not_found = 0, errors = 0, skipped = 0;
+      let first_error = null, first_sample = null;
       const now = new Date().toISOString();
       for (const rec of records) {
+        if (!first_sample) first_sample = { serial: rec.numero_serie, prossimo: rec.prossimo_controllo, ultimo: rec.ultimo_controllo };
         try {
           const rawSerial = (rec.numero_serie || rec.NumeroSerie || '').trim();
           const assetId = rec.asset_id || rec.AssetId;
@@ -6443,7 +6445,7 @@ Rispondi SOLO con JSON valido:
             }
             if (cnt > 0) { updated++; } else { not_found++; }
           } else { skipped++; }
-        } catch (e) { errors++; }
+        } catch (e) { errors++; if (!first_error) first_error = e.message; }
       }
       // Salva storico sincronizzazione in pm_sync_log
       const syncId = secureId('SYNC');
@@ -6461,7 +6463,7 @@ Rispondi SOLO con JSON valido:
         });
       } catch(e) { /* pm_sync_log non critico — non bloccare il flusso */ }
       await wlog('anagrafica_assets', 'bulk', `pm_import updated:${updated} not_found:${not_found} skipped:${skipped}`, body.operatoreId || body.userId);
-      return ok({ updated, not_found, errors, skipped, total: records.length, sync_id: syncId });
+      return ok({ updated, not_found, errors, skipped, total: records.length, sync_id: syncId, first_error, first_sample });
     }
 
     // ═══ GET STORICO SINCRONIZZAZIONI PM ═══
