@@ -389,6 +389,7 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <!-- PAGE: MENU -->
 <div class="page" id="pgMenu">
 <div class="menu-grid">
+<div class="menu-item" id="menuItemSquadra" style="display:none" onclick="goPage('squadra')"><span class="ico">👥</span><span class="lbl">Mia Squadra</span></div>
 <div class="menu-item" onclick="goPage('notifiche')"><span class="ico">🔔</span><span class="lbl">Notifiche</span></div>
 <div class="menu-item" onclick="goPage('richieste')"><span class="ico">📝</span><span class="lbl">Richieste</span></div>
 <div class="menu-item" onclick="goPage('reperibilita')"><span class="ico">📞</span><span class="lbl">Reperibilità</span></div>
@@ -403,6 +404,11 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <div class="menu-item" onclick="goPage('catalogomob')"><span class="ico">🔍</span><span class="lbl">Catalogo Parti</span></div>
 <div class="menu-item" onclick="goPage('profilo')"><span class="ico">👤</span><span class="lbl">Profilo</span></div>
 </div>
+</div>
+
+<!-- PAGE: SQUADRA (caposquadra e admin+caposquadra) -->
+<div class="page" id="pgSquadra">
+<div id="sqBody"></div>
 </div>
 
 <!-- PAGE: NOTIFICHE -->
@@ -893,7 +899,8 @@ function goPage(name){
   const t={'home':'🏠 Home','interventi':'📋 Interventi','urgenze':'🚨 Urgenze','ordini':'📦 Ordini','menu':'⋯ Menu',
     'chat':'💬 Chat Telegram','notifiche':'🔔 Notifiche','richieste':'📝 Richieste','reperibilita':'📞 Reperibilità','trasferte':'🧳 Trasferte',
     'installazioni':'🔧 Installazioni','clienti':'🏢 Clienti','macchine':'⚙️ Macchine','documenti':'📁 Documenti',
-    'mappa':'🗺️ Mappa Giro','calendario':'📅 Calendario','profilo':'👤 Profilo','kpi':'📊 Le mie KPI'};
+    'mappa':'🗺️ Mappa Giro','calendario':'📅 Calendario','profilo':'👤 Profilo','kpi':'📊 Le mie KPI',
+    'squadra':'👥 Mia Squadra'};
   $('hdrTitle').textContent=t[name]||name;
   window.scrollTo(0,0);
   // Stop chat polling when leaving chat page
@@ -904,6 +911,7 @@ function goPage(name){
   if(name==='mappa')setTimeout(initMap,200);
   if(name==='chat')initChat();
   if(name==='kpi')renderKpi();
+  if(name==='squadra')renderSquadra();
 }
 
 // ============ API (identica ad admin_v1) ============
@@ -1077,6 +1085,21 @@ function enterApp(){
   $('loginScreen').classList.add('hidden');
   $('hdr').style.display='flex';$('app').style.display='block';$('bnav').style.display='flex';
   $('hdrDate').textContent=new Date().toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'});
+  // Visibilità sezione Squadra per caposquadra e admin con flag anche_caposquadra
+  if(isCapoSq()){
+    // Mostra voce menu
+    const mi=$('menuItemSquadra');if(mi)mi.style.display='';
+    // Aggiunge pulsante Squadra nella bottom nav (sostituisce l'ultimo)
+    const bnav=$('bnav');
+    if(bnav&&!bnav.querySelector('[data-p="squadra"]')){
+      const btn=document.createElement('button');
+      btn.setAttribute('data-p','squadra');
+      btn.setAttribute('onclick',"goPage('squadra')");
+      btn.innerHTML='<span class="ico">👥</span>Squadra';
+      btn.addEventListener('click',()=>goPage('squadra'));
+      bnav.appendChild(btn);
+    }
+  }
   fillSelects();
   renderAll();
   // Auto-refresh silenzioso ogni 60s (senza overlay)
@@ -1137,9 +1160,41 @@ function fillSelects(){
 }
 
 // ============ FILTRO MIEI ITEMS ============
+// isCapoSq: true se l'utente loggato ha poteri di caposquadra
+// (ruolo caposquadra, OPPURE admin con flag AncheCaposquadra)
+function isCapoSq(){
+  if(!USER) return false;
+  if(USER.Ruolo==='caposquadra') return true;
+  if(USER.Ruolo==='admin'&&USER.AncheCaposquadra===true) return true;
+  return false;
+}
+
+// Ritorna array di ID dei tecnici nella squadra del caposquadra loggato
+function getMyTeam(){
+  if(!USER) return [];
+  if(USER.Ruolo==='admin'&&!USER.AncheCaposquadra) return []; // admin puro: non ha squadra
+  const mySquadra=USER.SquadraID;
+  return (DATA.utenti||[])
+    .filter(u=>!u.Obsoleto&&u.Attivo&&u.ID!==USER.ID&&(
+      // Stesso squadra_id, oppure ha caposquadra_id uguale al mio ID
+      (mySquadra&&u.SquadraID===mySquadra)||u.CaposquadraID===USER.ID
+    ))
+    .map(u=>u.ID);
+}
+
 function my(list){
   const isAdmin=USER?.Ruolo==='admin';
-  return(list||[]).filter(p=>!p.Obsoleto&&(isAdmin||p.TecnicoID===USER?.ID||p.TecnicoAssegnato===USER?.ID||(p.TecniciIDs||'').includes(USER?.ID)));
+  if(isAdmin) return (list||[]).filter(p=>!p.Obsoleto); // admin vede tutto
+  if(isCapoSq()){
+    const team=[...getMyTeam(),USER?.ID]; // caposquadra vede sé stesso + squadra
+    return (list||[]).filter(p=>!p.Obsoleto&&(
+      team.includes(p.TecnicoID)||
+      team.includes(p.TecnicoAssegnato)||
+      (p.TecniciIDs||'').split(',').some(id=>team.includes(id.trim()))
+    ));
+  }
+  // tecnico: solo i propri
+  return (list||[]).filter(p=>!p.Obsoleto&&(p.TecnicoID===USER?.ID||p.TecnicoAssegnato===USER?.ID||(p.TecniciIDs||'').includes(USER?.ID)));
 }
 
 // ============ RENDER ALL ============
@@ -2680,6 +2735,85 @@ async function searchCatalogMob(){
   }catch(e){
     el.innerHTML='<div style="text-align:center;padding:20px;color:var(--err)">❌ '+e.message+'</div>';
   }
+}
+
+// ─── SQUADRA ─────────────────────────────────────────────────────────────────
+function renderSquadra(){
+  const el=$('sqBody');if(!el)return;
+  if(!isCapoSq()){el.innerHTML='<div class="card"><div class="card-body"><p style="color:var(--gray);text-align:center">Sezione riservata al caposquadra.</p></div></div>';return;}
+  const teamIds=getMyTeam();
+  const team=(DATA.utenti||[]).filter(u=>teamIds.includes(u.ID));
+  const today=new Date().toISOString().split('T')[0];
+  const richiestePending=(DATA.richieste||[]).filter(r=>!r.Obsoleto&&r.Stato==='in_attesa'&&teamIds.includes(r.TecnicoID));
+  const urgenzeAperte=my(DATA.urgenze||[]).filter(u=>!u.Obsoleto&&(u.Stato==='aperta'||u.Stato==='assegnata'));
+
+  // ─ KPI squadra ─
+  const intOggi=my(DATA.piano||[]).filter(p=>p.Data===today).length;
+  const intComp=my(DATA.piano||[]).filter(p=>p.Stato==='completato'&&p.Data===today).length;
+  el.innerHTML=`
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-head"><h3>👥 Stato Squadra</h3><span style="font-size:.75rem;color:var(--gray)">${team.length} tecnici</span></div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin-bottom:12px">
+        <div style="background:var(--bg2);border-radius:8px;padding:8px"><div style="font-size:1.25rem;font-weight:700;color:var(--c1)">${intComp}/${intOggi}</div><div style="font-size:.6875rem;color:var(--gray)">Interventi oggi</div></div>
+        <div style="background:var(--bg2);border-radius:8px;padding:8px"><div style="font-size:1.25rem;font-weight:700;color:${urgenzeAperte.length>0?'var(--err)':'var(--ok)'}">${urgenzeAperte.length}</div><div style="font-size:.6875rem;color:var(--gray)">Urgenze aperte</div></div>
+        <div style="background:var(--bg2);border-radius:8px;padding:8px"><div style="font-size:1.25rem;font-weight:700;color:${richiestePending.length>0?'var(--warn)':'var(--gray)'}">${richiestePending.length}</div><div style="font-size:.6875rem;color:var(--gray)">Richieste</div></div>
+      </div>
+      ${team.length===0?'<p style="color:var(--gray);text-align:center;font-size:.8125rem">Nessun tecnico nel tuo team. Assicurati che abbiano lo stesso squadra_id o caposquadra_id.</p>':''}
+      ${team.map(t=>{
+        const intT=(DATA.piano||[]).filter(p=>!p.Obsoleto&&p.TecnicoID===t.ID&&p.Data===today);
+        const compT=intT.filter(p=>p.Stato==='completato').length;
+        const inCorsoT=intT.filter(p=>p.Stato==='in_corso').length;
+        const urgT=(DATA.urgenze||[]).filter(u=>!u.Obsoleto&&(u.TecnicoAssegnato===t.ID)&&(u.Stato==='assegnata'||u.Stato==='in_corso'));
+        const ini=((t.Nome||'')[0]||'')+((t.Cognome||'')[0]||'');
+        const statusColor=inCorsoT>0?'var(--ok)':intT.length>0?'var(--c1)':'var(--gray3)';
+        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--gray4)">
+          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--c2),var(--c1));display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:.7rem;flex-shrink:0">${ini}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:.875rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${(t.Nome||'')+' '+(t.Cognome||'')}</div>
+            <div style="font-size:.6875rem;color:var(--gray)">${t.Base||'—'} · ${t.Ruolo}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:.75rem;font-weight:600;color:${statusColor}">${inCorsoT>0?'🟢 In corso':compT===intT.length&&intT.length>0?'✅ Fatto':intT.length>0?'⏳ '+compT+'/'+intT.length:'⬜ Libero'}</div>
+            ${urgT.length>0?`<div style="font-size:.625rem;color:var(--err)">🚨 ${urgT.length} urgenz${urgT.length>1?'e':'a'}</div>`:''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>
+  ${richiestePending.length>0?`
+  <div class="card">
+    <div class="card-head"><h3>📝 Richieste da approvare</h3><span class="tag tag-warn">${richiestePending.length}</span></div>
+    <div class="card-body np">
+      ${richiestePending.map(r=>{
+        const tec=(DATA.utenti||[]).find(u=>u.ID===r.TecnicoID);
+        const tecNome=tec?(tec.Nome||'')+' '+(tec.Cognome||''):'—';
+        const typeIcons={ferie:'🏖️',permesso:'🕐',malattia:'🏥',altro:'📝'};
+        return `<div style="padding:10px 16px;border-bottom:1px solid var(--gray4)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+            <div>
+              <div style="font-weight:600;font-size:.875rem">${typeIcons[r.Tipo]||'📝'} ${r.Tipo||'Richiesta'} — ${tecNome}</div>
+              <div style="font-size:.75rem;color:var(--gray)">${r.DataInizio||''}${r.DataFine&&r.DataFine!==r.DataInizio?' → '+r.DataFine:''}</div>
+              ${r.Motivo?`<div style="font-size:.75rem;color:var(--muted);margin-top:2px">${esc(r.Motivo)}</div>`:''}
+            </div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-sm" style="flex:1;background:var(--ok);color:#fff;border:none" onclick="approvaRichiesta('${r.ID}','approvata')">✅ Approva</button>
+            <button class="btn btn-sm btn-outline" style="flex:1;color:var(--err);border-color:var(--err)" onclick="approvaRichiesta('${r.ID}','rifiutata')">✕ Rifiuta</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`:''}`;
+}
+
+async function approvaRichiesta(id,stato){
+  const msg=stato==='rifiutata'?prompt('Motivo del rifiuto (opzionale):'):null;
+  try{
+    await apiCall('updateRichiesta',{id,stato,nota_risposta:msg||null,operatoreId:USER?.ID},'POST');
+    toast(stato==='approvata'?'Richiesta approvata':'Richiesta rifiutata',stato==='approvata'?'ok':'warn');
+    await refreshData(true);renderSquadra();
+  }catch(e){toast(e.message,'err')}
 }
 
 function renderKpi(){

@@ -2231,8 +2231,15 @@ Workers AI è incluso in Cloudflare e non richiede chiavi aggiuntive.
 <div class="field"><label>Password</label><input type="password" id="nuPassword" placeholder="••••••••"></div>
 </div>
 <div class="field-row">
-<div class="field"><label>Ruolo</label><select id="nuRuolo"><option value="">Seleziona ruolo</option><option value="admin">Admin</option><option value="caposquadra">Caposquadra</option><option value="tecnico">Tecnico</option><option value="magazziniere">Magazziniere</option><option value="commerciale">Commerciale</option></select></div>
+<div class="field"><label>Ruolo</label><select id="nuRuolo" onchange="onRuoloChange(this.value)"><option value="">Seleziona ruolo</option><option value="admin">Admin</option><option value="caposquadra">Caposquadra</option><option value="tecnico">Tecnico</option><option value="magazziniere">Magazziniere</option><option value="commerciale">Commerciale</option></select></div>
 <div class="field"><label>Squadra</label><select id="nuSquadra"><option value="">Seleziona squadra</option></select></div>
+</div>
+<div id="nuAncheCapoRow" style="display:none;margin:-4px 0 8px;padding:8px 12px;background:rgba(0,201,167,.06);border-radius:8px;border:1px dashed var(--c1)">
+<label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+<input type="checkbox" id="nuAncheCapo" style="width:16px;height:16px;accent-color:var(--c1)">
+<span style="font-size:.8125rem;font-weight:600;color:var(--c1)">🎖️ Anche Caposquadra</span>
+<span style="font-size:.75rem;color:var(--gray);font-weight:400">— gestisce una squadra di tecnici</span>
+</label>
 </div>
 <div class="field-row">
 <div class="field"><label>Stato Tecnico</label>
@@ -2641,12 +2648,46 @@ function updateDarkBtn(dark){
 }
 initDarkMode();
 
+// ─── ROLE VISIBILITY ──────────────────────────────────────────────────────────
+// Sezioni riservate esclusivamente ad admin (non caposquadra)
+const ADMIN_ONLY_SECTIONS = ['tecnici','config','auditlog','powerbi'];
+
+// Ritorna true se l'utente loggato può vedere la sezione
+function canSee(sec){
+  if(!USER) return false;
+  if(USER.Ruolo==='admin') return true; // admin vede tutto
+  return !ADMIN_ONLY_SECTIONS.includes(sec);
+}
+
+// Nasconde/mostra voci di nav in base al ruolo; chiamata una volta in enterApp
+function applyRoleVisibility(){
+  if(!USER) return;
+  const isAdmin = USER.Ruolo==='admin';
+  document.querySelectorAll('.nav-item').forEach(btn=>{
+    const oc=btn.getAttribute('onclick')||'';
+    const m=oc.match(/showSec\('([^']+)'/);
+    if(!m) return;
+    if(!canSee(m[1])) btn.style.display='none';
+  });
+  // Nascondi pulsanti/azioni marcati data-admin-only
+  if(!isAdmin) document.querySelectorAll('[data-admin-only]').forEach(el=>el.style.display='none');
+}
+
+// Mostra/nasconde il campo "Anche Caposquadra" nel modale utente in base al ruolo selezionato
+function onRuoloChange(val){
+  const row=$('nuAncheCapoRow');
+  if(row) row.style.display=(val==='admin')?'':'none';
+  if(val!=='admin'&&$('nuAncheCapo')) $('nuAncheCapo').checked=false;
+}
+
 function enterApp(){
   $('loginScreen').classList.add('hidden');
   $('appMain').style.display='block';
   $('headerUser').textContent=(USER.Nome||'')+' '+(USER.Cognome||'');
   $('headerDate').textContent=new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  $('footUser').textContent=(USER.Nome||'')[0]+(USER.Cognome||'')[0]+' · '+USER.Ruolo;
+  const ruoloLabel=USER.AncheCaposquadra?`${USER.Ruolo} + caposquadra`:USER.Ruolo;
+  $('footUser').textContent=(USER.Nome||'')[0]+(USER.Cognome||'')[0]+' · '+ruoloLabel;
+  applyRoleVisibility();
   populateSelects();
   renderAll();
   loadAnagClients().then(()=>{renderMacchine();populateModalClientsFromAnag()}).catch(()=>{});
@@ -4433,7 +4474,7 @@ function renderTecnici(){
     <td><input type="checkbox" class="sel-chk" onchange="toggleSelectRow('tecnici','${t.ID}',this.checked)"></td>
     <td>${foto}</td>
     <td><strong>${(t.Nome||'')+' '+(t.Cognome||'')}</strong></td>
-    <td><span class="tag ${t.Ruolo==='admin'?'tag-purple':t.Ruolo==='caposquadra'?'tag-info':'tag-gray'}">${t.Ruolo}</span></td>
+    <td><span class="tag ${t.Ruolo==='admin'?'tag-purple':t.Ruolo==='caposquadra'?'tag-info':'tag-gray'}">${t.Ruolo}</span>${t.AncheCaposquadra?'<span class="tag tag-info" style="margin-left:3px;font-size:.6rem">+capo</span>':''}</td>
     <td>${sq?sq.Nome:'—'}</td>
     <td>${fmtAutoId(t.AutomezzoID)}</td>
     <td>${t.Base||'—'}</td>
@@ -6448,6 +6489,8 @@ function editUtente(id){
   $('nuNome').value=u.Nome||'';$('nuCognome').value=u.Cognome||'';
   $('nuUsername').value=u.Username||'';$('nuPassword').value='';
   $('nuRuolo').value=u.Ruolo||'tecnico';
+  onRuoloChange(u.Ruolo||'tecnico');
+  if($('nuAncheCapo')) $('nuAncheCapo').checked=!!(u.AncheCaposquadra);
   $('nuSquadra').value=u.SquadraID||'';$('nuAutomezzo').value=u.AutomezzoID||'';
   $('nuBase').value=u.Base||'';$('nuTelefono').value=u.Telefono||'';$('nuEmail').value=u.Email||'';
   // Attivo toggle
@@ -6495,7 +6538,7 @@ function editAutomezzo(id){
 }
 
 // ============ RESET MODAL ON NEW ============
-function openNewUtente(){EDITING.utente=null;['nuNome','nuCognome','nuUsername','nuPassword','nuBase','nuTelefono','nuEmail'].forEach(id=>{if($(id))$(id).value=''});$('nuRuolo').value='tecnico';$('nuSquadra').value='';$('nuAutomezzo').value='';$('resetPwdBox').style.display='none';document.querySelector('#modalUtente .modal-head h2').textContent='👤 Nuovo Utente';openModal('modalUtente')}
+function openNewUtente(){EDITING.utente=null;['nuNome','nuCognome','nuUsername','nuPassword','nuBase','nuTelefono','nuEmail'].forEach(id=>{if($(id))$(id).value=''});$('nuRuolo').value='tecnico';onRuoloChange('tecnico');if($('nuAncheCapo'))$('nuAncheCapo').checked=false;$('nuSquadra').value='';$('nuAutomezzo').value='';$('resetPwdBox').style.display='none';document.querySelector('#modalUtente .modal-head h2').textContent='👤 Nuovo Utente';openModal('modalUtente')}
 function openNewCliente(){EDITING.cliente=null;['ncNome','ncCitta','ncProv','ncIndirizzo','ncCap','ncTelefono','ncEmail','ncContratto','ncNote'].forEach(id=>{if($(id))$(id).value=''});document.querySelector('#modalCliente .modal-head h2').textContent='🏢 Nuovo Cliente';openModal('modalCliente')}
 function openNewMacchina(){EDITING.macchina=null;['nmTipo','nmModello','nmSeriale','nmAnno','nmOre','nmUltimoTag','nmProssTag','nmGaranzia','nmNote','nmFotoUrl'].forEach(id=>{if($(id))$(id).value=''});$('nmCliente').value='';const prev=$('nmFotoPreview');if(prev)prev.innerHTML='';document.querySelector('#modalMacchina .modal-head h2').textContent='⚙️ Nuova Macchina';openModal('modalMacchina')}
 function openNewAutomezzo(){EDITING.automezzo=null;['naCodice','naTarga','naDesc','naAllestimento','naKm','naControllo','naNote'].forEach(id=>{if($(id))$(id).value=''});$('naStatus').value='disponibile';$('naAssegnatario').value='';
@@ -6512,6 +6555,7 @@ async function saveUtente(){
     Cognome:$('nuCognome').value,
     Username:$('nuUsername').value,
     Ruolo:$('nuRuolo').value,
+    AncheCaposquadra:$('nuRuolo').value==='admin'?($('nuAncheCapo')?.checked||false):false,
     SquadraID:$('nuSquadra').value||null,
     AutomezzoID:$('nuAutomezzo').value||null,
     Base:$('nuBase').value||null,

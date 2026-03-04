@@ -81,6 +81,39 @@ function validateTransition(validMap, currentStato, newStato, entityType) {
 
 // ============ AUTHORIZATION HELPERS ============
 
+// ─── ROLE MATRIX ──────────────────────────────────────────────────────────────
+// Fonte di verità unica per i permessi. Consultata anche dal frontend via getAll.
+// level: 0-100. adminApp: può accedere ad admin_v1. canManageUsers: crea/elimina utenti.
+// Un admin con anche_caposquadra=true è trattato come caposquadra per la propria squadra.
+const ROLE_MATRIX = {
+  admin:        { level: 100, adminApp: true,  canApprove: true,  seeAll: true,  canManageUsers: true  },
+  caposquadra:  { level:  70, adminApp: true,  canApprove: true,  seeAll: false, canManageUsers: false },
+  tecnico:      { level:  30, adminApp: false, canApprove: false, seeAll: false, canManageUsers: false },
+  magazziniere: { level:  20, adminApp: false, canApprove: false, seeAll: false, canManageUsers: false },
+  commerciale:  { level:  20, adminApp: false, canApprove: false, seeAll: false, canManageUsers: false },
+  system:       { level: 100, adminApp: true,  canApprove: true,  seeAll: true,  canManageUsers: true  },
+};
+
+// requireRole: ritorna null se l'utente ha uno dei ruoli richiesti, stringa errore altrimenti.
+// Se 'caposquadra' è tra i ruoli, 'admin' è automaticamente incluso (admin ≥ caposquadra).
+function requireRole(body, ...allowedRoles) {
+  const role = body._authRole || 'tecnico';
+  if (role === 'system') return null; // cron/Telegram sempre autorizzato
+  if (!allowedRoles.length) return null;
+  const expanded = allowedRoles.includes('caposquadra') && !allowedRoles.includes('admin')
+    ? [...allowedRoles, 'admin'] : allowedRoles;
+  if (!expanded.includes(role)) return `Azione riservata a: ${allowedRoles.join(', ')}`;
+  return null;
+}
+
+// isCapoSq: true se l'utente agisce con poteri di caposquadra.
+// Condizioni: ruolo=caposquadra, OPPURE ruolo=admin con flag anche_caposquadra=true.
+function isCapoSq(body) {
+  if (body._authRole === 'caposquadra') return true;
+  if (body._authRole === 'admin' && body._ancheCaposquadra === true) return true;
+  return false;
+}
+
 async function requireAdmin(env, body) {
   // PRIORITY: JWT claim (non spoofabile) — se presente, usa quello
   if (body._isJWT) {
@@ -379,7 +412,7 @@ async function authenticateRequest(request, env, bodyToken) {
   const bearer = authHeader.match(/^Bearer\s+(.+)$/i);
   if (bearer) {
     const payload = await verifyJWT(bearer[1], env);
-    if (payload) return { ok: true, sub: payload.sub, role: payload.role, jwt: true };
+    if (payload) return { ok: true, sub: payload.sub, role: payload.role, jwt: true, ancheCaposquadra: payload.anche_caposquadra || false, squadraId: payload.squadra_id || null };
     // Bearer present but not a valid JWT — maybe it's the old SQ_TOKEN sent as Bearer?
     if (bearer[1] === env.SQ_TOKEN) return { ok: true, sub: 'system', role: 'system', jwt: false };
     return { ok: false }; // Invalid token
@@ -489,9 +522,11 @@ export default {
         const body = normalizeBody(rawBody);
         body._clientIP = clientIP; // per audit log
         // Inject user context from JWT (non spoofabile dal client)
-        body._authUserId = auth.sub;      // user ID dal token (JWT o 'system')
-        body._authRole   = auth.role;     // ruolo dal token
-        body._isJWT      = auth.jwt;      // true se autenticato via JWT
+        body._authUserId       = auth.sub;                      // user ID dal token (JWT o 'system')
+        body._authRole         = auth.role;                    // ruolo dal token
+        body._isJWT            = auth.jwt;                     // true se autenticato via JWT
+        body._ancheCaposquadra = auth.ancheCaposquadra || false; // admin che gestisce anche una squadra
+        body._squadraId        = auth.squadraId || null;       // squadra_id dal JWT
         return await handlePost(postAction, body, env);
       }
       return err('Metodo non supportato', 405);
@@ -577,6 +612,7 @@ async function handleGet(action, url, env, auth = {}) {
         checklistTemplate: checklist_template,
         documenti,
         config: Object.fromEntries(config.map(c => [c.chiave, c.valore])),
+        roleMatrix: ROLE_MATRIX, // permessi per profilazione frontend
         timestamp: new Date().toISOString()
       }));
     }
@@ -731,6 +767,8 @@ async function handlePost(action, body, env) {
         token = await signJWT({
           sub: utente.id,
           role: utente.ruolo || 'tecnico',
+          anche_caposquadra: utente.anche_caposquadra || false, // admin che gestisce anche una squadra
+          squadra_id: utente.squadra_id || null,                // squadra di appartenenza
           nome: `${utente.nome || ''} ${utente.cognome || ''}`.trim(),
           tenant_id: utente.tenant_id || env.TENANT_ID,
           iat: now,
@@ -1219,7 +1257,7 @@ async function handlePost(action, body, env) {
     }
 
     case 'updateOrdine': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'caposquadra'); // admin + caposquadra possono gestire ordini
       if (adminErr) return err(adminErr, 403);
       const { id, userId: _u, operatoreId: _op, tenant_id: _t, action: _a, ...updates } = body;
       if (!id) return err('ID ordine mancante');
@@ -1235,7 +1273,7 @@ async function handlePost(action, body, env) {
     }
 
     case 'deleteOrdine': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'caposquadra'); // admin + caposquadra possono eliminare ordini
       if (adminErr) return err(adminErr, 403);
       const id = body.id || body.ID;
       if (!id) return err('ID ordine mancante');
