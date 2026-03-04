@@ -1,9 +1,9 @@
 {
-  "date": "2026-03-04T09:26:15.940Z",
-  "score": 100,
-  "total": 120,
-  "passes": 120,
-  "warns": 0,
+  "date": "2026-03-04T09:46:11.432Z",
+  "score": 93,
+  "total": 171,
+  "passes": 159,
+  "warns": 12,
   "fails": 0,
   "results": [
     {
@@ -845,6 +845,363 @@
       "status": "PASS",
       "desc": "Conteggio POST handlers aggiornato (126)",
       "detail": ""
+    },
+    {
+      "id": "FE-01",
+      "section": "13. Frontend Security — XSS, CSP, Token Storage",
+      "status": "PASS",
+      "desc": "Nessun token/secret hardcoded in admin_v1.html",
+      "detail": ""
+    },
+    {
+      "id": "FE-02",
+      "section": "13. Frontend Security — XSS, CSP, Token Storage",
+      "status": "PASS",
+      "desc": "Nessun token legacy/service_role in index_v2.html",
+      "detail": ""
+    },
+    {
+      "id": "FE-03",
+      "section": "13. Frontend Security — XSS, CSP, Token Storage",
+      "status": "WARN",
+      "desc": "Placeholder token dev trovato in index_v2.html",
+      "detail": "FF_TOKEN_CAMBIA_QUESTO_IN_PRODUZIONE — il JWT ha precedenza ma rimuovere per pulizia"
+    },
+    {
+      "id": "FE-04",
+      "section": "13. Frontend Security — XSS, CSP, Token Storage",
+      "status": "WARN",
+      "desc": "CSP (Content-Security-Policy) assente in admin_v1.html",
+      "detail": "Aggiungere <meta http-equiv=\"Content-Security-Policy\"> per XSS mitigation"
+    },
+    {
+      "id": "FE-05",
+      "section": "13. Frontend Security — XSS, CSP, Token Storage",
+      "status": "WARN",
+      "desc": "CSP (Content-Security-Policy) assente in index_v2.html",
+      "detail": "Aggiungere <meta http-equiv=\"Content-Security-Policy\"> per XSS mitigation"
+    },
+    {
+      "id": "FE-06",
+      "section": "13. Frontend Security — XSS, CSP, Token Storage",
+      "status": "PASS",
+      "desc": "Nessun eval() in admin_v1.html",
+      "detail": ""
+    },
+    {
+      "id": "FE-07",
+      "section": "13. Frontend Security — XSS, CSP, Token Storage",
+      "status": "PASS",
+      "desc": "Nessun eval() in index_v2.html",
+      "detail": ""
+    },
+    {
+      "id": "FE-08",
+      "section": "13. Frontend Security — XSS, CSP, Token Storage",
+      "status": "WARN",
+      "desc": "171 innerHTML senza DOMPurify in admin_v1.html",
+      "detail": "Verificare che nessun input utente sia inserito direttamente via innerHTML"
+    },
+    {
+      "id": "FE-09",
+      "section": "13. Frontend Security — XSS, CSP, Token Storage",
+      "status": "WARN",
+      "desc": "69 innerHTML senza DOMPurify in index_v2.html",
+      "detail": "Verificare che nessun input utente sia inserito direttamente via innerHTML"
+    },
+    {
+      "id": "FE-10",
+      "section": "13. Frontend Security — XSS, CSP, Token Storage",
+      "status": "WARN",
+      "desc": "JWT (sq2_token) in localStorage — esposto a XSS",
+      "detail": "Alternativa: sessionStorage o memory-only. Compromesso accettabile per UX \"resta connesso\""
+    },
+    {
+      "id": "FE-11",
+      "section": "13. Frontend Security — XSS, CSP, Token Storage",
+      "status": "PASS",
+      "desc": "API URL usa HTTPS in white_label_config.js",
+      "detail": ""
+    },
+    {
+      "id": "FE-12",
+      "section": "13. Frontend Security — XSS, CSP, Token Storage",
+      "status": "PASS",
+      "desc": "autocomplete configurato su campi password in admin",
+      "detail": ""
+    },
+    {
+      "id": "FE-13",
+      "section": "13. Frontend Security — XSS, CSP, Token Storage",
+      "status": "PASS",
+      "desc": "autocomplete configurato su campi password in index",
+      "detail": ""
+    },
+    {
+      "id": "FE-14",
+      "section": "13. Frontend Security — XSS, CSP, Token Storage",
+      "status": "WARN",
+      "desc": "X-Frame-Options o CSP frame-ancestors non trovato",
+      "detail": "Il Worker dovrebbe aggiungere X-Frame-Options: DENY nelle response headers"
+    },
+    {
+      "id": "SW-00",
+      "section": "14. Service Worker — Cache, Offline, Push",
+      "status": "PASS",
+      "desc": "sw.js presente",
+      "detail": "414 righe"
+    },
+    {
+      "id": "SW-01",
+      "section": "14. Service Worker — Cache, Offline, Push",
+      "status": "PASS",
+      "desc": "Cache name con versione (invalidazione automatica aggiornamenti)",
+      "detail": ""
+    },
+    {
+      "id": "SW-02",
+      "section": "14. Service Worker — Cache, Offline, Push",
+      "status": "PASS",
+      "desc": "NEVER_CACHE list implementata",
+      "detail": "3 riferimenti"
+    },
+    {
+      "id": "SW-03",
+      "section": "14. Service Worker — Cache, Offline, Push",
+      "status": "PASS",
+      "desc": "Supabase in API_PATTERNS (network-first, non cache-first)",
+      "detail": ""
+    },
+    {
+      "id": "SW-04",
+      "section": "14. Service Worker — Cache, Offline, Push",
+      "status": "PASS",
+      "desc": "IndexedDB offline queue implementata",
+      "detail": ""
+    },
+    {
+      "id": "SW-05",
+      "section": "14. Service Worker — Cache, Offline, Push",
+      "status": "PASS",
+      "desc": "Background Sync event handler implementato",
+      "detail": ""
+    },
+    {
+      "id": "SW-06",
+      "section": "14. Service Worker — Cache, Offline, Push",
+      "status": "PASS",
+      "desc": "Push notification handler implementato in SW",
+      "detail": ""
+    },
+    {
+      "id": "SW-07",
+      "section": "14. Service Worker — Cache, Offline, Push",
+      "status": "PASS",
+      "desc": "skipWaiting() presente — aggiornamenti SW immediati",
+      "detail": ""
+    },
+    {
+      "id": "SW-08",
+      "section": "14. Service Worker — Cache, Offline, Push",
+      "status": "PASS",
+      "desc": "clients.claim() presente — SW controlla tutte le tab",
+      "detail": ""
+    },
+    {
+      "id": "SW-09",
+      "section": "14. Service Worker — Cache, Offline, Push",
+      "status": "WARN",
+      "desc": "admin_v1.html in APP_SHELL del SW mobile",
+      "detail": "Il pannello admin viene cachato nel device dei tecnici. Valutare se intenzionale o rimuovere per sicurezza"
+    },
+    {
+      "id": "SW-10",
+      "section": "14. Service Worker — Cache, Offline, Push",
+      "status": "PASS",
+      "desc": "Stale-while-revalidate implementata per app shell",
+      "detail": ""
+    },
+    {
+      "id": "SW-11",
+      "section": "14. Service Worker — Cache, Offline, Push",
+      "status": "PASS",
+      "desc": "Messaggi offline in italiano",
+      "detail": ""
+    },
+    {
+      "id": "CFG-01",
+      "section": "15. Config & Deploy — wrangler.toml + white_label_config",
+      "status": "PASS",
+      "desc": "Nessun secret con valore reale in wrangler.toml [vars]",
+      "detail": ""
+    },
+    {
+      "id": "CFG-02",
+      "section": "15. Config & Deploy — wrangler.toml + white_label_config",
+      "status": "PASS",
+      "desc": "compatibility_date configurata",
+      "detail": "2024-01-01"
+    },
+    {
+      "id": "CFG-03",
+      "section": "15. Config & Deploy — wrangler.toml + white_label_config",
+      "status": "PASS",
+      "desc": "AI binding configurato in wrangler.toml (Workers AI fallback)",
+      "detail": ""
+    },
+    {
+      "id": "CFG-04",
+      "section": "15. Config & Deploy — wrangler.toml + white_label_config",
+      "status": "WARN",
+      "desc": "KV namespace RATE_KV non in wrangler.toml — rate limiter usa fallback in-memory (no persistenza cold-start)",
+      "detail": "Aggiungere [[kv_namespaces]] binding = \"RATE_KV\" in wrangler.toml"
+    },
+    {
+      "id": "CFG-05",
+      "section": "15. Config & Deploy — wrangler.toml + white_label_config",
+      "status": "PASS",
+      "desc": "Brand vars configurate in wrangler.toml [vars]",
+      "detail": ""
+    },
+    {
+      "id": "CFG-06",
+      "section": "15. Config & Deploy — wrangler.toml + white_label_config",
+      "status": "PASS",
+      "desc": "Cron job */15 configurato in wrangler.toml",
+      "detail": ""
+    },
+    {
+      "id": "CFG-07",
+      "section": "15. Config & Deploy — wrangler.toml + white_label_config",
+      "status": "PASS",
+      "desc": "white_label_config.js senza secret/token",
+      "detail": ""
+    },
+    {
+      "id": "CFG-08",
+      "section": "15. Config & Deploy — wrangler.toml + white_label_config",
+      "status": "PASS",
+      "desc": "URL frontend HTTPS nelle brand vars di wrangler.toml",
+      "detail": ""
+    },
+    {
+      "id": "REPO-01",
+      "section": "16. Repo Security — .gitignore, Secrets, Cleanup",
+      "status": "PASS",
+      "desc": ".gitignore presente",
+      "detail": ""
+    },
+    {
+      "id": "REPO-02",
+      "section": "16. Repo Security — .gitignore, Secrets, Cleanup",
+      "status": "PASS",
+      "desc": ".gitignore copre .env e node_modules",
+      "detail": ""
+    },
+    {
+      "id": "REPO-03",
+      "section": "16. Repo Security — .gitignore, Secrets, Cleanup",
+      "status": "PASS",
+      "desc": ".env non presente nel repo (corretto)",
+      "detail": ""
+    },
+    {
+      "id": "REPO-04",
+      "section": "16. Repo Security — .gitignore, Secrets, Cleanup",
+      "status": "PASS",
+      "desc": "Nessun JWT token Supabase hardcoded nei sorgenti",
+      "detail": ""
+    },
+    {
+      "id": "REPO-05",
+      "section": "16. Repo Security — .gitignore, Secrets, Cleanup",
+      "status": "PASS",
+      "desc": "Nessun token Telegram hardcoded nei sorgenti",
+      "detail": ""
+    },
+    {
+      "id": "REPO-06",
+      "section": "16. Repo Security — .gitignore, Secrets, Cleanup",
+      "status": "PASS",
+      "desc": ".wrangler/ escluso da .gitignore",
+      "detail": ""
+    },
+    {
+      "id": "REPO-07",
+      "section": "16. Repo Security — .gitignore, Secrets, Cleanup",
+      "status": "WARN",
+      "desc": "9 script generazione docs nel repo root",
+      "detail": "create_exec_deck_v2.js, gen_doc1.js, gen_doc2.js, gen_doc3.js, gen_doc3_final.js, gen_docx.js, generate_deployment_docs.js, generate_doc1_architecture.js, generate_docx_final.js — valutare spostamento in /scripts o rimozione"
+    },
+    {
+      "id": "REPO-08",
+      "section": "16. Repo Security — .gitignore, Secrets, Cleanup",
+      "status": "WARN",
+      "desc": "1 file .xlsx nel repo",
+      "detail": "pm_overdue_lssa_import.xlsx — verificare che non contengano dati clienti/tecnici sensibili"
+    },
+    {
+      "id": "REPO-09",
+      "section": "16. Repo Security — .gitignore, Secrets, Cleanup",
+      "status": "PASS",
+      "desc": "manifest.json presente",
+      "detail": "42 righe"
+    },
+    {
+      "id": "SCALA-01",
+      "section": "17. Scalabilità & Resilienza — sbPaginate, Retry, KV",
+      "status": "PASS",
+      "desc": "sbPaginate() implementata — paginazione oltre 1000 record Supabase",
+      "detail": ""
+    },
+    {
+      "id": "SCALA-02",
+      "section": "17. Scalabilità & Resilienza — sbPaginate, Retry, KV",
+      "status": "PASS",
+      "desc": "rateLimitKV() implementata — rate limiter persistente (KV + fallback in-memory)",
+      "detail": ""
+    },
+    {
+      "id": "SCALA-03",
+      "section": "17. Scalabilità & Resilienza — sbPaginate, Retry, KV",
+      "status": "PASS",
+      "desc": "Promise.allSettled usato",
+      "detail": "5 occorrenze — crash-safe su query parallele"
+    },
+    {
+      "id": "SCALA-04",
+      "section": "17. Scalabilità & Resilienza — sbPaginate, Retry, KV",
+      "status": "PASS",
+      "desc": "sendWithRetry() implementata — email/push con exponential backoff",
+      "detail": ""
+    },
+    {
+      "id": "SCALA-05",
+      "section": "17. Scalabilità & Resilienza — sbPaginate, Retry, KV",
+      "status": "PASS",
+      "desc": "Power BI export usa sbPaginate() — dati storici illimitati",
+      "detail": ""
+    },
+    {
+      "id": "SCALA-06",
+      "section": "17. Scalabilità & Resilienza — sbPaginate, Retry, KV",
+      "status": "PASS",
+      "desc": "generatePlanSmart usa Promise.allSettled (_psResults/_safePS)",
+      "detail": ""
+    },
+    {
+      "id": "SCALA-07",
+      "section": "17. Scalabilità & Resilienza — sbPaginate, Retry, KV",
+      "status": "PASS",
+      "desc": "HTTP 410 Gone gestito in sendWebPush — subscription scadute rimosse automaticamente",
+      "detail": ""
+    },
+    {
+      "id": "DB-00",
+      "section": "18. Supabase DB — RLS, Views, Schema (via API)",
+      "status": "WARN",
+      "desc": "Credenziali Supabase non fornite — sezione DB saltata",
+      "detail": "Eseguire con SUPABASE_URL e SUPABASE_KEY per check completi del database"
     }
   ]
 }
