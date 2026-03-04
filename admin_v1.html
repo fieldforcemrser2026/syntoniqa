@@ -8828,7 +8828,7 @@ fetch(epUrl,{headers:{Authorization:'Bearer '+tok}})
   var blob=new Blob([JSON.stringify({records:records},null,2)],{type:'application/json'});
   var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='pm_lssa_'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
   overlay.style.background='#065F46';
-  overlay.textContent='✅ '+records.length+' record estratti — importa il file JSON nell\'admin (PM → Import file)';
+  overlay.textContent='OK: '+records.length+' record. Vai in admin > PM > Import file';
   setTimeout(function(){overlay.remove();},8000);
 })
 .catch(function(err){
