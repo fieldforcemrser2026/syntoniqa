@@ -810,7 +810,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 </div>
 </div>
 <div class="card-body np" style="max-height:500px;overflow-y:auto">
-<table class="tbl"><thead><tr><th>Tecnico</th><th>Tipo</th><th>Periodo</th><th>Motivo</th><th>Stato</th><th></th></tr></thead><tbody id="tblRich"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('richieste','tblRich',this.checked)"></th><th>Tecnico</th><th>Tipo</th><th>Periodo</th><th>Motivo</th><th>Stato</th><th></th></tr></thead><tbody id="tblRich"></tbody></table>
 </div>
 </div>
 </section>
@@ -1319,7 +1319,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <h3>🔧 PM Scheduling</h3>
 <div class="btn-group" style="flex-wrap:wrap">
 <button class="btn btn-sm" id="pmSyncBtn" onclick="showPMSyncModal()" title="Sincronizza automaticamente dal provider PM (bookmarklet)">🔄 Sync</button>
-<label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0" title="Importa file PM: template ufficiale, export provider, o template Syntoniqa">⬆ Import file <input type="file" id="pmLssaFile" style="display:none" accept=".xlsx,.csv,.xls,.xlsm" onchange="importPMFile(this)"></label>
+<label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0" title="Importa file PM: template ufficiale, export provider, o template Syntoniqa">⬆ Import file <input type="file" id="pmImportFile" style="display:none" accept=".xlsx,.csv,.xls,.xlsm" onchange="importPMFile(this)"></label>
 <button class="btn btn-ghost btn-sm" onclick="exportPMPiano()" title="Esporta elenco PM in CSV">📥 Export</button>
 <button class="btn btn-sm btn-ai" onclick="bulkGeneratePM()">⚡ Piano 3M</button>
 <button class="btn btn-sm btn-outline" onclick="togglePMSettings()">⚙️ Cicli</button>
@@ -1352,11 +1352,9 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 </div>
 <div class="card-body np" style="max-height:calc(100vh - 280px);overflow-y:auto" id="pmTreeScroll">
 <table class="tbl" id="pmTreeTable">
-<thead><tr>
+<thead id="pmTreeHead"><tr>
 <th style="width:28px"></th>
 <th>Cliente</th>
-<th style="text-align:center;width:55px">Robot</th>
-<th style="text-align:center;width:55px">MFR</th>
 <th style="text-align:center;width:50px">Tot</th>
 <th style="text-align:center;width:65px">🔴 Scad</th>
 <th style="text-align:center;width:65px">⚠️ 30gg</th>
@@ -3256,6 +3254,9 @@ async function batchAction(tableKey, actionName) {
     case 'deleteTecnici':
       await batchDeleteTecnici(ids, tableKey);
       break;
+    case 'deleteRichieste':
+      await batchDeleteRichieste(ids, tableKey);
+      break;
   }
 }
 
@@ -3500,6 +3501,29 @@ async function batchDeleteTecnici(ids, tableKey) {
   toast(`${ok} eliminati${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
   clearBatchSelection(tableKey);
   await refreshData(true);
+}
+
+async function batchDeleteRichieste(ids, tableKey) {
+  if (!confirm(`Eliminare ${ids.length} richieste selezionate?`)) return;
+  let ok = 0, fail = 0;
+  for (const id of ids) {
+    try {
+      await apiCall('updateRichiesta', {id, obsoleto: true, userId: USER?.ID}, 'POST');
+      ok++;
+    } catch(e) { fail++; }
+  }
+  toast(`${ok} eliminate${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
+  clearBatchSelection(tableKey);
+  await refreshData(true);
+}
+
+async function deleteRichiesta(id) {
+  if (!confirm('Eliminare questa richiesta?')) return;
+  try {
+    await apiCall('updateRichiesta', {id, obsoleto: true, userId: USER?.ID}, 'POST');
+    toast('Richiesta eliminata', 'ok');
+    await refreshData(true);
+  } catch(e) { toast(e.message, 'err'); }
 }
 
 async function deleteTecnico(id) {
@@ -3990,15 +4014,20 @@ function renderRichieste(){
   const badge=$('badgeRich');
   if(badge){badge.textContent=pend;badge.style.display=pend?'':'none'}
 
+  initBatchBar('richieste','tblRich',[
+    {label:'Elimina',action:'deleteRichieste',cls:'err',icon:'🗑️'}
+  ]);
+
   const tipoIcons={ferie:'🏖️',permesso:'🕐',malattia:'🤒',cambio_turno:'🔄',generico:'📝'};
-  $('tblRich').innerHTML=items.length?items.map(r=>`<tr style="${r.Stato==='in_attesa'?'background:#FEF3C7':''}">
+  $('tblRich').innerHTML=items.length?items.map(r=>`<tr id="row_richieste_${r.ID}" data-id="${r.ID}" style="${r.Stato==='in_attesa'?'background:#FEF3C7':''}">
+    <td><input type="checkbox" class="sel-chk" onchange="toggleSelectRow('richieste','${r.ID}',this.checked)"></td>
     <td>${getName(DATA.utenti||[],r.TecnicoID)}</td>
     <td><span class="tag">${tipoIcons[r.Tipo]||'📝'} ${r.Tipo||'generico'}</span></td>
     <td style="font-size:.8rem">${fmtDate(r.DataInizio)}${r.DataFine&&r.DataFine!==r.DataInizio?' → '+fmtDate(r.DataFine):''}</td>
     <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.8rem">${r.Motivo||'—'}</td>
     <td>${statusTag(r.Stato)}</td>
-    <td style="white-space:nowrap">${r.Stato==='in_attesa'?`<button class="btn btn-ok btn-xs" onclick="openApproveRich('${r.ID}','approvata')">✅ Approva</button><button class="btn btn-err btn-xs" onclick="openApproveRich('${r.ID}','rifiutata')" style="margin-left:4px">❌ Rifiuta</button>`:`<button class="btn btn-ghost btn-xs" onclick="showRichDetail('${r.ID}')">👁️</button>`}</td>
-  </tr>`).join(''):'<tr><td colspan="6" class="empty"><p>Nessuna richiesta</p></td></tr>';
+    <td style="white-space:nowrap">${r.Stato==='in_attesa'?`<button class="btn btn-ok btn-xs" onclick="openApproveRich('${r.ID}','approvata')">✅ Approva</button><button class="btn btn-err btn-xs" onclick="openApproveRich('${r.ID}','rifiutata')" style="margin-left:4px">❌ Rifiuta</button>`:`<button class="btn btn-ghost btn-xs" onclick="showRichDetail('${r.ID}')">👁️</button>`}<button class="btn btn-ghost btn-xs" onclick="deleteRichiesta('${r.ID}')" style="color:var(--err);margin-left:4px" title="Elimina">🗑️</button></td>
+  </tr>`).join(''):'<tr><td colspan="7" class="empty"><p>Nessuna richiesta</p></td></tr>';
 }
 
 function openApproveRich(id,statoTarget){
@@ -8258,7 +8287,20 @@ let PM_CYCLE_DEFS=[];
 let PM_OPEN_ROW=null;
 let PM_OVERVIEW=null; // {clienti:[{codice_m3,nome,assets:[...]}], total_assets, total_clienti}
 
-function initPMSection(){ loadPMOverview(); }
+function initPMSection(){
+  // Applica colore e nome provider al bottone Sync
+  const cfg=window.SYNTONIQA_CONFIG?.pmSync||{};
+  const syncBtn=$('pmSyncBtn');
+  if(syncBtn){
+    const pName=cfg.providerName||'Sync';
+    const pColor=cfg.providerColor||'var(--c1)';
+    syncBtn.textContent=`🔄 Sync ${pName}`;
+    syncBtn.style.background=pColor;
+    syncBtn.style.color='#fff';
+    syncBtn.style.border='none';
+  }
+  loadPMOverview();
+}
 
 /* ─── PM OVERVIEW: albero cliente/assets ─── */
 
@@ -8271,7 +8313,7 @@ function getPMAssetStatus(prossimoControllo){
 }
 
 async function loadPMOverview(){
-  const tb=$('pmTreeBody');if(tb)tb.innerHTML='<tr><td colspan="9" style="text-align:center;padding:24px"><div class="loading" style="margin:auto"><div class="spin"></div></div></td></tr>';
+  const tb=$('pmTreeBody');if(tb)tb.innerHTML='<tr><td colspan="7" style="text-align:center;padding:24px"><div class="loading" style="margin:auto"><div class="spin"></div></div></td></tr>';
   try{
     const r=await apiCall('getPMOverview',{userId:USER?.ID},'POST');
     PM_OVERVIEW=r;
@@ -8283,7 +8325,7 @@ async function loadPMOverview(){
     }
     renderPMTree();
   }catch(e){
-    if(tb)tb.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--err);padding:16px">${e.message}</td></tr>`;
+    if(tb)tb.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--err);padding:16px">${e.message}</td></tr>`;
   }
 }
 
@@ -8331,29 +8373,25 @@ function renderPMTree(){
     ${fBtn('tutti','📋','Tutti',allAssets.length,'border-color:var(--c1);background:rgba(0,201,167,.1);color:var(--c1)')}`;
 
   const tb=$('pmTreeBody');if(!tb)return;
-  if(!clienti.length){tb.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--gray);padding:24px">Nessun asset trovato con i filtri selezionati</td></tr>`;return;}
+  if(!clienti.length){tb.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--gray);padding:24px">Nessun asset trovato con i filtri selezionati</td></tr>`;return;}
 
   tb.innerHTML=clienti.map(c=>{
     const assets=c.assets||[];
-    const robots=assets.filter(a=>assetType(a)==='ROBOT').length;
-    const mfr=assets.filter(a=>assetType(a)==='MFR').length;
     const pc=a=>getPMAssetStatus(a.prossimo_controllo).days;
     const scad=assets.filter(a=>pc(a)!==null&&pc(a)<0).length;
-    const pross=assets.filter(a=>pc(a)!==null&&pc(a)>=0&&pc(a)<=60).length;
-    const ok=assets.filter(a=>pc(a)!==null&&pc(a)>60).length;
+    const pross=assets.filter(a=>pc(a)!==null&&pc(a)>=0&&pc(a)<=30).length;
+    const ok=assets.filter(a=>pc(a)!==null&&pc(a)>30).length;
     const rowBg=scad>0?'background:var(--err-light)':pross>0?'background:var(--warn-light)':'';
     return `<tr class="anag-row" id="pmRow_${c.codice_m3}" onclick="togglePMTree('${esc(c.codice_m3)}')" style="cursor:pointer;${rowBg}" title="Espandi assets">
       <td><span id="pmArrow_${c.codice_m3}" style="display:inline-block;transition:transform .2s">▶</span></td>
       <td><strong>${esc(c.nome)}</strong><br><small style="color:var(--muted)">${esc(c.codice_m3||'')} — ${assets.length} assets</small></td>
-      <td style="text-align:center">${robots||'<span style="color:#ddd">—</span>'}</td>
-      <td style="text-align:center">${mfr||'<span style="color:#ddd">—</span>'}</td>
       <td style="text-align:center"><strong>${assets.length}</strong></td>
       <td style="text-align:center">${scad>0?`<span class="tag tag-err">${scad}</span>`:'<span style="color:#ddd">—</span>'}</td>
       <td style="text-align:center">${pross>0?`<span class="tag tag-warn">${pross}</span>`:'<span style="color:#ddd">—</span>'}</td>
       <td style="text-align:center">${ok>0?`<span class="tag tag-ok">${ok}</span>`:'<span style="color:#ddd">—</span>'}</td>
       <td></td>
     </tr>
-    <tr id="pmExpand_${c.codice_m3}" style="display:none"><td colspan="9" style="padding:0;background:#f8faff;border-bottom:2px solid var(--gray3)">
+    <tr id="pmExpand_${c.codice_m3}" style="display:none"><td colspan="7" style="padding:0;background:#f8faff;border-bottom:2px solid var(--gray3)">
       ${renderPMAssetTable(c)}
     </td></tr>`;
   }).join('');
@@ -9530,10 +9568,15 @@ let MONTH_DRAGGING = null;
 
 function initMonthPlan(){
   const sel = $('monthFiltroTec');
-  if(sel && sel.options.length <= 1){
+  if(sel){
+    const prevVal = sel.value;
+    // Svuota sempre e ripopola con la lista tecnici aggiornata
+    sel.innerHTML = '<option value="">Tutti i tecnici</option>';
     (DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Ruolo!=='admin').forEach(u=>{
       const o=document.createElement('option'); o.value=u.ID; o.textContent=(u.Nome||'')+' '+(u.Cognome||''); sel.appendChild(o);
     });
+    // Mantieni selezione corrente se tecnico esiste ancora
+    if(prevVal && [...sel.options].some(o=>o.value===prevVal)) sel.value=prevVal;
   }
   renderMonthPlan();
 }
@@ -9832,9 +9875,11 @@ function initPlanner(){
   PLANNER_DATE = new Date(d);
   PLANNER_DATE.setDate(d.getDate() + diff);
   PLANNER_DATE.setHours(0,0,0,0);
-  // Populate tecnici filter
+  // Ripopola sempre il filtro tecnici (svuota prima per evitare duplicati dopo refresh)
   const sel = document.getElementById('plannerFiltroTec');
   if(sel){
+    const prevVal = sel.value;
+    sel.innerHTML = '<option value="">Tutti i tecnici</option>';
     const tecs = (DATA.utenti||[]).filter(u => !u.Obsoleto && (u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
     tecs.forEach(t => {
       const o = document.createElement('option');
@@ -9842,6 +9887,8 @@ function initPlanner(){
       o.textContent = (t.Nome||'') + ' ' + (t.Cognome||'');
       sel.appendChild(o);
     });
+    // Mantieni la selezione corrente se il tecnico esiste ancora
+    if(prevVal && [...sel.options].some(o => o.value === prevVal)) sel.value = prevVal;
   }
   renderPlanner();
 }
