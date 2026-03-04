@@ -6368,7 +6368,7 @@ Rispondi SOLO con JSON valido:
     case 'getPMOverview': {
       const [assets, clienti] = await Promise.all([
         sb(env, 'anagrafica_assets', 'GET', null,
-          '?obsoleto=eq.false&select=id,codice_m3,nome_account,tipo_foglio,gruppo_attrezzatura,nome_asset,numero_serie,modello,prossimo_controllo,ultimo_controllo,data_installazione,status,ciclo_pm,intervallo_settimane,schedule_type&limit=1000&order=codice_m3.asc').catch(() => []),
+          '?select=id,codice_m3,nome_account,tipo_foglio,gruppo_attrezzatura,nome_asset,numero_serie,modello,prossimo_controllo,ultimo_controllo,data_installazione,status,ciclo_pm,intervallo_settimane,schedule_type&limit=1000&order=codice_m3.asc').catch(() => []),
         sb(env, 'anagrafica_clienti', 'GET', null,
           '?select=codice_m3,nome_account,nome_interno,citta_fatturazione&limit=300').catch(() => [])
       ]);
