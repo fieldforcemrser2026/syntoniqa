@@ -1394,7 +1394,7 @@ async function handlePost(action, body, env) {
       // SECURITY: tecnici possono modificare solo se stessi (campi limitati), admin può modificare tutti
       const callerId3 = body.operatoreId || body.userId;
       if (callerId3 && callerId3 !== id) {
-        const adminErr3 = await requireAdmin(env, body);
+        const adminErr3 = requireRole(body, 'admin');
         if (adminErr3) return err('Solo admin può modificare altri utenti', 403);
       }
       if (password) updates.password_hash = await hashPassword(password);
@@ -1439,7 +1439,7 @@ async function handlePost(action, body, env) {
     // -------- CLIENTI --------
 
     case 'createCliente': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = secureId('CLI');
       const row = { id, ...getFields(body), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
@@ -1449,7 +1449,7 @@ async function handlePost(action, body, env) {
     }
 
     case 'updateCliente': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
       updates.updated_at = new Date().toISOString();
@@ -1460,7 +1460,7 @@ async function handlePost(action, body, env) {
     }
 
     case 'deleteCliente': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = body.id || body.ID;
       if (!id) return err('ID cliente mancante');
@@ -1472,7 +1472,7 @@ async function handlePost(action, body, env) {
     // -------- MACCHINE --------
 
     case 'createMacchina': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = secureId('MAC');
       const result = await sb(env, 'macchine', 'POST', { id, ...getFields(body), created_at: new Date().toISOString() });
@@ -1481,7 +1481,7 @@ async function handlePost(action, body, env) {
     }
 
     case 'updateMacchina': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
       for (const k of Object.keys(updates)) { if (updates[k] === null && k.endsWith('_id')) delete updates[k]; }
@@ -1491,7 +1491,7 @@ async function handlePost(action, body, env) {
     }
 
     case 'deleteMacchina': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = body.id || body.ID;
       if (!id) return err('ID macchina mancante');
@@ -1503,7 +1503,7 @@ async function handlePost(action, body, env) {
     // -------- AUTOMEZZI --------
 
     case 'createAutomezzo': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = secureId('AUT');
       const fields = getFields(body);
@@ -1517,7 +1517,7 @@ async function handlePost(action, body, env) {
     }
 
     case 'updateAutomezzo': {
-      const adminErr2 = await requireAdmin(env, body);
+      const adminErr2 = requireRole(body, 'admin');
       if (adminErr2) return err(adminErr2, 403);
       const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
       for (const k of Object.keys(updates)) { if (updates[k] === null && k.endsWith('_id')) delete updates[k]; }
@@ -1545,7 +1545,7 @@ async function handlePost(action, body, env) {
     }
 
     case 'deleteAutomezzo': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = body.id || body.ID;
       if (!id) return err('ID automezzo mancante');
@@ -1560,7 +1560,7 @@ async function handlePost(action, body, env) {
     }
 
     case 'deleteUtente': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = body.id || body.ID;
       if (!id) return err('ID utente mancante');
@@ -1575,7 +1575,7 @@ async function handlePost(action, body, env) {
     // -------- INSTALLAZIONI --------
 
     case 'createInstallazione': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = secureId('INS');
       const fields = getFields(body);
@@ -1596,7 +1596,7 @@ async function handlePost(action, body, env) {
     }
 
     case 'updateInstallazione': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const { id, userId: _u, operatoreId: _op, ...updates } = body;
       updates.updated_at = new Date().toISOString();
@@ -1606,7 +1606,7 @@ async function handlePost(action, body, env) {
     }
 
     case 'deleteInstallazione': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = body.id || body.ID;
       if (!id) return err('ID installazione mancante');
@@ -1618,7 +1618,7 @@ async function handlePost(action, body, env) {
     // -------- REPERIBILITA --------
 
     case 'createReperibilita': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = secureId('REP');
       const fields_rep = getFields(body);
@@ -1629,7 +1629,7 @@ async function handlePost(action, body, env) {
     }
 
     case 'updateReperibilita': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = body.id || body.ID;
       if (!id) return err('ID reperibilita mancante');
@@ -1641,7 +1641,7 @@ async function handlePost(action, body, env) {
     }
 
     case 'deleteReperibilita': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = body.id || body.ID;
       if (!id) return err('ID reperibilita mancante');
@@ -1653,7 +1653,7 @@ async function handlePost(action, body, env) {
     // -------- TRASFERTE --------
 
     case 'createTrasferta': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = secureId('TRA');
       const fields = getFields(body);
@@ -1677,7 +1677,7 @@ async function handlePost(action, body, env) {
     }
 
     case 'updateTrasferta': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = body.id || body.ID;
       if (!id) return err('ID trasferta mancante');
@@ -1689,7 +1689,7 @@ async function handlePost(action, body, env) {
     }
 
     case 'deleteTrasferta': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = body.id || body.ID;
       if (!id) return err('ID trasferta mancante');
@@ -3593,7 +3593,7 @@ Rispondi SOLO con JSON valido:
     }
 
     case 'applyAIPlan': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
 
       // Estrai array piano: supporta body.piano.piano (nested) e body.piano (flat array)
@@ -4200,7 +4200,7 @@ Rispondi SOLO con JSON valido:
 
     // ─── VINCOLI PIANIFICAZIONE (dinamici, white-label) ───────────────
     case 'saveVincoliCategories': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const payload = body.vincoli || body.data;
       if (!payload) return err('vincoli richiesti');
@@ -4482,7 +4482,7 @@ Rispondi SOLO con JSON valido:
 
     // ──────── APPROVAL WORKFLOW ─────────────────────────────────────
     case 'createApproval': {
-      const adminErr2 = await requireAdmin(env, body);
+      const adminErr2 = requireRole(body, 'admin');
       if (adminErr2) return err(adminErr2, 403);
       const aprId = body.id || secureId('APR');
       const pianoData2 = body.piano;
@@ -4663,7 +4663,7 @@ Rispondi SOLO con JSON valido:
 
     case 'telegramWebhook': {
       const update = body;
-      // [debug] console.log('[TG-WEBHOOK] msg_id:', update.message?.message_id);
+      // [debug] TG-WEBHOOK ricevuto (msg_id rimosso da prod)
       if (!update.message && !update.callback_query) return ok();
       try {
 
@@ -4744,7 +4744,7 @@ Rispondi SOLO con JSON valido:
           if (match) {
             await sb(env, `utenti?id=eq.${match.id}`, 'PATCH', { telegram_chat_id: String(fromId) }).catch(()=>{});
             utente = match;
-            // [debug] console.log(`[TG] Auto-registrato ${match.id} con chat_id`);
+            // [debug] TG auto-registrato (rimosso da prod)
           }
         }
       }
@@ -5903,7 +5903,7 @@ Rispondi SOLO con JSON valido:
     // ============ SYNC CLIENTI DA ANAGRAFICA ============
 
     case 'migrateDB': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const results = [];
       // Add note_ai column to urgenze
@@ -5927,7 +5927,7 @@ Rispondi SOLO con JSON valido:
     }
 
     case 'syncClientiFromAnagrafica': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       // Leggi anagrafica con lat/lng/citta
       const anagAll = await sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_interno,lat,lng,citta_fatturazione,via_fatturazione&limit=500');
@@ -6172,7 +6172,7 @@ Rispondi SOLO con JSON valido:
     case 'generatePMSchedule': {
       // Auto-scheduling PM basato su cicli manutenzione
       // Cicli: A1=bimestrale(60gg), B2=trimestrale(90gg), C3=semestrale(180gg), D8=annuale(365gg)
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const { mese_target, ciclo, cliente_id, dry_run } = body;
       if (!mese_target) return err('mese_target richiesto (YYYY-MM)');
@@ -6397,7 +6397,7 @@ Rispondi SOLO con JSON valido:
 
     // ═══ IMPORT PM OVERDUE: aggiorna prossimo_controllo da export provider PM ═══
     case 'importPMOverdue': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const { records } = body;
       if (!records || !Array.isArray(records)) return err('records array richiesto');
@@ -6448,7 +6448,7 @@ Rispondi SOLO con JSON valido:
 
     // ═══ IMPORT PM TEMPLATE v5.x (template standard LC Data con headers in riga 3) ═══
     case 'importPMTemplate': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const { records } = body; // [{serial_no, maintenance_type, standard_interval, weeks_months, schedule_type, next_pm_date, owner_m3}]
       if (!records || !Array.isArray(records)) return err('records array richiesto');
@@ -6491,7 +6491,7 @@ Rispondi SOLO con JSON valido:
 
     // ═══ UPDATE SINGLE ASSET CICLO PM ═══
     case 'updateAssetCiclo': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const { asset_id, ciclo_pm, intervallo_settimane } = body;
       if (!asset_id) return err('asset_id richiesto');
@@ -6504,7 +6504,7 @@ Rispondi SOLO con JSON valido:
 
     case 'savePMCycleState': {
       // Admin salva stato ciclo per una o più macchine
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
 
       const { updates } = body; // [{macchina_id, posizione, ultimo_completato, completati}]
@@ -6534,7 +6534,7 @@ Rispondi SOLO con JSON valido:
 
     case 'savePMCycleDefinitions': {
       // Admin salva/modifica definizioni cicli PM per modelli macchina
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
 
       const { definitions } = body; // array di {nome, modelli, sequenza, intervallo_giorni, desc}
@@ -6552,7 +6552,7 @@ Rispondi SOLO con JSON valido:
     }
 
     case 'updatePMDate': {
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const macchina_id = body.macchina_id || body.MacchinaID;
       const prossimo_tagliando = body.prossimo_tagliando || body.ProssimoTagliando;
@@ -6567,7 +6567,7 @@ Rispondi SOLO con JSON valido:
 
     case 'completePM': {
       // Segna un tagliando come completato e avanza il ciclo
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
 
       const { macchina_id: cmId, piano_id: cmPianoId, data_completamento, note: cmNote } = body;
@@ -6672,7 +6672,7 @@ Rispondi SOLO con JSON valido:
 
     case 'bulkGeneratePMCalendar': {
       // Genera interventi PM futuri per tutte le macchine per N mesi
-      const adminErr = await requireAdmin(env, body);
+      const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
 
       const { mesi_avanti = 3 } = body;
@@ -7163,7 +7163,7 @@ async function checkInterventoReminders(env) {
       }
     }
   }
-  console.log(`[CRON] checkInterventoReminders: ${pianificati?.length || 0} pianificati, ${inCorso?.length || 0} in_corso checked`);
+  env.DEBUG_LOG && console.log(`[CRON] checkInterventoReminders: ${pianificati?.length || 0} pianificati, ${inCorso?.length || 0} in_corso checked`);
 }
 
 // ============ CRON: SLA MONITORING ============
@@ -7229,7 +7229,7 @@ async function checkSLAUrgenze(env) {
         console.error(`[CRON] SLA check failed for urgenza ${u.id}: ${e.message}`);
       }
     }
-    console.log(`[CRON] checkSLAUrgenze: ${urgenze?.length || 0} urgenze checked, ${updated} updated`);
+    env.DEBUG_LOG && console.log(`[CRON] checkSLAUrgenze: ${urgenze?.length || 0} urgenze checked, ${updated} updated`);
 
     // ESCALATION: urgenze assegnate ma non iniziate da >4 ore
     const urgAssegnate = await sb(env, 'urgenze', 'GET', null,
@@ -7267,7 +7267,7 @@ async function checkSLAUrgenze(env) {
             testo: `⏰ ESCALATION: Urgenza ${ua.id} assegnata a ${tecName} da ${Math.floor(oreAssegnata)}h, non iniziata!`,
             tipo: 'testo', created_at: new Date().toISOString()
           }).catch(e=>console.error('[SYNC]',e.message));
-          console.log(`[CRON] Escalation for urgenza ${ua.id} (${Math.floor(oreAssegnata)}h)`);
+          env.DEBUG_LOG && console.log(`[CRON] Escalation for urgenza ${ua.id} (${Math.floor(oreAssegnata)}h)`);
         }
       }
     }
@@ -7291,7 +7291,7 @@ async function checkPMExpiry(env) {
       `?obsoleto=eq.false&prossimo_tagliando=not.is.null&prossimo_tagliando=lte.${warning7}&select=id,seriale,modello,prossimo_tagliando,cliente_id&order=prossimo_tagliando.asc&limit=200`
     ).catch(() => []);
 
-    if (!macchine3.length) { console.log('[CRON] checkPMExpiry: 0 tagliandi critici'); return; }
+    if (!macchine3.length) { env.DEBUG_LOG && console.log('[CRON] checkPMExpiry: 0 tagliandi critici'); return; }
 
     const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
     const group = env.TELEGRAM_CHAT_ID || '-5236723213';
@@ -7361,7 +7361,7 @@ async function checkPMExpiry(env) {
       }
     }
 
-    console.log(`[CRON] checkPMExpiry: ${scaduti} scaduti, ${urgenti} urgenti (<7gg), TG window: ${isMorningSummaryWindow}`);
+    env.DEBUG_LOG && console.log(`[CRON] checkPMExpiry: ${scaduti} scaduti, ${urgenti} urgenti (<7gg), TG window: ${isMorningSummaryWindow}`);
   } catch (e) { console.error('[CRON] checkPMExpiry error:', e.message); }
 }
 

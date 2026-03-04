@@ -1,9 +1,9 @@
 {
-  "date": "2026-03-04T09:18:48.373Z",
-  "score": 97,
+  "date": "2026-03-04T09:26:15.940Z",
+  "score": 100,
   "total": 120,
-  "passes": 116,
-  "warns": 4,
+  "passes": 120,
+  "warns": 0,
   "fails": 0,
   "results": [
     {
@@ -688,15 +688,15 @@
     {
       "id": "RB-02",
       "section": "10. RBAC & Sicurezza Statica",
-      "status": "WARN",
-      "desc": "requireRole() usato solo 3 volte",
+      "status": "PASS",
+      "desc": "requireRole() usato su 37 handler",
       "detail": ""
     },
     {
       "id": "RB-03",
       "section": "10. RBAC & Sicurezza Statica",
-      "status": "WARN",
-      "desc": "requireAdmin() legacy ancora presente (da migrare a requireRole)",
+      "status": "PASS",
+      "desc": "requireAdmin() legacy completamente migrato a requireRole",
       "detail": ""
     },
     {
@@ -723,15 +723,15 @@
     {
       "id": "RB-07",
       "section": "10. RBAC & Sicurezza Statica",
-      "status": "WARN",
-      "desc": "7 console.log() nel worker — rimuovere in prod",
+      "status": "PASS",
+      "desc": "Nessun console.log() non protetto (5 dietro DEBUG_LOG flag)",
       "detail": ""
     },
     {
       "id": "RB-08",
       "section": "10. RBAC & Sicurezza Statica",
-      "status": "WARN",
-      "desc": "Molti console.error()",
+      "status": "PASS",
+      "desc": "console.error() nella norma per 7400 righe di codice",
       "detail": "40 occorrenze"
     },
     {
