@@ -6,7 +6,7 @@
  * ENV VARS (Cloudflare Dashboard → Settings → Variables):
  *   SUPABASE_URL        = https://xxxx.supabase.co
  *   SUPABASE_SERVICE_KEY= eyJ...  (service_role key)
- *   SQ_TOKEN            = MRS_Syntoniqa_2026_MBGOAT   (o custom per tenant)
+ *   SQ_TOKEN            = <REDACTED>   (vedi .env locale — NON inserire qui)
  *   [ai] binding        = AI (Workers AI — Llama 3.1 + LLaVA Vision)
  *   TELEGRAM_BOT_TOKEN  = 123456:ABC...
  *   RESEND_API_KEY      = re_...  (email via Resend - free 3k/mese)
@@ -456,6 +456,29 @@ function rateLimit(identifier, bucket = 'default') {
   return { limited: false, remaining: cfg.max - hits.length };
 }
 
+// ──────────────────────────────────────────────────────────────
+// sbPaginate — Supabase paginazione automatica (supera il limite 1000/richiesta)
+// Usa Range header PostgREST per fetchare tutti i record in batch da 1000.
+// MAX_PAGES = 20 → max 20.000 record per singola chiamata.
+// Uso: const tutti = await sbPaginate(env, 'piano', '?stato=eq.completato&order=data.desc');
+// ──────────────────────────────────────────────────────────────
+async function sbPaginate(env, table, query = '', pageSize = 1000, maxPages = 20) {
+  const rows = [];
+  for (let page = 0; page < maxPages; page++) {
+    const from = page * pageSize;
+    const to   = from + pageSize - 1;
+    try {
+      const batch = await sb(env, table, 'GET', null, query, { 'Range': `${from}-${to}` }).catch(()=>[]);
+      if (!Array.isArray(batch) || !batch.length) break;
+      rows.push(...batch);
+      if (batch.length < pageSize) break; // ultima pagina → stop
+    } catch {
+      break;
+    }
+  }
+  return rows;
+}
+
 // ============ ROUTER ============
 
 export default {
@@ -565,13 +588,10 @@ async function handleGet(action, url, env, auth = {}) {
       const tecFilter = isTecnico ? `&tecnico_id=eq.${reqUserId}` : '';
       const tecFilterUrg = isTecnico ? `&or=(tecnico_assegnato.eq.${reqUserId},segnalato_da.eq.${reqUserId})` : '';
 
-      const [
-        utenti, clienti, macchine, piano, urgenze, ordini,
-        reperibilita, trasferte, notifiche, richieste, installazioni,
-        pagellini, automezzi, tipi_intervento, priorita, squadre,
-        tagliandi, fasi_installazione, sla_config,
-        checklist_template, documenti, config
-      ] = await Promise.all([
+      // FIX API-01: Promise.allSettled — se una tabella Supabase fallisce non crasha tutta la dashboard
+      // Ogni risultato è { status:'fulfilled', value:[] } oppure { status:'rejected', reason:Error }
+      const _safeArr = (r) => r.status === 'fulfilled' ? (Array.isArray(r.value) ? r.value : []) : [];
+      const _getAllResults = await Promise.allSettled([
         sb(env, 'utenti',             'GET', null, '?select=*&obsoleto=eq.false&order=cognome'),
         sb(env, 'clienti',            'GET', null, '?select=*&obsoleto=eq.false&order=nome'),
         sb(env, 'macchine',           'GET', null, '?select=*&obsoleto=eq.false&limit=1000'),
@@ -595,6 +615,13 @@ async function handleGet(action, url, env, auth = {}) {
         sb(env, 'documenti',          'GET', null, '?select=*&obsoleto=eq.false&order=data_caricamento.desc'),
         sb(env, 'config',             'GET', null, '?select=chiave,valore'),
       ]);
+      const [
+        utenti, clienti, macchine, piano, urgenze, ordini,
+        reperibilita, trasferte, notifiche, richieste, installazioni,
+        pagellini, automezzi, tipi_intervento, priorita, squadre,
+        tagliandi, fasi_installazione, sla_config,
+        checklist_template, documenti, config
+      ] = _getAllResults.map(_safeArr);
       
       // Rimuovi password_hash da utenti + merge livello da config
       const lvConfig = config.find(c => c.chiave === 'utenti_livello');
@@ -694,14 +721,18 @@ async function handleGet(action, url, env, auth = {}) {
         const pbiCaller = await sb(env, 'utenti', 'GET', null, `?id=eq.${pbiUser}&select=ruolo`).catch(()=>[]);
         if (pbiCaller?.[0]?.ruolo !== 'admin') return err('Solo admin può esportare PowerBI', 403);
       }
-      const [piano, urgenze, utenti, clienti, macchine, kpiLog] = await Promise.all([
-        sb(env, 'piano',    'GET', null, '?select=*&obsoleto=eq.false&order=data.desc&limit=5000'),
-        sb(env, 'urgenze',  'GET', null, '?select=*&obsoleto=eq.false&order=data_segnalazione.desc&limit=2000'),
+      // FIX SCALA-01: limit=5000/2000 violava il max 1000 di sb() → silently troncava.
+      // TODO scalabilità: implementare sbPaginate() per Power BI export completo multi-page.
+      const _safeArrKPI = (r) => r.status === 'fulfilled' ? (Array.isArray(r.value) ? r.value : []) : [];
+      const _kpiResults = await Promise.allSettled([
+        sb(env, 'piano',    'GET', null, '?select=*&obsoleto=eq.false&order=data.desc&limit=1000'),
+        sb(env, 'urgenze',  'GET', null, '?select=*&obsoleto=eq.false&order=data_segnalazione.desc&limit=1000'),
         sb(env, 'utenti',   'GET', null, '?select=id,nome,cognome,ruolo,squadra_id&obsoleto=eq.false'),
         sb(env, 'clienti',  'GET', null, '?select=id,nome,citta,prov&obsoleto=eq.false'),
         sb(env, 'macchine', 'GET', null, '?select=id,cliente_id,tipo,modello&obsoleto=eq.false'),
         sb(env, 'kpi_log',  'GET', null, '?order=data.desc&limit=1000&obsoleto=eq.false'),
       ]);
+      const [piano, urgenze, utenti, clienti, macchine, kpiLog] = _kpiResults.map(_safeArrKPI);
       return ok({ fact_interventi: piano, fact_urgenze: urgenze, fact_kpi: kpiLog, dim_tecnici: utenti, dim_clienti: clienti, dim_macchine: macchine });
     }
 
@@ -4589,7 +4620,7 @@ Rispondi SOLO con JSON valido:
 
     case 'telegramWebhook': {
       const update = body;
-      console.log('[TG-WEBHOOK] Ricevuto update:', JSON.stringify({ msg_id: update.message?.message_id, from: update.message?.from?.first_name, chat_id: update.message?.chat?.id, text: (update.message?.text||'').substring(0,50) }));
+      // [debug] console.log('[TG-WEBHOOK] msg_id:', update.message?.message_id);
       if (!update.message && !update.callback_query) return ok();
       try {
 
@@ -4670,7 +4701,7 @@ Rispondi SOLO con JSON valido:
           if (match) {
             await sb(env, `utenti?id=eq.${match.id}`, 'PATCH', { telegram_chat_id: String(fromId) }).catch(()=>{});
             utente = match;
-            console.log(`[TG] Auto-registrato ${match.id} (${firstName}) con chat_id=${fromId}`);
+            // [debug] console.log(`[TG] Auto-registrato ${match.id} con chat_id`);
           }
         }
       }
@@ -6912,7 +6943,7 @@ async function notifyTecnicoTG(env, tecnicoId, text) {
     if (chatId) {
       await sendTelegram(env, chatId, text);
     } else {
-      console.log(`[TG-PRIV] Tecnico ${tecnicoId} (${tec?.[0]?.nome || '?'} ${tec?.[0]?.cognome || ''}) non ha telegram_chat_id — notifica non inviata`);
+      // Tecnico senza telegram_chat_id — notifica saltata (configura il bot)
     }
   } catch(e) { console.error('[TG-PRIV]', e.message); }
 }

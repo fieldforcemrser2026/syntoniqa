@@ -1,0 +1,850 @@
+{
+  "date": "2026-03-04T09:11:20.560Z",
+  "score": 97,
+  "total": 120,
+  "passes": 116,
+  "warns": 4,
+  "fails": 0,
+  "results": [
+    {
+      "id": "F-01",
+      "section": "1. FILE SORGENTE — Presenza & Dimensioni",
+      "status": "PASS",
+      "desc": "cloudflare_worker.js presente",
+      "detail": "7328 righe"
+    },
+    {
+      "id": "F-02",
+      "section": "1. FILE SORGENTE — Presenza & Dimensioni",
+      "status": "PASS",
+      "desc": "admin_v1.html presente",
+      "detail": "10466 righe"
+    },
+    {
+      "id": "F-03",
+      "section": "1. FILE SORGENTE — Presenza & Dimensioni",
+      "status": "PASS",
+      "desc": "index_v2.html presente",
+      "detail": "3002 righe"
+    },
+    {
+      "id": "F-04",
+      "section": "1. FILE SORGENTE — Presenza & Dimensioni",
+      "status": "PASS",
+      "desc": "white_label_config.js presente",
+      "detail": "128 righe"
+    },
+    {
+      "id": "F-05",
+      "section": "1. FILE SORGENTE — Presenza & Dimensioni",
+      "status": "PASS",
+      "desc": "CLAUDE.md presente",
+      "detail": ""
+    },
+    {
+      "id": "W-01",
+      "section": "2. WORKER — Struttura & Sicurezza",
+      "status": "PASS",
+      "desc": "Export default presente (CF Worker entry)",
+      "detail": ""
+    },
+    {
+      "id": "W-02",
+      "section": "2. WORKER — Struttura & Sicurezza",
+      "status": "PASS",
+      "desc": "fetch handler trovato",
+      "detail": ""
+    },
+    {
+      "id": "W-03",
+      "section": "2. WORKER — Struttura & Sicurezza",
+      "status": "PASS",
+      "desc": "scheduled handler trovato (cron jobs)",
+      "detail": ""
+    },
+    {
+      "id": "W-04",
+      "section": "2. WORKER — Struttura & Sicurezza",
+      "status": "PASS",
+      "desc": "JWT sign + verify implementati",
+      "detail": ""
+    },
+    {
+      "id": "W-05",
+      "section": "2. WORKER — Struttura & Sicurezza",
+      "status": "PASS",
+      "desc": "PBKDF2 password hashing implementato",
+      "detail": ""
+    },
+    {
+      "id": "W-06",
+      "section": "2. WORKER — Struttura & Sicurezza",
+      "status": "PASS",
+      "desc": "Rate limiter implementato",
+      "detail": ""
+    },
+    {
+      "id": "W-07",
+      "section": "2. WORKER — Struttura & Sicurezza",
+      "status": "PASS",
+      "desc": "ROLE_MATRIX definita",
+      "detail": ""
+    },
+    {
+      "id": "W-08",
+      "section": "2. WORKER — Struttura & Sicurezza",
+      "status": "PASS",
+      "desc": "requireRole() implementata",
+      "detail": ""
+    },
+    {
+      "id": "W-09",
+      "section": "2. WORKER — Struttura & Sicurezza",
+      "status": "PASS",
+      "desc": "isCapoSq() implementata",
+      "detail": ""
+    },
+    {
+      "id": "W-10",
+      "section": "2. WORKER — Struttura & Sicurezza",
+      "status": "PASS",
+      "desc": "sanitizePgFilter() implementata (PostgREST injection)",
+      "detail": ""
+    },
+    {
+      "id": "W-11",
+      "section": "2. WORKER — Struttura & Sicurezza",
+      "status": "PASS",
+      "desc": "normalizeBody() implementata (camelCase→snake_case)",
+      "detail": ""
+    },
+    {
+      "id": "W-12",
+      "section": "2. WORKER — Struttura & Sicurezza",
+      "status": "PASS",
+      "desc": "pascalizeRecord() implementata (snake_case→PascalCase)",
+      "detail": ""
+    },
+    {
+      "id": "W-13",
+      "section": "2. WORKER — Struttura & Sicurezza",
+      "status": "PASS",
+      "desc": "Soft-delete pattern (obsoleto) usato sistematicamente",
+      "detail": ""
+    },
+    {
+      "id": "W-14",
+      "section": "2. WORKER — Struttura & Sicurezza",
+      "status": "PASS",
+      "desc": "CORS dinamico via setCorsForRequest()",
+      "detail": ""
+    },
+    {
+      "id": "W-15",
+      "section": "2. WORKER — Struttura & Sicurezza",
+      "status": "PASS",
+      "desc": "State machine con validateTransition()",
+      "detail": ""
+    },
+    {
+      "id": "W-16",
+      "section": "2. WORKER — Struttura & Sicurezza",
+      "status": "PASS",
+      "desc": "Case handlers trovati",
+      "detail": "166 case statements"
+    },
+    {
+      "id": "AI-01",
+      "section": "3. WORKER — AI Engines Cascade (6 motori)",
+      "status": "PASS",
+      "desc": "Gemini engine configurato (priorità 1)",
+      "detail": ""
+    },
+    {
+      "id": "AI-02",
+      "section": "3. WORKER — AI Engines Cascade (6 motori)",
+      "status": "PASS",
+      "desc": "Cerebras engine configurato (priorità 2)",
+      "detail": ""
+    },
+    {
+      "id": "AI-03",
+      "section": "3. WORKER — AI Engines Cascade (6 motori)",
+      "status": "PASS",
+      "desc": "Groq engine configurato (priorità 3)",
+      "detail": ""
+    },
+    {
+      "id": "AI-04",
+      "section": "3. WORKER — AI Engines Cascade (6 motori)",
+      "status": "PASS",
+      "desc": "Mistral engine configurato (priorità 4)",
+      "detail": ""
+    },
+    {
+      "id": "AI-05",
+      "section": "3. WORKER — AI Engines Cascade (6 motori)",
+      "status": "PASS",
+      "desc": "DeepSeek engine configurato (priorità 5)",
+      "detail": ""
+    },
+    {
+      "id": "AI-06",
+      "section": "3. WORKER — AI Engines Cascade (6 motori)",
+      "status": "PASS",
+      "desc": "Workers AI fallback configurato (priorità 6)",
+      "detail": ""
+    },
+    {
+      "id": "AI-07",
+      "section": "3. WORKER — AI Engines Cascade (6 motori)",
+      "status": "PASS",
+      "desc": "callAI() centralizzata — no engine hardcoded",
+      "detail": ""
+    },
+    {
+      "id": "AI-08",
+      "section": "3. WORKER — AI Engines Cascade (6 motori)",
+      "status": "PASS",
+      "desc": "Ranking configurabile da DB (ai_engine_ranking)",
+      "detail": ""
+    },
+    {
+      "id": "AI-09",
+      "section": "3. WORKER — AI Engines Cascade (6 motori)",
+      "status": "PASS",
+      "desc": "Auto-disable engine su 429/error",
+      "detail": ""
+    },
+    {
+      "id": "AI-10",
+      "section": "3. WORKER — AI Engines Cascade (6 motori)",
+      "status": "PASS",
+      "desc": "Timeout Workers AI via Promise.race (30s)",
+      "detail": ""
+    },
+    {
+      "id": "AI-11",
+      "section": "3. WORKER — AI Engines Cascade (6 motori)",
+      "status": "PASS",
+      "desc": "AI Vision LLaVA implementata (analisi foto)",
+      "detail": ""
+    },
+    {
+      "id": "AI-12",
+      "section": "3. WORKER — AI Engines Cascade (6 motori)",
+      "status": "PASS",
+      "desc": "AI Planner implementato (generateAIPlan/previewAIPlan)",
+      "detail": ""
+    },
+    {
+      "id": "CR-01",
+      "section": "4. WORKER — Cron Jobs (3 attivi)",
+      "status": "PASS",
+      "desc": "checkInterventoReminders() implementata",
+      "detail": ""
+    },
+    {
+      "id": "CR-02",
+      "section": "4. WORKER — Cron Jobs (3 attivi)",
+      "status": "PASS",
+      "desc": "checkSLAUrgenze() implementata",
+      "detail": ""
+    },
+    {
+      "id": "CR-03",
+      "section": "4. WORKER — Cron Jobs (3 attivi)",
+      "status": "PASS",
+      "desc": "checkPMExpiry() implementata",
+      "detail": ""
+    },
+    {
+      "id": "CR-04",
+      "section": "4. WORKER — Cron Jobs (3 attivi)",
+      "status": "PASS",
+      "desc": "ctx.waitUntil(Promise.all) — tutti e 3 i job in parallelo",
+      "detail": ""
+    },
+    {
+      "id": "CR-05",
+      "section": "4. WORKER — Cron Jobs (3 attivi)",
+      "status": "PASS",
+      "desc": "Timezone Europe/Rome configurata per cron",
+      "detail": ""
+    },
+    {
+      "id": "TG-01",
+      "section": "5. WORKER — Telegram Bot",
+      "status": "PASS",
+      "desc": "telegramWebhook handler implementato",
+      "detail": ""
+    },
+    {
+      "id": "TG-02",
+      "section": "5. WORKER — Telegram Bot",
+      "status": "PASS",
+      "desc": "TELEGRAM_WEBHOOK_SECRET auth su webhook",
+      "detail": ""
+    },
+    {
+      "id": "TG-03",
+      "section": "5. WORKER — Telegram Bot",
+      "status": "PASS",
+      "desc": "Comando /vado implementato",
+      "detail": ""
+    },
+    {
+      "id": "TG-04",
+      "section": "5. WORKER — Telegram Bot",
+      "status": "PASS",
+      "desc": "Comando /risolto implementato",
+      "detail": ""
+    },
+    {
+      "id": "TG-05",
+      "section": "5. WORKER — Telegram Bot",
+      "status": "PASS",
+      "desc": "Comando /incorso implementato",
+      "detail": ""
+    },
+    {
+      "id": "TG-06",
+      "section": "5. WORKER — Telegram Bot",
+      "status": "PASS",
+      "desc": "Comando /ordine implementato",
+      "detail": ""
+    },
+    {
+      "id": "TG-07",
+      "section": "5. WORKER — Telegram Bot",
+      "status": "PASS",
+      "desc": "Resend email implementato",
+      "detail": ""
+    },
+    {
+      "id": "TG-08",
+      "section": "5. WORKER — Telegram Bot",
+      "status": "PASS",
+      "desc": "Web Push VAPID implementato",
+      "detail": ""
+    },
+    {
+      "id": "AD-01",
+      "section": "6. admin_v1.html — Struttura & Coerenza",
+      "status": "PASS",
+      "desc": "white_label_config.js caricato e usato",
+      "detail": ""
+    },
+    {
+      "id": "AD-02",
+      "section": "6. admin_v1.html — Struttura & Coerenza",
+      "status": "PASS",
+      "desc": "Sezioni navigabili",
+      "detail": "47 chiamate showSec()"
+    },
+    {
+      "id": "AD-03",
+      "section": "6. admin_v1.html — Struttura & Coerenza",
+      "status": "PASS",
+      "desc": "Modali HTML",
+      "detail": "18 modali trovati"
+    },
+    {
+      "id": "AD-04",
+      "section": "6. admin_v1.html — Struttura & Coerenza",
+      "status": "PASS",
+      "desc": "Chiamate API",
+      "detail": "151 apiCall() trovate"
+    },
+    {
+      "id": "AD-05",
+      "section": "6. admin_v1.html — Struttura & Coerenza",
+      "status": "PASS",
+      "desc": "applyRoleVisibility() — RBAC su sidebar",
+      "detail": ""
+    },
+    {
+      "id": "AD-06",
+      "section": "6. admin_v1.html — Struttura & Coerenza",
+      "status": "PASS",
+      "desc": "canSee() — filtro sezioni per ruolo",
+      "detail": ""
+    },
+    {
+      "id": "AD-07",
+      "section": "6. admin_v1.html — Struttura & Coerenza",
+      "status": "PASS",
+      "desc": "Checkbox \"Anche Caposquadra\" in form utente",
+      "detail": ""
+    },
+    {
+      "id": "AD-08",
+      "section": "6. admin_v1.html — Struttura & Coerenza",
+      "status": "PASS",
+      "desc": "Dark mode supportata ([data-theme])",
+      "detail": ""
+    },
+    {
+      "id": "AD-09",
+      "section": "6. admin_v1.html — Struttura & Coerenza",
+      "status": "PASS",
+      "desc": "Leaflet (mappa) caricato",
+      "detail": ""
+    },
+    {
+      "id": "AD-10",
+      "section": "6. admin_v1.html — Struttura & Coerenza",
+      "status": "PASS",
+      "desc": "Chart.js (grafici) caricato",
+      "detail": ""
+    },
+    {
+      "id": "AD-11",
+      "section": "6. admin_v1.html — Struttura & Coerenza",
+      "status": "PASS",
+      "desc": "Feature toggle KPI corretto (chiave \"kpi\")",
+      "detail": "Fix ADM-05 applicato"
+    },
+    {
+      "id": "AD-12",
+      "section": "6. admin_v1.html — Struttura & Coerenza",
+      "status": "PASS",
+      "desc": "Meta theme-color legge config.colors.bg",
+      "detail": "Fix WL-01 applicato"
+    },
+    {
+      "id": "AD-13",
+      "section": "6. admin_v1.html — Struttura & Coerenza",
+      "status": "PASS",
+      "desc": "PM Scheduling table implementata",
+      "detail": ""
+    },
+    {
+      "id": "AD-14",
+      "section": "6. admin_v1.html — Struttura & Coerenza",
+      "status": "PASS",
+      "desc": "PM table colspan=7 (colonne corrette)",
+      "detail": ""
+    },
+    {
+      "id": "AD-15",
+      "section": "6. admin_v1.html — Struttura & Coerenza",
+      "status": "PASS",
+      "desc": "Bulk actions (batch delete) implementate",
+      "detail": ""
+    },
+    {
+      "id": "AD-16",
+      "section": "6. admin_v1.html — Struttura & Coerenza",
+      "status": "PASS",
+      "desc": "Nessun token hardcoded nell'HTML",
+      "detail": ""
+    },
+    {
+      "id": "IX-01",
+      "section": "7. index_v2.html — PWA Mobile",
+      "status": "PASS",
+      "desc": "Service Worker registrazione trovata",
+      "detail": ""
+    },
+    {
+      "id": "IX-02",
+      "section": "7. index_v2.html — PWA Mobile",
+      "status": "PASS",
+      "desc": "Push notifications implementate",
+      "detail": ""
+    },
+    {
+      "id": "IX-03",
+      "section": "7. index_v2.html — PWA Mobile",
+      "status": "PASS",
+      "desc": "isCapoSq() implementata nel mobile",
+      "detail": ""
+    },
+    {
+      "id": "IX-04",
+      "section": "7. index_v2.html — PWA Mobile",
+      "status": "PASS",
+      "desc": "getMyTeam() implementata",
+      "detail": ""
+    },
+    {
+      "id": "IX-05",
+      "section": "7. index_v2.html — PWA Mobile",
+      "status": "PASS",
+      "desc": "my() implementata — filtro per ruolo",
+      "detail": ""
+    },
+    {
+      "id": "IX-06",
+      "section": "7. index_v2.html — PWA Mobile",
+      "status": "PASS",
+      "desc": "Pagina Squadra (caposquadra) implementata",
+      "detail": ""
+    },
+    {
+      "id": "IX-07",
+      "section": "7. index_v2.html — PWA Mobile",
+      "status": "PASS",
+      "desc": "approvaRichiesta() — approvazione richieste da mobile",
+      "detail": ""
+    },
+    {
+      "id": "IX-08",
+      "section": "7. index_v2.html — PWA Mobile",
+      "status": "PASS",
+      "desc": "Dark mode supportata",
+      "detail": ""
+    },
+    {
+      "id": "IX-09",
+      "section": "7. index_v2.html — PWA Mobile",
+      "status": "PASS",
+      "desc": "i18n (it/en) implementata",
+      "detail": ""
+    },
+    {
+      "id": "IX-10",
+      "section": "7. index_v2.html — PWA Mobile",
+      "status": "PASS",
+      "desc": "Pull-to-refresh (touch events) implementato",
+      "detail": ""
+    },
+    {
+      "id": "IX-11",
+      "section": "7. index_v2.html — PWA Mobile",
+      "status": "PASS",
+      "desc": "AncheCaposquadra letto dal JWT nel mobile",
+      "detail": ""
+    },
+    {
+      "id": "IX-12",
+      "section": "7. index_v2.html — PWA Mobile",
+      "status": "PASS",
+      "desc": "JWT token (sq2_token) usato per auth",
+      "detail": ""
+    },
+    {
+      "id": "IX-13",
+      "section": "7. index_v2.html — PWA Mobile",
+      "status": "PASS",
+      "desc": "Nessun token legacy hardcoded nel mobile",
+      "detail": ""
+    },
+    {
+      "id": "IX-14",
+      "section": "7. index_v2.html — PWA Mobile",
+      "status": "PASS",
+      "desc": "AI Vision (analyzeImage) presente nel mobile",
+      "detail": ""
+    },
+    {
+      "id": "IX-15",
+      "section": "7. index_v2.html — PWA Mobile",
+      "status": "PASS",
+      "desc": "Catalogo parti searchable implementato",
+      "detail": ""
+    },
+    {
+      "id": "WL-01",
+      "section": "8. white_label_config.js — Configurazione",
+      "status": "PASS",
+      "desc": "window.SYNTONIQA_CONFIG esportato correttamente",
+      "detail": ""
+    },
+    {
+      "id": "WL-02",
+      "section": "8. white_label_config.js — Configurazione",
+      "status": "PASS",
+      "desc": "Sezione brand configurata",
+      "detail": ""
+    },
+    {
+      "id": "WL-03",
+      "section": "8. white_label_config.js — Configurazione",
+      "status": "PASS",
+      "desc": "Sezione colors configurata",
+      "detail": ""
+    },
+    {
+      "id": "WL-04",
+      "section": "8. white_label_config.js — Configurazione",
+      "status": "PASS",
+      "desc": "colors.primary configurato (HEX)",
+      "detail": ""
+    },
+    {
+      "id": "WL-05",
+      "section": "8. white_label_config.js — Configurazione",
+      "status": "PASS",
+      "desc": "Sezione api configurata",
+      "detail": ""
+    },
+    {
+      "id": "WL-06",
+      "section": "8. white_label_config.js — Configurazione",
+      "status": "PASS",
+      "desc": "API URL corretto (worker MRS)",
+      "detail": ""
+    },
+    {
+      "id": "WL-07",
+      "section": "8. white_label_config.js — Configurazione",
+      "status": "PASS",
+      "desc": "Feature toggles configurati",
+      "detail": ""
+    },
+    {
+      "id": "WL-08",
+      "section": "8. white_label_config.js — Configurazione",
+      "status": "PASS",
+      "desc": "Sezione pmSync configurata (provider PM)",
+      "detail": ""
+    },
+    {
+      "id": "WL-09",
+      "section": "8. white_label_config.js — Configurazione",
+      "status": "PASS",
+      "desc": "pmSync.providerName configurato",
+      "detail": ""
+    },
+    {
+      "id": "WL-10",
+      "section": "8. white_label_config.js — Configurazione",
+      "status": "PASS",
+      "desc": "pmSync.authStorageKey configurato",
+      "detail": ""
+    },
+    {
+      "id": "WL-11",
+      "section": "8. white_label_config.js — Configurazione",
+      "status": "PASS",
+      "desc": "Sezione PWA manifest configurata",
+      "detail": ""
+    },
+    {
+      "id": "WL-12",
+      "section": "8. white_label_config.js — Configurazione",
+      "status": "PASS",
+      "desc": "Nessun segreto hardcoded in white_label_config",
+      "detail": ""
+    },
+    {
+      "id": "LV-01",
+      "section": "9. API LIVE — Connettività Worker",
+      "status": "PASS",
+      "desc": "CORS OPTIONS preflight OK",
+      "detail": "Access-Control-Allow-Origin corretto"
+    },
+    {
+      "id": "LV-02",
+      "section": "9. API LIVE — Connettività Worker",
+      "status": "PASS",
+      "desc": "Worker risponde",
+      "detail": "HTTP 401"
+    },
+    {
+      "id": "LV-03",
+      "section": "9. API LIVE — Connettività Worker",
+      "status": "PASS",
+      "desc": "GET senza auth → 401 (corretto)",
+      "detail": ""
+    },
+    {
+      "id": "LV-04",
+      "section": "9. API LIVE — Connettività Worker",
+      "status": "PASS",
+      "desc": "Login credenziali errate → errore corretto",
+      "detail": ""
+    },
+    {
+      "id": "LV-05",
+      "section": "9. API LIVE — Connettività Worker",
+      "status": "PASS",
+      "desc": "POST senza action → errore corretto",
+      "detail": ""
+    },
+    {
+      "id": "LV-06",
+      "section": "9. API LIVE — Connettività Worker",
+      "status": "PASS",
+      "desc": "Nessun rate limit su richiesta singola",
+      "detail": ""
+    },
+    {
+      "id": "LV-07",
+      "section": "9. API LIVE — Connettività Worker",
+      "status": "PASS",
+      "desc": "Telegram webhook senza secret → bloccato",
+      "detail": "HTTP 401"
+    },
+    {
+      "id": "RB-01",
+      "section": "10. RBAC & Sicurezza Statica",
+      "status": "PASS",
+      "desc": "Nessun token/secret hardcoded nel worker",
+      "detail": ""
+    },
+    {
+      "id": "RB-02",
+      "section": "10. RBAC & Sicurezza Statica",
+      "status": "WARN",
+      "desc": "requireRole() usato solo 3 volte",
+      "detail": ""
+    },
+    {
+      "id": "RB-03",
+      "section": "10. RBAC & Sicurezza Statica",
+      "status": "WARN",
+      "desc": "requireAdmin() legacy ancora presente (da migrare a requireRole)",
+      "detail": ""
+    },
+    {
+      "id": "RB-04",
+      "section": "10. RBAC & Sicurezza Statica",
+      "status": "PASS",
+      "desc": "Auth context iniettato nel body dal middleware (_authRole, _authUserId)",
+      "detail": ""
+    },
+    {
+      "id": "RB-05",
+      "section": "10. RBAC & Sicurezza Statica",
+      "status": "PASS",
+      "desc": "anche_caposquadra propagato nel JWT",
+      "detail": ""
+    },
+    {
+      "id": "RB-06",
+      "section": "10. RBAC & Sicurezza Statica",
+      "status": "PASS",
+      "desc": "Filtro tecnico in getAll (tecnici vedono solo propri dati)",
+      "detail": ""
+    },
+    {
+      "id": "RB-07",
+      "section": "10. RBAC & Sicurezza Statica",
+      "status": "WARN",
+      "desc": "7 console.log() nel worker — rimuovere in prod",
+      "detail": ""
+    },
+    {
+      "id": "RB-08",
+      "section": "10. RBAC & Sicurezza Statica",
+      "status": "WARN",
+      "desc": "Molti console.error()",
+      "detail": "40 occorrenze"
+    },
+    {
+      "id": "CD-01",
+      "section": "11. Coerenza Dati — PascalCase / snake_case",
+      "status": "PASS",
+      "desc": "toSnake() e toPascal() usate sistematicamente",
+      "detail": ""
+    },
+    {
+      "id": "CD-02",
+      "section": "11. Coerenza Dati — PascalCase / snake_case",
+      "status": "PASS",
+      "desc": "userId/operatoreId preservati in normalizeBody (eccezioni)",
+      "detail": ""
+    },
+    {
+      "id": "CD-03",
+      "section": "11. Coerenza Dati — PascalCase / snake_case",
+      "status": "PASS",
+      "desc": "stripInternal() — chiavi _auth* non inviate a Supabase",
+      "detail": ""
+    },
+    {
+      "id": "CD-04",
+      "section": "11. Coerenza Dati — PascalCase / snake_case",
+      "status": "PASS",
+      "desc": "INTERNAL_KEYS set definito per esclusione",
+      "detail": ""
+    },
+    {
+      "id": "CD-05",
+      "section": "11. Coerenza Dati — PascalCase / snake_case",
+      "status": "PASS",
+      "desc": "VALID_PIANO_TRANSITIONS definita",
+      "detail": ""
+    },
+    {
+      "id": "CD-06",
+      "section": "11. Coerenza Dati — PascalCase / snake_case",
+      "status": "PASS",
+      "desc": "VALID_URGENZA_TRANSITIONS definita",
+      "detail": ""
+    },
+    {
+      "id": "CD-07",
+      "section": "11. Coerenza Dati — PascalCase / snake_case",
+      "status": "PASS",
+      "desc": "validateTransition usata su piano",
+      "detail": ""
+    },
+    {
+      "id": "CD-08",
+      "section": "11. Coerenza Dati — PascalCase / snake_case",
+      "status": "PASS",
+      "desc": "validateTransition usata su urgenza",
+      "detail": ""
+    },
+    {
+      "id": "DC-01",
+      "section": "12. Documentazione — CLAUDE.md",
+      "status": "PASS",
+      "desc": "Righe worker aggiornate (7296)",
+      "detail": ""
+    },
+    {
+      "id": "DC-02",
+      "section": "12. Documentazione — CLAUDE.md",
+      "status": "PASS",
+      "desc": "Righe admin aggiornate (10465)",
+      "detail": ""
+    },
+    {
+      "id": "DC-03",
+      "section": "12. Documentazione — CLAUDE.md",
+      "status": "PASS",
+      "desc": "Righe index aggiornate (3001)",
+      "detail": ""
+    },
+    {
+      "id": "DC-04",
+      "section": "12. Documentazione — CLAUDE.md",
+      "status": "PASS",
+      "desc": "JWT_SECRET documentato",
+      "detail": ""
+    },
+    {
+      "id": "DC-05",
+      "section": "12. Documentazione — CLAUDE.md",
+      "status": "PASS",
+      "desc": "CEREBRAS_KEY documentato (6 AI engines)",
+      "detail": ""
+    },
+    {
+      "id": "DC-06",
+      "section": "12. Documentazione — CLAUDE.md",
+      "status": "PASS",
+      "desc": "checkPMExpiry (3° cron job) documentato",
+      "detail": ""
+    },
+    {
+      "id": "DC-07",
+      "section": "12. Documentazione — CLAUDE.md",
+      "status": "PASS",
+      "desc": "requireRole() documentata nelle convenzioni",
+      "detail": ""
+    },
+    {
+      "id": "DC-08",
+      "section": "12. Documentazione — CLAUDE.md",
+      "status": "PASS",
+      "desc": "Conteggio POST handlers aggiornato (126)",
+      "detail": ""
+    }
+  ]
+}
