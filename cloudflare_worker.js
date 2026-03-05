@@ -1056,6 +1056,16 @@ async function handlePost(action, body, env) {
           }
         } catch(e){ console.error('Reopen urgenza from annullato error:', e.message); }
       }
+      // Quando il piano viene eliminato (obsoleto=true), scollegare le urgenze associate
+      if (updates.obsoleto === true) {
+        try {
+          const linkedUrgObs = await sb(env, 'urgenze', 'GET', null, `?intervento_id=eq.${id}&stato=in.(assegnata,schedulata,in_corso)&select=id`).catch(()=>[]);
+          for (const u of (linkedUrgObs||[])) {
+            await sb(env, `urgenze?id=eq.${u.id}`, 'PATCH', { stato: 'aperta', intervento_id: null, tecnico_assegnato: null, updated_at: new Date().toISOString() });
+            await wlog('urgenza', u.id, 'reopened_from_piano_deleted', body.operatoreId || body.userId, `piano ${id} eliminato`);
+          }
+        } catch(e){ console.error('Reopen urgenza from piano deleted error:', e.message); }
+      }
       return ok();
     }
 
@@ -2606,7 +2616,7 @@ async function handlePost(action, body, env) {
     }
 
     case 'generateAIPlan': {
-      if (!env.AI) return err('Workers AI non configurato. Aggiungi [ai] binding = "AI" in wrangler.toml e rideploya.');
+      // Workers AI è solo il fallback finale — non bloccare se non configurato
 
       const vincoli = body.vincoli || {};
       const testo = vincoli.testo || '';
@@ -2968,11 +2978,11 @@ ${periodoIstruzione || 'Genera piano per OGNI giorno lavorativo (lun-ven)'}
 - Urgenze → primi giorni. Tagliandi scaduti → massima priorita.
 - Usa SOLO codici dalla lista (clienteId, tecnicoId). NON inventare nomi.
 
-JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"codice macchina"}],"warnings":["..."]}`;
+JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina (es: Astronaut A5)"}],"warnings":["..."]}`;
 
       // ─── AI Call con ANONYMIZATION layer ───
       const validIds = new Set(allTecnici.map(t => t.id));
-      const sysPrompt = `Sei un pianificatore FSM (manutenzione robot). Rispondi SOLO JSON valido. Usa SOLO i codici ID forniti (TEC_xxx, codice_m3, MAC_xxx, FURG_x). NON usare nomi propri. Formato: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"codice macchina"}],"warnings":["..."]}`;
+      const sysPrompt = `Sei un pianificatore FSM (manutenzione robot). Rispondi SOLO JSON valido. Usa SOLO codici ID presenti nella lista (TEC_xxx per tecnici, codice_m3 per clienti, FURG_x per furgoni). NON inventare codici. Nel campo note scrivi il MODELLO della macchina leggendolo dalla sezione TAGLIANDI (es: "Astronaut A5", "Vector 70"). Formato: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina (es: Astronaut A5)"}],"warnings":["..."]}`;
 
       // Helper: costruisce prompt compatto per Workers AI (rimuove file e comprime dati)
       function buildCompactPrompt() {
@@ -3003,7 +3013,7 @@ ${periodoIstruzione || 'Genera piano mese intero'}
 - Usa furgone indicato nel tecnico.
 - Usa SOLO codici dalla lista. NON inventare nomi.
 
-JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"codice macchina"}],"warnings":[]}`;
+JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina (es: Astronaut A5)"}],"warnings":[]}`;
       }
 
       // Engine registry: ogni engine ha key env, funzione try, flag disabled
@@ -3047,6 +3057,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       } catch { /* ignora */ }
 
       let lastWorking = null;
+      let _usedEngine = null; // traccia quale motore ha risposto per ultimo
 
       async function callAI(promptText) {
         let lastError = '';
@@ -3056,7 +3067,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           const r = lastWorking === 'workersai'
             ? await tryWorkersAI(promptText)
             : await engines[lastWorking].tryFn(promptText);
-          if (r) return r;
+          if (r) { _usedEngine = lastWorking; return r; }
         }
 
         // Cascade secondo ranking configurato
@@ -3068,7 +3079,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           const r = name === 'workersai'
             ? await tryWorkersAI(promptText)
             : await eng.tryFn(promptText);
-          if (r) { lastWorking = name; return r; }
+          if (r) { lastWorking = name; _usedEngine = name; return r; }
         }
 
         throw new Error(`AI non disponibile (${lastError}). Configura almeno una chiave API: GEMINI_KEY, GROQ_KEY, CEREBRAS_KEY, MISTRAL_KEY, DEEPSEEK_KEY.`);
@@ -3384,7 +3395,7 @@ ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}`;
 - Tagliandi/interventi SOLO lun-ven. SABATO e DOMENICA: NIENTE.
 - Lun-ven: TUTTI i ${nTecAttivi} tecnici attivi devono avere interventi OGNI giorno (08:00-17:00) = MINIMO ${nTecAttivi} righe/giorno.
 - Durata: un tagliando puo richiedere 4-8 ore (anche giornata intera). Urgenze 1-3h.
-- "tagliando" e "service" = sinonimi. Nelle note scrivi il CODICE macchina (MAC_xxx).
+- "tagliando" e "service" = sinonimi. Nelle note scrivi il MODELLO della macchina (es: "Astronaut A5", "Vector 70") dal contesto TAGLIANDI sopra.
 - Affiancamento junior+senior: genera DUE righe (una per senior, una per junior) con STESSO clienteId/data/ora/furgone.
 - Tecnici assenti da vincoli o in ferie/malattia/trasferta/installazione: NON inserirli in quei giorni.
 - Usa il FURGONE indicato tra parentesi nel tecnico.
@@ -3392,7 +3403,7 @@ ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}`;
 - Urgenze → primi giorni. Tagliandi scaduti → massima priorita.
 - Usa SOLO codici dalla lista (tecnicoId, clienteId). NON inventare nomi.
 
-JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"codice macchina"}],"warnings":["..."]}`;
+JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina (es: Astronaut A5)"}],"warnings":["..."]}`;
 
         // ── CHUNKING SETTIMANALE: max 5 giorni per chunk = output gestibile ──
         // Sempre chunking per meseTarget (mese/vuoti/settimana)
@@ -3473,6 +3484,7 @@ ${urgList ? 'URGENZE: ' + urgList : ''}
 CLIENTI: ${cliListShort}
 ${repContext ? repContext.substring(0, 500) : ''}
 ${indispContext ? indispContext.substring(0, 800) : ''}
+${tagliandiContext ? tagliandiContext.substring(0, 1200) : ''}
 ${chunkFileCtx ? 'FILE: ' + chunkFileCtx : ''}
 
 GENERA PIANO per ${targetDays.length} GIORNI: ${targetDays.join(', ')}
@@ -3518,7 +3530,8 @@ ${instructions}`;
             summary: anonDecode(`Piano ${meseTarget}: ${decoded.length} interventi su ${[...new Set(decoded.map(p=>p.data))].length} giorni (${chunksDone}/${chunks.length} parti)${postProcessWarnings.length ? ` — ${postProcessWarnings.length} conflitti rimossi` : ''}`),
             piano: decoded,
             warnings: allWarnArr,
-            chunks: chunksDone
+            chunks: chunksDone,
+            engine_used: _usedEngine || lastWorking || 'unknown'
           });
 
         } else {
@@ -3541,6 +3554,7 @@ ${instructions}`;
             result.warnings = [...result.warnings, ...postProcessWarnings.map(w => anonDecode(w))];
             result.summary += ` — ${postProcessWarnings.length} conflitti rimossi`;
           }
+          result.engine_used = _usedEngine || lastWorking || 'unknown';
           return ok(result);
         }
       } catch (e) {
