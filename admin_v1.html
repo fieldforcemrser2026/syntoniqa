@@ -1325,7 +1325,8 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0" title="Importa file PM: template ufficiale, export provider, o template Syntoniqa">⬆ Import file <input type="file" id="pmImportFile" style="display:none" accept=".xlsx,.csv,.xls,.xlsm,.json" onchange="importPMFile(this)"></label>
 <button class="btn btn-ghost btn-sm" onclick="exportPMPiano()" title="Esporta i 99 record PM in XLSX (formato LSSA)">📥 Export XLSX</button>
 <button class="btn btn-ghost btn-sm" onclick="showPMSyncLog()" title="Storico sincronizzazioni PM da provider">📋 Storico Sync</button>
-<button class="btn btn-ghost btn-sm btn-danger" onclick="resetPMDates()" title="Cancella tutte le date PM da anagrafica_assets">🗑️ Cancella PM</button>
+<button class="btn btn-ghost btn-sm btn-danger" onclick="resetPMDates()" title="Cancella tutte le date PM da anagrafica_assets (prossimo_controllo → null)">🗑️ Cancella PM</button>
+<button class="btn btn-ghost btn-sm btn-danger" onclick="resetPMPiano()" title="Svuota tutti gli interventi PM pianificati dalla sezione Piano">🗑️ Svuota Piano PM</button>
 <select id="pmMesiSelect" style="padding:6px 8px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8rem" title="Orizzonte temporale piano">
   <option value="3">3 mesi</option>
   <option value="6" selected>6 mesi</option>
@@ -9194,6 +9195,15 @@ async function resetPMDates(){
     const r=await apiCall('resetPMDates',{confirm_token:'RESET_CONFIRMED',userId:USER?.ID},'POST');
     toast(`🗑️ Date PM azzerate (${r.reset||0} record)`,'ok');
     PM_OVERVIEW=null;await loadPMOverview();
+  }catch(e){toast(e.message,'err')}
+}
+
+async function resetPMPiano(){
+  const soloLssa=confirm('Vuoi cancellare SOLO gli interventi PM generati da LSSA?\n\nOK = solo [PM LSSA]\nAnnulla = tutti i PM pianificati (inclusi tagliandi macchine)');
+  if(!confirm(`Confermi la cancellazione degli interventi PM pianificati${soloLssa?' (solo LSSA)':' (tutti)'}?\n\nGli interventi già completati non vengono toccati.`))return;
+  try{
+    const r=await apiCall('resetPMPiano',{confirm_token:'RESET_CONFIRMED',solo_lssa:soloLssa,userId:USER?.ID},'POST');
+    toast(`🗑️ Piano PM svuotato: ${r.deleted||0} interventi rimossi`,'ok');
   }catch(e){toast(e.message,'err')}
 }
 

@@ -6407,44 +6407,39 @@ Rispondi SOLO con JSON valido:
       let updated = 0, not_found = 0, errors = 0, skipped = 0;
       let first_error = null, first_sample = null;
       const now = new Date().toISOString();
+
+      // ── Pre-carica tutti gli asset in UNA sola query (evita "Too many subrequests") ──
+      const allAssetsSnap = await sb(env, 'anagrafica_assets', 'GET', null, '?select=id,numero_serie&limit=1000').catch(() => []);
+      const snToId = new Map(); // tutte le varianti serial → asset_id
+      for (const a of allAssetsSnap) {
+        if (!a.numero_serie) continue;
+        snToId.set(a.numero_serie, a.id);
+        snToId.set(padSerial10(a.numero_serie), a.id);
+        snToId.set(normalizeSerial(a.numero_serie), a.id);
+      }
+
       for (const rec of records) {
         if (!first_sample) first_sample = { serial: rec.numero_serie, prossimo: rec.prossimo_controllo, ultimo: rec.ultimo_controllo };
         try {
           const rawSerial = (rec.numero_serie || rec.NumeroSerie || '').trim();
-          const assetId = rec.asset_id || rec.AssetId;
+          // Risolvi asset_id: prima da record esplicito, poi da mappa in-memory (zero subrequest)
+          const assetId = rec.asset_id || rec.AssetId
+            || snToId.get(rawSerial)
+            || snToId.get(padSerial10(rawSerial))
+            || snToId.get(normalizeSerial(rawSerial));
           const prossimoControllo = rec.prossimo_controllo || rec.ProssimoControllo;
           const patch = {};
           if (prossimoControllo) patch.prossimo_controllo = prossimoControllo;
           if (rec.ultimo_controllo || rec.UltimoControllo) patch.ultimo_controllo = rec.ultimo_controllo || rec.UltimoControllo;
           if (rec.ciclo_pm || rec.CicloPm) patch.ciclo_pm = rec.ciclo_pm || rec.CicloPm;
           if (rec.intervallo_settimane != null) patch.intervallo_settimane = parseInt(rec.intervallo_settimane) || null;
-          // Nessun campo da aggiornare → salta (contato come skipped, non not_found)
           if (!Object.keys(patch).length) { skipped++; continue; }
           patch.updated_at = now;
-          let res;
-          if (assetId) {
-            res = await sb(env, `anagrafica_assets?id=eq.${encodeURIComponent(assetId)}`, 'PATCH', patch);
-            const cnt2 = Array.isArray(res) ? res.length : (res ? 1 : 0);
-            if (cnt2 > 0) { updated++; } else { not_found++; }
-          } else if (rawSerial) {
-            // Tenta match: prima forma esatta, poi zero-padded 10 cifre, poi stripped
-            const stripped = normalizeSerial(rawSerial);
-            const padded = padSerial10(rawSerial);
-            // Prova 1: exact match
-            res = await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(rawSerial)}`, 'PATCH', patch);
-            let cnt = Array.isArray(res) ? res.length : (res ? 1 : 0);
-            // Prova 2: zero-padded (0003293257)
-            if (!cnt && padded !== rawSerial) {
-              res = await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(padded)}`, 'PATCH', patch);
-              cnt = Array.isArray(res) ? res.length : (res ? 1 : 0);
-            }
-            // Prova 3: stripped (senza zeri iniziali)
-            if (!cnt && stripped !== rawSerial && stripped !== padded) {
-              res = await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(stripped)}`, 'PATCH', patch);
-              cnt = Array.isArray(res) ? res.length : (res ? 1 : 0);
-            }
-            if (cnt > 0) { updated++; } else { not_found++; }
-          } else { skipped++; }
+          if (!assetId) { not_found++; continue; }
+          // Una sola PATCH per asset_id — da 297 chiamate a ~101 totali
+          const res = await sb(env, `anagrafica_assets?id=eq.${encodeURIComponent(assetId)}`, 'PATCH', patch);
+          const cnt = Array.isArray(res) ? res.length : (res ? 1 : 0);
+          if (cnt > 0) { updated++; } else { not_found++; }
         } catch (e) { errors++; if (!first_error) first_error = e.message; }
       }
       // Salva storico sincronizzazione in pm_sync_log
@@ -6735,7 +6730,14 @@ Rispondi SOLO con JSON valido:
       const defs2 = defR?.[0]?.valore ? JSON.parse(defR[0].valore) : getDefaultCycleDefs();
 
       // Set di chiavi esistenti per anti-duplicato
-      const existingKeys = new Set(existingPM.map(p => `${p.macchina_id}_${p.data}`));
+      // macchine: chiave = macchina_id_data
+      // LSSA assets: chiave = SN_seriale_data (estratto dalla nota)
+      const existingKeys = new Set();
+      for (const p of existingPM) {
+        existingKeys.add(`${p.macchina_id}_${p.data}`);
+        const snMatch = (p.note || '').match(/S\/N:([^\s,]+)/);
+        if (snMatch) existingKeys.add(`SN_${snMatch[1]}_${p.data}`);
+      }
 
       let created2 = 0, skipped = 0, errors2 = [];
 
@@ -6813,7 +6815,7 @@ Rispondi SOLO con JSON valido:
           while (nextDate <= endDate2 && safety < 10) {
             safety++;
             nextDate = skipWeekend(nextDate);
-            const key = `AST_${asset.id}_${nextDate}`;
+            const key = `SN_${sn||asset.id}_${nextDate}`;
             if (existingKeys.has(key)) { skipped++; nextDate = skipWeekend(addDays(nextDate, intervalDays)); continue; }
             try {
               const pianoId = secureId('PM');
@@ -6849,6 +6851,22 @@ Rispondi SOLO con JSON valido:
       const count = Array.isArray(res) ? res.length : 0;
       await wlog('anagrafica_assets', codice_m3 || 'all', 'pm_reset', body.operatoreId || body.userId);
       return ok({ reset: count, scope: codice_m3 || 'all' });
+    }
+
+    case 'resetPMPiano': {
+      // Soft-delete di tutti gli interventi PM pianificati (TAGLIANDO, stato=pianificato)
+      const adminErr = requireRole(body, 'admin');
+      if (adminErr) return err(adminErr, 403);
+      const { confirm_token, solo_lssa } = body;
+      if (confirm_token !== 'RESET_CONFIRMED') return err('Conferma richiesta: invia confirm_token="RESET_CONFIRMED"');
+      const now2 = new Date().toISOString();
+      // Solo futuri non ancora completati
+      let filter = `piano?tipo_intervento_id=eq.TAGLIANDO&stato=eq.pianificato&obsoleto=eq.false`;
+      if (solo_lssa) filter += `&note=like.*[PM LSSA]*`;
+      const res2 = await sb(env, filter, 'PATCH', { obsoleto: true, updated_at: now2 });
+      const count2 = Array.isArray(res2) ? res2.length : 0;
+      await wlog('piano', 'bulk_delete', `pm_piano_reset count:${count2} solo_lssa:${!!solo_lssa}`, body.operatoreId || body.userId);
+      return ok({ deleted: count2, solo_lssa: !!solo_lssa });
     }
 
     default:
