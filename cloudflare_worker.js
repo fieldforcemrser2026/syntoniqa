@@ -2868,17 +2868,38 @@ async function handlePost(action, body, env) {
         }).join('\n');
       }
 
-      // Piano esistente context (from DB, not frontend) — always load if available
+      // Piano esistente context — SEPARATO in: già assegnati vs DA ASSEGNARE (PM senza tecnico)
       let pianoEsistente = '';
+      let interventiDaAssegnare = '';
       if (ctx.piano) {
         const pianoSrc = allPianoDb.length ? allPianoDb : (vincoli.piano_esistente || []);
-        if (pianoSrc.length) {
-          pianoEsistente = '\nPIANO GIA ESISTENTE (non duplicare, complementa):\n' +
-            pianoSrc.slice(0, 40).map(p => {
+        // Interventi GIÀ ASSEGNATI (hanno tecnico) — non duplicare
+        const conTecnico = pianoSrc.filter(p => {
+          const tec = p.tecnico_id || p.TecnicoID || '';
+          return tec && tec !== 'null' && tec !== '';
+        });
+        // Interventi DA ASSEGNARE (senza tecnico — generati da import PM/tagliandi)
+        const senzaTecnico = pianoSrc.filter(p => {
+          const tec = p.tecnico_id || p.TecnicoID || '';
+          return !tec || tec === 'null' || tec === '';
+        });
+        if (conTecnico.length) {
+          pianoEsistente = '\nPIANO GIA ASSEGNATO (NON duplicare, complementa):\n' +
+            conTecnico.slice(0, 40).map(p => {
               const d = p.data || p.Data || '';
               const tec = p.tecnico_id || p.TecnicoID || '?';
               const cli = p.cliente_id || p.ClienteID || '?';
               return `- ${d} ${tec}: ${cli} (${anonEncode(p.note || p.Note || '')})`;
+            }).join('\n');
+        }
+        if (senzaTecnico.length) {
+          interventiDaAssegnare = `\nINTERVENTI DA ASSEGNARE (${senzaTecnico.length} interventi generati da PM/tagliandi — DEVI assegnare tecnico, data e furgone per CIASCUNO):\n` +
+            senzaTecnico.map(p => {
+              const d = p.data || p.Data || '';
+              const cli = p.cliente_id || p.ClienteID || '?';
+              const note = p.note || p.Note || '';
+              const tipo = p.tipo_intervento_id || p.TipoIntervento || 'tagliando';
+              return `- ID:${p.id||'?'}|data_sugg:${d}|cliente:${cli}|tipo:${tipo}|note:${anonEncode(note)} [ASSEGNA TECNICO+FURGONE]`;
             }).join('\n');
         }
       }
