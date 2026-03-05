@@ -1106,9 +1106,9 @@ function enterApp(){
   }
   fillSelects();
   renderAll();
-  // Auto-refresh silenzioso ogni 60s (senza overlay)
+  // Auto-refresh silenzioso ogni 120s (senza overlay — ridotto da 60s)
   if(window._autoRefreshTimer) clearInterval(window._autoRefreshTimer);
-  window._autoRefreshTimer = setInterval(()=>{refreshData(true)},60000);
+  window._autoRefreshTimer = setInterval(()=>{refreshData(true)},120000);
   // Init push notifications
   setTimeout(()=>PushMgr.init().catch(()=>{}),2000);
   // Init pull-to-refresh
@@ -2049,12 +2049,12 @@ function initChat(){
   loadChatUnread();
   renderChatChannels();
   loadChatMessages();
-  // Polling ogni 5 sec
+  // Polling ogni 15 sec (ridotto per risparmio API)
   if(chatPollTimer)clearInterval(chatPollTimer);
   chatPollTimer=setInterval(()=>{
     const pg=$('pgChat');
     if(pg&&pg.classList.contains('active')){loadChatMessages(true);loadChatUnread()}
-  },5000);
+  },15000);
 }
 
 let chatUnread={};

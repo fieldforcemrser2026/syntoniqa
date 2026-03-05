@@ -645,7 +645,7 @@ async function handleGet(action, url, env, auth = {}) {
         sb(env, 'reperibilita',       'GET', null, `?select=*&obsoleto=eq.false&order=data_inizio.desc&limit=200${tecFilter}`),
         sb(env, 'trasferte',          'GET', null, `?select=*&obsoleto=eq.false&order=data_inizio.desc&limit=100${tecFilter}`),
         sb(env, 'notifiche',          'GET', null, isTecnico ? `?select=*&obsoleto=eq.false&destinatario_id=eq.${reqUserId}&order=data_invio.desc&limit=100` : '?select=*&obsoleto=eq.false&order=data_invio.desc&limit=200'),
-        sb(env, 'richieste',          'GET', null, `?select=*&obsoleto=eq.false&tenant_id=eq.${env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'}&order=data_richiesta.desc&limit=500`),
+        sb(env, 'richieste',          'GET', null, `?select=*&tenant_id=eq.${env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'}&order=data_richiesta.desc&limit=500`).catch(()=>[]),
         sb(env, 'installazioni',      'GET', null, `?select=*&obsoleto=eq.false&tenant_id=eq.${env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'}`),
         sb(env, 'pagellini',          'GET', null, isTecnico ? `?select=*&obsoleto=eq.false&tecnico_id=eq.${reqUserId}&order=data_creazione.desc` : '?select=*&obsoleto=eq.false&order=data_creazione.desc'),
         sb(env, 'automezzi',          'GET', null, '?select=*&obsoleto=eq.false'),
@@ -1757,7 +1757,10 @@ async function handlePost(action, body, env) {
         tecnico_id: fields.tecnico_id || null,
         data_inizio: fields.data_inizio || new Date().toISOString().slice(0,10),
         data_fine: fields.data_fine || fields.data_inizio || new Date().toISOString().slice(0,10),
-        data_richiesta: new Date().toISOString()
+        data_richiesta: new Date().toISOString(),
+        obsoleto: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
       const result = await sb(env, 'richieste', 'POST', row);
 
@@ -4825,9 +4828,8 @@ Rispondi SOLO con JSON valido:
         return null;
       }
 
-      // ---- Helper: AI parse message with Workers AI (Llama + LLaVA) ----
+      // ---- Helper: AI parse message with cascade (Gemini → Workers AI) ----
       async function aiParseMessage(text, mediaUrl, mediaType) {
-        if (!env.AI) return null;
         // Get clients list for context — usa nome_interno come chiave primaria
         const clienti = await sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno&limit=300').catch(()=>[]);
         const clientiList = clienti.map(c => `${c.nome_interno || c.nome_account} → codice_m3: ${c.codice_m3}`).join('\n');
@@ -4904,41 +4906,58 @@ Rispondi SOLO con JSON valido:
           } catch(e) { console.error('Vision AI error:', e.message); /* fall through to text model */ }
         }
 
-        // Text-only: use Llama 3.1
-        try {
-          const aiRes = await env.AI.run('@cf/meta/llama-3.1-70b-instruct', {
-            messages: [
-              { role: 'system', content: 'Rispondi SOLO con JSON valido, nessun testo extra.' },
-              { role: 'user', content: systemPrompt + '\n\nMESSAGGIO UTENTE: ' + text }
-            ],
-            max_tokens: 1024
-          });
-          const raw = (aiRes.response || '').replace(/```json\n?|\n?```/g, '').trim();
+        // Text-only: cascade Gemini → Workers AI
+        const fullPrompt = systemPrompt + '\n\nMESSAGGIO UTENTE: ' + (text || '');
+
+        // 1. Prova Gemini (priorità alta — molto più preciso per classificazione)
+        if (env.GEMINI_KEY) {
           try {
-            const parsed = JSON.parse(raw);
-            // Post-process: match ricambi con catalogo
-            if (parsed.ricambi?.length) {
-              for (let i = 0; i < parsed.ricambi.length; i++) {
-                const match = await matchPartInCatalog(env, parsed.ricambi[i].codice || parsed.ricambi[i].descrizione);
-                if (match) parsed.ricambi[i] = { codice: match.codice, quantita: parsed.ricambi[i].quantita || 1, descrizione: match.nome || match.descrizione, _verificato: true };
-              }
+            const gr = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`, {
+              method: 'POST', headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({ contents:[{parts:[{text:fullPrompt}]}], generationConfig:{maxOutputTokens:512,temperature:0.1} })
+            });
+            const gd = await gr.json();
+            const graw = (gd.candidates?.[0]?.content?.parts?.[0]?.text || '').replace(/```json\n?|\n?```/g,'').trim();
+            if (graw) {
+              try {
+                const parsed = JSON.parse(graw);
+                if (parsed.ricambi?.length) {
+                  for (let i = 0; i < parsed.ricambi.length; i++) {
+                    const match = await matchPartInCatalog(env, parsed.ricambi[i].codice || parsed.ricambi[i].descrizione);
+                    if (match) parsed.ricambi[i] = { codice: match.codice, quantita: parsed.ricambi[i].quantita || 1, descrizione: match.nome || match.descrizione, _verificato: true };
+                  }
+                }
+                return parsed;
+              } catch { console.error('[TG AI] Gemini parse error, raw:', graw); }
             }
-            return parsed;
-          } catch { console.error('AI parse error, raw:', raw); return null; }
-        } catch (aiErr) {
-          // Fallback a modello più piccolo
+          } catch(e) { console.error('[TG AI] Gemini error:', e.message); }
+        }
+
+        // 2. Fallback Workers AI (Llama 3.3)
+        if (env.AI) {
           try {
             const aiRes = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
               messages: [
                 { role: 'system', content: 'Rispondi SOLO con JSON valido, nessun testo extra.' },
-                { role: 'user', content: systemPrompt + '\n\nMESSAGGIO UTENTE: ' + text }
+                { role: 'user', content: fullPrompt }
               ],
-              max_tokens: 1024
+              max_tokens: 512
             });
             const raw = (aiRes.response || '').replace(/```json\n?|\n?```/g, '').trim();
-            try { return JSON.parse(raw); } catch { return null; }
+            try {
+              const parsed = JSON.parse(raw);
+              if (parsed.ricambi?.length) {
+                for (let i = 0; i < parsed.ricambi.length; i++) {
+                  const match = await matchPartInCatalog(env, parsed.ricambi[i].codice || parsed.ricambi[i].descrizione);
+                  if (match) parsed.ricambi[i] = { codice: match.codice, quantita: parsed.ricambi[i].quantita || 1, descrizione: match.nome || match.descrizione, _verificato: true };
+                }
+              }
+              return parsed;
+            } catch { return null; }
           } catch { return null; }
         }
+
+        return null;
       }
 
       // ---- Handle media uploads (photo, document, video, audio) ----
@@ -5439,7 +5458,7 @@ Rispondi SOLO con JSON valido:
           if (!aiResult) {
             // Fallback: keyword-based parsing + nome_interno client matching
             const txt = (text || '').toLowerCase();
-            const urgKw = ['fermo', 'guasto', 'errore', 'rotto', 'urgente', 'emergenza', 'bloccato', 'non funziona', 'allarme'];
+            const urgKw = ['fermo', 'guasto', 'errore', 'rotto', 'urgente', 'emergenza', 'bloccato', 'non funziona', 'allarme', 'problema', 'aiuto', 'help', 'rottura', 'danneggiato', 'non parte', 'non munge', 'si è fermato', 'filtro', 'perdita', 'fumo', 'rumore'];
             const ordKw = ['ordine', 'ricambio', 'pezzo', 'servono', 'ordinare', 'spedire'];
             const isUrg = urgKw.some(k => txt.includes(k));
             const isOrd = ordKw.some(k => txt.includes(k));
@@ -5487,9 +5506,18 @@ Rispondi SOLO con JSON valido:
           }
 
           if (aiResult.tipo === 'nota') {
-            reply = `📝 *Nota registrata*\n${aiResult.problema || text}`;
-            if (aiResult.cliente) reply += `\nCliente: ${aiResult.cliente}`;
-            break;
+            // Safety override: se ci sono keyword urgenza o cliente + problema, reclassifica come urgenza
+            const urgKwSafe = ['fermo', 'guasto', 'errore', 'rotto', 'urgente', 'emergenza', 'bloccato', 'non funziona', 'allarme', 'problema', 'rottura', 'danneggiato', 'filtro', 'perdita', 'fumo', 'rumore', 'non munge', 'non parte'];
+            const hasUrgKw = urgKwSafe.some(k => (text||'').toLowerCase().includes(k));
+            if (hasUrgKw || (aiResult.codice_m3 && aiResult.problema && aiResult.problema.length > 5)) {
+              // Reclassifica come urgenza
+              aiResult.tipo = 'urgenza';
+              if (!aiResult.priorita) aiResult.priorita = hasUrgKw ? 'alta' : 'media';
+            } else {
+              reply = `📝 *Nota registrata*\n${aiResult.problema || text}`;
+              if (aiResult.cliente) reply += `\nCliente: ${aiResult.cliente}`;
+              break;
+            }
           }
 
           // Create action directly based on AI analysis
@@ -5636,8 +5664,12 @@ Rispondi SOLO con JSON valido:
             nota: 'CH_GENERALE'
           };
 
+          // 0. Admin/caposquadra → CH_ADMIN per comandi gestionali
+          if (utente && ['admin','caposquadra'].includes(utente.ruolo) && ['/assegna','/dove','/kpi','/report','/pianifica','/disponibile'].includes(cmdUsed)) {
+            botCanale = 'CH_ADMIN';
+          }
           // 1. Se abbiamo un aiResult con tipo, usa quello
-          if (typeof aiResult !== 'undefined' && aiResult?.tipo) {
+          else if (typeof aiResult !== 'undefined' && aiResult?.tipo) {
             botCanale = routingMap[aiResult.tipo] || 'CH_GENERALE';
           }
           // 2. Altrimenti routing per comando
