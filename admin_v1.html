@@ -8786,10 +8786,11 @@ async function _importPMFileCore(input){
     const colDevType   =tc.deviceType       ||'Type';
     const colOwner     =tc.ownerCode        ||'Owner';
     // campi export provider
-    const fSN       =flds.serialNumber    ||'DeviceSerialNumber';
-    const fDaysUntil=flds.daysUntilNextPM ||'DaysUntilNextPM';
-    const fDaysSince=flds.daysSinceLastPM ||'DaysSinceLastPM';
-    const fNextType =flds.nextPMType      ||'NextPMType';
+    const fSN        =flds.serialNumber        ||'DeviceSerialNumber';
+    const fDaysUntil =flds.daysUntilNextPM     ||'DaysUntilNextPM';
+    const fDaysSince =flds.daysSinceLastPM     ||'DaysSinceLastPM';
+    const fMilkings  =flds.milkingsSinceLastPM ||'MilkingsSinceLastPM';
+    const fNextType  =flds.nextPMType          ||'NextPMType';
 
     toast('Rilevamento formato...','info');
     const buf=await file.arrayBuffer();
@@ -8880,6 +8881,7 @@ async function _importPMFileCore(input){
       const fSNnk=nk(fSN);
       const fDaysUntilNk=nk(fDaysUntil);
       const fDaysSinceNk=nk(fDaysSince);
+      const fMilkingsNk=nk(fMilkings);
       const fNextTypeNk=nk(fNextType);
       const records=rows.map(r=>{
         const n={};for(const[k,v]of Object.entries(r)){n[nk(k)]=v;}
@@ -8890,11 +8892,20 @@ async function _importPMFileCore(input){
         const daysUntil=parseInt(n[fDaysUntilNk]||n['daysuntil']||'');
         let nextPM=nDate(n['nextpmdate']||n['nextservice']||'');
         if(!nextPM&&!isNaN(daysUntil)){const d=new Date();d.setDate(d.getDate()+daysUntil);nextPM=d.toISOString().split('T')[0];}
-        const daysSince=parseInt(n[fDaysSinceNk]||n['dayssince']||'');
+        const daysSince=parseInt(n[fDaysSinceNk]||n['dayssince']||n['daysincelastpm']||'');
         let lastPM=null;
         if(!isNaN(daysSince)&&daysSince>0){const d=new Date();d.setDate(d.getDate()-daysSince);lastPM=d.toISOString().split('T')[0];}
+        const milkings=parseInt(n[fMilkingsNk]||n['milkingsincelastpm']||n['milkings']||'');
         const ciclo=(n[fNextTypeNk]||n['maintenancetype']||'').toString().toUpperCase().trim();
-        return{numero_serie:serial,prossimo_controllo:nextPM||undefined,ultimo_controllo:lastPM||undefined,ciclo_pm:ciclo&&['A','B','C','D'].includes(ciclo)?ciclo:undefined};
+        return{
+          numero_serie:serial,
+          prossimo_controllo:nextPM||undefined,
+          ultimo_controllo:lastPM||undefined,
+          ciclo_pm:ciclo&&['A','B','C','D'].includes(ciclo)?ciclo:undefined,
+          // campi extra LSSA: conservati nel log, non scritti su DB asset
+          _days_since_pm:!isNaN(daysSince)&&daysSince>=0?daysSince:undefined,
+          _milkings_since_pm:!isNaN(milkings)&&milkings>=0?milkings:undefined,
+        };
       }).filter(r=>r&&r.numero_serie&&(r.prossimo_controllo||r.ultimo_controllo));
       if(!records.length){toast('Nessun record valido nel file export','err');return;}
       toast(`Importo ${records.length} record...`,'info');
@@ -8974,8 +8985,9 @@ function showPMSyncModal(){
   const fields          = cfg.fields          || {};
   const fSN   = fields.serialNumber    || 'serialNumber';
   const fDU   = fields.daysUntilNextPM || 'daysUntilNextPM';
-  const fDS   = fields.daysSinceLastPM || 'daysSinceLastPM';
-  const fType = fields.nextPMType      || 'nextPMType';
+  const fDS   = fields.daysSinceLastPM     || 'daysSinceLastPM';
+  const fMK   = fields.milkingsSinceLastPM || 'MilkingsSinceLastPM';
+  const fType = fields.nextPMType          || 'nextPMType';
   // Hostname del provider per il check nel bookmarklet (derivato da providerPageUrl)
   let providerHost = '';
   try { providerHost = new URL(providerPageUrl).hostname; } catch(e){}
@@ -8986,7 +8998,7 @@ function showPMSyncModal(){
   const esc = s => (s+'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   const bm = `javascript:(function(){
 var H='${esc(providerHost)}',EP='${esc(endpointFull)}',AK='${esc(authKey)}',AF='${esc(authField)}',CLR='${esc(providerColor)}';
-var FSN='${esc(fSN)}',FDU='${esc(fDU)}',FDS='${esc(fDS)}',FTP='${esc(fType)}';
+var FSN='${esc(fSN)}',FDU='${esc(fDU)}',FDS='${esc(fDS)}',FMK='${esc(fMK)}',FTP='${esc(fType)}';
 if(H&&location.hostname!==H){alert('Apri '+H);return;}
 var a={};try{a=JSON.parse(localStorage.getItem(AK)||'{}');}catch(e){}
 var t=a[AF];if(!t){alert('Login scaduto');return;}
@@ -9012,11 +9024,14 @@ var lp=d.LastPMDate||d.LastServiceDate||null;
 var lm=null;
 if(!isNaN(ds)&&ds>0){var y=new Date(N);y.setDate(y.getDate()-Math.round(ds));lm=y.toISOString().slice(0,10);}
 else if(lp){try{lm=new Date(lp).toISOString().slice(0,10);}catch(e){}}
+var mk=parseInt(d[FMK]!=null?d[FMK]:(d.MilkingsSinceLastPM!=null?d.MilkingsSinceLastPM:NaN));
 var cy=(d[FTP]||'').toString().toUpperCase().trim();
 var r={numero_serie:sn};
 if(pm)r.prossimo_controllo=pm;
 if(lm)r.ultimo_controllo=lm;
 if('ABCD'.indexOf(cy)>=0&&cy.length===1)r.ciclo_pm=cy;
+if(!isNaN(ds)&&ds>=0)r._days_since_pm=Math.round(ds);
+if(!isNaN(mk)&&mk>=0)r._milkings_since_pm=mk;
 return r;
 }).filter(Boolean);
 var nd=R.filter(function(r){return !r.prossimo_controllo;}).length;
@@ -9162,6 +9177,9 @@ function renderPMSyncRecordsTable(records){
   const cnt=$('pmSyncRecordsCount');if(cnt)cnt.textContent=records.length+' record';
   if(!records.length){el.innerHTML='<div style="padding:24px;text-align:center;color:var(--gray)">Nessun record.</div>';return;}
   const fmtD=d=>d?new Date(d+'T00:00:00').toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}):'—';
+  // Rileva se ci sono dati LSSA extra (Days Since / Milkings)
+  const hasDS=records.some(r=>r._days_since_pm!=null);
+  const hasMK=records.some(r=>r._milkings_since_pm!=null);
   const rows=records.map(r=>{
     const _t=(()=>{const d=new Date();d.setHours(0,0,0,0);return d;})();
     const days=r.prossimo_controllo?Math.round((new Date(r.prossimo_controllo+'T00:00:00')-_t)/(86400000)):null;
@@ -9170,16 +9188,21 @@ function renderPMSyncRecordsTable(records){
       days<0?`<span class="tag tag-err">🟠 ${Math.abs(days)}gg sc.</span>`:
       days<=30?`<span class="tag tag-warn">🟠 ${days}gg</span>`:
       `<span class="tag tag-ok">✅ ${days}gg</span>`;
+    const dsCell=hasDS?`<td style="text-align:center;color:var(--muted)">${r._days_since_pm!=null?r._days_since_pm+'gg':'—'}</td>`:'';
+    const mkCell=hasMK?`<td style="text-align:center;color:var(--muted)">${r._milkings_since_pm!=null?r._milkings_since_pm:'—'}</td>`:'';
     return `<tr>
       <td style="font-family:monospace;font-size:.8rem">${r.numero_serie||'—'}</td>
       <td>${fmtD(r.prossimo_controllo)}</td>
       <td>${fmtD(r.ultimo_controllo)}</td>
       <td style="text-align:center">${r.ciclo_pm||'—'}</td>
+      ${dsCell}${mkCell}
       <td>${dTag}</td>
     </tr>`;
   }).join('');
+  const dsHdr=hasDS?'<th title="Days Since Last PM (LSSA)">gg da PM</th>':'';
+  const mkHdr=hasMK?'<th title="Milking Since Last PM (LSSA)">Mungiture</th>':'';
   el.innerHTML=`<table class="table" style="width:100%;font-size:.82rem">
-    <thead><tr><th>Numero Serie</th><th>Prossimo PM</th><th>Ultimo PM</th><th>Ciclo</th><th>Stato</th></tr></thead>
+    <thead><tr><th>Numero Serie</th><th>Prossimo PM</th><th>Ultimo PM</th><th>Ciclo</th>${dsHdr}${mkHdr}<th>Stato</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
 }

@@ -87,13 +87,14 @@ window.SYNTONIQA_CONFIG = {
     providerColor:   '#c8102e',
     // Mapping campi risposta API → campi interni Syntoniqa
     fields: {
-      serialNumber:    'DeviceSerialNumber',  // numero serie robot/asset
-      daysUntilNextPM: 'DaysUntilNextPM',    // giorni al prossimo PM (negativo = scaduto)
-      daysSinceLastPM: 'DaysSinceLastPM',    // giorni dall'ultimo PM completato
-      nextPMType:      'NextPMType',          // tipo PM: A/B/C/D/Unknown
-      customerNumber:  'CustomerNumber',      // codice cliente (es. Movex)
-      customerName:    'CustomerName',        // nome cliente
-      deviceType:      'DeviceType',          // tipo macchina/asset
+      serialNumber:        'DeviceSerialNumber',   // numero serie robot/asset
+      daysUntilNextPM:     'DaysUntilNextPM',      // giorni al prossimo PM (negativo = scaduto)
+      daysSinceLastPM:     'DaysSinceLastPM',      // giorni dall'ultimo PM completato
+      milkingsSinceLastPM: 'MilkingsSinceLastPM',  // mungiture dall'ultimo PM (dato LSSA)
+      nextPMType:          'NextPMType',            // tipo PM: A/B/C/D/Unknown
+      customerNumber:      'CustomerNumber',        // codice cliente (es. Movex)
+      customerName:        'CustomerName',          // nome cliente
+      deviceType:          'DeviceType',            // tipo macchina/asset
     },
     // Rilevamento automatico formato file importato (per "Import file")
     fileDetection: {
