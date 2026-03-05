@@ -521,35 +521,36 @@ async function sbPaginate(env, table, query = '', pageSize = 1000, maxPages = 20
   return rows;
 }
 
-// ─── Helper: assicura che il tipo_intervento 'TAGLIANDO' esista (FK guard) ───
-// Chiamato prima di ogni INSERT su piano con tipo_intervento_id='TAGLIANDO'.
-// Usa resolution=ignore-duplicates → idempotente, nessun effetto se già esiste.
-let _tagliandoEnsured = false; // cache per la durata della richiesta (reset per ogni Worker invocation)
-async function ensureTagliandoType(env) {
-  if (_tagliandoEnsured) return;
-  const TENANT = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+// ─── Helper: risolve il tipo_intervento_id per i piani PM ────────────────────
+// Cerca 'TAGLIANDO' nella tabella tipi_intervento; se non esiste cerca per nome
+// (tagliando/service/pm/manut); se ancora nessuno restituisce null e il campo
+// viene omesso dall'INSERT (FK safe perché la colonna è nullable).
+// Cache per tutta la vita dell'isolate Worker.
+let _tagliandoIdCache = undefined; // undefined=non risolto, null=nessun tipo trovato, string=id trovato
+async function resolveTagliandoId(env) {
+  if (_tagliandoIdCache !== undefined) return _tagliandoIdCache;
   try {
-    // Prima verifica se esiste già (GET leggero)
-    const existing = await sb(env, 'tipi_intervento', 'GET', null, '?id=eq.TAGLIANDO&limit=1').catch(() => []);
-    if (Array.isArray(existing) && existing.length > 0) {
-      _tagliandoEnsured = true;
-      return;
-    }
-    // Non esiste: inserisci il record base
-    await sb(env, 'tipi_intervento', 'POST', {
-      id: 'TAGLIANDO',
-      nome: 'Tagliando / Service PM',
-      colore: '#3B82F6',
-      attivo: true,
-      tenant_id: TENANT,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }, '', { 'Prefer': 'resolution=ignore-duplicates' }).catch(() => {});
-    _tagliandoEnsured = true;
+    const types = await sb(env, 'tipi_intervento', 'GET', null, '?attivo=eq.true&limit=100').catch(() => []);
+    if (!Array.isArray(types) || !types.length) { _tagliandoIdCache = null; return null; }
+    // 1. ID esatto 'TAGLIANDO'
+    const exact = types.find(t => t.id === 'TAGLIANDO');
+    if (exact) { _tagliandoIdCache = 'TAGLIANDO'; return 'TAGLIANDO'; }
+    // 2. Nome contiene tagliando/service/pm/manut
+    const byName = types.find(t => {
+      const n = ((t.nome || t.id || '') + '').toLowerCase();
+      return n.includes('tagliando') || n.includes('service') || n.includes('manut') || n.includes(' pm');
+    });
+    if (byName) { _tagliandoIdCache = byName.id; return byName.id; }
+    // 3. Primo tipo disponibile come fallback
+    _tagliandoIdCache = types[0].id;
+    return _tagliandoIdCache;
   } catch {
-    // Non critico: se fallisce comunque proviamo il POST su piano, l'errore FK apparirà nell'applyErrors
+    _tagliandoIdCache = null;
+    return null;
   }
 }
+// Wrapper sincrono per i vecchi riferimenti (uso: await ensureTagliandoType(env))
+async function ensureTagliandoType(env) { await resolveTagliandoId(env); }
 
 // ============ ROUTER ============
 
@@ -5081,7 +5082,7 @@ Rispondi SOLO con JSON valido:
           for (const cid of cliIds5) { cliNames5[cid] = await getEntityName(env, 'clienti', cid); }
           reply = `📅 *Interventi oggi (${intv.length}):*\n` + intv.map(i => {
             const cli = cliNames5[i.cliente_id] || i.cliente_id || '?';
-            const tipo = i.tipo_intervento_id === 'TAGLIANDO' ? '🔧' : '📋';
+            const tipo = (i.tipo_intervento_id === 'TAGLIANDO' || (i.note||'').startsWith('[PM')) ? '🔧' : '📋';
             return `${tipo} *${cli}* — ${i.stato} ${i.note ? '(' + i.note.substring(0, 40) + ')' : ''}`;
           }).join('\n');
           break;
@@ -6296,19 +6297,20 @@ Rispondi SOLO con JSON valido:
       if (!dry_run && scheduled.length) {
         const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
         const now = new Date().toISOString();
-        await ensureTagliandoType(env); // FK guard: crea 'TAGLIANDO' in tipi_intervento se mancante
+        const tagId = await resolveTagliandoId(env); // risolve ID reale da tipi_intervento (o null se non trovato)
         let created = 0, errors = [];
         for (const s of scheduled) {
           try {
             const intId = secureId('PM');
-            await sb(env, 'piano', 'POST', {
+            const pianoRow = {
               id: intId, tenant_id: tid,
               cliente_id: s.cliente_id, macchina_id: s.macchina_id,
               data: s.data_suggerita, stato: 'pianificato',
-              tipo_intervento_id: 'TAGLIANDO',
               note: `[PM Auto] ${s.ciclo_nome} — ${s.macchina_nome} (${s.modello || '?'})`,
               obsoleto: false, created_at: now
-            });
+            };
+            if (tagId) pianoRow.tipo_intervento_id = tagId; // ometti se null → FK safe
+            await sb(env, 'piano', 'POST', pianoRow);
             created++;
           } catch (e) { errors.push({ macchina: s.macchina_nome, err: e.message }); }
         }
@@ -6344,7 +6346,10 @@ Rispondi SOLO con JSON valido:
       const sixMonths = new Date(Date.now() + 180 * 86400000).toISOString().split('T')[0];
       const startDate = pmMese ? pmMese + '-01' : today;
       const endDate = pmMese ? (() => { const d = new Date(pmMese + '-01'); d.setMonth(d.getMonth() + 1); d.setDate(0); return d.toISOString().split('T')[0]; })() : sixMonths;
-      const pianoFilter = `?obsoleto=eq.false&tipo_intervento_id=eq.TAGLIANDO&data=gte.${startDate}&data=lte.${endDate}&order=data.asc&limit=500`;
+      const tagIdCal = await resolveTagliandoId(env);
+      const pianoFilter = tagIdCal
+        ? `?obsoleto=eq.false&tipo_intervento_id=eq.${encodeURIComponent(tagIdCal)}&data=gte.${startDate}&data=lte.${endDate}&order=data.asc&limit=500`
+        : `?obsoleto=eq.false&note=like.[PM*]&data=gte.${startDate}&data=lte.${endDate}&order=data.asc&limit=500`;
       const pianoTags = await sb(env, 'piano', 'GET', null, pianoFilter).catch(() => []);
 
       // 5. Carica clienti per nomi
@@ -6807,24 +6812,26 @@ Rispondi SOLO con JSON valido:
       }
 
       // 9. Anti-duplicato: verifica che non esista già un piano per prossima data + macchina
+      // (macchina_id + data è già sufficientemente specifico — non serve filtrare per tipo)
       const dupeCheck = await sb(env, 'piano', 'GET', null,
-        `?obsoleto=eq.false&macchina_id=eq.${cmId}&data=eq.${prossimaData}&tipo_intervento_id=eq.TAGLIANDO&limit=1`
+        `?obsoleto=eq.false&macchina_id=eq.${cmId}&data=eq.${prossimaData}&limit=1`
       ).catch(() => []);
 
+      const tagId2 = await resolveTagliandoId(env);
       let nextPianoId = null;
       if (!dupeCheck.length) {
         // Crea prossimo intervento pianificato
-        await ensureTagliandoType(env); // FK guard
         nextPianoId = secureId('PM');
-        await sb(env, 'piano', 'POST', {
+        const nextRow = {
           id: nextPianoId, tenant_id: tid,
           macchina_id: cmId,
           cliente_id: macRow?.[0]?.cliente_id || null,
           data: prossimaData, stato: 'pianificato',
-          tipo_intervento_id: 'TAGLIANDO',
           note: `[PM Auto] ${prossimoTipo} — Prossimo dopo ${tipoCompletato}`,
           obsoleto: false, created_at: now
-        }).catch(() => {});
+        };
+        if (tagId2) nextRow.tipo_intervento_id = tagId2;
+        await sb(env, 'piano', 'POST', nextRow).catch(() => {});
       }
 
       await wlog('pm_complete', cmId, tipoCompletato, body.userId || 'admin',
@@ -6849,12 +6856,18 @@ Rispondi SOLO con JSON valido:
       const today2 = now.split('T')[0];
       const endDate2 = addDays(today2, mesi_avanti * 30);
 
+      // Risolvi ID tipo tagliando una volta (prima del Promise.all per usarlo nel filtro)
+      const tagId3 = await resolveTagliandoId(env);
+      const pmExistingFilter = tagId3
+        ? `?obsoleto=eq.false&tipo_intervento_id=eq.${encodeURIComponent(tagId3)}&stato=eq.pianificato&data=gte.${today2}&order=data.asc&limit=1000`
+        : `?obsoleto=eq.false&note=like.[PM*]&stato=eq.pianificato&data=gte.${today2}&order=data.asc&limit=1000`;
+
       // Carica tutto
       const [macchine2, cycleR, defR, existingPM] = await Promise.all([
         sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,seriale,note,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&limit=1000').catch(() => []),
         sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_state&limit=1').catch(() => []),
         sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_definitions&limit=1').catch(() => []),
-        sb(env, 'piano', 'GET', null, `?obsoleto=eq.false&tipo_intervento_id=eq.TAGLIANDO&stato=eq.pianificato&data=gte.${today2}&order=data.asc&limit=1000`).catch(() => [])
+        sb(env, 'piano', 'GET', null, pmExistingFilter).catch(() => [])
       ]);
 
       const cs2 = cycleR?.[0]?.valore ? JSON.parse(cycleR[0].valore) : {};
@@ -6870,7 +6883,7 @@ Rispondi SOLO con JSON valido:
         if (snMatch) existingKeys.add(`SN_${snMatch[1]}_${p.data}`);
       }
 
-      await ensureTagliandoType(env); // FK guard: crea 'TAGLIANDO' in tipi_intervento se mancante
+      const tagId3 = await resolveTagliandoId(env); // ID reale da tipi_intervento (null se tabella vuota)
       let created2 = 0, skipped = 0, errors2 = [];
       // ── Raccoglie TUTTI i nuovi inserimenti in un array → batch POST unico ──
       const toInsert = [];
@@ -6899,13 +6912,15 @@ Rispondi SOLO con JSON valido:
           }
           const tipo2 = seq2[pos2 % seq2.length];
           const pianoId = secureId('PM');
-          toInsert.push({
+          const row2 = {
             id: pianoId, tenant_id: tid,
             macchina_id: mac.id, cliente_id: mac.cliente_id,
-            data: nextDate, stato: 'pianificato', tipo_intervento_id: 'TAGLIANDO',
+            data: nextDate, stato: 'pianificato',
             note: `[PM Auto] ${tipo2} — ${mac.modello || mac.seriale || mac.id} (${mac.modello || '?'})`,
             obsoleto: false, created_at: now
-          });
+          };
+          if (tagId3) row2.tipo_intervento_id = tagId3;
+          toInsert.push(row2);
           existingKeys.add(key);
           nextDate = skipWeekend(addDays(nextDate, intervallo2));
           pos2 = (pos2 + 1) % seq2.length;
@@ -6945,12 +6960,14 @@ Rispondi SOLO con JSON valido:
             const key = `SN_${sn||asset.id}_${nextDate}`;
             if (existingKeys.has(key)) { skipped++; nextDate = skipWeekend(addDays(nextDate, intervalDays)); continue; }
             const pianoId = secureId('PM');
-            toInsert.push({
+            const row3 = {
               id: pianoId, tenant_id: tid, macchina_id, cliente_id,
-              data: nextDate, stato: 'pianificato', tipo_intervento_id: 'TAGLIANDO',
+              data: nextDate, stato: 'pianificato',
               note: `[PM LSSA] ${asset.gruppo_attrezzatura||asset.modello||''} S/N:${sn||'?'}`,
               obsoleto: false, created_at: now
-            });
+            };
+            if (tagId3) row3.tipo_intervento_id = tagId3;
+            toInsert.push(row3);
             existingKeys.add(key);
             nextDate = skipWeekend(addDays(nextDate, intervalDays));
           }
@@ -6999,7 +7016,10 @@ Rispondi SOLO con JSON valido:
       if (confirm_token !== 'RESET_CONFIRMED') return err('Conferma richiesta: invia confirm_token="RESET_CONFIRMED"');
       const now2 = new Date().toISOString();
       // Solo futuri non ancora completati
-      let filter = `piano?tipo_intervento_id=eq.TAGLIANDO&stato=eq.pianificato&obsoleto=eq.false`;
+      const tagIdReset = await resolveTagliandoId(env);
+      let filter = tagIdReset
+        ? `piano?tipo_intervento_id=eq.${encodeURIComponent(tagIdReset)}&stato=eq.pianificato&obsoleto=eq.false`
+        : `piano?note=like.[PM*]&stato=eq.pianificato&obsoleto=eq.false`;
       if (solo_lssa) filter += `&note=like.*[PM LSSA]*`;
       const res2 = await sb(env, filter, 'PATCH', { obsoleto: true, updated_at: now2 });
       const count2 = Array.isArray(res2) ? res2.length : 0;
