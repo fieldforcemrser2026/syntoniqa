@@ -6440,17 +6440,23 @@ Rispondi SOLO con JSON valido:
       let first_error = null, first_sample = null;
       const now = new Date().toISOString();
 
-      // ── Pre-carica tutti gli asset in UNA sola query (evita "Too many subrequests") ──
-      const allAssetsSnap = await sb(env, 'anagrafica_assets', 'GET', null, '?select=id,numero_serie&limit=1000').catch(() => []);
-      const snToId = new Map(); // tutte le varianti serial → asset_id
+      // ── Pre-carica tutti gli asset con tutti i campi aggiornabili (fix PGRST102) ──
+      // PGRST102: tutti gli oggetti nell'array upsert DEVONO avere le stesse chiavi.
+      // Soluzione: caricare i valori correnti → ogni oggetto ha sempre le stesse 6 chiavi,
+      // usando il valore DB esistente per i campi non forniti dall'import.
+      const allAssetsSnap = await sb(env, 'anagrafica_assets', 'GET', null,
+        '?select=id,numero_serie,prossimo_controllo,ultimo_controllo,ciclo_pm,intervallo_settimane&limit=1000').catch(() => []);
+      const snToId = new Map();
+      const idToAsset = new Map(); // id → record completo per fallback valori
       for (const a of allAssetsSnap) {
         if (!a.numero_serie) continue;
         snToId.set(a.numero_serie, a.id);
         snToId.set(padSerial10(a.numero_serie), a.id);
         snToId.set(normalizeSerial(a.numero_serie), a.id);
+        idToAsset.set(a.id, a);
       }
 
-      // ── Costruisci array di upsert in-memory (ZERO subrequest nel loop) ──
+      // ── Costruisci array di upsert con chiavi uniformi (ZERO subrequest nel loop) ──
       const toUpsert = [];
       for (const rec of records) {
         if (!first_sample) first_sample = { serial: rec.numero_serie, prossimo: rec.prossimo_controllo, ultimo: rec.ultimo_controllo };
@@ -6461,17 +6467,29 @@ Rispondi SOLO con JSON valido:
             || snToId.get(padSerial10(rawSerial))
             || snToId.get(normalizeSerial(rawSerial));
           if (!assetId) { not_found++; continue; }
-          const patch = { id: assetId, updated_at: now };
-          const prossimoControllo = rec.prossimo_controllo || rec.ProssimoControllo;
-          if (prossimoControllo) patch.prossimo_controllo = prossimoControllo;
-          if (rec.ultimo_controllo || rec.UltimoControllo) patch.ultimo_controllo = rec.ultimo_controllo || rec.UltimoControllo;
-          if (rec.ciclo_pm || rec.CicloPm) patch.ciclo_pm = rec.ciclo_pm || rec.CicloPm;
-          if (rec.intervallo_settimane != null) patch.intervallo_settimane = parseInt(rec.intervallo_settimane) || null;
-          if (Object.keys(patch).length <= 2) { skipped++; continue; } // solo id+updated_at = nulla da aggiornare
-          toUpsert.push(patch);
+          const existing = idToAsset.get(assetId) || {};
+          const newProssimo = rec.prossimo_controllo || rec.ProssimoControllo || null;
+          const newUltimo = rec.ultimo_controllo || rec.UltimoControllo || null;
+          const newCiclo = rec.ciclo_pm || rec.CicloPm || null;
+          const newIntervallo = rec.intervallo_settimane != null ? (parseInt(rec.intervallo_settimane) || null) : null;
+          // Controlla se c'è davvero qualcosa da aggiornare
+          const hasChanges = (newProssimo && newProssimo !== existing.prossimo_controllo)
+            || (newUltimo && newUltimo !== existing.ultimo_controllo)
+            || (newCiclo && newCiclo !== existing.ciclo_pm)
+            || (newIntervallo !== null && newIntervallo !== existing.intervallo_settimane);
+          if (!hasChanges) { skipped++; continue; }
+          // Oggetto con chiavi SEMPRE identiche (fix PGRST102): usa valore esistente come fallback
+          toUpsert.push({
+            id: assetId,
+            prossimo_controllo: newProssimo || existing.prossimo_controllo || null,
+            ultimo_controllo: newUltimo || existing.ultimo_controllo || null,
+            ciclo_pm: newCiclo || existing.ciclo_pm || null,
+            intervallo_settimane: newIntervallo !== null ? newIntervallo : (existing.intervallo_settimane || null),
+            updated_at: now
+          });
         } catch (e) { errors++; if (!first_error) first_error = e.message; }
       }
-      // ── Upsert batch: 1 singolo subrequest per tutti i record (da N PATCH a 1 POST) ──
+      // ── Upsert batch: 1 singolo subrequest per tutti i record ──
       if (toUpsert.length) {
         try {
           const res = await sb(env, 'anagrafica_assets', 'POST', toUpsert, '', {
@@ -6532,16 +6550,19 @@ Rispondi SOLO con JSON valido:
       if (!records || !Array.isArray(records)) return err('records array richiesto');
       let updated = 0, not_found = 0, errors = 0;
       const now = new Date().toISOString();
-      // ── Pre-carica tutti gli asset in UNA sola query (zero subrequest nel loop) ──
-      const allAssetsT = await sb(env, 'anagrafica_assets', 'GET', null, '?select=id,numero_serie&limit=1000').catch(() => []);
+      // ── Pre-carica tutti gli asset con tutti i campi aggiornabili (fix PGRST102) ──
+      const allAssetsT = await sb(env, 'anagrafica_assets', 'GET', null,
+        '?select=id,numero_serie,ciclo_pm,intervallo_settimane,schedule_type,prossimo_controllo,tipo_foglio&limit=1000').catch(() => []);
       const snMapT = new Map();
+      const idToAssetT = new Map();
       for (const a of allAssetsT) {
         if (!a.numero_serie) continue;
         snMapT.set(a.numero_serie, a.id);
         snMapT.set(padSerial10(a.numero_serie), a.id);
         snMapT.set(normalizeSerial(a.numero_serie), a.id);
+        idToAssetT.set(a.id, a);
       }
-      // ── Costruisci array di upsert in-memory ──
+      // ── Costruisci array di upsert con chiavi uniformi (fix PGRST102) ──
       const toUpsertT = [];
       for (const rec of records) {
         try {
@@ -6549,24 +6570,36 @@ Rispondi SOLO con JSON valido:
           if (!rawSerial) { not_found++; continue; }
           const assetId = snMapT.get(rawSerial) || snMapT.get(padSerial10(rawSerial)) || snMapT.get(normalizeSerial(rawSerial));
           if (!assetId) { not_found++; continue; }
-          const patch = { id: assetId, updated_at: now };
-          if (rec.maintenance_type) patch.ciclo_pm = rec.maintenance_type;
+          const existing = idToAssetT.get(assetId) || {};
+          let newIntervallo = existing.intervallo_settimane || null;
           if (rec.standard_interval) {
             const intv = parseInt(rec.standard_interval);
-            if (rec.weeks_months && (rec.weeks_months+'').toLowerCase().includes('month')) {
-              patch.intervallo_settimane = intv * 4; // approx
-            } else {
-              patch.intervallo_settimane = intv;
-            }
+            newIntervallo = (rec.weeks_months && (rec.weeks_months+'').toLowerCase().includes('month')) ? intv * 4 : intv;
           }
-          if (rec.schedule_type) patch.schedule_type = rec.schedule_type;
-          if (rec.next_pm_date) patch.prossimo_controllo = rec.next_pm_date;
-          if (rec.asset_type) patch.tipo_foglio = rec.asset_type;
-          if (Object.keys(patch).length <= 2) { not_found++; continue; } // solo id+updated_at = nulla da aggiornare
-          toUpsertT.push(patch);
+          const newCiclo = rec.maintenance_type || existing.ciclo_pm || null;
+          const newSchedule = rec.schedule_type || existing.schedule_type || null;
+          const newProssimo = rec.next_pm_date || existing.prossimo_controllo || null;
+          const newTipo = rec.asset_type || existing.tipo_foglio || null;
+          // Controlla se c'è davvero qualcosa da aggiornare
+          const hasChanges = (rec.maintenance_type && rec.maintenance_type !== existing.ciclo_pm)
+            || (rec.standard_interval && newIntervallo !== existing.intervallo_settimane)
+            || (rec.schedule_type && rec.schedule_type !== existing.schedule_type)
+            || (rec.next_pm_date && rec.next_pm_date !== existing.prossimo_controllo)
+            || (rec.asset_type && rec.asset_type !== existing.tipo_foglio);
+          if (!hasChanges) { not_found++; continue; }
+          // Oggetto con chiavi SEMPRE identiche (fix PGRST102)
+          toUpsertT.push({
+            id: assetId,
+            ciclo_pm: newCiclo,
+            intervallo_settimane: newIntervallo,
+            schedule_type: newSchedule,
+            prossimo_controllo: newProssimo,
+            tipo_foglio: newTipo,
+            updated_at: now
+          });
         } catch (e) { errors++; }
       }
-      // ── Upsert batch: 1 singolo subrequest per tutti (da N PATCH a 1 POST) ──
+      // ── Upsert batch: 1 singolo subrequest per tutti (fix PGRST102 + no subrequest) ──
       if (toUpsertT.length) {
         try {
           const res = await sb(env, 'anagrafica_assets', 'POST', toUpsertT, '', {
