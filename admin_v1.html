@@ -8908,39 +8908,46 @@ setTimeout(function(){o.remove();},8000);
 
 // ── Export PM corrente come CSV ──────────────────────────────────────────────
 async function exportPMPiano(){
+  // Auto-carica dati se PM_OVERVIEW non è ancora popolato (es. sezione PM non aperta)
+  if(!PM_OVERVIEW||(PM_OVERVIEW.clienti||[]).length===0){
+    toast('Caricamento dati PM in corso...','info');
+    await loadPMOverview();
+  }
   const allAssets=(PM_OVERVIEW?.clienti||[]).flatMap(c=>(c.assets||[]).map(a=>({...a,_cliente:c.nome||c.codice_m3||''})));
-  if(!allAssets.length){toast('Nessun dato PM disponibile — carica prima la sezione PM','warn');return;}
+  if(!allAssets.length){toast('Nessun dato PM disponibile — nessun asset trovato nel DB','warn');return;}
   // Carica SheetJS se non disponibile
   if(typeof XLSX==='undefined'){
     await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
   }
   const fmtD=d=>d?new Date(d+'T00:00:00').toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}):'';
   // Formato colonne compatibile con template LSSA
-  const rows=allAssets.map(a=>{
-    const{days,stato,prossima}=getPMAssetStatus(a.prossimo_controllo,a.intervallo_settimane);
-    return{
-      'Numero Serie':a.numero_serie||'',
-      'Nome Asset':a.nome_asset||'',
-      'Tipo / Gruppo':a.gruppo_attrezzatura||a.tipo_foglio||'',
-      'Modello':a.modello||'',
-      'Cliente':a._cliente,
-      'Codice M3':a.codice_m3||'',
-      'Prossimo PM (LSSA)':fmtD(a.prossimo_controllo),
-      'Prossima data stimata':prossima||fmtD(a.prossimo_controllo),
-      'Ultimo PM':fmtD(a.ultimo_controllo),
-      'Giorni al PM':days===null?'':days,
-      'Stato PM':stato||'',
-      'Ciclo PM':a.ciclo_pm||'',
-      'Intervallo (sett)':a.intervallo_settimane||''
-    };
-  });
-  const ws=XLSX.utils.json_to_sheet(rows);
-  // Larghezze colonne
-  ws['!cols']=[{wch:15},{wch:22},{wch:18},{wch:16},{wch:28},{wch:12},{wch:13},{wch:13},{wch:12},{wch:12},{wch:10},{wch:14}];
-  const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,'PM Overview',ws);
-  XLSX.writeFile(wb,'pm_overview_'+new Date().toISOString().slice(0,10)+'.xlsx');
-  toast('XLSX esportato ('+allAssets.length+' asset)','ok');
+  try{
+    const rows=allAssets.map(a=>{
+      const{days,stato,prossima}=getPMAssetStatus(a.prossimo_controllo,a.intervallo_settimane);
+      return{
+        'Numero Serie':a.numero_serie||'',
+        'Nome Asset':a.nome_asset||'',
+        'Tipo / Gruppo':a.gruppo_attrezzatura||a.tipo_foglio||'',
+        'Modello':a.modello||'',
+        'Cliente':a._cliente,
+        'Codice M3':a.codice_m3||'',
+        'Prossimo PM (LSSA)':fmtD(a.prossimo_controllo),
+        'Prossima data stimata':prossima||fmtD(a.prossimo_controllo),
+        'Ultimo PM':fmtD(a.ultimo_controllo),
+        'Giorni al PM':days===null?'':days,
+        'Stato PM':stato||'',
+        'Ciclo PM':a.ciclo_pm||'',
+        'Intervallo (sett)':a.intervallo_settimane||''
+      };
+    });
+    const ws=XLSX.utils.json_to_sheet(rows);
+    // Larghezze colonne (13 colonne)
+    ws['!cols']=[{wch:15},{wch:22},{wch:18},{wch:16},{wch:28},{wch:12},{wch:13},{wch:13},{wch:12},{wch:12},{wch:10},{wch:14},{wch:12}];
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,'PM Overview',ws);
+    XLSX.writeFile(wb,'pm_overview_'+new Date().toISOString().slice(0,10)+'.xlsx');
+    toast('XLSX esportato ('+allAssets.length+' asset)','ok');
+  }catch(e){toast('Errore export PM: '+e.message,'err');console.error('[exportPMPiano]',e);}
 }
 
 // ── Storico Sincronizzazioni PM ──────────────────────────────────────────────

@@ -6772,7 +6772,10 @@ Rispondi SOLO con JSON valido:
       }
 
       let created2 = 0, skipped = 0, errors2 = [];
+      // ── Raccoglie TUTTI i nuovi inserimenti in un array → batch POST unico ──
+      const toInsert = [];
 
+      // FASE 1: da macchine (prossimo_tagliando)
       for (const mac of macchine2) {
         const modKey2 = (mac.modello || mac.tipo || '').toUpperCase();
         const def2 = findCycleDef(defs2, modKey2);
@@ -6783,11 +6786,10 @@ Rispondi SOLO con JSON valido:
         let nextDate = mac.prossimo_tagliando;
         if (!nextDate) continue;
 
-        // Genera fino a endDate
         let safety = 0;
         while (nextDate <= endDate2 && safety < 10) {
           safety++;
-          nextDate = skipWeekend(nextDate); // Skip sabato/domenica
+          nextDate = skipWeekend(nextDate);
           const key = `${mac.id}_${nextDate}`;
           if (existingKeys.has(key)) {
             skipped++;
@@ -6795,40 +6797,34 @@ Rispondi SOLO con JSON valido:
             pos2 = (pos2 + 1) % seq2.length;
             continue;
           }
-
           const tipo2 = seq2[pos2 % seq2.length];
-          try {
-            const pianoId = secureId('PM');
-            await sb(env, 'piano', 'POST', {
-              id: pianoId, tenant_id: tid,
-              macchina_id: mac.id,
-              cliente_id: mac.cliente_id,
-              data: nextDate, stato: 'pianificato',
-              tipo_intervento_id: 'TAGLIANDO',
-              note: `[PM Auto] ${tipo2} — ${mac.modello || mac.seriale || mac.id} (${mac.modello || '?'})`,
-              obsoleto: false, created_at: now
-            });
-            existingKeys.add(key);
-            created2++;
-          } catch (e) { errors2.push({ macchina: mac.id, err: e.message }); }
-
+          const pianoId = secureId('PM');
+          toInsert.push({
+            id: pianoId, tenant_id: tid,
+            macchina_id: mac.id, cliente_id: mac.cliente_id,
+            data: nextDate, stato: 'pianificato', tipo_intervento_id: 'TAGLIANDO',
+            note: `[PM Auto] ${tipo2} — ${mac.modello || mac.seriale || mac.id} (${mac.modello || '?'})`,
+            obsoleto: false, created_at: now
+          });
+          existingKeys.add(key);
           nextDate = skipWeekend(addDays(nextDate, intervallo2));
           pos2 = (pos2 + 1) % seq2.length;
         }
       }
 
-      // ── FASE 2: genera anche da anagrafica_assets (import LSSA/bookmarklet) ──
-      const assets2 = await sb(env, 'anagrafica_assets', 'GET', null,
-        `?prossimo_controllo=not.is.null&prossimo_controllo=lte.${endDate2}&select=id,numero_serie,nome_asset,modello,gruppo_attrezzatura,codice_m3,prossimo_controllo,intervallo_settimane&limit=500`).catch(() => []);
+      // ── FASE 2: da anagrafica_assets (import LSSA/bookmarklet) ──
+      // Riusa macchine2 già caricate sopra (evita GET duplicato)
+      const [assets2, allCli] = await Promise.all([
+        sb(env, 'anagrafica_assets', 'GET', null,
+          `?prossimo_controllo=not.is.null&prossimo_controllo=lte.${endDate2}&select=id,numero_serie,nome_asset,modello,gruppo_attrezzatura,codice_m3,prossimo_controllo,intervallo_settimane&limit=500`).catch(() => []),
+        sb(env, 'clienti', 'GET', null, '?obsoleto=eq.false&select=id,codice_m3&limit=500').catch(() => [])
+      ]);
       if (assets2.length) {
-        // Lookup seriale → {id, cliente_id} da macchine
-        const allMacchineS = await sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&select=id,seriale,cliente_id&limit=1000').catch(() => []);
+        // Costruisci lookup seriale → macchina da macchine2 già in memoria (NO extra GET)
         const seriMap = {};
-        for (const m of allMacchineS) {
+        for (const m of macchine2) {
           if (m.seriale) { seriMap[m.seriale] = m; seriMap[padSerial10(m.seriale)] = m; seriMap[normalizeSerial(m.seriale)] = m; }
         }
-        // Lookup codice_m3 → cliente_id da clienti
-        const allCli = await sb(env, 'clienti', 'GET', null, '?obsoleto=eq.false&select=id,codice_m3&limit=500').catch(() => []);
         const m3Map = {};
         for (const c of allCli) { if (c.codice_m3) m3Map[c.codice_m3] = c.id; }
 
@@ -6840,7 +6836,6 @@ Rispondi SOLO con JSON valido:
           const intervalDays = asset.intervallo_settimane ? asset.intervallo_settimane * 7 : 112;
           let nextDate = asset.prossimo_controllo;
           if (!nextDate) continue;
-          // Se la data è nel passato, avanza alla prossima occorrenza futura
           while (nextDate < today2) { nextDate = addDays(nextDate, intervalDays); }
           if (nextDate > endDate2) continue;
           let safety = 0;
@@ -6849,18 +6844,29 @@ Rispondi SOLO con JSON valido:
             nextDate = skipWeekend(nextDate);
             const key = `SN_${sn||asset.id}_${nextDate}`;
             if (existingKeys.has(key)) { skipped++; nextDate = skipWeekend(addDays(nextDate, intervalDays)); continue; }
-            try {
-              const pianoId = secureId('PM');
-              await sb(env, 'piano', 'POST', {
-                id: pianoId, tenant_id: tid, macchina_id, cliente_id,
-                data: nextDate, stato: 'pianificato', tipo_intervento_id: 'TAGLIANDO',
-                note: `[PM LSSA] ${asset.gruppo_attrezzatura||asset.modello||''} S/N:${sn||'?'}`,
-                obsoleto: false, created_at: now
-              });
-              existingKeys.add(key); created2++;
-            } catch (e) { errors2.push({ asset: asset.id, err: e.message }); }
+            const pianoId = secureId('PM');
+            toInsert.push({
+              id: pianoId, tenant_id: tid, macchina_id, cliente_id,
+              data: nextDate, stato: 'pianificato', tipo_intervento_id: 'TAGLIANDO',
+              note: `[PM LSSA] ${asset.gruppo_attrezzatura||asset.modello||''} S/N:${sn||'?'}`,
+              obsoleto: false, created_at: now
+            });
+            existingKeys.add(key);
             nextDate = skipWeekend(addDays(nextDate, intervalDays));
           }
+        }
+      }
+
+      // ── Batch INSERT unico per tutti (1 subrequest invece di N) ──
+      if (toInsert.length) {
+        // Supabase batch: max 500 per POST, split se necessario
+        const BATCH_SIZE = 400;
+        for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
+          const chunk = toInsert.slice(i, i + BATCH_SIZE);
+          try {
+            await sb(env, 'piano', 'POST', chunk);
+            created2 += chunk.length;
+          } catch (e) { errors2.push({ chunk: i, err: e.message }); }
         }
       }
 
