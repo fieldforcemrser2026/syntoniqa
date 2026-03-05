@@ -6883,7 +6883,6 @@ Rispondi SOLO con JSON valido:
         if (snMatch) existingKeys.add(`SN_${snMatch[1]}_${p.data}`);
       }
 
-      const tagId3 = await resolveTagliandoId(env); // ID reale da tipi_intervento (null se tabella vuota)
       let created2 = 0, skipped = 0, errors2 = [];
       // ── Raccoglie TUTTI i nuovi inserimenti in un array → batch POST unico ──
       const toInsert = [];
