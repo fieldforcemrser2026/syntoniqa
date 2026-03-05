@@ -2852,9 +2852,26 @@ function loadMacchineCliente(prefix){
   s.innerHTML='<option value="">— Seleziona Macchina —</option>';
 
   // Per installazioni usa SEMPRE DATA.macchine (FK richiede MAC_xxx, non serial number)
+  // Mostra tutte le macchine non obsolete: se cliente selezionato, priorità a quelle del cliente,
+  // ma include anche macchine senza ClienteID (nuove, non ancora assegnate) e quelle del cliente
   if(prefix==='mi'){
-    const maccs=(DATA.macchine||[]).filter(m=>!m.Obsoleto&&(!cliId||m.ClienteID===cliId));
-    maccs.forEach(m=>{const o=document.createElement('option');o.value=m.ID;o.textContent=(m.Tipo||'Macchina')+' '+(m.Modello||'')+(m.Seriale?' (SN: '+m.Seriale+')':'');s.appendChild(o)});
+    const maccs=(DATA.macchine||[]).filter(m=>!m.Obsoleto&&(!cliId||!m.ClienteID||m.ClienteID===cliId));
+    maccs.sort((a,b)=>{
+      // Prima le macchine del cliente selezionato, poi quelle senza cliente
+      const aMatch=!cliId||a.ClienteID===cliId?0:1;
+      const bMatch=!cliId||b.ClienteID===cliId?0:1;
+      return aMatch-bMatch;
+    });
+    const defOpt=s.querySelector('option[value=""]');
+    if(defOpt)defOpt.textContent='— Nessuna (opzionale) —';
+    maccs.forEach(m=>{
+      const o=document.createElement('option');
+      o.value=m.ID;
+      const sn=m.Seriale?' (SN: '+m.Seriale+')':'';
+      const altCliente=(cliId&&m.ClienteID&&m.ClienteID!==cliId)?' [altro cliente]':'';
+      o.textContent=(m.Tipo||'Macchina')+' '+(m.Modello||'')+sn+altCliente;
+      s.appendChild(o);
+    });
     return;
   }
 
@@ -7982,7 +7999,7 @@ function showDetail(type,id){
       foot=`<button class="btn btn-primary" onclick="saveInterventoEdit('${id}')">💾 Salva</button> `;
       if(item.Stato==='pianificato')foot+=`<button class="btn btn-warn" onclick="updatePianoStato('${id}','in_corso')">⚡ Inizia</button> `;
       if(item.Stato==='in_corso')foot+=`<button class="btn btn-ok" onclick="updatePianoStato('${id}','completato')">✅ Completa</button> `;
-      foot+=`<button class="btn btn-delete" onclick="if(confirm('Cancellare questo intervento?')){deletePlannerItem('piano','${id}');closeModal('modalDetail')}">🗑️ Cancella</button>`;
+      foot+=`<button class="btn btn-delete" onclick="deletePlannerItem('piano','${id}','modalDetail')">🗑️ Cancella</button>`;
       break;
 
     case 'urgenza':
@@ -8040,7 +8057,7 @@ function showDetail(type,id){
       if(item.Stato==='assegnata'||item.Stato==='schedulata')foot+=`<button class="btn btn-warn" onclick="urgAction('${id}','startUrgenza');closeModal('modalDetail')">⚡ Inizia</button> `;
       if(item.Stato==='in_corso')foot+=`<button class="btn btn-ok" onclick="urgAction('${id}','resolveUrgenza');closeModal('modalDetail')">✅ Risolvi</button> `;
       if(item.Stato==='risolta')foot+=`<button class="btn btn-close-action" onclick="closeUrgenza('${id}')">📁 Chiudi Urgenza</button> `;
-      foot+=`<button class="btn btn-delete" onclick="if(confirm('Cancellare questa urgenza?')){deletePlannerItem('urgenza','${id}');closeModal('modalDetail')}">🗑️ Cancella</button>`;
+      foot+=`<button class="btn btn-delete" onclick="deletePlannerItem('urgenza','${id}','modalDetail')">🗑️ Cancella</button>`;
       break;
 
     case 'ordine':
@@ -10646,16 +10663,18 @@ function showPlannerDay(ds){
   if(el) el.innerHTML = html;
 }
 
-async function deletePlannerItem(type, id){
-  if(!confirm('Sei sicuro di voler cancellare questo '+(type==='piano'?'intervento':'urgenza')+'?')) return;
+async function deletePlannerItem(type, id, modalToClose=null){
+  if(!confirm('Cancellare questo '+(type==='piano'?'intervento':'urgenza')+'?')) return;
   try {
     if(type === 'piano'){
-      await apiCall('updatePiano', { id, Obsoleto: true }, 'POST');
+      await apiCall('updatePiano', { id, Obsoleto: true, userId: USER?.ID }, 'POST');
       toast('Intervento cancellato', 'ok');
     } else {
-      await apiCall('updateUrgenza', { id, Obsoleto: true }, 'POST');
+      await apiCall('updateUrgenza', { id, Obsoleto: true, userId: USER?.ID }, 'POST');
       toast('Urgenza cancellata', 'ok');
     }
+    // Chiudi modal SOLO dopo delete riuscito (non prima, non se fallisce)
+    if(modalToClose) closeModal(modalToClose);
     await refreshData(true);
     renderPlanner();
     const el = document.getElementById('plannerDayDetail');

@@ -221,7 +221,8 @@ function getFields(body) {
   const source = (body.data && typeof body.data === 'object' && !Array.isArray(body.data)) ? body.data : body;
   const result = {};
   for (const [k, v] of Object.entries(source)) {
-    if (INTERNAL_KEYS.has(k) || k.startsWith('_auth') || k.startsWith('_client') || k.startsWith('_is')) continue;
+    // Skip internal/auth meta keys — k.startsWith('_') catches _ancheCaposquadra, _squadraId, etc.
+    if (INTERNAL_KEYS.has(k) || k.startsWith('_')) continue;
     if (v === undefined) continue; // skip undefined only — null/'' allowed to clear fields
     result[toSnake(k)] = v;
   }
@@ -602,7 +603,7 @@ export default {
 
     // Rate limit check — FIX SCALA-02: usa KV per login/ai (persistente), in-memory per default
     const bucket = action === 'login' ? 'login'
-      : (action === 'generateAIPlan' || action === 'analyzeImage' || action === 'previewAIPlan') ? 'ai'
+      : (action === 'generateAIPlan' || action === 'analyzeImage') ? 'ai'  // previewAIPlan è solo DB, non va nel bucket AI
       : 'default';
     const rl = (bucket === 'login' || bucket === 'ai')
       ? await rateLimitKV(clientIP, bucket, env)
@@ -1826,9 +1827,8 @@ async function handlePost(action, body, env) {
         data_inizio: fields.data_inizio || new Date().toISOString().slice(0,10),
         data_fine: fields.data_fine || fields.data_inizio || new Date().toISOString().slice(0,10),
         data_richiesta: new Date().toISOString(),
-        obsoleto: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        obsoleto: false
+        // NB: richieste non ha created_at/updated_at (usa data_richiesta/data_risposta)
       };
       const result = await sb(env, 'richieste', 'POST', row);
 
@@ -3076,33 +3076,17 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       let _usedEngine = null; // traccia quale motore ha risposto per ultimo
 
       async function callAI(promptText, onEngine) {
-        let lastError = '';
-        // Helper interno: prova un singolo engine con callback SSE
-        const _tryE = async (n) => {
-          onEngine?.({engine:n, status:'trying'});
-          const eng = engines[n];
-          const r = n === 'workersai' ? await tryWorkersAI(promptText) : await eng.tryFn(promptText);
-          onEngine?.({engine:n, status: r ? 'ok' : 'failed'});
-          return r;
-        };
-
-        // Se un engine ha già funzionato in questa sessione, provalo PRIMA
-        if (lastWorking && engines[lastWorking] && !engines[lastWorking].disabled && env[engines[lastWorking].envKey]) {
-          const r = await _tryE(lastWorking);
-          if (r) { _usedEngine = lastWorking; return r; }
-        }
-
-        // Cascade secondo ranking configurato
+        // Cascade SEMPRE secondo ranking configurato — no lastWorking shortcut
+        // (garantisce che Gemini/Cerebras vengano sempre provati per ogni chunk)
         for (const name of engineRanking) {
           const eng = engines[name];
           if (!eng || eng.disabled || !env[eng.envKey]) continue;
-          if (name === lastWorking) continue; // già provato sopra
-
-          const r = await _tryE(name);
+          onEngine?.({engine:name, status:'trying'});
+          const r = name === 'workersai' ? await tryWorkersAI(promptText) : await eng.tryFn(promptText);
+          onEngine?.({engine:name, status: r ? 'ok' : 'failed'});
           if (r) { lastWorking = name; _usedEngine = name; return r; }
         }
-
-        throw new Error(`AI non disponibile (${lastError}). Configura almeno una chiave API: GEMINI_KEY, GROQ_KEY, CEREBRAS_KEY, MISTRAL_KEY, DEEPSEEK_KEY.`);
+        throw new Error(`AI non disponibile. Configura almeno una chiave API: GEMINI_KEY, GROQ_KEY, CEREBRAS_KEY, MISTRAL_KEY, DEEPSEEK_KEY.`);
       }
 
       async function tryWorkersAI(promptText) {
@@ -3132,11 +3116,12 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               })
             }
           );
-          if (res.status === 429) { engines.gemini.disabled = true; return null; }
-          if (!res.ok) { engines.gemini.disabled = true; return null; }
+          // Disabilita solo per rate-limit o auth — NON per errori transitori (500/503/network)
+          if (res.status === 429 || res.status === 401 || res.status === 403) { engines.gemini.disabled = true; return null; }
+          if (!res.ok) return null; // errore transitorio: riprova prossimo chunk
           const gd = await res.json();
           return gd.candidates?.[0]?.content?.parts?.[0]?.text || null;
-        } catch { engines.gemini.disabled = true; return null; }
+        } catch { return null; } // network error: non disabilitare
       }
 
       async function tryCerebras(promptText) {
@@ -3151,7 +3136,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               response_format: { type: 'json_object' }
             })
           });
-          if (!res.ok) { if (res.status === 429) engines.cerebras.disabled = true; return null; }
+          if (res.status === 429 || res.status === 401 || res.status === 403) { engines.cerebras.disabled = true; return null; }
+          if (!res.ok) return null;
           const cd = await res.json();
           return cd.choices?.[0]?.message?.content || null;
         } catch { return null; }
@@ -3169,10 +3155,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               response_format: { type: 'json_object' }
             })
           });
-          if (!res.ok) {
-            if (res.status === 429) engines.groq.disabled = true;
-            return null;
-          }
+          if (res.status === 429 || res.status === 401 || res.status === 403) { engines.groq.disabled = true; return null; }
+          if (!res.ok) return null;
           const gd = await res.json();
           return gd.choices?.[0]?.message?.content || null;
         } catch { return null; }
@@ -3190,10 +3174,11 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               response_format: { type: 'json_object' }
             })
           });
-          if (!res.ok) { if (res.status === 429) engines.mistral.disabled = true; return null; }
+          if (res.status === 429 || res.status === 401 || res.status === 403) { engines.mistral.disabled = true; return null; }
+          if (!res.ok) return null;
           const d = await res.json();
           return d.choices?.[0]?.message?.content || null;
-        } catch { engines.mistral.disabled = true; return null; }
+        } catch { return null; }
       }
 
       async function tryDeepSeek(promptText) {
@@ -3208,10 +3193,11 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               response_format: { type: 'json_object' }
             })
           });
-          if (!res.ok) { if (res.status === 429) engines.deepseek.disabled = true; return null; }
+          if (res.status === 429 || res.status === 401 || res.status === 403) { engines.deepseek.disabled = true; return null; }
+          if (!res.ok) return null;
           const d = await res.json();
           return d.choices?.[0]?.message?.content || null;
-        } catch { engines.deepseek.disabled = true; return null; }
+        } catch { return null; }
       }
 
       // Parser robusto — gestisce JSON troncati (risposta tagliata a max_tokens)
@@ -3262,7 +3248,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       }
 
       // ─── Parse vincoli per estrarre regole programmatiche ───
-      const vincoliRules = { assenti: new Set(), affiancamenti: [] };
+      // assenti: array di {id, dataInizio?, dataFine?, permanente} per controllo date-aware
+      const vincoliRules = { assenti: [], affiancamenti: [] };
       if (vincoliCfg.length) {
         try {
           const vc = JSON.parse(vincoliCfg[0].valore);
@@ -3275,7 +3262,15 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               const txt = (r.testo || '').toLowerCase();
               // Regola assenza: "assente", "non disponibile", "ferie", "malattia"
               if (txt.match(/assent|non disponibil|ferie|malattia|indisponibil/)) {
-                for (const id of (r.soggetti || [])) vincoliRules.assenti.add(id);
+                for (const id of (r.soggetti || [])) {
+                  // Mantieni data_inizio/data_fine per controllo per-giorno
+                  vincoliRules.assenti.push({
+                    id,
+                    dataInizio: r.data_inizio || null,
+                    dataFine: r.data_fine || null,
+                    permanente: !!r.permanente
+                  });
+                }
               }
               // Regola affiancamento: "affianc", "accompagn", "coppia"
               if (txt.match(/affianc|accompagn|coppia|deve lavorare con|junior.*senior/)) {
@@ -3335,8 +3330,16 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           return p;
         }).filter(p => {
           if (!p.tecnicoId || !validIds.has(p.tecnicoId)) return false;
-          // VINCOLO: rimuovi tecnici assenti (da config vincoli)
-          if (vincoliRules.assenti.has(p.tecnicoId)) return false;
+          // VINCOLO date-aware: rimuovi tecnico solo nei giorni coperti dalla regola assenza
+          const isAbsent = vincoliRules.assenti.some(a => {
+            if (a.id !== p.tecnicoId) return false;
+            if (a.permanente) return true;
+            // Controlla range date: se fuori range, NON assente
+            if (a.dataFine && a.dataFine < pData) return false; // regola già scaduta
+            if (a.dataInizio && a.dataInizio > pData) return false; // regola non ancora attiva
+            return true;
+          });
+          if (isAbsent) return false;
           // Rimuovi sab/dom (tipo tagliando) — tieni solo urgenze di reperibilita
           try {
             const d = new Date(p.data);
