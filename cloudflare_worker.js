@@ -3233,12 +3233,23 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               })
             }
           );
-          // Disabilita solo per rate-limit o auth — NON per errori transitori (500/503/network)
-          if (res.status === 429 || res.status === 401 || res.status === 403) { engines.gemini.disabled = true; return null; }
-          if (!res.ok) return null; // errore transitorio: riprova prossimo chunk
+          if (res.status === 429 || res.status === 401 || res.status === 403) {
+            sse({type:'engine_debug', engine:'gemini', status:res.status, reason:'rate_limit_or_auth'});
+            engines.gemini.disabled = true; return null;
+          }
+          if (!res.ok) {
+            const errBody = await res.text().catch(()=>'');
+            sse({type:'engine_debug', engine:'gemini', status:res.status, reason:errBody.substring(0,200)});
+            return null;
+          }
           const gd = await res.json();
-          return gd.candidates?.[0]?.content?.parts?.[0]?.text || null;
-        } catch { return null; } // network error: non disabilitare
+          const text = gd.candidates?.[0]?.content?.parts?.[0]?.text || null;
+          if (!text) sse({type:'engine_debug', engine:'gemini', status:200, reason:'empty_response', candidates:JSON.stringify(gd.candidates||[]).substring(0,200)});
+          return text;
+        } catch(e) {
+          sse({type:'engine_debug', engine:'gemini', status:'exception', reason:e.message||'unknown'});
+          return null;
+        }
       }
 
       async function tryCerebras(promptText) {
@@ -3253,11 +3264,23 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               response_format: { type: 'json_object' }
             })
           });
-          if (res.status === 429 || res.status === 401 || res.status === 403) { engines.cerebras.disabled = true; return null; }
-          if (!res.ok) return null;
+          if (res.status === 429 || res.status === 401 || res.status === 403) {
+            sse({type:'engine_debug', engine:'cerebras', status:res.status, reason:'rate_limit_or_auth'});
+            engines.cerebras.disabled = true; return null;
+          }
+          if (!res.ok) {
+            const errBody = await res.text().catch(()=>'');
+            sse({type:'engine_debug', engine:'cerebras', status:res.status, reason:errBody.substring(0,200)});
+            return null;
+          }
           const cd = await res.json();
-          return cd.choices?.[0]?.message?.content || null;
-        } catch { return null; }
+          const text = cd.choices?.[0]?.message?.content || null;
+          if (!text) sse({type:'engine_debug', engine:'cerebras', status:200, reason:'empty_response'});
+          return text;
+        } catch(e) {
+          sse({type:'engine_debug', engine:'cerebras', status:'exception', reason:e.message||'unknown'});
+          return null;
+        }
       }
 
       async function tryGroq(promptText) {

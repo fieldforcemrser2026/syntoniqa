@@ -7648,6 +7648,12 @@ async function runAI(){
           if(ev.type==='init'){const el=document.getElementById('aiInitText');if(el)el.textContent=`${ev.n.tecnici} tecnici · ${ev.n.clienti} clienti · ${ev.n.urgenze} urgenze · ${ev.n.tagliandi} tagliandi caricati`;}
           else if(ev.type==='debug_prompt'){window._lastAIPromptDebug=ev;const el=document.getElementById('aiInitText');if(el)el.textContent=`📊 Dati: ${ev.tecnici_count} tecnici · ${ev.macchine_loaded} macchine · ${ev.assets_loaded} assets · ${ev.tagliandi_count} tagliandi · ${ev.urgenze_count} urgenze · Prompt ${ev.prompt_length} chars`;}
           else if(ev.type==='anon'){_updAnon(ev);}
+          else if(ev.type==='engine_debug'){
+            // Debug: mostra perché un motore ha fallito
+            const el=document.getElementById('aiInitText');
+            if(el)el.textContent=`⚠️ ${ev.engine}: HTTP ${ev.status} — ${(ev.reason||'').substring(0,120)}`;
+            console.warn('AI Engine Debug:', ev);
+          }
           else if(ev.type==='engine'){
             _engStatus[ev.engine]=ev.status;
             if(ev.status==='ok')Object.keys(_engStatus).forEach(k=>{if(_engStatus[k]==='trying')_engStatus[k]='failed';});
