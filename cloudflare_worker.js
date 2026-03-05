@@ -2997,22 +2997,24 @@ ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}
 
 ISTRUZIONI GENERAZIONE:
 ${periodoIstruzione || 'Genera piano per OGNI giorno lavorativo (lun-ven)'}
-- Tagliandi/interventi SOLO lun-ven. SABATO e DOMENICA: niente tagliandi — solo il tecnico REPERIBILE per eventuali urgenze (se previsto dalla reperibilita).
-- Lun-ven: TUTTI i ${nTecAttivi} tecnici attivi devono avere interventi OGNI giorno (08:00-17:00) = MINIMO ${nTecAttivi} righe/giorno.
-- Durata: un tagliando puo richiedere 4-8 ore (anche giornata intera). Urgenze 1-3h. Se tagliando=giornata intera, 1 solo intervento per quel tecnico.
-- "tagliando" e "service" sono sinonimi = manutenzione macchina. Nelle note scrivi il MODELLO macchina (es: "Astronaut A5", "Vector 70").
-- Affiancamento junior: se vincolo dice "affianca senior", genera DUE righe separate (una senior + una junior) con STESSO cliente/data/ora/furgone.
+- Tagliandi/interventi SOLO lun-ven. SABATO e DOMENICA: niente tagliandi — solo il tecnico REPERIBILE per urgenze (se previsto dalla reperibilita).
+- Lun-ven: ogni tecnico attivo deve avere ALMENO 1 intervento per giorno lavorativo. Genera ${nTecAttivi} righe per giorno (1 riga per tecnico, ognuno a un cliente diverso).
+- REGOLA FONDAMENTALE: UN tagliando = 1 SOLO tecnico = 1 sola riga. NON mettere due tecnici sullo stesso intervento salvo affiancamento ESPLICITO da vincolo.
+- Durata: un tagliando richiede 4-8 ore (giornata intera). Urgenze 1-3h.
+- "tagliando" e "service" sono sinonimi = manutenzione macchina programmata (PM).
+- Nel campo note scrivi: modello macchina + scadenza + ore lavoro se disponibili dalla sezione TAGLIANDI (es: "Astronaut A5 | scad:2026-03-10 | 2800h").
+- AFFIANCAMENTO (SOLO se un vincolo esplicito lo dice per una coppia specifica): genera DUE righe separate (senior + junior) con stesso cliente/data/ora/furgone. NON inventare affiancamenti non richiesti dai vincoli.
 - Tecnici assenti da vincoli o in ferie/malattia/trasferta/installazione: NON inserirli in quei giorni.
-- Usa il FURGONE indicato tra parentesi nel tecnico (es: "furgone:FURG_1"). Junior affiancato usa furgone del senior.
-- Raggruppa per zona (stessa citta per stesso tecnico nello stesso giorno).
-- Urgenze → primi giorni. Tagliandi scaduti → massima priorita.
-- Usa SOLO codici dalla lista (clienteId, tecnicoId). NON inventare nomi.
+- Usa il FURGONE indicato nel tecnico (es: "furgone:FURG_1"). In affiancamento il junior usa il furgone del senior.
+- DISTRIBUISCI i clienti: non mandare lo stesso tecnico dallo stesso cliente ogni giorno per una settimana intera — varia per ottimizzare logistica e zone.
+- Urgenze → assegna nei primi giorni. Tagliandi SCADUTI → massima priorita, pianifica subito.
+- Usa SOLO codici dalla lista (TEC_xxx, codice_m3, FURG_x). NON inventare ID.
 
-JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina (es: Astronaut A5)"}],"warnings":["..."]}`;
+JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}`;
 
       // ─── AI Call con ANONYMIZATION layer ───
       const validIds = new Set(allTecnici.map(t => t.id));
-      const sysPrompt = `Sei un pianificatore FSM (manutenzione robot). Rispondi SOLO JSON valido. Usa SOLO codici ID presenti nella lista (TEC_xxx per tecnici, codice_m3 per clienti, FURG_x per furgoni). NON inventare codici. Nel campo note scrivi il MODELLO della macchina leggendolo dalla sezione TAGLIANDI (es: "Astronaut A5", "Vector 70"). Formato: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina (es: Astronaut A5)"}],"warnings":["..."]}`;
+      const sysPrompt = `Sei un pianificatore FSM (manutenzione robot). Rispondi SOLO JSON valido. Regole INVIOLABILI: (1) UN tagliando = 1 solo tecnico = 1 sola riga. NON mettere due tecnici sullo stesso intervento salvo affiancamento ESPLICITO da vincolo configurato. (2) Usa SOLO codici ID dalla lista (TEC_xxx per tecnici, codice_m3 per clienti, FURG_x per furgoni). NON inventare ID. (3) Nel campo note scrivi modello macchina + data scadenza se disponibile (es: "Astronaut A5 | scad:2026-03-10 | 2800h"). Formato: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}`;
 
       // Helper: costruisce prompt compatto per Workers AI (rimuove file e comprime dati)
       function buildCompactPrompt() {
@@ -3035,15 +3037,16 @@ ${tagliandiContext ? tagliandiContext.substring(0,500) : ''}
 
 ${periodoIstruzione || 'Genera piano mese intero'}
 - SOLO lun-ven. Sab/Dom: solo reperibilita urgenze, no tagliandi.
-- TUTTI i tecnici attivi: almeno 1 intervento AL GIORNO.
-- Tagliando=4-8h (anche giornata intera). Urgenza=1-3h.
-- Affiancamento junior+senior = DUE righe: stesso cliente/data/ora/furgone.
+- 1 riga per tecnico per giorno (ogni tecnico almeno 1 intervento/giorno).
+- REGOLA: UN tagliando = 1 SOLO tecnico. NON mettere due tecnici sullo stesso intervento salvo affiancamento esplicito da vincolo.
+- Tagliando=4-8h. Urgenza=1-3h.
+- AFFIANCAMENTO solo se vincolo lo dice esplicitamente: DUE righe (senior+junior) stesso cliente/data/ora/furgone.
 - Tecnici assenti da vincoli: NON inserirli.
-- note = modello macchina (es: Astronaut A5, Vector 70).
-- Usa furgone indicato nel tecnico.
-- Usa SOLO codici dalla lista. NON inventare nomi.
+- note = modello macchina + scadenza se disponibile (es: Astronaut A5 | scad:2026-03-10).
+- Distribuisci clienti: non stesso tecnico+cliente ogni giorno per settimane.
+- Usa furgone indicato nel tecnico. Usa SOLO codici dalla lista. NON inventare ID.
 
-JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina (es: Astronaut A5)"}],"warnings":[]}`;
+JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA"}],"warnings":[]}`;
       }
 
       // Engine registry: ogni engine ha key env, funzione try, flag disabled

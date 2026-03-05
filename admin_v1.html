@@ -7647,6 +7647,7 @@ async function runAI(){
       <button class="btn btn-sm" style="background:var(--info);color:white" onclick="showAIPlanInCalendar()">📅 Mostra nel Calendario Mensile</button>
       ${result.chunks?`<span style="font-size:.75rem;color:var(--gray);align-self:center">Generato in ${result.chunks} chunk settimanali</span>`:''}
     </div>`;
+    $('aiResult').style.display='block';
     $('aiResult').innerHTML=html;
     $('btnApplyAI').disabled=false;
     $('btnSubmitPlan').disabled=false;
