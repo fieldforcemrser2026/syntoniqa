@@ -2959,9 +2959,16 @@ async function handlePost(action, body, env) {
         const baseCode = t.base ? (cittaMap[t.base] || t.base) : '?';
         return `${t.id}(${t.ruolo},zona:${baseCode},furgone:${furgLabel})`;
       }).join('; ');
-      // Calcola senior/junior per regola distribuzione
-      const allSeniors = allTecnici.filter(t=>t.ruolo==='caposquadra'||t.ruolo==='senior'||t.ruolo==='tecnico_senior');
-      const allJuniors = allTecnici.filter(t=>t.ruolo==='junior'||t.ruolo==='tecnico_junior');
+      // Calcola senior/junior per regola distribuzione — match robusto con spazi E underscore
+      // DB usa: "caposquadra", "tecnico senior", "tecnico junior" (con spazio)
+      const allSeniors = allTecnici.filter(t => {
+        const r = (t.ruolo||'').toLowerCase().replace(/_/g,' ').trim();
+        return r === 'caposquadra' || r === 'senior' || r.includes('senior');
+      });
+      const allJuniors = allTecnici.filter(t => {
+        const r = (t.ruolo||'').toLowerCase().replace(/_/g,' ').trim();
+        return r === 'junior' || r.includes('junior');
+      });
       const seniorConstraint = allSeniors.length
         ? `\nREGOLA SENIOR (INVIOLABILE): i ${allSeniors.length} senior [${allSeniors.map(t=>t.id).join(',')}] sono RISORSE SCARSE. (1) MAI due senior insieme allo stesso cliente/giorno — devono essere su squadre separate. (2) Tecnici junior [${allJuniors.map(t=>t.id).join(',')}] NON vanno MAI da soli — abbinali SEMPRE a un senior diverso (1 junior per senior al massimo per giorno).`
         : '';
