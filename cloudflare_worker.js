@@ -521,6 +521,36 @@ async function sbPaginate(env, table, query = '', pageSize = 1000, maxPages = 20
   return rows;
 }
 
+// ─── Helper: assicura che il tipo_intervento 'TAGLIANDO' esista (FK guard) ───
+// Chiamato prima di ogni INSERT su piano con tipo_intervento_id='TAGLIANDO'.
+// Usa resolution=ignore-duplicates → idempotente, nessun effetto se già esiste.
+let _tagliandoEnsured = false; // cache per la durata della richiesta (reset per ogni Worker invocation)
+async function ensureTagliandoType(env) {
+  if (_tagliandoEnsured) return;
+  const TENANT = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+  try {
+    // Prima verifica se esiste già (GET leggero)
+    const existing = await sb(env, 'tipi_intervento', 'GET', null, '?id=eq.TAGLIANDO&limit=1').catch(() => []);
+    if (Array.isArray(existing) && existing.length > 0) {
+      _tagliandoEnsured = true;
+      return;
+    }
+    // Non esiste: inserisci il record base
+    await sb(env, 'tipi_intervento', 'POST', {
+      id: 'TAGLIANDO',
+      nome: 'Tagliando / Service PM',
+      colore: '#3B82F6',
+      attivo: true,
+      tenant_id: TENANT,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }, '', { 'Prefer': 'resolution=ignore-duplicates' }).catch(() => {});
+    _tagliandoEnsured = true;
+  } catch {
+    // Non critico: se fallisce comunque proviamo il POST su piano, l'errore FK apparirà nell'applyErrors
+  }
+}
+
 // ============ ROUTER ============
 
 export default {
@@ -6266,6 +6296,7 @@ Rispondi SOLO con JSON valido:
       if (!dry_run && scheduled.length) {
         const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
         const now = new Date().toISOString();
+        await ensureTagliandoType(env); // FK guard: crea 'TAGLIANDO' in tipi_intervento se mancante
         let created = 0, errors = [];
         for (const s of scheduled) {
           try {
@@ -6783,6 +6814,7 @@ Rispondi SOLO con JSON valido:
       let nextPianoId = null;
       if (!dupeCheck.length) {
         // Crea prossimo intervento pianificato
+        await ensureTagliandoType(env); // FK guard
         nextPianoId = secureId('PM');
         await sb(env, 'piano', 'POST', {
           id: nextPianoId, tenant_id: tid,
@@ -6838,6 +6870,7 @@ Rispondi SOLO con JSON valido:
         if (snMatch) existingKeys.add(`SN_${snMatch[1]}_${p.data}`);
       }
 
+      await ensureTagliandoType(env); // FK guard: crea 'TAGLIANDO' in tipi_intervento se mancante
       let created2 = 0, skipped = 0, errors2 = [];
       // ── Raccoglie TUTTI i nuovi inserimenti in un array → batch POST unico ──
       const toInsert = [];
