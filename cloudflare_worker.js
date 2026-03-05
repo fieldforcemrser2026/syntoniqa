@@ -2959,6 +2959,12 @@ async function handlePost(action, body, env) {
         const baseCode = t.base ? (cittaMap[t.base] || t.base) : '?';
         return `${t.id}(${t.ruolo},zona:${baseCode},furgone:${furgLabel})`;
       }).join('; ');
+      // Calcola senior/junior per regola distribuzione
+      const allSeniors = allTecnici.filter(t=>t.ruolo==='caposquadra'||t.ruolo==='senior'||t.ruolo==='tecnico_senior');
+      const allJuniors = allTecnici.filter(t=>t.ruolo==='junior'||t.ruolo==='tecnico_junior');
+      const seniorConstraint = allSeniors.length
+        ? `\nREGOLA SENIOR (INVIOLABILE): i ${allSeniors.length} senior [${allSeniors.map(t=>t.id).join(',')}] sono RISORSE SCARSE. (1) MAI due senior insieme allo stesso cliente/giorno — devono essere su squadre separate. (2) Tecnici junior [${allJuniors.map(t=>t.id).join(',')}] NON vanno MAI da soli — abbinali SEMPRE a un senior diverso (1 junior per senior al massimo per giorno).`
+        : '';
       const urgList = ctx.urgenze ? allUrgenze.slice(0,20).map(u => `${u.id}:${anonEncode((u.problema||'').substring(0,40))}|${u.cliente_id}|pri:${u.priorita_id}`).join('; ') : '';
       const cliList = allClienti.slice(0,100).map(c => `${c.codice_m3}(${cittaMap[c.citta_fatturazione] || c.citta_fatturazione || '?'})`).join(', ');
 
@@ -2969,6 +2975,7 @@ OGGI: ${oggiIt} (${isoOggi})
 ########## VINCOLI CONFIGURATI (INVIOLABILI — rispetta OGNI regola senza eccezioni) ##########
 ${anonEncode(vincoliText || '(Nessun vincolo)')}
 ${testo ? 'ISTRUZIONI AGGIUNTIVE UTENTE: ' + anonEncode(testo) : ''}
+${seniorConstraint}
 ##########
 
 TECNICI DISPONIBILI (${nTecAttivi}): ${tecList}
@@ -3402,6 +3409,7 @@ OGGI: ${oggiIt} (${isoOggi})
 ########## VINCOLI CONFIGURATI (INVIOLABILI — rispetta OGNI regola senza eccezioni) ##########
 ${anonEncode(vincoliText || '(Nessun vincolo)')}
 ${testo ? 'ISTRUZIONI AGGIUNTIVE UTENTE: ' + anonEncode(testo) : ''}
+${seniorConstraint}
 ##########
 
 TECNICI DISPONIBILI (${nTecAttivi}): ${tecList}
@@ -3419,13 +3427,13 @@ ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}`;
 - Lun-ven: TUTTI i ${nTecAttivi} tecnici attivi devono avere interventi OGNI giorno (08:00-17:00) = MINIMO ${nTecAttivi} righe/giorno.
 - Durata: un tagliando puo richiedere 4-8 ore (anche giornata intera). Urgenze 1-3h.
 - "tagliando" e "service" = sinonimi. Nelle note scrivi il MODELLO della macchina (es: "Astronaut A5", "Vector 70") dal contesto TAGLIANDI sopra.
-- Affiancamento junior+senior: genera DUE righe (una per senior, una per junior) con STESSO clienteId/data/ora/furgone.
+- AFFIANCAMENTO JUNIOR+SENIOR: genera DUE righe (senior + junior) con STESSO clienteId/data/ora/furgone. Junior usa furgone del senior. MAI due senior insieme. MAI junior da solo.
 - Tecnici assenti da vincoli o in ferie/malattia/trasferta/installazione: NON inserirli in quei giorni.
 - Usa il FURGONE indicato tra parentesi nel tecnico.
 - Raggruppa per zona (stessa zona per stesso tecnico nello stesso giorno).
 - Urgenze → primi giorni. Tagliandi scaduti → massima priorita.
 - Usa SOLO codici dalla lista (tecnicoId, clienteId). NON inventare nomi.
-
+${seniorConstraint}
 JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina (es: Astronaut A5)"}],"warnings":["..."]}`;
 
         // ── CHUNKING SETTIMANALE: max 5 giorni per chunk = output gestibile ──
