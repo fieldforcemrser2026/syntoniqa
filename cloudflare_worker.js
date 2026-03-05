@@ -3075,6 +3075,7 @@ CLIENTI: ${cliList}
 ${repContext}
 ${indispContext}
 ${pianoEsistente}
+${interventiDaAssegnare}
 ${tagliandiContext}
 ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}
 
@@ -3082,7 +3083,7 @@ ISTRUZIONI GENERAZIONE:
 ${periodoIstruzione || 'Genera piano per OGNI giorno lavorativo (lun-ven)'}
 
 OBIETTIVO PRINCIPALE:
-${tagItems.length > 0 ? `HAI ${tagItems.length} TAGLIANDI/SERVICE DA SCHEDULARE. Genera ESATTAMENTE 1 intervento per ciascuna macchina/asset dalla lista TAGLIANDI/SERVICE SCADENZA qui sopra. Non generare interventi extra non corrispondenti a un tagliando reale. Distribuisci i ${tagItems.length} interventi tra i tecnici disponibili in modo ottimale nel periodo target, rispettando zone e vincoli.` : 'Genera piano per il periodo specificato coprendo tutti i tecnici disponibili.'}
+${interventiDaAssegnare ? `HAI ${senzaTecnico.length} INTERVENTI GIA CREATI DA ASSEGNARE (generati da import PM/tagliandi). Il tuo compito PRINCIPALE è ASSEGNARE tecnico, data e furgone a CIASCUNO di questi interventi. Usa la lista "INTERVENTI DA ASSEGNARE" qui sopra. Per ogni intervento, scegli il tecnico migliore in base a zona del cliente, disponibilità e vincoli. NON creare interventi nuovi per le stesse macchine — assegna SOLO quelli esistenti.` : tagItems.length > 0 ? `HAI ${tagItems.length} TAGLIANDI/SERVICE DA SCHEDULARE. Genera ESATTAMENTE 1 intervento per ciascuna macchina/asset dalla lista TAGLIANDI/SERVICE SCADENZA qui sopra. Non generare interventi extra non corrispondenti a un tagliando reale. Distribuisci i ${tagItems.length} interventi tra i tecnici disponibili in modo ottimale nel periodo target, rispettando zone e vincoli.` : 'Genera piano per il periodo specificato coprendo tutti i tecnici disponibili.'}
 ${allUrgenze.length > 0 ? `
 URGENZE DA PIANIFICARE: Assegna le ${allUrgenze.length} urgenze aperte ai tecnici disponibili NEI PRIMI GIORNI del periodo (priorità massima).` : ''}
 
@@ -3097,18 +3098,22 @@ REGOLE INVIOLABILI:
 - Distribuisci clienti per zona: ottimizza percorsi, non mandare stesso tecnico a stesso cliente per giorni consecutivi senza motivo logistico.
 - Usa SOLO codici dalla lista (TEC_xxx, codice_m3, FURG_x). NON inventare ID.
 
-JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}`;
+JSON: {"summary":"...","piano":[{"id":"INT_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}
+NOTA ID: se stai ASSEGNANDO un intervento esistente dalla lista INTERVENTI DA ASSEGNARE, usa il suo ID (es: INT_xxx). Se stai CREANDO un nuovo intervento, usa null.`;
 
       // ─── Debug SSE: emetti il prompt prima della chiamata AI ───
-      sse({type:'debug_prompt', prompt_preview: prompt.substring(0, 3000), prompt_length: prompt.length,
+      const _senzaTec = interventiDaAssegnare ? (allPianoDb.filter(p => !p.tecnico_id || p.tecnico_id === 'null' || p.tecnico_id === '').length) : 0;
+      sse({type:'debug_prompt', prompt_preview: prompt.substring(0, 4000), prompt_length: prompt.length,
            tagliandi_count: tagItems.length, urgenze_count: allUrgenze.length,
            tecnici_count: allTecnici.filter(t=>t.ruolo!=='admin').length,
            macchine_loaded: allMacchine.length, assets_loaded: allAssets.length,
+           interventi_da_assegnare: _senzaTec,
+           piano_assegnato: allPianoDb.length - _senzaTec,
            mese_target: meseTarget, modalita: modalita });
 
       // ─── AI Call con ANONYMIZATION layer ───
       const validIds = new Set(allTecnici.map(t => t.id));
-      const sysPrompt = `Sei un pianificatore FSM (manutenzione robot). Rispondi SOLO JSON valido. Regole INVIOLABILI: (1) UN tagliando = 1 solo tecnico = 1 sola riga. NON mettere due tecnici sullo stesso intervento salvo affiancamento ESPLICITO da vincolo configurato. (2) Usa SOLO codici ID dalla lista (TEC_xxx per tecnici, codice_m3 per clienti, FURG_x per furgoni). NON inventare ID. (3) Nel campo note scrivi modello macchina + data scadenza se disponibile (es: "Astronaut A5 | scad:2026-03-10 | 2800h"). Formato: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}`;
+      const sysPrompt = `Sei un pianificatore FSM (manutenzione robot Lely). Rispondi SOLO JSON valido. Regole INVIOLABILI: (1) Se ci sono INTERVENTI DA ASSEGNARE, il tuo compito è assegnare tecnico+data+furgone a ciascuno. Usa il campo "id" con l'ID esistente (es: INT_xxx). (2) UN tagliando = 1 solo tecnico = 1 sola riga. NON mettere due tecnici sullo stesso intervento salvo affiancamento ESPLICITO. (3) Usa SOLO codici ID dalla lista. NON inventare ID. (4) Nel campo note scrivi modello macchina + data scadenza (es: "Astronaut A5 | scad:2026-03-10 | 2800h"). Formato: {"summary":"...","piano":[{"id":"INT_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}`;
 
       // Helper: costruisce prompt compatto per Workers AI (rimuove file e comprime dati)
       function buildCompactPrompt() {

@@ -7767,6 +7767,8 @@ async function runAI(){
           <span style="font-size:.72rem;padding:2px 8px;background:rgba(99,102,241,.15);border-radius:8px;color:#A5B4FC">📦 ${dbg.assets_loaded} assets</span>
           <span style="font-size:.72rem;padding:2px 8px;background:rgba(249,115,22,.15);border-radius:8px;color:#FB923C">🏷️ ${dbg.tagliandi_count} tagliandi target</span>
           <span style="font-size:.72rem;padding:2px 8px;background:rgba(239,68,68,.15);border-radius:8px;color:var(--err)">🚨 ${dbg.urgenze_count} urgenze</span>
+          ${dbg.interventi_da_assegnare?`<span style="font-size:.72rem;padding:2px 8px;background:rgba(16,185,129,.2);border:1px solid rgba(16,185,129,.4);border-radius:8px;color:var(--ok);font-weight:600">📋 ${dbg.interventi_da_assegnare} DA ASSEGNARE</span>`:''}
+          ${dbg.piano_assegnato?`<span style="font-size:.72rem;padding:2px 8px;background:rgba(59,130,246,.1);border-radius:8px;color:var(--info)">✅ ${dbg.piano_assegnato} già assegnati</span>`:''}
           <span style="font-size:.72rem;padding:2px 8px;background:rgba(59,130,246,.15);border-radius:8px;color:var(--info)">📅 ${dbg.mese_target} (${dbg.modalita})</span>
         </div>
         <div style="font-size:.72rem;color:rgba(255,255,255,.5);margin-bottom:6px">Anteprima prompt (primi 3000 chars — dati già anonimizzati):</div>
