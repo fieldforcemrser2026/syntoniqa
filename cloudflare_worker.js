@@ -6444,7 +6444,7 @@ Rispondi SOLO con JSON valido:
       // IMPORTANTE: NON usare .catch(()=>[]) qui — se fallisce vogliamo saperlo,
       // altrimenti tutto appare "not found" silenziosamente (matching random 0 vs 80)
       const allAssetsSnap = await sb(env, 'anagrafica_assets', 'GET', null,
-        `?select=id,numero_serie,prossimo_controllo,ultimo_controllo,ciclo_pm,intervallo_settimane&tenant_id=eq.${TENANT}&limit=1000`);
+        `?select=id,numero_serie,prossimo_controllo,ultimo_controllo,ciclo_pm,intervallo_settimane&limit=1000`);
       if (!allAssetsSnap || allAssetsSnap.length === 0) {
         return err('Nessun asset trovato in anagrafica_assets — verifica tenant_id e che la tabella non sia vuota', 500);
       }
