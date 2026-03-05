@@ -6441,12 +6441,20 @@ Rispondi SOLO con JSON valido:
       const now = new Date().toISOString();
 
       // ── Pre-carica tutti gli asset con tutti i campi aggiornabili ──
-      // IMPORTANTE: NON usare .catch(()=>[]) qui — se fallisce vogliamo saperlo,
-      // altrimenti tutto appare "not found" silenziosamente (matching random 0 vs 80)
-      const allAssetsSnap = await sb(env, 'anagrafica_assets', 'GET', null,
-        `?select=id,numero_serie,prossimo_controllo,ultimo_controllo,ciclo_pm,intervallo_settimane&limit=1000`);
+      // Timeout esplicito 20s via AbortController per evitare hanging randomici
+      let allAssetsSnap;
+      try {
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), 20000);
+        allAssetsSnap = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/anagrafica_assets?select=id,numero_serie,prossimo_controllo,ultimo_controllo,ciclo_pm,intervallo_settimane&limit=2000`,
+          { signal: ac.signal, headers: { 'apikey': env.SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}` } }
+        ).then(r => r.json()).finally(() => clearTimeout(timer));
+      } catch(e) {
+        return err(`Timeout o errore caricamento anagrafica_assets: ${e.message}`, 500);
+      }
       if (!allAssetsSnap || allAssetsSnap.length === 0) {
-        return err('Nessun asset trovato in anagrafica_assets — verifica tenant_id e che la tabella non sia vuota', 500);
+        return err('Nessun asset trovato in anagrafica_assets — verifica che la tabella non sia vuota', 500);
       }
       const snToId = new Map();
       const idToAsset = new Map();
@@ -6486,12 +6494,10 @@ Rispondi SOLO con JSON valido:
           const newUltimo = rec.ultimo_controllo || rec.UltimoControllo || null;
           const newCiclo = rec.ciclo_pm || rec.CicloPm || null;
           const newIntervallo = rec.intervallo_settimane != null ? (parseInt(rec.intervallo_settimane) || null) : null;
-          // Controlla se c'è davvero qualcosa da aggiornare
-          const hasChanges = (newProssimo && newProssimo !== existing.prossimo_controllo)
-            || (newUltimo && newUltimo !== existing.ultimo_controllo)
-            || (newCiclo && newCiclo !== existing.ciclo_pm)
-            || (newIntervallo !== null && newIntervallo !== existing.intervallo_settimane);
-          if (!hasChanges) { skipped++; continue; }
+          // NIENTE hasChanges — sempre upsert. Il check "no changes" causava
+          // conteggi diversi tra run perché il cron aggiornava prossimo_controllo nel DB
+          // tra un import e l'altro, rendendo la comparazione non-deterministica.
+          // L'upsert a DB è idempotente: sovrascrivere con lo stesso valore è sicuro.
           // Oggetto con chiavi SEMPRE identiche (fix PGRST102): usa valore esistente come fallback
           toUpsert.push({
             id: assetId,
