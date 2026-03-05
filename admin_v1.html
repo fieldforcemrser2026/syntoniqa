@@ -2323,6 +2323,13 @@ Workers AI è incluso in Cloudflare e non richiede chiavi aggiuntive.
 </div>
 </div>
 
+<!-- MODAL: Seriali non trovati import PM -->
+<div class="modal-overlay" id="modalPMNotFound">
+<div class="modal" style="max-width:680px">
+<div class="modal-head"><h2>🔍 Seriali non trovati nell'import</h2><button class="close" onclick="closeModal('modalPMNotFound')">✕</button></div>
+<div id="pmNotFoundContent" style="max-height:60vh;overflow-y:auto"></div>
+</div></div>
+
 <!-- MODAL: Storico Sincronizzazioni PM -->
 <div class="modal-overlay" id="modalPMSyncLog">
 <div class="modal" style="max-width:820px">
@@ -8378,6 +8385,29 @@ let PM_FILTER='tutti';
 let PM_CYCLE_DEFS=[];
 let PM_OPEN_ROW=null;
 let PM_OVERVIEW=null; // {clienti:[{codice_m3,nome,assets:[...]}], total_assets, total_clienti}
+let _pmLastNotFound=[]; // ultimi seriali non trovati dall'import, per debug
+
+function showPMNotFound(){
+  if(!_pmLastNotFound.length){toast('Nessun seriale non trovato','info');return;}
+  const rows=_pmLastNotFound.map((x,i)=>`<tr>
+    <td style="padding:6px 10px;border-bottom:1px solid var(--border)">${i+1}</td>
+    <td style="padding:6px 10px;border-bottom:1px solid var(--border);font-family:monospace;font-weight:600">${esc(x.serial||'—')}</td>
+    <td style="padding:6px 10px;border-bottom:1px solid var(--border);color:var(--gray);font-size:12px">${(x.tried||[]).map(t=>`<code style="background:var(--bg2);padding:1px 4px;border-radius:3px">${esc(t)}</code>`).join(' / ')}</td>
+  </tr>`).join('');
+  const html=`<div style="padding:20px">
+    <p style="margin:0 0 12px;color:var(--gray)">Questi <b>${_pmLastNotFound.length}</b> seriali del file import non hanno trovato corrispondenza in <b>anagrafica_assets</b>.<br>Verifica che il numero di serie sia identico a quello salvato nel DB (colonna N. Serie).</p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:var(--bg2)">
+        <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--gray)">#</th>
+        <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--gray)">SERIALE IMPORT</th>
+        <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--gray)">VARIANTI PROVATE</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+  const el=$('pmNotFoundContent');if(el)el.innerHTML=html;
+  openModal('modalPMNotFound');
+}
 
 function initPMSection(){
   // Applica colore e nome provider al bottone Sync
@@ -8620,7 +8650,9 @@ async function _importPMFileCore(input){
       const res=await apiCall('importPMOverdue',{records},'POST');
       const sk=res.skipped||0, er=res.errors||0;
       const lvl=res.updated>0?'ok':er>0?'err':'warn';
+      if(res.not_found_serials?.length){_pmLastNotFound=res.not_found_serials;}
       let msg='✅ '+res.updated+' aggiornati | '+(res.not_found||0)+' non trovati';
+      if(res.not_found>0)msg+=' <a href="#" onclick="showPMNotFound();return false" style="color:#fff;text-decoration:underline">Vedi quali</a>';
       if(sk>0)msg+=' | '+sk+' senza data';
       if(er>0)msg+=' | ⚠️ '+er+' errori';
       if(res.sync_id)msg+=' — <a href="#" onclick="showPMSyncLog();return false" style="color:#fff;text-decoration:underline">📋 Storico</a>';
@@ -8765,7 +8797,9 @@ async function _importPMFileCore(input){
       if(!records.length){toast('Nessun record valido nel file export','err');return;}
       toast(`Importo ${records.length} record...`,'info');
       const res=await apiCall('importPMOverdue',{records},'POST');
-      toast(`✅ ${res.updated} aggiornati | ${res.not_found} non trovati`,res.not_found>res.updated?'warn':'ok');
+      if(res.not_found_serials?.length)_pmLastNotFound=res.not_found_serials;
+      let nfLink=res.not_found>0?' <a href="#" onclick="showPMNotFound();return false" style="color:#fff;text-decoration:underline">Vedi quali</a>':'';
+      toast(`✅ ${res.updated} aggiornati | ${res.not_found} non trovati`+nfLink,res.not_found>res.updated?'warn':'ok');
       PM_OVERVIEW=null;await loadPMOverview();
       return;
     }
@@ -8783,7 +8817,9 @@ async function _importPMFileCore(input){
     if(!records.length){toast('Nessun record valido trovato','err');return;}
     toast(`Importo ${records.length} record...`,'info');
     const res=await apiCall('importPMOverdue',{records},'POST');
-    toast(`✅ ${res.updated} aggiornati | ${res.not_found} non trovati${res.errors?', '+res.errors+' err':''}`,res.not_found>res.updated?'warn':'ok');
+    if(res.not_found_serials?.length)_pmLastNotFound=res.not_found_serials;
+    const nfLnk=res.not_found>0?' <a href="#" onclick="showPMNotFound();return false" style="color:#fff;text-decoration:underline">Vedi quali</a>':'';
+    toast(`✅ ${res.updated} aggiornati | ${res.not_found} non trovati`+nfLnk+(res.errors?', '+res.errors+' err':''),res.not_found>res.updated?'warn':'ok');
     PM_OVERVIEW=null;await loadPMOverview();
   }catch(e){toast('Errore import: '+e.message,'err');}
   input.value='';

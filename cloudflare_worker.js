@@ -6458,6 +6458,7 @@ Rispondi SOLO con JSON valido:
 
       // ── Costruisci array di upsert con chiavi uniformi (ZERO subrequest nel loop) ──
       const toUpsert = [];
+      const not_found_serials = []; // traccia i seriali non trovati per debug UI
       for (const rec of records) {
         if (!first_sample) first_sample = { serial: rec.numero_serie, prossimo: rec.prossimo_controllo, ultimo: rec.ultimo_controllo };
         try {
@@ -6466,7 +6467,11 @@ Rispondi SOLO con JSON valido:
             || snToId.get(rawSerial)
             || snToId.get(padSerial10(rawSerial))
             || snToId.get(normalizeSerial(rawSerial));
-          if (!assetId) { not_found++; continue; }
+          if (!assetId) {
+            not_found++;
+            not_found_serials.push({ serial: rawSerial, tried: [rawSerial, padSerial10(rawSerial), normalizeSerial(rawSerial)].filter(Boolean) });
+            continue;
+          }
           const existing = idToAsset.get(assetId) || {};
           const newProssimo = rec.prossimo_controllo || rec.ProssimoControllo || null;
           const newUltimo = rec.ultimo_controllo || rec.UltimoControllo || null;
@@ -6517,7 +6522,7 @@ Rispondi SOLO con JSON valido:
         });
       } catch(e) { /* pm_sync_log non critico — non bloccare il flusso */ }
       await wlog('anagrafica_assets', 'bulk', `pm_import updated:${updated} not_found:${not_found} skipped:${skipped}`, body.operatoreId || body.userId);
-      return ok({ updated, not_found, errors, skipped, total: records.length, sync_id: syncId, first_error, first_sample });
+      return ok({ updated, not_found, errors, skipped, total: records.length, sync_id: syncId, first_error, first_sample, not_found_serials });
     }
 
     // ═══ GET STORICO SINCRONIZZAZIONI PM ═══
