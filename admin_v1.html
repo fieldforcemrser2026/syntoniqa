@@ -2754,7 +2754,7 @@ function enterApp(){
 // ============ POPULATE SELECTS ============
 function populateSelects(){
   const tecs=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Attivo&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
-  const clis=(DATA.clienti||[]).filter(c=>!c.Obsoleto);
+  const clis=(DATA.clienti||[]).filter(c=>!c.Obsoleto&&!(c.Nome||'').startsWith('Should Fail'));
   const automezziList=(DATA.automezzi||[]).filter(f=>!f.Obsoleto);
   const tipi=(DATA.tipiIntervento||[]).filter(t=>t.Attivo);
   const pris=(DATA.priorita||[]).filter(p=>p.Attivo);
@@ -2869,11 +2869,15 @@ function loadMacchineCliente(prefix){
         const tipo=assetType(a);
         const cfg=PROD_CFG[tipo]||{};
         const o=document.createElement('option');
-        o.value=a.NumeroSerie||a.NomeAsset||'';
-        o.textContent=(cfg.label||tipo)+' '+(a.Modello||'')+' — '+(a.NomeAsset||'')+(a.NumeroSerie?' (SN: '+a.NumeroSerie+')':'');
+        // Preferisci MAC_xxx da DATA.macchine (richiesto da FK urgenze/piano),
+        // ricercando per numero seriale; fallback al seriale stesso
+        const sn=a.NumeroSerie||'';
+        const macMatch=sn?(DATA.macchine||[]).find(m=>m.Seriale&&m.Seriale===sn):null;
+        o.value=macMatch?macMatch.ID:sn||a.NomeAsset||'';
+        o.textContent=(cfg.label||tipo)+' '+(a.Modello||'')+' — '+(a.NomeAsset||'')+(sn?' (SN: '+sn+')':'');
         o.dataset.tipo=tipo;
         o.dataset.modello=a.Modello||'';
-        o.dataset.seriale=a.NumeroSerie||'';
+        o.dataset.seriale=sn;
         o.dataset.asset=a.NomeAsset||'';
         o.dataset.m3=m3;
         s.appendChild(o);
@@ -10211,11 +10215,11 @@ function renderMonthPlan(){
       pmDay.forEach(mc => {
         const cli = getName(DATA.clienti||[], mc.ClienteID);
         const isOverdue = mc.ProssimoTagliando < today();
-        html += `<div class="cal-micro cal-micro-pm ${isOverdue?'overdue':'upcoming'}" title="${isOverdue?'SCADUTO':'In scadenza'}: ${mc.Modello||mc.ID}\nCliente: ${cli}\nData: ${mc.ProssimoTagliando}" onclick="showSec('tagliandi')">🔧 ${(cli||'').substring(0,compact?8:12)}</div>`;
+        html += `<div class="cal-micro cal-micro-pm ${isOverdue?'overdue':'upcoming'}" title="${isOverdue?'SCADUTO':'In scadenza'}: ${mc.Modello||mc.ID}\nCliente: ${cli}\nData: ${mc.ProssimoTagliando}" onclick="showSec('pm')">🔧 ${(cli||'').substring(0,compact?8:12)}</div>`;
       });
       // Mostra conteggio scaduti generici se non cadono in questo giorno
       if(!pmDay.length && d.ds === days[0]?.ds && pmScaduti.length) {
-        html += `<div style="font-size:.55rem;color:var(--err2);text-align:center;cursor:pointer" onclick="showSec('tagliandi')" title="${pmScaduti.length} tagliandi scaduti da schedulare">🔴 ${pmScaduti.length} scad.</div>`;
+        html += `<div style="font-size:.55rem;color:var(--err2);text-align:center;cursor:pointer" onclick="showSec('pm')" title="${pmScaduti.length} tagliandi scaduti da schedulare">🔴 ${pmScaduti.length} scad.</div>`;
       }
       html += '</td>';
     });

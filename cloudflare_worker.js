@@ -552,6 +552,22 @@ async function resolveTagliandoId(env) {
 // Wrapper sincrono per i vecchi riferimenti (uso: await ensureTagliandoType(env))
 async function ensureTagliandoType(env) { await resolveTagliandoId(env); }
 
+// Helper: se macId è già MAC_xxx restituisce così com'è;
+// se è un numero seriale lo risolve cercando nella tabella macchine.
+async function resolveSerialToMacId(env, macId) {
+  if (!macId) return null;
+  const s = String(macId).trim();
+  if (s.startsWith('MAC_')) return s;
+  // È un seriale — cerca in macchine per campo seriale
+  try {
+    const hits = await sb(env, 'macchine', 'GET', null,
+      `?seriale=eq.${encodeURIComponent(s)}&obsoleto=eq.false&select=id&limit=1`
+    ).catch(() => []);
+    if (hits && hits.length) return hits[0].id;
+  } catch(e) { console.error('resolveSerialToMacId:', e.message); }
+  return null;
+}
+
 // ============ ROUTER ============
 
 export default {
@@ -961,12 +977,15 @@ async function handlePost(action, body, env) {
       const fields = getFields(body);
       if (!fields.data) return err('Campo data obbligatorio per createPiano');
       if (!fields.cliente_id) return err('Campo cliente_id obbligatorio per createPiano');
-      // Writable: id,tenant_id,tecnico_id,cliente_id,automezzo_id,tipo_intervento_id,data,ora_inizio,ora_fine,stato,note,data_fine
+      // Risolvi macchina_id: se è un seriale cerca il MAC_xxx corrispondente
+      const resolvedMacPiano = await resolveSerialToMacId(env, fields.macchina_id);
+      // Writable: id,tenant_id,tecnico_id,cliente_id,macchina_id,automezzo_id,tipo_intervento_id,data,ora_inizio,ora_fine,stato,note,data_fine
       const row = {
         id,
         tenant_id: fields.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
         tecnico_id: fields.tecnico_id || null,
         cliente_id: fields.cliente_id || null,
+        macchina_id: resolvedMacPiano || null,
         automezzo_id: fields.automezzo_id || null,
         tipo_intervento_id: fields.tipo_intervento_id || null,
         data: fields.data || null,
@@ -1057,6 +1076,9 @@ async function handlePost(action, body, env) {
           slaScadenza = d.toISOString();
         }
       }
+      // Risolvi macchina_id: se è un seriale cerca il MAC_xxx corrispondente
+      const resolvedMacUrg = await resolveSerialToMacId(env, fields.macchina_id);
+      if (resolvedMacUrg !== undefined) fields.macchina_id = resolvedMacUrg;
       // Only writable urgenze columns
       const urgWritable = ['tenant_id','cliente_id','macchina_id','problema','priorita_id','stato','tecnico_assegnato','tecnici_ids','automezzo_id','data_segnalazione','data_assegnazione','data_prevista','ora_prevista','data_inizio','data_risoluzione','intervento_id','note','allegati_ids','sla_scadenza','sla_status'];
       const row = { id };
