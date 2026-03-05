@@ -6469,7 +6469,13 @@ Rispondi SOLO con JSON valido:
             || snToId.get(normalizeSerial(rawSerial));
           if (!assetId) {
             not_found++;
-            not_found_serials.push({ serial: rawSerial, tried: [rawSerial, padSerial10(rawSerial), normalizeSerial(rawSerial)].filter(Boolean) });
+            not_found_serials.push({
+              serial: rawSerial,
+              prossimo_controllo: rec.prossimo_controllo || rec.ProssimoControllo || null,
+              ultimo_controllo: rec.ultimo_controllo || rec.UltimoControllo || null,
+              ciclo_pm: rec.ciclo_pm || rec.CicloPm || null,
+              tried: [rawSerial, padSerial10(rawSerial), normalizeSerial(rawSerial)].filter(Boolean)
+            });
             continue;
           }
           const existing = idToAsset.get(assetId) || {};

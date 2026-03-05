@@ -8389,24 +8389,75 @@ let _pmLastNotFound=[]; // ultimi seriali non trovati dall'import, per debug
 
 function showPMNotFound(){
   if(!_pmLastNotFound.length){toast('Nessun seriale non trovato','info');return;}
-  const rows=_pmLastNotFound.map((x,i)=>`<tr>
-    <td style="padding:6px 10px;border-bottom:1px solid var(--border)">${i+1}</td>
-    <td style="padding:6px 10px;border-bottom:1px solid var(--border);font-family:monospace;font-weight:600">${esc(x.serial||'—')}</td>
-    <td style="padding:6px 10px;border-bottom:1px solid var(--border);color:var(--gray);font-size:12px">${(x.tried||[]).map(t=>`<code style="background:var(--bg2);padding:1px 4px;border-radius:3px">${esc(t)}</code>`).join(' / ')}</td>
-  </tr>`).join('');
+  // Costruisci lista flat di tutti gli asset in memoria per il dropdown
+  const allAssets=(PM_OVERVIEW?.clienti||[]).flatMap(c=>(c.assets||[]).map(a=>({
+    id:a.id, label:`${esc(a.numero_serie||a.id)} — ${esc(a.nome_asset||a.modello||'')} (${esc(c.nome||c.codice_m3||'')})`
+  })));
+  const assetOpts=allAssets.map(a=>`<option value="${esc(a.id)}">${a.label}</option>`).join('');
+
+  const rows=_pmLastNotFound.map((x,i)=>{
+    const hasDate=x.prossimo_controllo||x.ultimo_controllo;
+    return `<tr id="nfRow${i}">
+      <td style="padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top">${i+1}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top">
+        <div style="font-family:monospace;font-weight:600;font-size:13px">${esc(x.serial||'—')}</div>
+        ${hasDate?`<div style="font-size:11px;color:var(--gray);margin-top:2px">
+          ${x.prossimo_controllo?'Prox: <b>'+x.prossimo_controllo+'</b>':''}
+          ${x.ultimo_controllo?' · Ult: <b>'+x.ultimo_controllo+'</b>':''}
+          ${x.ciclo_pm?' · Ciclo: <b>'+esc(x.ciclo_pm)+'</b>':''}
+        </div>`:'<div style="font-size:11px;color:var(--gray)">Nessuna data</div>'}
+      </td>
+      <td style="padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top;min-width:260px">
+        ${allAssets.length?`<div style="display:flex;gap:6px;align-items:center">
+          <select id="nfSel${i}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--bg);color:var(--text)">
+            <option value="">— scegli asset —</option>${assetOpts}
+          </select>
+          <button onclick="applyPMNotFound(${i})" style="padding:4px 10px;background:var(--c1);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap">✅ Applica</button>
+        </div>`:'<span style="color:var(--gray);font-size:12px">Apri prima la sezione PM</span>'}
+      </td>
+    </tr>`;
+  }).join('');
+
   const html=`<div style="padding:20px">
-    <p style="margin:0 0 12px;color:var(--gray)">Questi <b>${_pmLastNotFound.length}</b> seriali del file import non hanno trovato corrispondenza in <b>anagrafica_assets</b>.<br>Verifica che il numero di serie sia identico a quello salvato nel DB (colonna N. Serie).</p>
+    <p style="margin:0 0 12px;color:var(--gray)">Questi <b>${_pmLastNotFound.length}</b> seriali del file import non hanno matchato nessun asset nel DB.<br>Seleziona manualmente l'asset corretto e clicca <b>Applica</b> per aggiornare le date senza rilancire l'import.</p>
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="background:var(--bg2)">
         <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--gray)">#</th>
-        <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--gray)">SERIALE IMPORT</th>
-        <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--gray)">VARIANTI PROVATE</th>
+        <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--gray)">SERIALE IMPORT + DATE</th>
+        <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--gray)">ASSET DB (rematch manuale)</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
   </div>`;
   const el=$('pmNotFoundContent');if(el)el.innerHTML=html;
   openModal('modalPMNotFound');
+}
+
+async function applyPMNotFound(idx){
+  const x=_pmLastNotFound[idx];
+  const sel=$('nfSel'+idx);
+  const assetId=sel?.value;
+  if(!assetId){toast('Seleziona un asset','warn');return;}
+  if(!x.prossimo_controllo&&!x.ultimo_controllo){toast('Nessuna data da applicare','warn');return;}
+  const btn=sel?.nextElementSibling;
+  if(btn){btn.disabled=true;btn.textContent='...';}
+  try{
+    const rec={asset_id:assetId};
+    if(x.prossimo_controllo)rec.prossimo_controllo=x.prossimo_controllo;
+    if(x.ultimo_controllo)rec.ultimo_controllo=x.ultimo_controllo;
+    if(x.ciclo_pm)rec.ciclo_pm=x.ciclo_pm;
+    await apiCall('importPMOverdue',{records:[rec]},'POST');
+    // Segna riga come completata
+    const row=$('nfRow'+idx);
+    if(row)row.style.opacity='0.4';
+    if(btn){btn.disabled=true;btn.textContent='✅ Fatto';}
+    _pmLastNotFound.splice(idx,1,{..._pmLastNotFound[idx],_done:true});
+    toast('Asset aggiornato','ok');
+    PM_OVERVIEW=null;loadPMOverview();
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='✅ Applica';}
+    toast('Errore: '+e.message,'err');
+  }
 }
 
 function initPMSection(){
