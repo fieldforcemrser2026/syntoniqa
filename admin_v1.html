@@ -931,7 +931,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <div style="border-top:1px solid #E5E7EB;padding-top:10px;margin-top:8px">
 <div style="font-size:.75rem;color:var(--gray);margin-bottom:6px">Suggerimenti rapidi:</div>
 <div style="display:flex;flex-wrap:wrap;gap:4px" id="vincoliQuickAdd">
-<button class="btn btn-sm btn-outline" onclick="addManualVincolo('👥 Accoppiamento Junior+Senior','Gino/Giuseppe/Emanuele devono lavorare affiancati a un senior (Jacopo/Anton/Giovanni)')">👥 Junior+Senior</button>
+<button class="btn btn-sm btn-outline" onclick="(()=>{const tec=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Ruolo==='tecnico');const cap=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Ruolo==='caposquadra');const j=tec.slice(0,3).map(u=>u.Nome).join('/')||'[Junior]';const s=cap.slice(0,2).map(u=>u.Nome).join('/')||'[Senior]';addManualVincolo('👥 Accoppiamento Junior+Senior',j+' devono lavorare affiancati a un senior ('+s+')')})()">👥 Junior+Senior</button>
 <button class="btn btn-sm btn-outline" onclick="addManualVincolo('🚫 Tecnico non disponibile','[Nome] non disponibile per [motivo]')">🚫 Non disponibile</button>
 <button class="btn btn-sm btn-outline" onclick="addManualVincolo('🔧 Competenza specifica','Solo [Nome] può intervenire su [tipo macchina]')">🔧 Competenza</button>
 <button class="btn btn-sm btn-outline" onclick="addManualVincolo('🚗 Furgone fuori servizio','Furgone [FURG_X] in officina dal [data] al [data]')">🚗 Furgone KO</button>
@@ -4499,10 +4499,17 @@ function closeMacchMap(){
 
 // ============ AUTOMEZZI ============
 function renderAutomezzi(){
-  const items=(DATA.automezzi||[]).filter(f=>!f.Obsoleto).sort((a,b)=>{
+  const _allAuto=(DATA.automezzi||[]).filter(f=>!f.Obsoleto).sort((a,b)=>{
     const numA=parseInt((a.ID||'').replace(/\D/g,''),10)||9999;
     const numB=parseInt((b.ID||'').replace(/\D/g,''),10)||9999;
     return numA-numB;
+  });
+  // Dedup by display label (Nome o F{n} da ID) — preferisce il primo (FURG_ < AUT_ per ordine)
+  const _seenLabels=new Set();
+  const items=_allAuto.filter(f=>{
+    const lbl=f.Nome||(()=>{const m=(f.ID||'').match(/FURG_(\d+)/i);return m?'F'+m[1]:f.ID})();
+    if(_seenLabels.has(lbl))return false;
+    _seenLabels.add(lbl);return true;
   });
   $('furgGrid').innerHTML=items.length?'<div class="grid-auto">'+items.map(f=>{
     const d=today();const ctrl=f.ProssimoControllo&&f.ProssimoControllo<=d;
@@ -7417,6 +7424,9 @@ async function runAI(){
   const meseVal=$('aiMeseTarget')?.value||'';
   const hasVincoli=VINCOLI_AUTO.some(v=>VINCOLI_AUTO_SEL[v.id||(v.fonte_tabella+'_'+v.fonte_record_id)]!==false)||VINCOLI_MANUAL.some(r=>r.testo);
   if(!prompt&&!AI_FILES.length&&!meseVal&&!hasVincoli){toast('Specifica almeno un criterio: testo, mese target, vincoli configurati o file allegati','warn');return}
+
+  // FIX: vai sempre allo step 3 (dove si trova aiResult) prima di generare
+  aiGoToStep(3);
 
   // ─── STREAMING LOADING UI ───
   const _engLabels={gemini:{name:'Gemini',color:'#4285F4',ico:'🔵'},cerebras:{name:'Cerebras',color:'#FF6B35',ico:'🟠'},groq:{name:'Groq',color:'#F55036',ico:'🔴'},mistral:{name:'Mistral',color:'#7C3AED',ico:'🟣'},deepseek:{name:'DeepSeek',color:'#0EA5E9',ico:'🔷'},workersai:{name:'Workers AI',color:'#F38020',ico:'⚡'}};
@@ -10658,23 +10668,18 @@ async function runAIPlanner(){
   for(let i=0;i<7;i++){ const d=new Date(PLANNER_DATE); d.setDate(d.getDate()+i); week.push(d.toISOString().split('T')[0]); }
   const urgenze = (DATA.urgenze||[]).filter(u=>!u.Obsoleto&&u.Stato!=='risolta');
   const tecnici = (DATA.utenti||[]).filter(u=>!u.Obsoleto&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
-  const prompt = 'Genera piano ottimizzato settimana '+week[0]+' - '+week[6]+'. Tecnici: '+tecnici.map(t=>t.Nome).join(', ')+'. Urgenze aperte: '+urgenze.length+' ('+urgenze.filter(u=>u.Priorita==='CRITICA').length+' CRITICHE). Rispetta SLA, ottimizza geo, distribuisci carico.';
-  try {
-    toast('AI sta generando il piano... (può richiedere 30-60 sec)','warn');
-    // Usa fetch diretto con timeout esteso (90s) — apiCall ha solo 30s
-    const aiResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(JWT_TOKEN||API_TOKEN)},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:{testo:prompt}}),signal:AbortSignal.timeout(90000)});
-    const aiJson=await aiResp.json();
-    if(!aiJson.success)throw new Error(aiJson.error||'Errore AI');
-    const result=aiJson.data||aiJson;
-    AI_PLAN = result;
-    const el = document.getElementById('aiResult');
-    if(el){ el.style.display='block'; el.innerHTML='<h4>Piano AI generato dal Planner Visuale</h4><p style="font-size:.8125rem;color:var(--gray)">Settimana '+week[0]+' — '+week[6]+' · '+tecnici.length+' tecnici · '+(result.piano?.length||0)+' interventi</p><pre style="white-space:pre-wrap;font-size:.75rem;max-height:400px;overflow-y:auto">'+JSON.stringify(result,null,2)+'</pre>'; }
-    const btn = document.getElementById('btnApplyAI');
-    if(btn) btn.disabled = false;
-    toast('Piano AI generato! Apro AI Planner...','ok');
-    // Naviga alla sezione AI Planner per mostrare il risultato e applicarlo
-    setTimeout(()=>showSec('ai'),800);
-  } catch(e){ toast('Errore AI: '+e.message,'err') }
+  const meseTarget = week[0].substring(0,7);
+  const prompt = `Settimana ${week[0]} - ${week[6]}: ${urgenze.length} urgenze aperte (${urgenze.filter(u=>u.Priorita==='CRITICA').length} critiche). Rispetta SLA, ottimizza zone, distribuisci carico.`;
+  // Naviga subito alla sezione AI Planner mostrando lo step 3
+  showSec('ai');
+  setTimeout(() => {
+    // Imposta mese target nel campo
+    if($('aiMeseTarget')) $('aiMeseTarget').value = meseTarget;
+    // Imposta prompt dal planner visuale
+    if($('aiPrompt')) $('aiPrompt').value = prompt;
+    // Avvia generazione (andrà allo step 3 automaticamente)
+    runAI();
+  }, 200);
 }
 
 async function geocodeAllClienti(){

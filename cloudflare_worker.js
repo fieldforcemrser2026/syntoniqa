@@ -1571,8 +1571,13 @@ async function handlePost(action, body, env) {
     case 'createAutomezzo': {
       const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
-      const id = secureId('AUT');
       const fields = getFields(body);
+      // Check duplicate nome before creating
+      if (fields.nome) {
+        const dup = await sb(env, 'automezzi', 'GET', null, `?nome=eq.${encodeURIComponent(fields.nome)}&obsoleto=eq.false&select=id&limit=1`).catch(()=>[]);
+        if (dup && dup.length) return err(`Automezzo con codice "${fields.nome}" già esistente`, 400);
+      }
+      const id = secureId('AUT');
       const result = await sb(env, 'automezzi', 'POST', { id, ...fields });
       // SYNC: se ha assegnatario_id, aggiorna automezzo_id nell'utente
       if (fields.assegnatario_id) {
@@ -3492,8 +3497,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             }
 
             const chunkPrompt = `PLANNER FSM — ${meseTarget} — ${weekLabel}
-VINCOLI: ${vincoliText || '(Nessuno)'}
-${testo ? 'UTENTE: ' + testo : ''}
+VINCOLI: ${anonEncode(vincoliText || '(Nessuno)')}
+${testo ? 'UTENTE: ' + anonEncode(testo) : ''}
 TECNICI (${nTecAttivi}): ${tecList}
 ${urgList ? 'URGENZE: ' + urgList : ''}
 CLIENTI: ${cliListShort}
