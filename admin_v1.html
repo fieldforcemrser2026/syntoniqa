@@ -650,8 +650,8 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <!-- Tecnici attivi oggi -->
 <div class="card mb"><div class="card-head"><h3>👥 Stato Tecnici</h3></div><div class="card-body" id="tecniciDash" style="display:flex;flex-wrap:wrap;gap:8px;padding:8px"></div></div>
 <div class="grid-2 mb">
-<div class="card"><div class="card-head"><h3>📋 Interventi Oggi</h3><button class="btn btn-primary btn-sm" onclick="openModal('modalPiano')">+ Nuovo</button></div><div class="card-body np" style="max-height:360px;overflow-y:auto"><table class="tbl"><thead><tr><th>Ora</th><th>Tecnico</th><th>🚐</th><th>Cliente</th><th>Tipo</th><th>Stato</th><th></th></tr></thead><tbody id="tblOggi"></tbody></table></div></div>
-<div class="card"><div class="card-head"><h3>🚨 Urgenze Aperte</h3><button class="btn btn-err btn-sm" onclick="openModal('modalUrgenza')">+ Nuova Urgenza</button></div><div class="card-body np" style="max-height:360px;overflow-y:auto"><table class="tbl"><thead><tr><th>Priorità</th><th>Cliente</th><th>Problema</th><th>SLA</th><th>Stato</th><th></th></tr></thead><tbody id="tblUrgDash"></tbody></table></div></div>
+<div class="card"><div class="card-head"><h3>📋 Interventi Oggi</h3><button class="btn btn-primary btn-sm" onclick="openNewPiano()">+ Nuovo</button></div><div class="card-body np" style="max-height:360px;overflow-y:auto"><table class="tbl"><thead><tr><th>Ora</th><th>Tecnico</th><th>🚐</th><th>Cliente</th><th>Tipo</th><th>Stato</th><th></th></tr></thead><tbody id="tblOggi"></tbody></table></div></div>
+<div class="card"><div class="card-head"><h3>🚨 Urgenze Aperte</h3><button class="btn btn-err btn-sm" onclick="openNewUrgenza()">+ Nuova Urgenza</button></div><div class="card-body np" style="max-height:360px;overflow-y:auto"><table class="tbl"><thead><tr><th>Priorità</th><th>Cliente</th><th>Problema</th><th>SLA</th><th>Stato</th><th></th></tr></thead><tbody id="tblUrgDash"></tbody></table></div></div>
 </div>
 <!-- Alert critici -->
 <div id="dashAlerts" class="mb" style="display:none"></div>
@@ -700,7 +700,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <select id="filtPianoStato" onchange="renderPiano()" class="inp-filter"><option value="">Tutti gli stati</option><option value="da_confermare">⏳ Da Confermare</option><option value="pianificato">Pianificato</option><option value="in_corso">In Corso</option><option value="completato">Completato</option><option value="annullato">Annullato</option></select>
 <select id="filtPianoTec" onchange="renderPiano()" class="inp-filter"><option value="">Tutti i tecnici</option></select>
 <button class="btn btn-ghost btn-sm" onclick="exportPianoCSV()" title="Esporta CSV">📥</button>
-<button class="btn btn-primary btn-sm" onclick="openModal('modalPiano')">+ Nuovo Intervento</button>
+<button class="btn btn-primary btn-sm" onclick="openNewPiano()">+ Nuovo Intervento</button>
 </div>
 </div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
@@ -719,7 +719,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <input type="date" id="filtUrgDataA" onchange="renderUrgenze()" class="inp-filter" title="A data">
 <select id="filtUrgStato" onchange="renderUrgenze()" class="inp-filter"><option value="">Tutti</option><option value="aperta">🔴 Aperte</option><option value="assegnata">👤 Assegnate</option><option value="schedulata">📅 Schedulate</option><option value="in_corso">⚡ In Corso</option><option value="risolta">✅ Risolte</option><option value="chiusa">📁 Chiuse</option></select>
 <button class="btn btn-ghost btn-sm" onclick="exportUrgenzeCSV()" title="Esporta CSV">📥</button>
-<button class="btn btn-err btn-sm" onclick="openModal('modalUrgenza')">+ Nuova Urgenza</button>
+<button class="btn btn-err btn-sm" onclick="openNewUrgenza()">+ Nuova Urgenza</button>
 </div>
 </div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
@@ -1230,7 +1230,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <button class="btn btn-sm btn-outline" onclick="plannerNav(-1)">&#9664; Prec</button>
 <span id="plannerTitle" style="font-size:.875rem;font-weight:600;padding:0 8px"></span>
 <button class="btn btn-sm btn-outline" onclick="plannerNav(1)">Succ &#9654;</button>
-<button class="btn btn-sm btn-primary" onclick="openModal('modalPiano')">+ Intervento</button>
+<button class="btn btn-sm btn-primary" onclick="openNewPiano()">+ Intervento</button>
 <button class="btn btn-sm btn-ai" onclick="runAIPlanner()">&#x1F916; AI Genera Piano</button>
 </div>
 </div>
@@ -2484,8 +2484,22 @@ function fmtAutoId(id){if(!id)return '—';const f=(DATA.automezzi||[]).find(a=>
 const statusTag=(s)=>{const m={'pianificato':['tag-info','📅'],'in_corso':['tag-warn','⚡'],'completato':['tag-ok','✅'],'chiuso':['tag-gray','🔒'],'aperta':['tag-err','🔴'],'assegnata':['tag-warn','👤'],'schedulata':['tag-info','📅'],'risolta':['tag-ok','✅'],'richiesto':['tag-info','📝'],'preso_in_carico':['tag-warn','👋'],'ordinato':['tag-purple','📦'],'in_arrivo':['tag-info','🚚'],'arrivato':['tag-ok','✅'],'attiva':['tag-ok','✅'],'pianificata':['tag-info','📅'],'completata':['tag-ok','✅'],'bozza':['tag-warn','📝'],'approvato':['tag-ok','✅'],'approvata':['tag-ok','✅'],'rifiutata':['tag-err','❌'],'in_attesa':['tag-warn','⏳']};const x=m[s]||['tag-gray',''];return `<span class="tag ${x[0]}">${x[1]} ${s||'—'}</span>`};
 const slaTag=(s,pct)=>{const m={'ok':['tag-ok','✅ OK'],'warning':['tag-warn','⚠️ Warning'],'critical':['tag-err','🔴 Critical'],'breach':['tag-err','💥 Breach']};const x=m[s]||['tag-gray',s||'—'];return `<span class="tag ${x[0]}">${x[1]}</span>${pct!==undefined?`<div class="sla-bar sla-${s}"><div class="fill" style="width:${Math.min(pct,100)}%"></div></div>`:''}`};
 
-function toast(msg,type='info',duration=4000){const d=document.createElement('div');d.className='toast '+type;if(msg&&msg.includes('<'))d.innerHTML=msg;else d.textContent=msg;$('toasts').appendChild(d);setTimeout(()=>d.remove(),duration)}
-function openModal(id){$(id).classList.add('show')}
+function toast(msg,type='info',duration=4000){
+  const _tc=$('toasts');
+  if(_tc){while(_tc.children.length>=5)_tc.children[0].remove()}
+  const d=document.createElement('div');
+  d.className='toast '+type;
+  if(msg&&msg.includes('<'))d.innerHTML=msg;else d.textContent=msg;
+  if(_tc)_tc.appendChild(d);
+  setTimeout(()=>d.remove(),duration)
+}
+function openModal(id){
+  const _m=$(id);
+  if(!_m)return;
+  _m.classList.add('show');
+  const _mb=_m.querySelector('.modal-body');
+  if(_mb)_mb.scrollTop=0;
+}
 function closeModal(id){$(id).classList.remove('show')}
 function toggleSidebar(){$('sidebar').classList.toggle('open');$('sideOverlay').classList.toggle('show')}
 
@@ -2633,7 +2647,7 @@ async function init(){
   }catch(e){
     showGlobalLoad(false);
     console.error('[INIT]',e);
-    $('loginLoad').innerHTML='<div style="color:var(--err)">❌ '+e.message+'</div><br><button class="btn btn-primary btn-sm" onclick="location.reload()">Riprova</button>';
+    $('loginLoad').innerHTML='<div style="color:var(--err)">❌ '+escapeHtml(e.message)+'</div><br><button class="btn btn-primary btn-sm" onclick="location.reload()">Riprova</button>';
   }
 }
 
@@ -4465,12 +4479,12 @@ function openAssetAction(action, codiceM3, assetInfo, clienteName){
   const seriale=snMatch?snMatch[1]:'';
 
   if(action==='urgenza'){
-    openModal('modalUrgenza');
+    openNewUrgenza();
     setCliAndMacch('mu',seriale);
     const prob=$('muProblema');if(prob)prob.value='';
     const note=$('muNote');if(note)note.value='Asset: '+assetInfo.replace(/'/g,"'")+' | M3: '+codiceM3;
   }else if(action==='piano'){
-    openModal('modalPiano');
+    openNewPiano();
     const d=$('mpData');if(d)d.value=today();
     setCliAndMacch('mp',seriale);
     const note=$('mpNote');if(note)note.value='Asset: '+assetInfo.replace(/'/g,"'")+' | M3: '+codiceM3;
@@ -5595,7 +5609,7 @@ async function testAllEngines(){
     });
     html+='</div>';
     box.innerHTML=html;
-  }catch(e){box.innerHTML=`<div style="padding:10px;color:var(--err);font-size:.8rem">Errore: ${e.message}</div>`}
+  }catch(e){box.innerHTML=`<div style="padding:10px;color:var(--err);font-size:.8rem">Errore: ${escapeHtml(e.message)}</div>`}
 }
 
 // Backward compatibility alias
@@ -6216,7 +6230,7 @@ async function toggleAnagTree(m3){
       html+=`<p style="color:var(--muted);font-size:.8125rem">Nessun asset collegato (codice M3: ${m3})</p>`;
     }
     detailDiv.innerHTML=html;
-  }catch(e){detailDiv.innerHTML=`<p style="color:var(--err)">Errore: ${e.message}</p>`}
+  }catch(e){detailDiv.innerHTML=`<p style="color:var(--err)">Errore: ${escapeHtml(e.message)}</p>`}
 }
 
 function formatAnagDate(d){
@@ -6793,6 +6807,22 @@ setTimeout(()=>{
 },100);
 
 // ============ SAVE FUNCTIONS ============
+function openNewPiano(){
+  ['mpData','mpDataFine','mpNote'].forEach(id=>{if($(id))$(id).value=''});
+  if($('mpOra'))$('mpOra').value='08:00';
+  if($('mpDurata'))$('mpDurata').value='2';
+  if($('mpTecnico'))$('mpTecnico').selectedIndex=0;
+  if($('mpAutomezzo'))$('mpAutomezzo').selectedIndex=0;
+  if($('mpCliente'))$('mpCliente').selectedIndex=0;
+  if($('mpTipo'))$('mpTipo').selectedIndex=0;
+  if($('mpPriorita'))$('mpPriorita').selectedIndex=0;
+  // Reset multi-select
+  if($('mpTecnici')){Array.from($('mpTecnici').options).forEach(o=>o.selected=false)}
+  if($('mpMacchina')){$('mpMacchina').innerHTML='<option value="">— seleziona cliente prima —</option>'}
+  document.querySelector('#modalPiano .modal-head h2').textContent='📋 Nuovo Intervento';
+  openModal('modalPiano');
+}
+
 async function savePiano(){
   try{
     const tecniciSel=Array.from($('mpTecnici').selectedOptions).map(o=>o.value);
@@ -6826,6 +6856,19 @@ function onUrgPrioChange(){
     hint='🟡 Entro settimana — prossimo giorno lavorativo (SLA 72h)';
   }else{$('muDataPrev').value='';$('muDurata').value='2';hint='⚪ Programmabile — a discrezione del planner (nessun SLA)'}
   if($('muDataHint'))$('muDataHint').innerHTML=hint;
+}
+
+function openNewUrgenza(){
+  if($('muCliente'))$('muCliente').selectedIndex=0;
+  if($('muProblema'))$('muProblema').value='';
+  if($('muNote'))$('muNote').value='';
+  if($('muDataPrev'))$('muDataPrev').value='';
+  if($('muDurata'))$('muDurata').value='4';
+  if($('muPriorita'))$('muPriorita').selectedIndex=0;
+  if($('muMacchina'))$('muMacchina').innerHTML='<option value="">— seleziona cliente prima —</option>';
+  if($('muDataHint'))$('muDataHint').textContent='';
+  document.querySelector('#modalUrgenza .modal-head h2').textContent='🚨 Nuova Urgenza';
+  openModal('modalUrgenza');
 }
 
 async function saveUrgenza(){
@@ -7368,7 +7411,7 @@ async function aiPreviewStep(){
 
     container.innerHTML = html;
   } catch(e){
-    container.innerHTML = `<div style="padding:20px;text-align:center;color:var(--err)">❌ Errore caricamento anteprima: ${e.message}</div>`;
+    container.innerHTML = `<div style="padding:20px;text-align:center;color:var(--err)">❌ Errore caricamento anteprima: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -7665,7 +7708,7 @@ async function runAI(){
     toast(`Piano generato: ${piano.length} interventi, ${nGiorni} giorni`,'ok');
   }catch(e){
     $('aiResult').innerHTML=`<div style="padding:16px;background:rgba(239,68,68,.1);border:1px solid var(--err);border-radius:var(--radius)">
-      <strong>❌ Errore</strong><br>${e.message}<br><span style="font-size:.75rem;color:var(--gray)">Prova con un prompt più breve o riprova tra qualche secondo.</span>
+      <strong>❌ Errore</strong><br>${escapeHtml(e.message)}<br><span style="font-size:.75rem;color:var(--gray)">Prova con un prompt più breve o riprova tra qualche secondo.</span>
     </div>`;
     toast(e.message,'err');
   }
@@ -8682,7 +8725,7 @@ async function loadPMOverview(){
     }
     renderPMTree();
   }catch(e){
-    if(tb)tb.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--err);padding:16px">${e.message}</td></tr>`;
+    if(tb)tb.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--err);padding:16px">${escapeHtml(e.message)}</td></tr>`;
   }
 }
 
@@ -9250,7 +9293,7 @@ async function showPMSyncLog(){
     const res=await apiCall('getPMSyncLog',{limit:50},'POST');
     renderPMSyncLog(res.logs||[]);
   }catch(e){
-    if(el)el.innerHTML=`<div style="padding:16px;color:var(--err)">Errore: ${e.message}<br><small>Verifica di aver creato la tabella pm_sync_log in Supabase (vedi pm_sync_log_migration.sql)</small></div>`;
+    if(el)el.innerHTML=`<div style="padding:16px;color:var(--err)">Errore: ${escapeHtml(e.message)}<br><small>Verifica di aver creato la tabella pm_sync_log in Supabase (vedi pm_sync_log_migration.sql)</small></div>`;
   }
 }
 
@@ -9298,7 +9341,7 @@ async function showPMSyncRecords(syncId, label){
     _pmSyncCurrentRecords=res.records_raw||[];
     renderPMSyncRecordsTable(_pmSyncCurrentRecords);
   }catch(e){
-    if(el)el.innerHTML=`<div style="padding:16px;color:var(--err)">Errore: ${e.message}</div>`;
+    if(el)el.innerHTML=`<div style="padding:16px;color:var(--err)">Errore: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -9591,7 +9634,7 @@ async function searchCatalog(){
     html+='</tbody></table>';
     $('catResults').innerHTML=html;
   }catch(e){
-    status.innerHTML='❌ Errore: '+e.message;
+    status.innerHTML='❌ Errore: '+escapeHtml(e.message);
     status.style.background='rgba(220,38,38,.1)';
   }
 }
@@ -9658,7 +9701,7 @@ async function autoDetectTelegramIds(){
     html+='</div>';
     resultEl.innerHTML=html;
   }catch(e){
-    resultEl.innerHTML='<div class="alert-err">❌ Errore: '+e.message+'</div>';
+    resultEl.innerHTML='<div class="alert-err">❌ Errore: '+escapeHtml(e.message)+'</div>';
   }
 }
 
@@ -9790,7 +9833,7 @@ async function loadBackupHistory(){
     });
     html+='</tbody></table>';
     $('tblBackupHistory').innerHTML=html;
-  }catch(e){$('tblBackupHistory').innerHTML='<div class="empty"><p>'+e.message+'</p></div>'}
+  }catch(e){$('tblBackupHistory').innerHTML='<div class="empty"><p>'+escapeHtml(e.message)+'</p></div>'}
 }
 
 async function saveBackupConfig(){
@@ -9847,7 +9890,7 @@ async function loadVincoliAuto(){
     const countEl = $('vincoliAutoCount');
     if(countEl) countEl.textContent = `${VINCOLI_AUTO.length} vincoli trovati`;
   } catch(e){
-    if(container) container.innerHTML = `<p style="color:#DC2626;text-align:center;padding:20px">❌ Errore: ${e.message}</p>`;
+    if(container) container.innerHTML = `<p style="color:#DC2626;text-align:center;padding:20px">❌ Errore: ${escapeHtml(e.message)}</p>`;
   }
 }
 
@@ -10371,6 +10414,9 @@ async function onMonthDrop(e, tecnicoId, data){
   MONTH_DRAGGING = null;
   try {
     if(type==='piano'){
+      if(!tecnicoId){toast('Tecnico non valido','warn');return}
+      if(!data||!/^\d{4}-\d{2}-\d{2}$/.test(data)){toast('Data non valida','warn');return}
+      if(!(DATA.utenti||[]).find(u=>u.ID===tecnicoId)){toast('Tecnico non trovato','warn');return}
       await apiCall('updatePiano',{id,data:{TecnicoID:tecnicoId,Data:data}},'POST');
       toast('Intervento spostato','ok');
     }else if(type==='reperibilita'){
