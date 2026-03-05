@@ -1596,10 +1596,11 @@ async function handlePost(action, body, env) {
       const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const fields = getFields(body);
-      // Check duplicate nome before creating
-      if (fields.nome) {
-        const dup = await sb(env, 'automezzi', 'GET', null, `?nome=eq.${encodeURIComponent(fields.nome)}&obsoleto=eq.false&select=id&limit=1`).catch(()=>[]);
-        if (dup && dup.length) return err(`Automezzo con codice "${fields.nome}" già esistente`, 400);
+      // Check duplicate targa before creating (nome non esiste in tabella automezzi)
+      if (fields.nome) { fields.descrizione = fields.descrizione || fields.nome; delete fields.nome; }
+      if (fields.targa) {
+        const dup = await sb(env, 'automezzi', 'GET', null, `?targa=eq.${encodeURIComponent(fields.targa)}&obsoleto=eq.false&select=id&limit=1`).catch(()=>[]);
+        if (dup && dup.length) return err(`Automezzo con targa "${fields.targa}" già esistente`, 400);
       }
       const id = secureId('AUT');
       const result = await sb(env, 'automezzi', 'POST', { id, ...fields });
@@ -1616,6 +1617,8 @@ async function handlePost(action, body, env) {
       if (adminErr2) return err(adminErr2, 403);
       const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
       for (const k of Object.keys(updates)) { if (updates[k] === null && k.endsWith('_id')) delete updates[k]; }
+      // Fix: colonna 'nome' non esiste in automezzi → mappa a descrizione
+      if (updates.nome) { updates.descrizione = updates.descrizione || updates.nome; delete updates.nome; }
       // SYNC BIDIREZIONALE: se cambia assegnatario_id, aggiorna anche l'utente
       const newAssId = updates.assegnatario_id;
       if (newAssId) {
