@@ -2567,16 +2567,17 @@ async function handlePost(action, body, env) {
       const pvStart = `${pvMese}-01`, pvEnd = `${pvMese}-31`;
       const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
 
-      const [pvTecnici, pvRichieste, pvRep, pvTrasf, pvInst, pvPiano, pvUrg, pvMacchine, pvClienti, pvVincoliCfg] = await Promise.all([
+      const [pvTecnici, pvRichieste, pvRep, pvTrasf, pvInst, pvPiano, pvUrg, pvMacchine, pvClienti, pvAssets, pvVincoliCfg] = await Promise.all([
         sb(env, 'utenti', 'GET', null, '?attivo=eq.true&obsoleto=eq.false&select=id,nome,cognome,base,ruolo,automezzo_id').catch(()=>[]),
         sb(env, 'richieste', 'GET', null, `?stato=eq.approvata&obsoleto=eq.false&data_inizio=lte.${pvEnd}&data_fine=gte.${pvStart}&select=id,tecnico_id,tipo,data_inizio,data_fine,motivo&limit=100`).catch(()=>[]),
         sb(env, 'reperibilita', 'GET', null, `?obsoleto=eq.false&data_inizio=lte.${pvEnd}&data_fine=gte.${pvStart}&select=id,tecnico_id,data_inizio,data_fine,turno,tipo&limit=100`).catch(()=>[]),
         sb(env, 'trasferte', 'GET', null, `?obsoleto=eq.false&data_inizio=lte.${pvEnd}&data_fine=gte.${pvStart}&select=id,tecnico_id,tecnici_ids,cliente_id,data_inizio,data_fine&limit=50`).catch(()=>[]),
         sb(env, 'installazioni', 'GET', null, `?obsoleto=eq.false&stato=in.(pianificato,in_corso,pianificata)&data_inizio=lte.${pvEnd}&select=id,tecnici_ids,cliente_id,data_inizio,data_fine_prevista,stato&limit=50`).catch(()=>[]),
         sb(env, 'piano', 'GET', null, `?obsoleto=eq.false&stato=neq.annullato&data=gte.${pvStart}&data=lte.${pvEnd}&select=id,tecnico_id,data,stato,cliente_id,tipo_intervento_id&limit=500`).catch(()=>[]),
-        sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,schedulata)&select=id,problema,cliente_id,priorita_id&limit=20').catch(()=>[]),
-        sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,tipo,modello,cliente_id,prossimo_tagliando&order=prossimo_tagliando.asc&limit=50').catch(()=>[]),
+        sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,schedulata)&select=id,problema,cliente_id,priorita_id,stato,data_segnalazione,note&order=data_segnalazione.desc&limit=50').catch(()=>[]),
+        sb(env, 'macchine', 'GET', null, `?obsoleto=eq.false&prossimo_tagliando=not.is.null&prossimo_tagliando=lte.${pvEnd}&select=id,tipo,modello,seriale,cliente_id,prossimo_tagliando,ore_lavoro&order=prossimo_tagliando.asc&limit=200`).catch(()=>[]),
         sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno,citta_fatturazione&limit=150').catch(()=>[]),
+        sb(env, 'anagrafica_assets', 'GET', null, `?prossimo_controllo=not.is.null&prossimo_controllo=lte.${pvEnd}&select=id,nome_asset,modello,codice_m3,prossimo_controllo,numero_serie&order=prossimo_controllo.asc&limit=200`).catch(()=>[]),
         sb(env, 'config', 'GET', null, '?chiave=eq.vincoli_categories&limit=1').catch(()=>[])
       ]);
 
@@ -2621,15 +2622,50 @@ async function handlePost(action, body, env) {
       vincAuto.forEach(v => (v.soggetti_ids||[]).forEach(id => tecVincolati.add(id)));
       const totTec = pvTecnici.filter(u=>u.ruolo!=='admin').length;
 
-      // Tagliandi in scadenza
+      // Tagliandi in scadenza — build full list with details
       const pvOggi = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
-      const taglScad = pvMacchine.filter(m => m.prossimo_tagliando && m.prossimo_tagliando <= pvEnd).length;
+      const pvClientiMap = {};
+      pvClienti.forEach(c => { pvClientiMap[c.codice_m3] = c.nome_interno || c.nome_account || c.codice_m3; });
+      const pvGetCli = (id) => pvClientiMap[id] || id;
+
+      // Tagliandi da macchine table
+      const tagliandiList = pvMacchine.map(m => {
+        const ggDiff = Math.round((new Date(m.prossimo_tagliando) - new Date(pvOggi)) / 86400000);
+        return {
+          id: m.id, tipo: 'tagliando', modello: m.modello || m.tipo || m.seriale || '?',
+          cliente_id: m.cliente_id || '', cliente_nome: pvGetCli(m.cliente_id || ''),
+          prossimo_tagliando: m.prossimo_tagliando, ore_lavoro: m.ore_lavoro || null,
+          giorni_scadenza: ggDiff, urgenza: ggDiff < 0 ? 'SCADUTO' : ggDiff <= 7 ? 'URGENTE' : ggDiff <= 30 ? 'PROSSIMO' : 'PROGRAMMATO'
+        };
+      });
+      // Tagliandi da anagrafica_assets table
+      const assetsTagliandi = (pvAssets || []).map(a => {
+        const ggDiff = Math.round((new Date(a.prossimo_controllo) - new Date(pvOggi)) / 86400000);
+        return {
+          id: a.id || ('ASSET_' + (a.numero_serie || '?')), tipo: 'controllo_asset',
+          modello: a.nome_asset || a.modello || '?', cliente_id: a.codice_m3 || '',
+          cliente_nome: pvGetCli(a.codice_m3 || ''), prossimo_tagliando: a.prossimo_controllo,
+          ore_lavoro: null, giorni_scadenza: ggDiff,
+          urgenza: ggDiff < 0 ? 'SCADUTO' : ggDiff <= 7 ? 'URGENTE' : ggDiff <= 30 ? 'PROSSIMO' : 'PROGRAMMATO'
+        };
+      });
+      const allTagliandi = [...tagliandiList, ...assetsTagliandi].sort((a,b) => a.giorni_scadenza - b.giorni_scadenza);
+      const taglScad = allTagliandi.length;
+
+      // Urgenze full list
+      const urgenzeList = pvUrg.map(u => ({
+        id: u.id, problema: u.problema || '?',
+        cliente_id: u.cliente_id || '', cliente_nome: pvGetCli(u.cliente_id || ''),
+        priorita: u.priorita_id || 'normale'
+      }));
 
       return json({
         success: true,
         mese: pvMese,
         vincoli_auto: vincAuto,
         regole_manuali: manualRules,
+        tagliandi_list: allTagliandi,
+        urgenze_list: urgenzeList,
         summary: {
           tecnici_totali: totTec,
           tecnici_disponibili: totTec - tecVincolati.size,
@@ -2672,13 +2708,13 @@ async function handlePost(action, body, env) {
       const _safePS = (r) => r.status === 'fulfilled' ? (Array.isArray(r.value) ? r.value : []) : [];
       const _psResults = await Promise.allSettled([
         sb(env, 'utenti', 'GET', null, '?attivo=eq.true&obsoleto=eq.false&select=id,nome,cognome,base,ruolo,automezzo_id'),
-        sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,schedulata)&order=data_segnalazione.desc&limit=20&select=id,problema,cliente_id,priorita_id'),
+        sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,schedulata)&order=data_segnalazione.desc&limit=50&select=id,problema,cliente_id,priorita_id,stato,data_segnalazione,note'),
         sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno,citta_fatturazione&limit=150'),
         sb(env, 'config', 'GET', null, '?chiave=eq.vincoli_categories&limit=1'),
         sb(env, 'reperibilita', 'GET', null, `?obsoleto=eq.false${repFilter}&select=id,tecnico_id,data_inizio,data_fine,turno,tipo&order=data_inizio.asc&limit=100`),
         sb(env, 'automezzi', 'GET', null, '?obsoleto=eq.false&select=id,targa,modello,stato&limit=20'),
-        sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,seriale,note,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&order=prossimo_tagliando.asc&limit=50'),
-        sb(env, 'anagrafica_assets', 'GET', null, '?prossimo_controllo=not.is.null&select=id,nome_asset,numero_serie,modello,gruppo_attrezzatura,codice_m3,nome_account,prossimo_controllo&order=prossimo_controllo.asc&limit=50'),
+        sb(env, 'macchine', 'GET', null, `?obsoleto=eq.false&prossimo_tagliando=not.is.null${meseEnd?'&prossimo_tagliando=lte.'+meseEnd:''}&select=id,seriale,note,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&order=prossimo_tagliando.asc&limit=200`),
+        sb(env, 'anagrafica_assets', 'GET', null, `?prossimo_controllo=not.is.null${meseEnd?'&prossimo_controllo=lte.'+meseEnd:''}&select=id,nome_asset,numero_serie,modello,gruppo_attrezzatura,codice_m3,nome_account,prossimo_controllo&order=prossimo_controllo.asc&limit=200`),
         meseTarget ? sb(env, 'richieste', 'GET', null, `?stato=eq.approvata&obsoleto=eq.false&data_inizio=lte.${meseEnd}&data_fine=gte.${meseStart}&select=id,tecnico_id,tipo,data_inizio,data_fine,motivo&limit=100`) : Promise.resolve([]),
         meseTarget ? sb(env, 'trasferte', 'GET', null, `?obsoleto=eq.false&data_inizio=lte.${meseEnd}&data_fine=gte.${meseStart}&select=id,tecnico_id,tecnici_ids,cliente_id,data_inizio,data_fine&limit=50`) : Promise.resolve([]),
         meseTarget ? sb(env, 'installazioni', 'GET', null, `?obsoleto=eq.false&stato=in.(pianificato,in_corso,pianificata)&data_inizio=lte.${meseEnd}&select=id,tecnici_ids,cliente_id,data_inizio,data_fine_prevista,stato&limit=50`) : Promise.resolve([]),
@@ -2919,12 +2955,12 @@ async function handlePost(action, body, env) {
         const urgenti = tagItems.filter(t => t.giorniScadenza >= 0 && t.giorniScadenza <= 7);
         const prossimi = tagItems.filter(t => t.giorniScadenza > 7 && t.giorniScadenza <= 30);
         const programmati = tagItems.filter(t => t.giorniScadenza > 30);
-        const fmtItem = t => `${t.tipo}|${t.macchina}[${t.macchinaLabel}]@${t.clienteId}|${t.data}|${t.giorniScadenza}gg`;
+        const fmtItem = t => `${t.tipo}|${t.macchina}[${t.macchinaLabel}]@${t.clienteId}|scad:${t.data}|${t.giorniScadenza}gg${t.oreLavoro?'|ore:'+t.oreLavoro:''}`;
         tagliandiContext = '\nTAGLIANDI/SERVICE SCADENZA (pianifica PRIMA i piu urgenti):';
-        if (scaduti.length) tagliandiContext += '\nSCADUTI:' + scaduti.slice(0,10).map(fmtItem).join(';');
-        if (urgenti.length) tagliandiContext += '\nURGENTI(<7gg):' + urgenti.slice(0,8).map(fmtItem).join(';');
-        if (prossimi.length) tagliandiContext += '\nPROSSIMI(<30gg):' + prossimi.slice(0,6).map(fmtItem).join(';');
-        if (programmati.length) tagliandiContext += '\nPROGRAMMATI:' + programmati.slice(0,3).map(fmtItem).join(';');
+        if (scaduti.length) tagliandiContext += '\nSCADUTI(' + scaduti.length + '):' + scaduti.map(fmtItem).join(';');
+        if (urgenti.length) tagliandiContext += '\nURGENTI_7gg(' + urgenti.length + '):' + urgenti.map(fmtItem).join(';');
+        if (prossimi.length) tagliandiContext += '\nPROSSIMI_30gg(' + prossimi.length + '):' + prossimi.map(fmtItem).join(';');
+        if (programmati.length) tagliandiContext += '\nPROGRAMMATI(' + programmati.length + '):' + programmati.map(fmtItem).join(';');
       }
       } // end if ctx.tagliandi
 
@@ -3038,6 +3074,13 @@ REGOLE INVIOLABILI:
 - Usa SOLO codici dalla lista (TEC_xxx, codice_m3, FURG_x). NON inventare ID.
 
 JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}`;
+
+      // ─── Debug SSE: emetti il prompt prima della chiamata AI ───
+      sse({type:'debug_prompt', prompt_preview: prompt.substring(0, 3000), prompt_length: prompt.length,
+           tagliandi_count: tagItems.length, urgenze_count: allUrgenze.length,
+           tecnici_count: allTecnici.filter(t=>t.ruolo!=='admin').length,
+           macchine_loaded: allMacchine.length, assets_loaded: allAssets.length,
+           mese_target: meseTarget, modalita: modalita });
 
       // ─── AI Call con ANONYMIZATION layer ───
       const validIds = new Set(allTecnici.map(t => t.id));

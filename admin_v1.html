@@ -7350,30 +7350,42 @@ async function aiPreviewStep(){
     const perTipo = {};
     (r.vincoli_auto||[]).forEach(v => { const t=v.tipo||'altro'; perTipo[t]=(perTipo[t]||0)+1; });
 
-    let html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px">
-      <div style="text-align:center;padding:12px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:10px">
-        <div style="font-size:1.8rem;font-weight:700;color:var(--ai)">${s.tecnici_disponibili||0}</div>
-        <div style="font-size:.7rem;color:rgba(255,255,255,.5)">Tecnici Disponibili</div>
+    // Urgenza color helper
+    const urgColor = (u) => u==='SCADUTO'?'var(--err)':u==='URGENTE'?'#F59E0B':u==='PROSSIMO'?'var(--warn)':'rgba(255,255,255,.5)';
+    const urgBg = (u) => u==='SCADUTO'?'rgba(239,68,68,.2)':u==='URGENTE'?'rgba(245,158,11,.2)':u==='PROSSIMO'?'rgba(249,115,22,.1)':'rgba(255,255,255,.05)';
+    const tagliandi = r.tagliandi_list || [];
+    const urgenzeL = r.urgenze_list || [];
+    const tagScad = tagliandi.filter(t=>t.urgenza==='SCADUTO').length;
+    const tagUrg = tagliandi.filter(t=>t.urgenza==='URGENTE').length;
+
+    let html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:14px">
+      <div style="text-align:center;padding:10px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:10px">
+        <div style="font-size:1.6rem;font-weight:700;color:var(--ai)">${s.tecnici_disponibili||0}</div>
+        <div style="font-size:.65rem;color:rgba(255,255,255,.5)">Tecnici Disponibili</div>
       </div>
-      <div style="text-align:center;padding:12px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);border-radius:10px">
-        <div style="font-size:1.8rem;font-weight:700;color:var(--warn)">${s.tecnici_vincolati||0}</div>
-        <div style="font-size:.7rem;color:rgba(255,255,255,.5)">Tecnici Vincolati</div>
+      <div style="text-align:center;padding:10px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);border-radius:10px">
+        <div style="font-size:1.6rem;font-weight:700;color:var(--warn)">${s.tecnici_vincolati||0}</div>
+        <div style="font-size:.65rem;color:rgba(255,255,255,.5)">Vincolati</div>
       </div>
-      <div style="text-align:center;padding:12px;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);border-radius:10px">
-        <div style="font-size:1.8rem;font-weight:700;color:var(--ok)">${s.vincoli_auto||0}</div>
-        <div style="font-size:.7rem;color:rgba(255,255,255,.5)">Vincoli Automatici</div>
+      <div style="text-align:center;padding:10px;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);border-radius:10px">
+        <div style="font-size:1.6rem;font-weight:700;color:var(--ok)">${s.vincoli_auto||0}</div>
+        <div style="font-size:.65rem;color:rgba(255,255,255,.5)">Vincoli Auto</div>
       </div>
-      <div style="text-align:center;padding:12px;background:rgba(129,140,248,.15);border:1px solid rgba(129,140,248,.3);border-radius:10px">
-        <div style="font-size:1.8rem;font-weight:700;color:#A5B4FC">${s.regole_manuali||0}</div>
-        <div style="font-size:.7rem;color:rgba(255,255,255,.5)">Regole Manuali</div>
+      <div style="text-align:center;padding:10px;background:rgba(129,140,248,.15);border:1px solid rgba(129,140,248,.3);border-radius:10px">
+        <div style="font-size:1.6rem;font-weight:700;color:#A5B4FC">${s.regole_manuali||0}</div>
+        <div style="font-size:.65rem;color:rgba(255,255,255,.5)">Regole Manuali</div>
       </div>
-      <div style="text-align:center;padding:12px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:10px">
-        <div style="font-size:1.8rem;font-weight:700;color:var(--info)">${s.piano_esistente||0}</div>
-        <div style="font-size:.7rem;color:rgba(255,255,255,.5)">Piano Esistente</div>
+      <div style="text-align:center;padding:10px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:10px">
+        <div style="font-size:1.6rem;font-weight:700;color:var(--info)">${s.piano_esistente||0}</div>
+        <div style="font-size:.65rem;color:rgba(255,255,255,.5)">Piano Esistente</div>
       </div>
-      <div style="text-align:center;padding:12px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);border-radius:10px">
-        <div style="font-size:1.8rem;font-weight:700;color:var(--err)">${s.urgenze_aperte||0}</div>
-        <div style="font-size:.7rem;color:rgba(255,255,255,.5)">Urgenze Aperte</div>
+      <div style="text-align:center;padding:10px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);border-radius:10px">
+        <div style="font-size:1.6rem;font-weight:700;color:var(--err)">${s.urgenze_aperte||0}</div>
+        <div style="font-size:.65rem;color:rgba(255,255,255,.5)">Urgenze Aperte</div>
+      </div>
+      <div style="text-align:center;padding:10px;background:${tagScad>0?'rgba(239,68,68,.2)':'rgba(249,115,22,.15)'};border:1px solid ${tagScad>0?'rgba(239,68,68,.5)':'rgba(249,115,22,.3)'};border-radius:10px">
+        <div style="font-size:1.6rem;font-weight:700;color:${tagScad>0?'var(--err)':'#FB923C'}">${s.tagliandi_scadenza||0}</div>
+        <div style="font-size:.65rem;color:rgba(255,255,255,.5)">PM Tagliandi${tagScad>0?' (⚠️'+tagScad+' scad.)':''}</div>
       </div>
     </div>`;
 
@@ -7397,16 +7409,67 @@ async function aiPreviewStep(){
 
     // Regole manuali
     if((r.regole_manuali||[]).length){
-      html += `<details style="margin-bottom:12px"><summary style="cursor:pointer;font-size:.8rem;font-weight:600;color:rgba(255,255,255,.7);padding:6px 0">📋 ${r.regole_manuali.length} regole manuali</summary>
-      <div style="max-height:200px;overflow-y:auto;padding:8px;background:rgba(0,0,0,.2);border-radius:8px;margin-top:4px;font-size:.75rem;color:rgba(255,255,255,.6)">`;
+      html += `<details style="margin-bottom:10px"><summary style="cursor:pointer;font-size:.8rem;font-weight:600;color:rgba(255,255,255,.7);padding:6px 0">📋 ${r.regole_manuali.length} regole manuali attive</summary>
+      <div style="max-height:180px;overflow-y:auto;padding:8px;background:rgba(0,0,0,.2);border-radius:8px;margin-top:4px;font-size:.75rem;color:rgba(255,255,255,.6)">`;
       r.regole_manuali.forEach(r2 => {
         html += `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05)">${r2.titolo||'📋'} ${r2.testo||''} ${r2.priorita==='alta'?'⚠️':''}</div>`;
       });
       html += '</div></details>';
     }
 
+    // ─── URGENZE APERTE — lista dettagliata ───
+    if(urgenzeL.length){
+      html += `<details style="margin-bottom:10px;border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:0"><summary style="cursor:pointer;font-size:.8rem;font-weight:600;color:var(--err);padding:8px 10px;border-radius:8px;background:rgba(239,68,68,.1)">🚨 ${urgenzeL.length} Urgenze Aperte da Pianificare</summary>
+      <div style="max-height:180px;overflow-y:auto;padding:8px;font-size:.75rem">`;
+      urgenzeL.forEach(u => {
+        html += `<div style="padding:4px 6px;margin-bottom:4px;border-left:3px solid var(--err);background:rgba(239,68,68,.07);border-radius:0 4px 4px 0">
+          <span style="font-weight:600;color:rgba(255,255,255,.85)">${u.id}</span>
+          <span style="color:rgba(255,255,255,.5);margin:0 4px">·</span>
+          <span style="color:rgba(255,255,255,.7)">${u.cliente_nome}</span>
+          <span style="color:rgba(255,255,255,.5);margin:0 4px">·</span>
+          <span style="color:rgba(255,255,255,.6)">${(u.problema||'').substring(0,60)}</span>
+          <span style="float:right;font-size:.7rem;color:var(--warn)">${u.priorita}</span>
+        </div>`;
+      });
+      html += '</div></details>';
+    }
+
+    // ─── TAGLIANDI PM — lista dettagliata ───
+    if(tagliandi.length){
+      const tagBySt = {SCADUTO:[], URGENTE:[], PROSSIMO:[], PROGRAMMATO:[]};
+      tagliandi.forEach(t => { if(tagBySt[t.urgenza]) tagBySt[t.urgenza].push(t); else tagBySt.PROGRAMMATO.push(t); });
+      html += `<details style="margin-bottom:10px;border:1px solid ${tagScad>0?'rgba(239,68,68,.4)':'rgba(249,115,22,.3)'};border-radius:8px;padding:0">
+        <summary style="cursor:pointer;font-size:.8rem;font-weight:600;color:${tagScad>0?'var(--err)':'#FB923C'};padding:8px 10px;border-radius:8px;background:${tagScad>0?'rgba(239,68,68,.12)':'rgba(249,115,22,.1)'}">
+        🔧 ${tagliandi.length} Tagliandi/PM da Pianificare${tagScad>0?' — '+tagScad+' SCADUTI ⚠️':''}${tagUrg>0?' — '+tagUrg+' urgenti':''}
+        </summary>
+        <div style="padding:6px 8px;font-size:.73rem">
+          <div style="margin-bottom:6px;font-size:.7rem;color:rgba(255,255,255,.4)">
+            📌 Ciascun tagliando genera <strong style="color:rgba(255,255,255,.7)">1 intervento</strong> nel piano — AI assegna tecnico, data e furgone in base a zona e disponibilità
+          </div>`;
+      ['SCADUTO','URGENTE','PROSSIMO','PROGRAMMATO'].forEach(stato => {
+        const items = tagBySt[stato];
+        if(!items.length) return;
+        const c = urgColor(stato), bg = urgBg(stato);
+        html += `<div style="font-size:.7rem;font-weight:600;color:${c};margin:4px 0 3px">${stato==='SCADUTO'?'⛔':stato==='URGENTE'?'⚡':stato==='PROSSIMO'?'📅':'🗓️'} ${stato} (${items.length})</div>`;
+        const maxShow = stato === 'SCADUTO' ? 999 : stato === 'URGENTE' ? 20 : 10;
+        items.slice(0, maxShow).forEach(t => {
+          html += `<div style="padding:3px 6px;margin-bottom:3px;border-left:3px solid ${c};background:${bg};border-radius:0 4px 4px 0">
+            <span style="font-weight:600;color:rgba(255,255,255,.85)">${t.modello}</span>
+            <span style="color:rgba(255,255,255,.4);margin:0 4px">·</span>
+            <span style="color:rgba(255,255,255,.6)">${t.cliente_nome}</span>
+            <span style="float:right;font-size:.7rem;color:${c}">📅 ${t.prossimo_tagliando}${t.ore_lavoro?' · '+t.ore_lavoro+'h':''}</span>
+          </div>`;
+        });
+        if(items.length > maxShow) html += `<div style="font-size:.7rem;color:rgba(255,255,255,.3);padding:2px 6px">... e altri ${items.length-maxShow}</div>`;
+      });
+      html += '</div></details>';
+    }
+
+    // ─── STATUS BAR ───
     html += `<div style="padding:10px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:8px;font-size:.8rem;color:var(--ok)">
-      ✅ Pronto per generare. L'AI considererà ${s.vincoli_auto||0} vincoli auto + ${s.regole_manuali||0} regole manuali per il mese <strong>${meseVal}</strong>.
+      ✅ Pronto per generare. L'AI pianificherà <strong>${tagliandi.length} tagliandi PM</strong> + <strong>${urgenzeL.length} urgenze</strong>
+      considerando <strong>${s.vincoli_auto||0} vincoli auto</strong> + <strong>${s.regole_manuali||0} regole manuali</strong>
+      per <strong>${meseVal}</strong>.${tagScad>0?`<br><span style="color:var(--err)">⚠️ Attenzione: ${tagScad} tagliandi SCADUTI — verranno pianificati con priorità massima.</span>`:''}
     </div>`;
 
     container.innerHTML = html;
@@ -7583,6 +7646,7 @@ async function runAI(){
         try{
           const ev=JSON.parse(line.slice(6));
           if(ev.type==='init'){const el=document.getElementById('aiInitText');if(el)el.textContent=`${ev.n.tecnici} tecnici · ${ev.n.clienti} clienti · ${ev.n.urgenze} urgenze · ${ev.n.tagliandi} tagliandi caricati`;}
+          else if(ev.type==='debug_prompt'){window._lastAIPromptDebug=ev;const el=document.getElementById('aiInitText');if(el)el.textContent=`📊 Dati: ${ev.tecnici_count} tecnici · ${ev.macchine_loaded} macchine · ${ev.assets_loaded} assets · ${ev.tagliandi_count} tagliandi · ${ev.urgenze_count} urgenze · Prompt ${ev.prompt_length} chars`;}
           else if(ev.type==='anon'){_updAnon(ev);}
           else if(ev.type==='engine'){
             _engStatus[ev.engine]=ev.status;
@@ -7691,6 +7755,23 @@ async function runAI(){
     // Raw fallback
     if(result.raw){
       html+=`<details style="margin-top:12px"><summary style="font-size:.75rem;color:var(--gray);cursor:pointer">Mostra risposta grezza</summary><pre style="font-size:.7rem;overflow-x:auto;padding:8px;background:var(--gray5);border-radius:var(--radius-sm);margin-top:4px">${result.raw}</pre></details>`;
+    }
+    // Debug: Prompt AI inviato
+    if(window._lastAIPromptDebug){
+      const dbg=window._lastAIPromptDebug;
+      html+=`<details style="margin-top:10px;border:1px solid rgba(99,102,241,.25);border-radius:8px"><summary style="cursor:pointer;font-size:.78rem;font-weight:600;color:rgba(99,102,241,.8);padding:8px 12px;background:rgba(99,102,241,.08);border-radius:8px">🔍 Debug: Prompt inviato all'AI (${dbg.prompt_length} chars)</summary>
+      <div style="padding:10px 12px">
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+          <span style="font-size:.72rem;padding:2px 8px;background:rgba(16,185,129,.15);border-radius:8px;color:var(--ok)">✅ ${dbg.tecnici_count} tecnici</span>
+          <span style="font-size:.72rem;padding:2px 8px;background:rgba(99,102,241,.15);border-radius:8px;color:#A5B4FC">🔧 ${dbg.macchine_loaded} macchine PM</span>
+          <span style="font-size:.72rem;padding:2px 8px;background:rgba(99,102,241,.15);border-radius:8px;color:#A5B4FC">📦 ${dbg.assets_loaded} assets</span>
+          <span style="font-size:.72rem;padding:2px 8px;background:rgba(249,115,22,.15);border-radius:8px;color:#FB923C">🏷️ ${dbg.tagliandi_count} tagliandi target</span>
+          <span style="font-size:.72rem;padding:2px 8px;background:rgba(239,68,68,.15);border-radius:8px;color:var(--err)">🚨 ${dbg.urgenze_count} urgenze</span>
+          <span style="font-size:.72rem;padding:2px 8px;background:rgba(59,130,246,.15);border-radius:8px;color:var(--info)">📅 ${dbg.mese_target} (${dbg.modalita})</span>
+        </div>
+        <div style="font-size:.72rem;color:rgba(255,255,255,.5);margin-bottom:6px">Anteprima prompt (primi 3000 chars — dati già anonimizzati):</div>
+        <pre style="font-size:.68rem;overflow-x:auto;overflow-y:auto;max-height:300px;padding:10px;background:rgba(0,0,0,.4);border-radius:6px;color:rgba(255,255,255,.65);white-space:pre-wrap;word-break:break-word">${(dbg.prompt_preview||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre>
+      </div></details>`;
     }
     // Quick action: view in monthly calendar
     html+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:12px;border-top:1px solid var(--gray4)">
