@@ -6957,7 +6957,8 @@ Rispondi SOLO con JSON valido:
             safety++;
             nextDate = skipWeekend(nextDate);
             const key = `SN_${sn||asset.id}_${nextDate}`;
-            if (existingKeys.has(key)) { skipped++; nextDate = skipWeekend(addDays(nextDate, intervalDays)); continue; }
+            const keyAlt = macchina_id ? `${macchina_id}_${nextDate}` : null; // chiave FASE 1 — evita doppio inserimento stessa macchina
+            if (existingKeys.has(key) || (keyAlt && existingKeys.has(keyAlt))) { skipped++; nextDate = skipWeekend(addDays(nextDate, intervalDays)); continue; }
             const pianoId = secureId('PM');
             const row3 = {
               id: pianoId, tenant_id: tid, macchina_id, cliente_id,
@@ -6968,6 +6969,7 @@ Rispondi SOLO con JSON valido:
             if (tagId3) row3.tipo_intervento_id = tagId3;
             toInsert.push(row3);
             existingKeys.add(key);
+            if (keyAlt) existingKeys.add(keyAlt); // marca anche chiave FASE 1 come occupata
             nextDate = skipWeekend(addDays(nextDate, intervalDays));
           }
         }
