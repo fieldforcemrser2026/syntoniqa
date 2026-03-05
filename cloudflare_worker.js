@@ -6450,29 +6450,38 @@ Rispondi SOLO con JSON valido:
         snToId.set(normalizeSerial(a.numero_serie), a.id);
       }
 
+      // ── Costruisci array di upsert in-memory (ZERO subrequest nel loop) ──
+      const toUpsert = [];
       for (const rec of records) {
         if (!first_sample) first_sample = { serial: rec.numero_serie, prossimo: rec.prossimo_controllo, ultimo: rec.ultimo_controllo };
         try {
           const rawSerial = (rec.numero_serie || rec.NumeroSerie || '').trim();
-          // Risolvi asset_id: prima da record esplicito, poi da mappa in-memory (zero subrequest)
           const assetId = rec.asset_id || rec.AssetId
             || snToId.get(rawSerial)
             || snToId.get(padSerial10(rawSerial))
             || snToId.get(normalizeSerial(rawSerial));
+          if (!assetId) { not_found++; continue; }
+          const patch = { id: assetId, updated_at: now };
           const prossimoControllo = rec.prossimo_controllo || rec.ProssimoControllo;
-          const patch = {};
           if (prossimoControllo) patch.prossimo_controllo = prossimoControllo;
           if (rec.ultimo_controllo || rec.UltimoControllo) patch.ultimo_controllo = rec.ultimo_controllo || rec.UltimoControllo;
           if (rec.ciclo_pm || rec.CicloPm) patch.ciclo_pm = rec.ciclo_pm || rec.CicloPm;
           if (rec.intervallo_settimane != null) patch.intervallo_settimane = parseInt(rec.intervallo_settimane) || null;
-          if (!Object.keys(patch).length) { skipped++; continue; }
-          patch.updated_at = now;
-          if (!assetId) { not_found++; continue; }
-          // Una sola PATCH per asset_id — da 297 chiamate a ~101 totali
-          const res = await sb(env, `anagrafica_assets?id=eq.${encodeURIComponent(assetId)}`, 'PATCH', patch);
-          const cnt = Array.isArray(res) ? res.length : (res ? 1 : 0);
-          if (cnt > 0) { updated++; } else { not_found++; }
+          if (Object.keys(patch).length <= 2) { skipped++; continue; } // solo id+updated_at = nulla da aggiornare
+          toUpsert.push(patch);
         } catch (e) { errors++; if (!first_error) first_error = e.message; }
+      }
+      // ── Upsert batch: 1 singolo subrequest per tutti i record (da N PATCH a 1 POST) ──
+      if (toUpsert.length) {
+        try {
+          const res = await sb(env, 'anagrafica_assets', 'POST', toUpsert, '', {
+            'Prefer': 'resolution=merge-duplicates,return=representation'
+          });
+          updated = Array.isArray(res) ? res.length : toUpsert.length;
+        } catch (e) {
+          errors += toUpsert.length;
+          first_error = first_error || e.message;
+        }
       }
       // Salva storico sincronizzazione in pm_sync_log
       const syncId = secureId('SYNC');
@@ -6523,11 +6532,24 @@ Rispondi SOLO con JSON valido:
       if (!records || !Array.isArray(records)) return err('records array richiesto');
       let updated = 0, not_found = 0, errors = 0;
       const now = new Date().toISOString();
+      // ── Pre-carica tutti gli asset in UNA sola query (zero subrequest nel loop) ──
+      const allAssetsT = await sb(env, 'anagrafica_assets', 'GET', null, '?select=id,numero_serie&limit=1000').catch(() => []);
+      const snMapT = new Map();
+      for (const a of allAssetsT) {
+        if (!a.numero_serie) continue;
+        snMapT.set(a.numero_serie, a.id);
+        snMapT.set(padSerial10(a.numero_serie), a.id);
+        snMapT.set(normalizeSerial(a.numero_serie), a.id);
+      }
+      // ── Costruisci array di upsert in-memory ──
+      const toUpsertT = [];
       for (const rec of records) {
         try {
           const rawSerial = (rec.serial_no || '').trim();
           if (!rawSerial) { not_found++; continue; }
-          const patch = { updated_at: now };
+          const assetId = snMapT.get(rawSerial) || snMapT.get(padSerial10(rawSerial)) || snMapT.get(normalizeSerial(rawSerial));
+          if (!assetId) { not_found++; continue; }
+          const patch = { id: assetId, updated_at: now };
           if (rec.maintenance_type) patch.ciclo_pm = rec.maintenance_type;
           if (rec.standard_interval) {
             const intv = parseInt(rec.standard_interval);
@@ -6540,19 +6562,18 @@ Rispondi SOLO con JSON valido:
           if (rec.schedule_type) patch.schedule_type = rec.schedule_type;
           if (rec.next_pm_date) patch.prossimo_controllo = rec.next_pm_date;
           if (rec.asset_type) patch.tipo_foglio = rec.asset_type;
-          if (!Object.keys(patch).length || Object.keys(patch).length === 1) { not_found++; continue; }
-          // Try serial in multiple formats
-          const stripped = normalizeSerial(rawSerial);
-          const padded = padSerial10(rawSerial);
-          let cnt = 0;
-          for (const sn of [rawSerial, padded, stripped]) {
-            if (!sn) continue;
-            const res = await sb(env, `anagrafica_assets?numero_serie=eq.${encodeURIComponent(sn)}`, 'PATCH', patch);
-            cnt = Array.isArray(res) ? res.length : (res ? 1 : 0);
-            if (cnt) break;
-          }
-          if (cnt > 0) { updated++; } else { not_found++; }
+          if (Object.keys(patch).length <= 2) { not_found++; continue; } // solo id+updated_at = nulla da aggiornare
+          toUpsertT.push(patch);
         } catch (e) { errors++; }
+      }
+      // ── Upsert batch: 1 singolo subrequest per tutti (da N PATCH a 1 POST) ──
+      if (toUpsertT.length) {
+        try {
+          const res = await sb(env, 'anagrafica_assets', 'POST', toUpsertT, '', {
+            'Prefer': 'resolution=merge-duplicates,return=representation'
+          });
+          updated = Array.isArray(res) ? res.length : toUpsertT.length;
+        } catch (e) { errors += toUpsertT.length; }
       }
       await wlog('anagrafica_assets', 'bulk', `pm_template_import updated:${updated} not_found:${not_found}`, body.operatoreId || body.userId);
       return ok({ updated, not_found, errors, total: records.length });
