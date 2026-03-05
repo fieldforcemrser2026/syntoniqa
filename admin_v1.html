@@ -3428,14 +3428,21 @@ async function batchStatoUrgenze(ids, tableKey) {
 
 async function batchDeletePiano(ids, tableKey) {
   if (!confirm(`Eliminare ${ids.length} interventi selezionati?`)) return;
-  let ok = 0, fail = 0;
-  for (const id of ids) {
-    try {
-      await apiCall('updatePiano', {id, Obsoleto: true, userId: USER?.ID}, 'POST');
-      ok++;
-    } catch(e) { fail++; }
+  try {
+    // Usa endpoint batch per evitare N chiamate sequenziali (rate limit)
+    const r = await apiCall('batchDeletePiano', {ids, userId: USER?.ID}, 'POST');
+    const deleted = r?.deleted ?? ids.length;
+    const errors = r?.errors ?? 0;
+    toast(`${deleted} eliminati${errors ? ' (' + errors + ' errori)' : ''}`, errors ? 'warn' : 'ok');
+  } catch(e) {
+    // Fallback: eliminazione singola (worker vecchio non ha batchDeletePiano)
+    let ok = 0, fail = 0;
+    for (const id of ids) {
+      try { await apiCall('updatePiano', {id, Obsoleto: true, userId: USER?.ID}, 'POST'); ok++; }
+      catch(e2) { fail++; }
+    }
+    toast(`${ok} eliminati${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
   }
-  toast(`${ok} eliminati${fail ? ' (' + fail + ' errori)' : ''}`, fail ? 'warn' : 'ok');
   clearBatchSelection(tableKey);
   await refreshData(true);
 }

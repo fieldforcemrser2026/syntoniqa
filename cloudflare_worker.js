@@ -1070,6 +1070,29 @@ async function handlePost(action, body, env) {
       return ok();
     }
 
+    // ─── BATCH DELETE PIANO (bulk soft-delete di N interventi in un'unica chiamata) ───
+    case 'batchDeletePiano': {
+      const ids = body.ids || [];
+      if (!Array.isArray(ids) || !ids.length) return err('ids array richiesto');
+      if (ids.length > 500) return err('Max 500 ID per chiamata batch');
+      let ok2 = 0, fail2 = 0;
+      const now2 = new Date().toISOString();
+      // Rilascia le urgenze collegate prima di obsoletare
+      for (const id of ids) {
+        try {
+          await sb(env, `piano?id=eq.${id}`, 'PATCH', { obsoleto: true, updated_at: now2 });
+          // scollegare urgenze associate
+          const linkedUrg = await sb(env, 'urgenze', 'GET', null, `?intervento_id=eq.${id}&stato=in.(assegnata,schedulata,in_corso)&select=id`).catch(()=>[]);
+          for (const u of (linkedUrg||[])) {
+            await sb(env, `urgenze?id=eq.${u.id}`, 'PATCH', { stato: 'aperta', intervento_id: null, tecnico_assegnato: null, updated_at: now2 }).catch(()=>{});
+          }
+          ok2++;
+        } catch(e) { fail2++; }
+      }
+      await wlog('piano', ids[0], `batch_deleted_${ids.length}`, body.userId);
+      return json({ success: true, deleted: ok2, errors: fail2 });
+    }
+
     // -------- URGENZE --------
 
     case 'createUrgenza': {
@@ -2997,17 +3020,21 @@ ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}
 
 ISTRUZIONI GENERAZIONE:
 ${periodoIstruzione || 'Genera piano per OGNI giorno lavorativo (lun-ven)'}
-- Tagliandi/interventi SOLO lun-ven. SABATO e DOMENICA: niente tagliandi — solo il tecnico REPERIBILE per urgenze (se previsto dalla reperibilita).
-- Lun-ven: ogni tecnico attivo deve avere ALMENO 1 intervento per giorno lavorativo. Genera ${nTecAttivi} righe per giorno (1 riga per tecnico, ognuno a un cliente diverso).
-- REGOLA FONDAMENTALE: UN tagliando = 1 SOLO tecnico = 1 sola riga. NON mettere due tecnici sullo stesso intervento salvo affiancamento ESPLICITO da vincolo.
-- Durata: un tagliando richiede 4-8 ore (giornata intera). Urgenze 1-3h.
-- "tagliando" e "service" sono sinonimi = manutenzione macchina programmata (PM).
-- Nel campo note scrivi: modello macchina + scadenza + ore lavoro se disponibili dalla sezione TAGLIANDI (es: "Astronaut A5 | scad:2026-03-10 | 2800h").
-- AFFIANCAMENTO (SOLO se un vincolo esplicito lo dice per una coppia specifica): genera DUE righe separate (senior + junior) con stesso cliente/data/ora/furgone. NON inventare affiancamenti non richiesti dai vincoli.
-- Tecnici assenti da vincoli o in ferie/malattia/trasferta/installazione: NON inserirli in quei giorni.
-- Usa il FURGONE indicato nel tecnico (es: "furgone:FURG_1"). In affiancamento il junior usa il furgone del senior.
-- DISTRIBUISCI i clienti: non mandare lo stesso tecnico dallo stesso cliente ogni giorno per una settimana intera — varia per ottimizzare logistica e zone.
-- Urgenze → assegna nei primi giorni. Tagliandi SCADUTI → massima priorita, pianifica subito.
+
+OBIETTIVO PRINCIPALE:
+${tagItems.length > 0 ? `HAI ${tagItems.length} TAGLIANDI/SERVICE DA SCHEDULARE. Genera ESATTAMENTE 1 intervento per ciascuna macchina/asset dalla lista TAGLIANDI/SERVICE SCADENZA qui sopra. Non generare interventi extra non corrispondenti a un tagliando reale. Distribuisci i ${tagItems.length} interventi tra i tecnici disponibili in modo ottimale nel periodo target, rispettando zone e vincoli.` : 'Genera piano per il periodo specificato coprendo tutti i tecnici disponibili.'}
+${allUrgenze.length > 0 ? `
+URGENZE DA PIANIFICARE: Assegna le ${allUrgenze.length} urgenze aperte ai tecnici disponibili NEI PRIMI GIORNI del periodo (priorità massima).` : ''}
+
+REGOLE INVIOLABILI:
+- UN tagliando = 1 SOLO tecnico = 1 sola riga. NON mettere due tecnici sullo stesso intervento salvo affiancamento ESPLICITO da vincolo.
+- AFFIANCAMENTO solo se vincolo esplicito per coppia specifica: DUE righe (senior + junior), stesso cliente/data/ora/furgone. NON inventare affiancamenti.
+- Tagliandi/interventi SOLO lun-ven. Sab/Dom: solo reperibilita urgenze.
+- Tecnici assenti da vincoli o in ferie/malattia/trasferta: NON inserirli in quei giorni.
+- Usa FURGONE del tecnico (es: "furgone:FURG_1"). In affiancamento il junior usa furgone del senior.
+- Durata tagliando: 4-8 ore (giornata intera). Urgenza: 1-3h.
+- Nel campo note: modello macchina + scadenza + ore lavoro (es: "Astronaut A5 | scad:2026-03-10 | 2800h").
+- Distribuisci clienti per zona: ottimizza percorsi, non mandare stesso tecnico a stesso cliente per giorni consecutivi senza motivo logistico.
 - Usa SOLO codici dalla lista (TEC_xxx, codice_m3, FURG_x). NON inventare ID.
 
 JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}`;
