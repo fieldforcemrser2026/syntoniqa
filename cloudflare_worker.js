@@ -6436,7 +6436,7 @@ Rispondi SOLO con JSON valido:
     case 'getPMOverview': {
       const [assets, clienti] = await Promise.all([
         sb(env, 'anagrafica_assets', 'GET', null,
-          '?prossimo_controllo=not.is.null&select=id,codice_m3,nome_account,tipo_foglio,gruppo_attrezzatura,nome_asset,numero_serie,modello,prossimo_controllo,ultimo_controllo,data_installazione,status,ciclo_pm,intervallo_settimane,schedule_type&limit=1000&order=codice_m3.asc').catch(() => []),
+          '?prossimo_controllo=not.is.null&select=id,codice_m3,nome_account,tipo_foglio,gruppo_attrezzatura,nome_asset,numero_serie,modello,prossimo_controllo,ultimo_controllo,data_installazione,status,ciclo_pm,intervallo_settimane,schedule_type,giorni_da_pm,mungiture_da_pm&limit=1000&order=codice_m3.asc').catch(() => []),
         sb(env, 'anagrafica_clienti', 'GET', null,
           '?select=codice_m3,nome_account,nome_interno,citta_fatturazione&limit=300').catch(() => [])
       ]);
@@ -6523,6 +6523,11 @@ Rispondi SOLO con JSON valido:
           const newUltimo = rec.ultimo_controllo || rec.UltimoControllo || null;
           const newCiclo = rec.ciclo_pm || rec.CicloPm || null;
           const newIntervallo = rec.intervallo_settimane != null ? (parseInt(rec.intervallo_settimane) || null) : null;
+          // Campi LSSA: Days Since Last PM → giorni_da_pm, Milking Since Last PM → mungiture_da_pm
+          const rawGiorni = rec._days_since_pm != null ? rec._days_since_pm : (rec.days_since_pm != null ? rec.days_since_pm : null);
+          const rawMungiture = rec._milkings_since_pm != null ? rec._milkings_since_pm : (rec.milkings_since_pm != null ? rec.milkings_since_pm : null);
+          const newGiorni = rawGiorni !== null ? (parseInt(rawGiorni) || null) : null;
+          const newMungiture = rawMungiture !== null ? (parseInt(rawMungiture) || null) : null;
           // NIENTE hasChanges — sempre upsert. Il check "no changes" causava
           // conteggi diversi tra run perché il cron aggiornava prossimo_controllo nel DB
           // tra un import e l'altro, rendendo la comparazione non-deterministica.
@@ -6534,6 +6539,8 @@ Rispondi SOLO con JSON valido:
             ultimo_controllo: newUltimo || existing.ultimo_controllo || null,
             ciclo_pm: newCiclo || existing.ciclo_pm || null,
             intervallo_settimane: newIntervallo !== null ? newIntervallo : (existing.intervallo_settimane || null),
+            giorni_da_pm: newGiorni !== null ? newGiorni : (existing.giorni_da_pm || null),
+            mungiture_da_pm: newMungiture !== null ? newMungiture : (existing.mungiture_da_pm || null),
             updated_at: now
           });
         } catch (e) { errors++; if (!first_error) first_error = e.message; }
@@ -6888,6 +6895,12 @@ Rispondi SOLO con JSON valido:
       const toInsert = [];
 
       // FASE 1: da macchine (prossimo_tagliando)
+      // Ordina: più scadute prima (prossimo_tagliando ASC) → se avanzate a today, vanno nelle slot più vicine
+      macchine2.sort((a, b) => {
+        const da = a.prossimo_tagliando || '9999';
+        const db = b.prossimo_tagliando || '9999';
+        return da.localeCompare(db);
+      });
       for (const mac of macchine2) {
         const modKey2 = (mac.modello || mac.tipo || '').toUpperCase();
         const def2 = findCycleDef(defs2, modKey2);
@@ -6897,6 +6910,10 @@ Rispondi SOLO con JSON valido:
         let pos2 = state2.posizione || 0;
         let nextDate = mac.prossimo_tagliando;
         if (!nextDate) continue;
+        // Avanza date scadute a oggi: non generare interventi nel passato.
+        // Salta cicli interi già passati finché nextDate non è >= oggi.
+        while (nextDate < today2) { nextDate = addDays(nextDate, intervallo2); }
+        if (nextDate > endDate2) continue; // fuori dalla finestra, salta
 
         let safety = 0;
         while (nextDate <= endDate2 && safety < 10) {

@@ -8637,6 +8637,9 @@ function renderPMAssetTable(c){
     return sa-sb;
   });
   if(!assets.length)return'<div style="padding:12px;color:var(--gray)">Nessun asset.</div>';
+  // Mostra colonne giorni/mungiture solo se almeno un asset le ha
+  const hasGiorni=assets.some(a=>a.giorni_da_pm!=null);
+  const hasMungiture=assets.some(a=>a.mungiture_da_pm!=null);
   const rows=assets.map((a,i)=>{
     const st=getPMAssetStatus(a.prossimo_controllo,a.intervallo_settimane);
     const tipo=a.gruppo_attrezzatura||a.tipo_foglio||'-';
@@ -8657,6 +8660,9 @@ function renderPMAssetTable(c){
     const cicloBadge=ciclo?`<span style="cursor:pointer;padding:2px 7px;border-radius:8px;font-size:.7rem;font-weight:700;background:${cc}22;color:${cc};border:1.5px solid ${cc}55" onclick="event.stopPropagation();openPMCicloEdit('${a.id}','${ciclo}')" title="Clicca per cambiare ciclo">${ciclo}</span>`:
       `<span style="cursor:pointer;padding:2px 7px;border-radius:8px;font-size:.7rem;color:var(--gray);border:1px dashed var(--gray3)" onclick="event.stopPropagation();openPMCicloEdit('${a.id}','')" title="Assegna ciclo PM">+ ciclo</span>`;
     const intv=a.intervallo_settimane?`<span style="font-size:.65rem;color:var(--gray);margin-left:2px">${a.intervallo_settimane}w</span>`:'';
+    // Giorni da ultimo PM (da LSSA) — colore che scala da verde a rosso
+    const ggCell=hasGiorni?(a.giorni_da_pm!=null?`<td style="text-align:center;font-size:.75rem;font-weight:600;color:${a.giorni_da_pm>100?'#DC2626':a.giorni_da_pm>70?'#f97316':'#16a34a'}">${a.giorni_da_pm}gg</td>`:'<td style="text-align:center;color:var(--gray)">—</td>'):'';
+    const mkCell=hasMungiture?(a.mungiture_da_pm!=null?`<td style="text-align:center;font-size:.75rem;color:var(--muted)">${a.mungiture_da_pm.toLocaleString('it-IT')}</td>`:'<td style="text-align:center;color:var(--gray)">—</td>'):'';
     return `<tr>
       <td style="color:var(--gray);text-align:center;width:26px;font-size:.7rem">${i+1}</td>
       <td style="font-size:.73rem">${prodIcon(assetType(a),13)} ${esc(tipo)}</td>
@@ -8664,13 +8670,16 @@ function renderPMAssetTable(c){
       <td style="font-family:monospace;font-size:.72rem">${esc(a.numero_serie||'—')}</td>
       <td style="font-size:.75rem">${prossimoFmt}</td>
       <td style="font-size:.72rem;color:var(--gray)">${ultimoFmt}</td>
+      ${ggCell}${mkCell}
       <td>${stBadge}</td>
       <td>${cicloBadge}${intv}</td>
       <td><button class="btn btn-xs" onclick="event.stopPropagation();openPMEdit('${a.id}','${esc(c.codice_m3)}')" title="Imposta date PM">✏️</button></td>
     </tr>`;
   }).join('');
+  const ggHdr=hasGiorni?'<th title="Giorni da ultimo PM (da LSSA)">gg da PM</th>':'';
+  const mkHdr=hasMungiture?'<th title="Mungiture da ultimo PM (da LSSA)">Mungiture</th>':'';
   return `<div style="padding:8px 16px 12px;overflow-x:auto"><table class="tbl" style="font-size:.79rem;min-width:800px">
-    <thead><tr><th>#</th><th>Tipo</th><th>Modello</th><th>N. Serie</th><th>Prossimo PM</th><th>Ultimo PM</th><th>Stato</th><th>Ciclo</th><th></th></tr></thead>
+    <thead><tr><th>#</th><th>Tipo</th><th>Modello</th><th>N. Serie</th><th>Prossimo PM</th><th>Ultimo PM</th>${ggHdr}${mkHdr}<th>Stato</th><th>Ciclo</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
 
