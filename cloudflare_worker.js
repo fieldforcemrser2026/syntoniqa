@@ -2616,6 +2616,14 @@ async function handlePost(action, body, env) {
     }
 
     case 'generateAIPlan': {
+      // ═══ SSE STREAMING — real-time engine status + chunk progress ═══
+      const {readable: _sseR, writable: _sseW} = new TransformStream();
+      const _sseWr = _sseW.getWriter();
+      const _sseEnc = new TextEncoder();
+      const sse = (ev) => { try { _sseWr.write(_sseEnc.encode(`data: ${JSON.stringify(ev)}\n\n`)); } catch {} };
+
+      (async () => { try {
+
       // Workers AI è solo il fallback finale — non bloccare se non configurato
 
       const vincoli = body.vincoli || {};
@@ -2649,6 +2657,7 @@ async function handlePost(action, body, env) {
         meseTarget ? sb(env, 'piano', 'GET', null, `?obsoleto=eq.false&stato=neq.annullato&data=gte.${meseStart}&data=lte.${meseEnd}&select=id,tecnico_id,tecnici_ids,cliente_id,data,ora_inizio,tipo_intervento_id,note,stato&limit=500`) : Promise.resolve([])
       ]);
       const [allTecnici, allUrgenze, allClienti, vincoliCfg, allRep, allAutomezzi, allMacchine, allAssets, allRichieste, allTrasferte, allInstallazioni, allPianoDb] = _psResults.map(_safePS);
+      sse({type:'init', message:'Dati caricati', n:{tecnici:allTecnici.filter(t=>t.ruolo!=='admin').length, clienti:allClienti.length, urgenze:allUrgenze.length, tagliandi:allMacchine.length+allAssets.length}});
 
       // Parse vincoli: NEW v2 format (manual_rules) + legacy categories
       let vincoliText = '';
@@ -2781,6 +2790,8 @@ async function handlePost(action, body, env) {
         }
         return result;
       }
+      // Notifica frontend: quante entità sono state anonimizzate (per UI fancy)
+      sse({type:'anon', entities:Object.keys(anonMap.encode).length, sample:Object.entries(anonMap.encode).slice(0,6).map(([r,c])=>({r,c}))});
 
       // Reperibilita context (only if ctx.reperibilita)
       let repContext = '';
@@ -2880,7 +2891,7 @@ async function handlePost(action, body, env) {
         const urgenti = tagItems.filter(t => t.giorniScadenza >= 0 && t.giorniScadenza <= 7);
         const prossimi = tagItems.filter(t => t.giorniScadenza > 7 && t.giorniScadenza <= 30);
         const programmati = tagItems.filter(t => t.giorniScadenza > 30);
-        const fmtItem = t => `${t.tipo}|${t.macchina}@${t.clienteId}|${t.data}|${t.giorniScadenza}gg`;
+        const fmtItem = t => `${t.tipo}|${t.macchina}[${t.macchinaLabel}]@${t.clienteId}|${t.data}|${t.giorniScadenza}gg`;
         tagliandiContext = '\nTAGLIANDI/SERVICE SCADENZA (pianifica PRIMA i piu urgenti):';
         if (scaduti.length) tagliandiContext += '\nSCADUTI:' + scaduti.slice(0,10).map(fmtItem).join(';');
         if (urgenti.length) tagliandiContext += '\nURGENTI(<7gg):' + urgenti.slice(0,8).map(fmtItem).join(';');
@@ -3059,14 +3070,20 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       let lastWorking = null;
       let _usedEngine = null; // traccia quale motore ha risposto per ultimo
 
-      async function callAI(promptText) {
+      async function callAI(promptText, onEngine) {
         let lastError = '';
+        // Helper interno: prova un singolo engine con callback SSE
+        const _tryE = async (n) => {
+          onEngine?.({engine:n, status:'trying'});
+          const eng = engines[n];
+          const r = n === 'workersai' ? await tryWorkersAI(promptText) : await eng.tryFn(promptText);
+          onEngine?.({engine:n, status: r ? 'ok' : 'failed'});
+          return r;
+        };
 
         // Se un engine ha già funzionato in questa sessione, provalo PRIMA
         if (lastWorking && engines[lastWorking] && !engines[lastWorking].disabled && env[engines[lastWorking].envKey]) {
-          const r = lastWorking === 'workersai'
-            ? await tryWorkersAI(promptText)
-            : await engines[lastWorking].tryFn(promptText);
+          const r = await _tryE(lastWorking);
           if (r) { _usedEngine = lastWorking; return r; }
         }
 
@@ -3076,9 +3093,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           if (!eng || eng.disabled || !env[eng.envKey]) continue;
           if (name === lastWorking) continue; // già provato sopra
 
-          const r = name === 'workersai'
-            ? await tryWorkersAI(promptText)
-            : await eng.tryFn(promptText);
+          const r = await _tryE(name);
           if (r) { lastWorking = name; _usedEngine = name; return r; }
         }
 
@@ -3494,7 +3509,7 @@ Servono ${targetDays.length * nTecAttivi} righe (${nTecAttivi} tecnici x ${targe
 ${instructions}`;
 
             try {
-              const rawText = await callAI(chunkPrompt);
+              const rawText = await callAI(chunkPrompt, (ev) => sse({type:'engine', ...ev, chunk:weekLabel}));
               if (!rawText) return { piano: [], warnings: [`${weekLabel}: risposta vuota`], ok: false };
               const parsed = parseAIResponse(rawText);
               if (parsed?.piano?.length) {
@@ -3513,26 +3528,28 @@ ${instructions}`;
           const chunkDelay = fastEngines ? 2000 : 65000; // 65s se solo Groq, 2s se altri disponibili
 
           for (let ci = 0; ci < chunks.length; ci++) {
+            sse({type:'progress', message:`Elaboro ${chunks[ci].label}...`, chunk:ci+1, total:chunks.length});
             if (ci > 0) await new Promise(r => setTimeout(r, chunkDelay));
 
             const res = await processChunk(chunks[ci], chunks[ci].label);
             if (res.piano.length) { allPiano.push(...res.piano); chunksDone++; }
+            sse({type:'chunk', done:ci+1, total:chunks.length, count:res.piano.length, label:chunks[ci].label, ok:res.ok});
             res.warnings.forEach(w => allWarnings.add(w));
           }
 
-          if (!allPiano.length) return err('AI non ha generato nessun intervento. Verifica le API key nei Worker secrets.');
+          if (!allPiano.length) { sse({type:'error', message:'AI non ha generato nessun intervento. Verifica le API key nei Worker secrets.'}); return; }
 
           const processed = postProcess(allPiano);
           // DECODE: rimetti nomi reali nelle risposte per il frontend
           const decoded = decodePiano(processed);
           const allWarnArr = [...allWarnings, ...postProcessWarnings].map(w => anonDecode(w));
-          return ok({
+          sse({type:'result', data:{
             summary: anonDecode(`Piano ${meseTarget}: ${decoded.length} interventi su ${[...new Set(decoded.map(p=>p.data))].length} giorni (${chunksDone}/${chunks.length} parti)${postProcessWarnings.length ? ` — ${postProcessWarnings.length} conflitti rimossi` : ''}`),
             piano: decoded,
             warnings: allWarnArr,
             chunks: chunksDone,
             engine_used: _usedEngine || lastWorking || 'unknown'
-          });
+          }}); return;
 
         } else {
           // ── SINGOLA CHIAMATA: nessun mese target ──
@@ -3543,10 +3560,11 @@ Genera almeno ${nTecAttivi} interventi per OGNI giorno lavorativo.
 
 ${instructions}`;
 
-          const rawText = await callAI(singlePrompt);
-          if (!rawText) return err('AI non ha generato risposta. Verifica le API key nei Worker secrets.');
+          sse({type:'progress', message:'Elaboro piano...', chunk:1, total:1});
+          const rawText = await callAI(singlePrompt, (ev) => sse({type:'engine', ...ev, chunk:'Piano'}));
+          if (!rawText) { sse({type:'error', message:'AI non ha generato risposta. Verifica le API key nei Worker secrets.'}); return; }
           const result = parseAIResponse(rawText);
-          if (!result) return ok({ summary: 'Errore formato risposta', piano: [], warnings: ['Risposta AI non parsabile. Riprova.'], raw: rawText.substring(0, 1500) });
+          if (!result) { sse({type:'result', data:{ summary:'Errore formato risposta', piano:[], warnings:['Risposta AI non parsabile. Riprova.'], raw:rawText.substring(0,1500), engine_used:_usedEngine||lastWorking||'unknown' }}); return; }
           result.piano = decodePiano(postProcess(result.piano));
           result.summary = anonDecode(result.summary || '');
           result.warnings = (result.warnings || []).map(w => anonDecode(w));
@@ -3555,11 +3573,17 @@ ${instructions}`;
             result.summary += ` — ${postProcessWarnings.length} conflitti rimossi`;
           }
           result.engine_used = _usedEngine || lastWorking || 'unknown';
-          return ok(result);
+          sse({type:'result', data:result}); return;
         }
       } catch (e) {
-        return err(`Errore AI: ${e.message || 'sconosciuto'}`);
+        sse({type:'error', message:`Errore AI: ${e.message || 'sconosciuto'}`});
       }
+      } catch(e2) { sse({type:'error', message:e2.message||'Errore imprevisto'}); }
+      finally { try { _sseWr.close(); } catch {} }
+      })(); // end async IIFE
+
+      // Ritorna risposta SSE subito — il worker resta vivo finché lo stream viene consumato
+      return new Response(_sseR, { headers: {...corsHeaders, 'Content-Type':'text/event-stream; charset=utf-8', 'Cache-Control':'no-cache, no-transform', 'X-Accel-Buffering':'no'} });
     }
 
     case 'analyzeImage': {

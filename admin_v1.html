@@ -159,6 +159,8 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 .login-box .loading .spin{display:inline-block;width:32px;height:32px;border:3px solid var(--gray3);border-top-color:var(--c1);border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes aiProgress{0%{width:10%;margin-left:0}50%{width:50%;margin-left:25%}100%{width:10%;margin-left:90%}}
+@keyframes aiPulse{0%,100%{opacity:.65;transform:scale(1)}50%{opacity:1;transform:scale(1.03)}}
+@keyframes aiSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 
 .pm-row-detail{max-height:0;overflow:hidden;transition:max-height .3s ease}
 .pm-row-detail.open{max-height:600px}
@@ -7414,53 +7416,111 @@ async function runAI(){
   const prompt=$('aiPrompt').value.trim();
   const meseVal=$('aiMeseTarget')?.value||'';
   const hasVincoli=VINCOLI_AUTO.some(v=>VINCOLI_AUTO_SEL[v.id||(v.fonte_tabella+'_'+v.fonte_record_id)]!==false)||VINCOLI_MANUAL.some(r=>r.testo);
-  // Permetti generazione se c'è: prompt, file, mese target, o vincoli configurati
   if(!prompt&&!AI_FILES.length&&!meseVal&&!hasVincoli){toast('Specifica almeno un criterio: testo, mese target, vincoli configurati o file allegati','warn');return}
-  $('aiResult').style.display='block';
-  $('aiResult').innerHTML='<div style="text-align:center;padding:32px"><div style="font-size:2rem;margin-bottom:12px">🤖</div><div style="font-size:.9rem;font-weight:600;color:#fff;margin-bottom:8px">Generazione in corso...</div><div style="font-size:.8rem;color:rgba(255,255,255,.6)">'+(meseVal?'Mese: '+meseVal+' · ':'')+(hasVincoli?'Vincoli attivi ✓ · ':'')+(prompt?'Prompt ✓ · ':'')+(AI_FILES.length?AI_FILES.length+' file ✓':'')+'</div><div style="margin-top:16px;height:3px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden"><div style="height:100%;width:30%;background:linear-gradient(90deg,#818CF8,#6366F1);border-radius:3px;animation:aiProgress 2s ease-in-out infinite"></div></div></div>';
 
-  // Prepare file data for API
+  // ─── STREAMING LOADING UI ───
+  const _engLabels={gemini:{name:'Gemini',color:'#4285F4',ico:'🔵'},cerebras:{name:'Cerebras',color:'#FF6B35',ico:'🟠'},groq:{name:'Groq',color:'#F55036',ico:'🔴'},mistral:{name:'Mistral',color:'#7C3AED',ico:'🟣'},deepseek:{name:'DeepSeek',color:'#0EA5E9',ico:'🔷'},workersai:{name:'Workers AI',color:'#F38020',ico:'⚡'}};
+  const _allEng=['gemini','cerebras','groq','mistral','deepseek','workersai'];
+  $('aiResult').style.display='block';
+  $('aiResult').innerHTML=`<div style="background:var(--card);border-radius:var(--radius-lg);overflow:hidden">
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#1e1b4b,#312e81);padding:20px 24px;color:white">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
+        <span style="font-size:1.5rem;animation:aiSpin 2s linear infinite">⚙️</span>
+        <div><div style="font-size:.95rem;font-weight:700">Generazione AI in corso...</div>
+        <div id="aiProgressText" style="font-size:.78rem;opacity:.65;margin-top:2px">${meseVal?'Mese: '+meseVal+' · ':''}Preparazione dati...</div></div>
+      </div>
+      <div style="margin-top:14px;height:4px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden">
+        <div id="aiChunkBar" style="height:100%;width:0%;background:linear-gradient(90deg,#818CF8,#6366F1);border-radius:4px;transition:width .5s ease"></div>
+      </div>
+      <div id="aiChunkText" style="font-size:.7rem;opacity:.5;margin-top:4px;text-align:right">In attesa...</div>
+    </div>
+    <!-- Anonymization Panel -->
+    <div style="padding:12px 24px;background:rgba(0,0,0,.35);border-bottom:1px solid rgba(255,255,255,.05)">
+      <div id="aiAnonPanel" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:.8rem;color:rgba(255,255,255,.35)">🔒 Preparazione anonimizzazione dati...</span>
+      </div>
+    </div>
+    <!-- Engines Grid -->
+    <div style="padding:14px 24px 18px">
+      <div style="font-size:.7rem;font-weight:600;color:rgba(255,255,255,.35);letter-spacing:.06em;margin-bottom:8px">MOTORI AI (cascata automatica)</div>
+      <div id="aiEngineBar" style="display:flex;gap:6px;flex-wrap:wrap">
+        ${_allEng.map(e=>{const i=_engLabels[e];return`<span id="aiEng_${e}" style="padding:4px 10px;border-radius:14px;font-size:.72rem;font-weight:600;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.3)">${i.ico} ${i.name}</span>`;}).join('')}
+      </div>
+    </div>
+    <!-- Init data line -->
+    <div style="padding:0 24px 14px"><div id="aiInitText" style="font-size:.72rem;color:rgba(255,255,255,.3)">Caricamento contesto...</div></div>
+  </div>`;
+
+  // Prepare file data
   const filesData=[];
-  for(const f of AI_FILES){
-    const content=await readFileAsText(f);
-    filesData.push({name:f.name, type:f.type, size:f.size, content});
+  for(const f of AI_FILES){const content=await readFileAsText(f);filesData.push({name:f.name,type:f.type,size:f.size,content});}
+
+  const meseTarget=$('aiMeseTarget')?.value||'';
+  const modalita=$('aiModalita')?.value||'mese';
+  const settimana=$('aiSettimana')?.value||'1';
+  const ctxFlags={vincoli:$('aiCtxVincoli')?.checked!==false,reperibilita:$('aiCtxRep')?.checked!==false,piano:$('aiCtxPiano')?.checked!==false,urgenze:$('aiCtxUrgenze')?.checked!==false,tagliandi:$('aiCtxTagliandi')?.checked!==false};
+  let pianoEsistente=[];
+  if(ctxFlags.piano&&meseTarget&&DATA.piano){
+    pianoEsistente=DATA.piano.filter(p=>{const d=(p.Data||'').split('T')[0];return d.startsWith(meseTarget)&&p.Stato!=='annullato';}).map(p=>{
+      const u=(DATA.utenti||[]).find(u=>u.ID===p.TecnicoID)||{};const c=(DATA.clienti||[]).find(c=>c.ID===p.ClienteID)||{};
+      return {data:(p.Data||'').split('T')[0],tecnico:((u.Nome||'')+(u.Cognome?' '+u.Cognome:'')).trim()||p.TecnicoID||'?',tecnicoId:p.TecnicoID,cliente:c.Nome||p.ClienteID||'',note:p.Note||p.TipoIntervento||''};
+    });
+  }
+
+  // SSE helpers
+  const _engStatus={};
+  function _updEng(){
+    _allEng.forEach(e=>{
+      const el=document.getElementById('aiEng_'+e);if(!el)return;
+      const i=_engLabels[e];const st=_engStatus[e];
+      if(st==='trying'){el.style.cssText=`padding:4px 10px;border-radius:14px;font-size:.72rem;font-weight:600;border:1px solid ${i.color};color:${i.color};background:${i.color}22;animation:aiPulse 1s ease-in-out infinite`;el.textContent=i.ico+' '+i.name+' ⟳';}
+      else if(st==='ok'){el.style.cssText=`padding:4px 10px;border-radius:14px;font-size:.72rem;font-weight:600;border:1px solid ${i.color};color:white;background:${i.color}`;el.textContent=i.ico+' '+i.name+' ✓';}
+      else if(st==='failed'){el.style.cssText=`padding:4px 10px;border-radius:14px;font-size:.72rem;font-weight:600;border:1px solid rgba(239,68,68,.4);color:rgba(239,68,68,.6);text-decoration:line-through`;el.textContent=i.ico+' '+i.name+' ✗';}
+    });
+  }
+  function _updChunk(done,total,label){
+    const pb=document.getElementById('aiChunkBar');const pt=document.getElementById('aiChunkText');
+    if(pb)pb.style.width=`${Math.round(done/total*100)}%`;
+    if(pt)pt.textContent=`${label} — ${done}/${total} settimane`;
+  }
+  function _updAnon(ev){
+    const el=document.getElementById('aiAnonPanel');if(!el)return;
+    const samples=(ev.sample||[]).slice(0,4);
+    el.innerHTML=`<span style="font-size:.8rem">🔒</span><span style="font-size:.75rem;font-weight:700;color:#4ade80">${ev.entities} entità anonimizzate</span>`
+      +samples.map(s=>`<span style="font-size:.68rem;padding:2px 7px;background:rgba(0,0,0,.35);border-radius:8px"><span style="color:#f87171">${s.r}</span><span style="color:rgba(255,255,255,.3)"> → </span><span style="color:#4ade80;font-family:monospace">${s.c}</span></span>`).join('')
+      +`<span style="font-size:.65rem;color:rgba(255,255,255,.3);margin-left:4px">Dati personali cifrati prima dell'invio all'AI</span>`;
   }
 
   try{
-    // Collect context flags
-    const meseTarget=$('aiMeseTarget')?.value||'';
-    const modalita=$('aiModalita')?.value||'mese';
-    const settimana=$('aiSettimana')?.value||'1';
-    const ctxFlags={
-      vincoli:$('aiCtxVincoli')?.checked!==false,
-      reperibilita:$('aiCtxRep')?.checked!==false,
-      piano:$('aiCtxPiano')?.checked!==false,
-      urgenze:$('aiCtxUrgenze')?.checked!==false,
-      tagliandi:$('aiCtxTagliandi')?.checked!==false
-    };
-    // Pre-load piano esistente for the target month
-    let pianoEsistente=[];
-    if(ctxFlags.piano&&meseTarget&&DATA.piano){
-      pianoEsistente=DATA.piano.filter(p=>{
-        const d=(p.Data||'').split('T')[0];
-        return d.startsWith(meseTarget)&&p.Stato!=='annullato';
-      }).map(p=>{
-        const u=(DATA.utenti||[]).find(u=>u.ID===p.TecnicoID)||{};
-        const c=(DATA.clienti||[]).find(c=>c.ID===p.ClienteID)||{};
-        return {
-          data:(p.Data||'').split('T')[0],
-          tecnico:((u.Nome||'')+(u.Cognome?' '+u.Cognome:'')).trim()||p.TecnicoID||'?',
-          tecnicoId:p.TecnicoID,
-          cliente:c.Nome||p.ClienteID||'',
-          note:p.Note||p.TipoIntervento||''
-        };
-      });
+    const resp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(JWT_TOKEN||API_TOKEN)},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:{testo:prompt,files:filesData,mese_target:meseTarget,modalita,settimana,ctx:ctxFlags,piano_esistente:pianoEsistente}}),signal:AbortSignal.timeout(180000)});
+    if(!resp.ok)throw new Error(`HTTP ${resp.status}`);
+    if(!resp.body)throw new Error('Streaming non supportato dal browser');
+    const reader=resp.body.getReader();const dec=new TextDecoder();let buf='';let result=null;
+    while(true){
+      const {done,value}=await reader.read();if(done)break;
+      buf+=dec.decode(value,{stream:true});
+      const lines=buf.split('\n');buf=lines.pop();
+      for(const line of lines){
+        if(!line.startsWith('data: '))continue;
+        try{
+          const ev=JSON.parse(line.slice(6));
+          if(ev.type==='init'){const el=document.getElementById('aiInitText');if(el)el.textContent=`${ev.n.tecnici} tecnici · ${ev.n.clienti} clienti · ${ev.n.urgenze} urgenze · ${ev.n.tagliandi} tagliandi caricati`;}
+          else if(ev.type==='anon'){_updAnon(ev);}
+          else if(ev.type==='engine'){
+            _engStatus[ev.engine]=ev.status;
+            if(ev.status==='ok')Object.keys(_engStatus).forEach(k=>{if(_engStatus[k]==='trying')_engStatus[k]='failed';});
+            _updEng();
+            const pt=document.getElementById('aiProgressText');if(pt&&ev.status==='trying')pt.textContent=`Provo ${_engLabels[ev.engine]?.name||ev.engine}...`+( ev.chunk?` (${ev.chunk})`:'');
+          }
+          else if(ev.type==='progress'){const pt=document.getElementById('aiProgressText');if(pt)pt.textContent=ev.message;if(ev.total>1)_updChunk(Math.max(0,ev.chunk-1),ev.total,ev.message);}
+          else if(ev.type==='chunk'){_updChunk(ev.done,ev.total,ev.label);}
+          else if(ev.type==='result'){result=ev.data;}
+          else if(ev.type==='error'){throw new Error(ev.message);}
+        }catch(pe){if(pe.message&&!pe.message.includes('JSON'))throw pe;}
+      }
     }
-    // Direct fetch con timeout 120s (apiCall ha 30s hardcoded — insufficiente per Workers AI)
-    const _aiResp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(JWT_TOKEN||API_TOKEN)},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:{testo:prompt,files:filesData,mese_target:meseTarget,modalita,settimana,ctx:ctxFlags,piano_esistente:pianoEsistente}}),signal:AbortSignal.timeout(120000)});
-    const _aiJson=await _aiResp.json();
-    if(!_aiJson.success)throw new Error(_aiJson.error||'Errore AI');
-    const result=_aiJson.data||_aiJson;
+    if(!result)throw new Error('Nessuna risposta ricevuta dal worker');
     AI_PLAN=result;
     if(!result||typeof result!=='object'||(!result.piano&&!result.summary)){
       $('aiResult').innerHTML='<div style="padding:16px;background:rgba(239,68,68,.1);border:1px solid var(--err);border-radius:var(--radius)"><strong>❌ Errore</strong><br>Workers AI non ha generato un piano. Riprova con un prompt più specifico.</div>';
@@ -7471,11 +7531,21 @@ async function runAI(){
     const piano=result.piano||[];
     const nGiorni=[...new Set(piano.map(p=>p.data))].length;
     const nTecnici=[...new Set(piano.map(p=>p.tecnicoId||p.tecnico))].length;
-    // Motore AI usato
     const engineUsed=result.engine_used||'unknown';
     const engineLabels={gemini:{name:'Gemini',color:'#4285F4',ico:'🔵'},cerebras:{name:'Cerebras',color:'#FF6B35',ico:'🟠'},groq:{name:'Groq',color:'#F55036',ico:'🔴'},mistral:{name:'Mistral',color:'#7C3AED',ico:'🟣'},deepseek:{name:'DeepSeek',color:'#0EA5E9',ico:'🔷'},workersai:{name:'Workers AI',color:'#F38020',ico:'⚡'},unknown:{name:'AI',color:'#888',ico:'🤖'}};
     const allEngines=['gemini','cerebras','groq','mistral','deepseek','workersai'];
-    const engBar=allEngines.map(e=>{const info=engineLabels[e]||{name:e,color:'#888',ico:'🤖'};const active=e===engineUsed;return `<span title="${info.name}" style="padding:3px 8px;border-radius:12px;font-size:.7rem;font-weight:600;opacity:${active?1:.3};background:${active?info.color+'33':'transparent'};border:1px solid ${active?info.color:'rgba(255,255,255,.2)'};color:${active?info.color:'rgba(255,255,255,.5)'}">${info.ico} ${info.name}</span>`;}).join('');
+    // Engine bar: show history (ok=winner, failed=tried, dim=not tried)
+    const engBar=allEngines.map(e=>{
+      const info=engineLabels[e]||{name:e,color:'#888',ico:'🤖'};
+      const active=e===engineUsed;const tried=_engStatus[e]==='failed';
+      let style=`padding:3px 8px;border-radius:12px;font-size:.7rem;font-weight:600;border:1px solid;`;
+      if(active)style+=`background:${info.color}33;border-color:${info.color};color:${info.color}`;
+      else if(tried)style+=`background:transparent;border-color:rgba(239,68,68,.3);color:rgba(239,68,68,.5);text-decoration:line-through`;
+      else style+=`background:transparent;border-color:rgba(255,255,255,.15);color:rgba(255,255,255,.3)`;
+      return `<span title="${info.name}${active?' ✓ Usato':tried?' ✗ Fallito':''}" style="${style}">${info.ico} ${info.name}${active?' ✓':''}</span>`;
+    }).join('');
+    // ── Anonimizzazione badge nel risultato ──
+    const anonEntities=Object.keys(_engStatus).length>0?'<span style="font-size:.7rem;opacity:.7;margin-left:8px">🔒 Dati cifrati durante elaborazione</span>':'';
     // Header con KPI
     html+=`<div style="background:linear-gradient(135deg,#009B83,#00C9A7);color:white;border-radius:var(--radius-lg);padding:24px;margin-bottom:16px">
       <h3 style="margin:0 0 4px;font-size:1.25rem">📋 Piano Generato con AI</h3>
@@ -7485,7 +7555,7 @@ async function runAI(){
         <div><span style="font-size:1.75rem;font-weight:700">${nGiorni}</span><br><span style="font-size:.75rem;opacity:.7">Giorni</span></div>
         <div><span style="font-size:1.75rem;font-weight:700">${nTecnici}</span><br><span style="font-size:.75rem;opacity:.7">Tecnici</span></div>
       </div>
-      <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span style="font-size:.7rem;opacity:.7;margin-right:4px">Motore:</span>${engBar}</div>
+      <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span style="font-size:.7rem;opacity:.7;margin-right:4px">Motore:</span>${engBar}${anonEntities}</div>
     </div>`;
     // Tabella per giorno con colori tecnico
     if(piano.length){
