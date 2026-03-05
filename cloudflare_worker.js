@@ -6440,30 +6440,20 @@ Rispondi SOLO con JSON valido:
       let first_error = null, first_sample = null;
       const now = new Date().toISOString();
 
-      // ── Pre-carica tutti gli asset con tutti i campi aggiornabili ──
-      // Timeout esplicito 20s via AbortController per evitare hanging randomici
-      let allAssetsSnap;
-      try {
-        const ac = new AbortController();
-        const timer = setTimeout(() => ac.abort(), 20000);
-        allAssetsSnap = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/anagrafica_assets?select=id,numero_serie,prossimo_controllo,ultimo_controllo,ciclo_pm,intervallo_settimane&limit=2000`,
-          { signal: ac.signal, headers: { 'apikey': env.SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}` } }
-        ).then(r => r.json()).finally(() => clearTimeout(timer));
-      } catch(e) {
-        return err(`Timeout o errore caricamento anagrafica_assets: ${e.message}`, 500);
-      }
+      // ── Pre-carica TUTTI gli asset con paginazione (sbPaginate bypassa il cap 1000 di PostgREST) ──
+      const allAssetsSnap = await sbPaginate(env, 'anagrafica_assets',
+        '?select=id,numero_serie,prossimo_controllo,ultimo_controllo,ciclo_pm,intervallo_settimane&order=id.asc');
       if (!allAssetsSnap || allAssetsSnap.length === 0) {
         return err('Nessun asset trovato in anagrafica_assets — verifica che la tabella non sia vuota', 500);
       }
       const snToId = new Map();
       const idToAsset = new Map();
       let db_null_serial = 0;
-      const db_serials_sample = [];
+      const db_serials_sample = []; // prime 8 serie DB per debug formato
       for (const a of allAssetsSnap) {
         const sn = (a.numero_serie || '').trim(); // trim() difensivo per spazi nel DB
         if (!sn) { db_null_serial++; continue; }
-        if (db_serials_sample.length < 5) db_serials_sample.push(sn); // campione debug
+        if (db_serials_sample.length < 8) db_serials_sample.push(sn);
         snToId.set(sn, a.id);
         snToId.set(padSerial10(sn), a.id);
         snToId.set(normalizeSerial(sn), a.id);
