@@ -3166,8 +3166,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
       // Ranking configurabile da DB config (chiave: ai_engine_ranking)
       // Formato: "gemini,cerebras,groq,mistral,deepseek,workersai" (ordine = priorità)
-      // Ranking: FREE first (gemini/cerebras/groq/workersai), pagamento solo come fallback
-      const defaultRanking = ['gemini','cerebras','groq','workersai','mistral','deepseek'];
+      // Ranking: tutti gratuiti (free tier), Workers AI è il fallback finale (prompt compatto)
+      const defaultRanking = ['gemini','cerebras','groq','mistral','deepseek','workersai'];
       let engineRanking = defaultRanking;
       try {
         const cfgRank = await sb(env, 'config', 'GET', null,
