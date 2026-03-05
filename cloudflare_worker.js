@@ -6458,9 +6458,12 @@ Rispondi SOLO con JSON valido:
       }
       const snToId = new Map();
       const idToAsset = new Map();
+      let db_null_serial = 0;
+      const db_serials_sample = [];
       for (const a of allAssetsSnap) {
         const sn = (a.numero_serie || '').trim(); // trim() difensivo per spazi nel DB
-        if (!sn) continue;
+        if (!sn) { db_null_serial++; continue; }
+        if (db_serials_sample.length < 5) db_serials_sample.push(sn); // campione debug
         snToId.set(sn, a.id);
         snToId.set(padSerial10(sn), a.id);
         snToId.set(normalizeSerial(sn), a.id);
@@ -6537,7 +6540,7 @@ Rispondi SOLO con JSON valido:
         });
       } catch(e) { /* pm_sync_log non critico — non bloccare il flusso */ }
       await wlog('anagrafica_assets', 'bulk', `pm_import updated:${updated} not_found:${not_found} skipped:${skipped}`, body.operatoreId || body.userId);
-      return ok({ updated, not_found, errors, skipped, total: records.length, sync_id: syncId, first_error, first_sample, not_found_serials, db_assets_loaded: allAssetsSnap.length });
+      return ok({ updated, not_found, errors, skipped, total: records.length, sync_id: syncId, first_error, first_sample, not_found_serials, db_assets_loaded: allAssetsSnap.length, db_null_serial, db_serials_sample });
     }
 
     // ═══ GET STORICO SINCRONIZZAZIONI PM ═══

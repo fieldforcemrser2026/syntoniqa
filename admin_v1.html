@@ -8757,6 +8757,9 @@ async function _importPMFileCore(input){
       toast(msg,lvl,10000);
       if(res.first_error)toast('❌ Errore PATCH: '+res.first_error,'err',15000);
       if(res.first_sample)console.log('[PM IMPORT] Primo record inviato al Worker:',JSON.stringify(res.first_sample));
+      // Debug: quante righe in DB hanno numero_serie NULL?
+      if(res.db_null_serial>0)toast(`⚠️ DB debug: ${res.db_assets_loaded} asset caricati, ${res.db_null_serial} senza numero_serie (→ non trovabili per serial). Campione DB: ${(res.db_serials_sample||[]).join(', ')}`,'warn',20000);
+      else console.log('[PM IMPORT] DB debug: caricati',res.db_assets_loaded,'asset, tutti con numero_serie. Campione:',res.db_serials_sample);
       PM_OVERVIEW=null;await loadPMOverview();
       return;
     }
