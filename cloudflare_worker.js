@@ -6440,19 +6440,22 @@ Rispondi SOLO con JSON valido:
       let first_error = null, first_sample = null;
       const now = new Date().toISOString();
 
-      // ── Pre-carica tutti gli asset con tutti i campi aggiornabili (fix PGRST102) ──
-      // PGRST102: tutti gli oggetti nell'array upsert DEVONO avere le stesse chiavi.
-      // Soluzione: caricare i valori correnti → ogni oggetto ha sempre le stesse 6 chiavi,
-      // usando il valore DB esistente per i campi non forniti dall'import.
+      // ── Pre-carica tutti gli asset con tutti i campi aggiornabili ──
+      // IMPORTANTE: NON usare .catch(()=>[]) qui — se fallisce vogliamo saperlo,
+      // altrimenti tutto appare "not found" silenziosamente (matching random 0 vs 80)
       const allAssetsSnap = await sb(env, 'anagrafica_assets', 'GET', null,
-        '?select=id,numero_serie,prossimo_controllo,ultimo_controllo,ciclo_pm,intervallo_settimane&limit=1000').catch(() => []);
+        `?select=id,numero_serie,prossimo_controllo,ultimo_controllo,ciclo_pm,intervallo_settimane&tenant_id=eq.${TENANT}&limit=1000`);
+      if (!allAssetsSnap || allAssetsSnap.length === 0) {
+        return err('Nessun asset trovato in anagrafica_assets — verifica tenant_id e che la tabella non sia vuota', 500);
+      }
       const snToId = new Map();
-      const idToAsset = new Map(); // id → record completo per fallback valori
+      const idToAsset = new Map();
       for (const a of allAssetsSnap) {
-        if (!a.numero_serie) continue;
-        snToId.set(a.numero_serie, a.id);
-        snToId.set(padSerial10(a.numero_serie), a.id);
-        snToId.set(normalizeSerial(a.numero_serie), a.id);
+        const sn = (a.numero_serie || '').trim(); // trim() difensivo per spazi nel DB
+        if (!sn) continue;
+        snToId.set(sn, a.id);
+        snToId.set(padSerial10(sn), a.id);
+        snToId.set(normalizeSerial(sn), a.id);
         idToAsset.set(a.id, a);
       }
 
@@ -6528,7 +6531,7 @@ Rispondi SOLO con JSON valido:
         });
       } catch(e) { /* pm_sync_log non critico — non bloccare il flusso */ }
       await wlog('anagrafica_assets', 'bulk', `pm_import updated:${updated} not_found:${not_found} skipped:${skipped}`, body.operatoreId || body.userId);
-      return ok({ updated, not_found, errors, skipped, total: records.length, sync_id: syncId, first_error, first_sample, not_found_serials });
+      return ok({ updated, not_found, errors, skipped, total: records.length, sync_id: syncId, first_error, first_sample, not_found_serials, db_assets_loaded: allAssetsSnap.length });
     }
 
     // ═══ GET STORICO SINCRONIZZAZIONI PM ═══

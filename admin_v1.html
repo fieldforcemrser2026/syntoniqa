@@ -8387,72 +8387,119 @@ let PM_OPEN_ROW=null;
 let PM_OVERVIEW=null; // {clienti:[{codice_m3,nome,assets:[...]}], total_assets, total_clienti}
 let _pmLastNotFound=[]; // ultimi seriali non trovati dall'import, per debug
 
+// Lista globale asset flat per il rematch (popolata quando PM_OVERVIEW è disponibile)
+let _nfAllAssets=[];
+
 function showPMNotFound(){
   if(!_pmLastNotFound.length){toast('Nessun seriale non trovato','info');return;}
-  // Costruisci lista flat di tutti gli asset in memoria per il dropdown
-  const allAssets=(PM_OVERVIEW?.clienti||[]).flatMap(c=>(c.assets||[]).map(a=>({
-    id:a.id, label:`${esc(a.numero_serie||a.id)} — ${esc(a.nome_asset||a.modello||'')} (${esc(c.nome||c.codice_m3||'')})`
+  // Costruisci lista flat di tutti gli asset in memoria (id + label + seriale per matching)
+  _nfAllAssets=(PM_OVERVIEW?.clienti||[]).flatMap(c=>(c.assets||[]).map(a=>({
+    id:a.id,
+    serial:(a.numero_serie||'').trim(),
+    label:`${a.numero_serie||a.id} — ${a.nome_asset||a.modello||''} (${c.nome||c.codice_m3||''})`
   })));
-  const assetOpts=allAssets.map(a=>`<option value="${esc(a.id)}">${a.label}</option>`).join('');
 
   const rows=_pmLastNotFound.map((x,i)=>{
+    if(x._done)return'';
     const hasDate=x.prossimo_controllo||x.ultimo_controllo;
-    return `<tr id="nfRow${i}">
-      <td style="padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top">${i+1}</td>
-      <td style="padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top">
-        <div style="font-family:monospace;font-weight:600;font-size:13px">${esc(x.serial||'—')}</div>
-        ${hasDate?`<div style="font-size:11px;color:var(--gray);margin-top:2px">
-          ${x.prossimo_controllo?'Prox: <b>'+x.prossimo_controllo+'</b>':''}
-          ${x.ultimo_controllo?' · Ult: <b>'+x.ultimo_controllo+'</b>':''}
-          ${x.ciclo_pm?' · Ciclo: <b>'+esc(x.ciclo_pm)+'</b>':''}
-        </div>`:'<div style="font-size:11px;color:var(--gray)">Nessuna data</div>'}
+    // Auto-suggest: cerca asset il cui seriale contiene il seriale import (o viceversa)
+    const srchNorm=x.serial.replace(/^0+/,'');
+    const preFilter=_nfAllAssets.filter(a=>a.serial&&(
+      a.serial===x.serial||a.serial.replace(/^0+/,'')===srchNorm||
+      a.serial.includes(srchNorm)||srchNorm.includes(a.serial.replace(/^0+/,''))
+    ));
+    const autoMatch=preFilter.length===1?preFilter[0]:null;
+    const opts=_nfAllAssets.map(a=>`<option value="${esc(a.id)}">${esc(a.label)}</option>`).join('');
+
+    return `<tr id="nfRow${i}" style="background:var(--bg)">
+      <td style="padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle;color:var(--gray)">${i+1}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle">
+        <div style="font-family:monospace;font-weight:700;font-size:13px;color:var(--c1)">${esc(x.serial||'—')}</div>
+        <div style="font-size:11px;color:var(--gray);margin-top:3px;line-height:1.5">
+          ${x.prossimo_controllo?'📅 <b>'+x.prossimo_controllo+'</b>':''}
+          ${x.ultimo_controllo?' &nbsp;⬅️ '+x.ultimo_controllo:''}
+          ${x.ciclo_pm?' &nbsp;🔄 '+esc(x.ciclo_pm):''}
+          ${!hasDate?'<i>nessuna data</i>':''}
+        </div>
       </td>
-      <td style="padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top;min-width:260px">
-        ${allAssets.length?`<div style="display:flex;gap:6px;align-items:center">
-          <select id="nfSel${i}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--bg);color:var(--text)">
-            <option value="">— scegli asset —</option>${assetOpts}
+      <td style="padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle">
+        ${_nfAllAssets.length?`
+        <div style="margin-bottom:4px">
+          <input type="text" id="nfSearch${i}" placeholder="Cerca seriale / cliente / modello..."
+            oninput="filterNFOpts(${i},this.value)"
+            value="${autoMatch?esc(autoMatch.label):''}"
+            style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--bg);color:var(--text);box-sizing:border-box">
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select id="nfSel${i}" size="3"
+            style="flex:1;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--bg);color:var(--text);min-width:0">
+            ${opts}
           </select>
-          <button onclick="applyPMNotFound(${i})" style="padding:4px 10px;background:var(--c1);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap">✅ Applica</button>
-        </div>`:'<span style="color:var(--gray);font-size:12px">Apri prima la sezione PM</span>'}
+          <button id="nfBtn${i}" onclick="applyPMNotFound(${i})"
+            style="padding:6px 12px;background:var(--c1);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap;align-self:flex-start">
+            ✅ Applica
+          </button>
+        </div>
+        ${autoMatch?`<div style="font-size:11px;color:var(--ok);margin-top:3px">💡 Auto-suggerito: <b>${esc(autoMatch.label)}</b></div>`:''}
+        `:'<span style="color:var(--gray);font-size:12px">Apri prima la sezione PM per caricare gli assets</span>'}
       </td>
     </tr>`;
   }).join('');
 
-  const html=`<div style="padding:20px">
-    <p style="margin:0 0 12px;color:var(--gray)">Questi <b>${_pmLastNotFound.length}</b> seriali del file import non hanno matchato nessun asset nel DB.<br>Seleziona manualmente l'asset corretto e clicca <b>Applica</b> per aggiornare le date senza rilancire l'import.</p>
+  const html=`<div style="padding:16px 20px 8px">
+    <p style="margin:0 0 12px;color:var(--gray);font-size:13px">
+      <b>${_pmLastNotFound.filter(x=>!x._done).length}</b> seriali non matchati — cerca l'asset corretto nel DB e clicca <b>Applica</b>.
+      ${_nfAllAssets.length?`<span style="color:var(--ok)">(${_nfAllAssets.length} asset in memoria)</span>`:'<span style="color:var(--warn)">⚠️ Apri la sezione PM prima per caricare gli assets</span>'}
+    </p>
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="background:var(--bg2)">
-        <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--gray)">#</th>
-        <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--gray)">SERIALE IMPORT + DATE</th>
-        <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--gray)">ASSET DB (rematch manuale)</th>
+        <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--gray);width:28px">#</th>
+        <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--gray);width:180px">SERIALE IMPORT</th>
+        <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--gray)">CERCA ASSET NEL DB</th>
       </tr></thead>
-      <tbody>${rows}</tbody>
+      <tbody>${rows||'<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--ok)">✅ Tutti risolti</td></tr>'}</tbody>
     </table>
   </div>`;
   const el=$('pmNotFoundContent');if(el)el.innerHTML=html;
+  // Auto-select per i match univoci
+  _pmLastNotFound.forEach((x,i)=>{
+    if(x._done)return;
+    const srchN=x.serial.replace(/^0+/,'');
+    const pre=_nfAllAssets.filter(a=>a.serial&&(a.serial===x.serial||a.serial.replace(/^0+/,'')===srchN||a.serial.includes(srchN)||srchN.includes(a.serial.replace(/^0+/,''))));
+    if(pre.length===1){const s=$('nfSel'+i);if(s){s.value=pre[0].id;}}
+  });
   openModal('modalPMNotFound');
+}
+
+function filterNFOpts(idx, query){
+  const sel=$('nfSel'+idx);if(!sel)return;
+  const q=query.toLowerCase().trim();
+  sel.innerHTML=_nfAllAssets
+    .filter(a=>!q||a.label.toLowerCase().includes(q)||a.serial.toLowerCase().includes(q))
+    .map(a=>`<option value="${esc(a.id)}">${esc(a.label)}</option>`)
+    .join('');
+  if(sel.options.length===1)sel.selectedIndex=0;
 }
 
 async function applyPMNotFound(idx){
   const x=_pmLastNotFound[idx];
   const sel=$('nfSel'+idx);
   const assetId=sel?.value;
-  if(!assetId){toast('Seleziona un asset','warn');return;}
-  if(!x.prossimo_controllo&&!x.ultimo_controllo){toast('Nessuna data da applicare','warn');return;}
-  const btn=sel?.nextElementSibling;
-  if(btn){btn.disabled=true;btn.textContent='...';}
+  if(!assetId){toast('Seleziona un asset dalla lista','warn');return;}
+  if(!x.prossimo_controllo&&!x.ultimo_controllo){toast('Nessuna data da applicare per questo seriale','warn');return;}
+  const btn=$('nfBtn'+idx);
+  if(btn){btn.disabled=true;btn.textContent='⏳';}
   try{
     const rec={asset_id:assetId};
     if(x.prossimo_controllo)rec.prossimo_controllo=x.prossimo_controllo;
     if(x.ultimo_controllo)rec.ultimo_controllo=x.ultimo_controllo;
     if(x.ciclo_pm)rec.ciclo_pm=x.ciclo_pm;
     await apiCall('importPMOverdue',{records:[rec]},'POST');
-    // Segna riga come completata
     const row=$('nfRow'+idx);
-    if(row)row.style.opacity='0.4';
-    if(btn){btn.disabled=true;btn.textContent='✅ Fatto';}
-    _pmLastNotFound.splice(idx,1,{..._pmLastNotFound[idx],_done:true});
-    toast('Asset aggiornato','ok');
+    if(row){row.style.background='var(--ok-bg,#e8f5e9)';row.style.opacity='0.6';}
+    if(btn){btn.textContent='✅ Fatto';}
+    _pmLastNotFound[idx]={..._pmLastNotFound[idx],_done:true};
+    toast('✅ Asset aggiornato','ok');
     PM_OVERVIEW=null;loadPMOverview();
   }catch(e){
     if(btn){btn.disabled=false;btn.textContent='✅ Applica';}
