@@ -3446,7 +3446,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               checkAllDone();
             });
 
-            // Timeout: 25s max (CF Worker ha 30s wall time)
+            // Timeout: 60s max (SSE mantiene la connessione viva oltre i 30s)
             setTimeout(() => {
               if (!resolved) {
                 resolved = true;
@@ -3457,7 +3457,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
                   resolve(null);
                 }
               }
-            }, 25000);
+            }, 60000);
           });
 
           if (raceResult) {
@@ -3677,8 +3677,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
       async function tryAnthropic(promptText) {
         try {
-          // Claude Haiku 3.5 — veloce (2-5s), economico ($1/M in, $5/M out), qualità >> Llama
-          sse({type:'engine_debug', engine:'anthropic', status:'calling', reason:'Calling Claude Haiku 3.5...'});
+          // Claude Haiku 4.5 — veloce, economico ($1/M in, $5/M out), qualità >> Llama
+          sse({type:'engine_debug', engine:'anthropic', status:'calling', reason:'Calling Claude Haiku 4.5...'});
           const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
             method: 'POST',
             headers: {
@@ -3687,13 +3687,13 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               'anthropic-version': '2023-06-01'
             },
             body: JSON.stringify({
-              model: 'claude-haiku-3-5-20241022',
+              model: 'claude-haiku-4-5-20251001',
               max_tokens: 8192,
               temperature: 0.3,
               system: sysPrompt,
               messages: [{ role: 'user', content: promptText }]
             })
-          }, 22000);
+          }, 55000);
           sse({type:'engine_debug', engine:'anthropic', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'anthropic', status:res.status, reason:'rate_limit_or_auth'});
@@ -3730,7 +3730,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 8192, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          }, 22000);
+          }, 55000);
           sse({type:'engine_debug', engine:'openai', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             const errBody = await res.text().catch(()=>'');
