@@ -3084,6 +3084,31 @@ async function handlePost(action, body, env) {
       const cliList = allClienti.slice(0,100).map(c => `${c.codice_m3}(${cittaMap[c.citta_fatturazione] || c.citta_fatturazione || '?'})`).join(', ');
 
       const nTecAttivi = allTecnici.filter(t=>t.ruolo!=='admin').length;
+      // ─── CAPACITY MATH: calcola team effettivi e target tagliandi ───
+      const _juniorIds = allJuniors.map(t => t.id);
+      const _seniorIds = allSeniors.map(t => t.id);
+      const _nonJuniorTecs = allTecnici.filter(t => t.ruolo !== 'admin' && !_juniorIds.includes(t.id));
+      const _nCoppie = Math.min(_juniorIds.length, _seniorIds.length);
+      // Team effettivi = tecnici non-junior (ognuno indipendente) perché i junior si "appoggiano" ai senior
+      const nTeamEffettivi = _nonJuniorTecs.length;
+      // Conta giorni lavorativi nel periodo target
+      function _countWorkDays(meseStr) {
+        if (!meseStr) return 20;
+        const [y, m] = meseStr.split('-').map(Number);
+        let cnt = 0;
+        const d = new Date(y, m - 1, 1);
+        while (d.getMonth() === m - 1) {
+          const dow = d.getDay();
+          if (dow >= 1 && dow <= 5) cnt++;
+          d.setDate(d.getDate() + 1);
+        }
+        return cnt;
+      }
+      const nGiorniLav = _countWorkDays(meseTarget);
+      const capacitaMax = nTeamEffettivi * nGiorniLav;
+      const nUrgenzePlan = allUrgenze.length;
+      const targetTagliandi = Math.max(0, capacitaMax - nUrgenzePlan);
+
       const prompt = `PLANNER FSM — ${meseTarget || 'Piano interventi'}
 OGGI: ${oggiIt} (${isoOggi})
 
@@ -3107,14 +3132,23 @@ ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}
 ISTRUZIONI GENERAZIONE:
 ${periodoIstruzione || 'Genera piano per OGNI giorno lavorativo (lun-ven)'}
 
+CAPACITÀ MENSILE (MATEMATICA — rispetta questi numeri):
+- ${nTeamEffettivi} team effettivi/giorno (i junior si affiancano ai senior, non contano come team separato)
+- ${nGiorniLav} giorni lavorativi nel periodo
+- Capacità max: ${nTeamEffettivi} × ${nGiorniLav} = ${capacitaMax} slot
+- Urgenze da pianificare: ${nUrgenzePlan} (occupano ${nUrgenzePlan} slot)
+- TARGET TAGLIANDI: almeno ${targetTagliandi} tagliandi su macchine DIVERSE
+- REGOLA CRITICA: ogni macchina/asset va pianificata UNA SOLA VOLTA (1 riga per macchina). NON ripetere la stessa macchina su più giorni o tecnici!
+
 OBIETTIVO PRINCIPALE:
-${interventiDaAssegnare ? `HAI ${senzaTecnico.length} INTERVENTI GIA CREATI DA ASSEGNARE (generati da import PM/tagliandi). Il tuo compito PRINCIPALE è ASSEGNARE tecnico, data e furgone a CIASCUNO di questi interventi. Usa la lista "INTERVENTI DA ASSEGNARE" qui sopra. Per ogni intervento, scegli il tecnico migliore in base a zona del cliente, disponibilità e vincoli. NON creare interventi nuovi per le stesse macchine — assegna SOLO quelli esistenti.` : tagItems.length > 0 ? `HAI ${tagItems.length} TAGLIANDI/SERVICE DA SCHEDULARE. Genera ESATTAMENTE 1 intervento per ciascuna macchina/asset dalla lista TAGLIANDI/SERVICE SCADENZA qui sopra. Non generare interventi extra non corrispondenti a un tagliando reale. Distribuisci i ${tagItems.length} interventi tra i tecnici disponibili in modo ottimale nel periodo target, rispettando zone e vincoli.` : 'Genera piano per il periodo specificato coprendo tutti i tecnici disponibili.'}
+${interventiDaAssegnare ? `HAI ${senzaTecnico.length} INTERVENTI GIA CREATI DA ASSEGNARE (generati da import PM/tagliandi). Il tuo compito PRINCIPALE è ASSEGNARE tecnico, data e furgone a CIASCUNO di questi interventi. Usa la lista "INTERVENTI DA ASSEGNARE" qui sopra. Per ogni intervento, scegli il tecnico migliore in base a zona del cliente, disponibilità e vincoli. NON creare interventi nuovi per le stesse macchine — assegna SOLO quelli esistenti.` : tagItems.length > 0 ? `HAI ${tagItems.length} TAGLIANDI/SERVICE DA SCHEDULARE. Genera ESATTAMENTE 1 intervento per ciascuna macchina/asset dalla lista TAGLIANDI/SERVICE SCADENZA qui sopra. OGNI macchina = 1 sola riga. Non generare interventi extra non corrispondenti a un tagliando reale. Distribuisci i ${tagItems.length} interventi tra i tecnici disponibili in modo ottimale nel periodo target, rispettando zone e vincoli.` : `Genera piano per il periodo specificato. Devi riempire TUTTI i ${nGiorniLav} giorni lavorativi con ${nTeamEffettivi} interventi/giorno = ${capacitaMax} righe totali.`}
 ${allUrgenze.length > 0 ? `
 URGENZE DA PIANIFICARE: Assegna le ${allUrgenze.length} urgenze aperte ai tecnici disponibili NEI PRIMI GIORNI del periodo (priorità massima).` : ''}
 
 REGOLE INVIOLABILI:
 - UN tagliando = 1 SOLO tecnico = 1 sola riga. NON mettere due tecnici sullo stesso intervento salvo affiancamento ESPLICITO da vincolo.
-- AFFIANCAMENTO solo se vincolo esplicito per coppia specifica: DUE righe (senior + junior), stesso cliente/data/ora/furgone. NON inventare affiancamenti.
+- OGNI macchina/asset deve apparire UNA SOLA VOLTA nel piano. Non pianificare la stessa macchina 5 o 9 volte!
+- AFFIANCAMENTO JUNIOR: i junior [${_juniorIds.join(',')}] DEVONO SEMPRE essere affiancati a un senior [${_seniorIds.join(',')}] = DUE righe (senior + junior), STESSO cliente/data/ora/furgone. Junior usa furgone del senior. MAI junior da solo. MAI due senior insieme allo stesso cliente.
 - Tagliandi/interventi SOLO lun-ven. Sab/Dom: solo reperibilita urgenze.
 - Tecnici assenti da vincoli o in ferie/malattia/trasferta: NON inserirli in quei giorni.
 - Usa FURGONE del tecnico (es: "furgone:FURG_1"). In affiancamento il junior usa furgone del senior.
@@ -3248,7 +3282,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       // Strategia: lancia top N motori IN PARALLELO, il primo JSON valido con più piano[] vince.
       // Se parallelo fallisce, cascade sequenziale sui rimanenti.
 
-      // Valuta qualità di una risposta JSON AI
+      // Valuta qualità di una risposta JSON AI — con penalità per violazioni
       function _scoreAIResponse(text) {
         try {
           // Cerca il JSON nella risposta (potrebbe avere testo prima/dopo)
@@ -3267,6 +3301,47 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           });
           if (obj.summary) score += 3;
           if (obj.warnings && obj.warnings.length) score += 2;
+
+          // ── PENALITÀ: macchine duplicate (stessa macchina schedulata più volte) ──
+          const macchineViste = new Set();
+          let duplicati = 0;
+          obj.piano.filter(p => (p.tipo||'') === 'tagliando').forEach(p => {
+            const key = (p.note || '').split('|')[0].trim();
+            if (key && key.length > 3) {
+              if (macchineViste.has(key)) duplicati++;
+              macchineViste.add(key);
+            }
+          });
+          score -= duplicati * 5; // -5 per ogni duplicato
+
+          // ── PENALITÀ: poche macchine uniche vs target ──
+          if (targetTagliandi > 0) {
+            const nTag = obj.piano.filter(p => (p.tipo||'') === 'tagliando').length;
+            if (nTag < targetTagliandi * 0.7) score -= 15; // molto sotto target
+            else if (nTag < targetTagliandi * 0.9) score -= 5; // sotto target
+            if (macchineViste.size < nTag * 0.5) score -= 10; // troppe ripetizioni
+          }
+
+          // ── PENALITÀ: junior senza senior (check basico) ──
+          if (_juniorIds.length > 0) {
+            const pianoByDateClient = {};
+            obj.piano.forEach(p => {
+              const key = `${p.data}|${p.clienteId}`;
+              if (!pianoByDateClient[key]) pianoByDateClient[key] = [];
+              pianoByDateClient[key].push(p.tecnicoId);
+            });
+            let juniorSoli = 0;
+            obj.piano.forEach(p => {
+              if (_juniorIds.includes(p.tecnicoId)) {
+                const key = `${p.data}|${p.clienteId}`;
+                const tecnici = pianoByDateClient[key] || [];
+                const hasSenior = tecnici.some(id => _seniorIds.includes(id));
+                if (!hasSenior) juniorSoli++;
+              }
+            });
+            score -= juniorSoli * 8; // -8 per ogni junior solo
+          }
+
           return { score, parsed: obj };
         } catch { return { score: 0, parsed: null }; }
       }
@@ -3294,42 +3369,67 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         const fallbackEngines = available.filter(n => !parallelEngines.includes(n));
 
         if (parallelEngines.length >= 2) {
-          sse({type:'moa_start', engines: parallelEngines, mode: 'parallel_race'});
+          sse({type:'moa_start', engines: parallelEngines, mode: 'best_of'});
           parallelEngines.forEach(n => onEngine?.({engine:n, status:'trying'}));
 
-          // RACE: il primo che risponde con JSON valido vince — non aspettare gli altri
+          // BEST-OF: lancia tutti in parallelo, aspetta TUTTE le risposte, scegli la migliore
           const raceResult = await new Promise((resolve) => {
-            let settled = false;
-            let failCount = 0;
+            const results = [];
+            let doneCount = 0;
+            const total = parallelEngines.length;
+            let resolved = false;
+
+            function checkAllDone() {
+              doneCount++;
+              if (doneCount >= total && !resolved) {
+                resolved = true;
+                if (results.length > 0) {
+                  results.sort((a, b) => b.score - a.score);
+                  resolve(results[0]);
+                } else {
+                  resolve(null);
+                }
+              }
+            }
+
             parallelEngines.forEach(async (name) => {
               try {
                 const eng = engines[name];
                 const text = await eng.tryFn(promptText);
-                if (settled) return;
                 if (text) {
                   const { score } = _scoreAIResponse(text);
                   if (score >= 10) {
-                    settled = true;
-                    resolve({ name, text, score });
-                    return;
+                    results.push({ name, text, score });
+                    onEngine?.({engine:name, status:'ok', score});
+                  } else {
+                    onEngine?.({engine:name, status:'low_score', score});
                   }
+                } else {
+                  onEngine?.({engine:name, status:'failed'});
                 }
-                failCount++;
-                onEngine?.({engine:name, status:'failed'});
-                if (failCount >= parallelEngines.length) resolve(null);
               } catch {
-                failCount++;
                 onEngine?.({engine:name, status:'failed'});
-                if (failCount >= parallelEngines.length) resolve(null);
               }
+              checkAllDone();
             });
-            // Timeout di sicurezza: 20s max per il race parallelo (CF Worker ha 30s wall time)
-            setTimeout(() => { if (!settled) resolve(null); }, 20000);
+
+            // Timeout: 25s max (CF Worker ha 30s wall time)
+            setTimeout(() => {
+              if (!resolved) {
+                resolved = true;
+                if (results.length > 0) {
+                  results.sort((a, b) => b.score - a.score);
+                  resolve(results[0]);
+                } else {
+                  resolve(null);
+                }
+              }
+            }, 25000);
           });
 
           if (raceResult) {
-            sse({type:'moa_result', winner: raceResult.name, bestScore: raceResult.score});
-            parallelEngines.forEach(n => onEngine?.({engine:n, status: n === raceResult.name ? 'ok' : 'failed'}));
+            sse({type:'moa_result', winner: raceResult.name, bestScore: raceResult.score, mode: 'best_of', candidates: parallelEngines.length});
+            parallelEngines.forEach(n => onEngine?.({engine:n, status: n === raceResult.name ? 'winner' : 'done'}));
             _usedEngine = raceResult.name; lastWorking = raceResult.name;
             return raceResult.text;
           }
@@ -3831,6 +3931,185 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         });
       }
 
+      // ── POST-VALIDATION: check affiancamento junior e duplicati macchine ──
+      function postValidate(piano) {
+        // 1. Check junior senza senior allo stesso cliente/data
+        if (_juniorIds.length > 0) {
+          piano.forEach(p => {
+            if (_juniorIds.includes(p.tecnicoId)) {
+              const paired = piano.find(r =>
+                r.data === p.data && r.clienteId === p.clienteId &&
+                _seniorIds.includes(r.tecnicoId) && r !== p
+              );
+              if (!paired) {
+                postProcessWarnings.push(`⚠️ AFFIANCAMENTO: ${p.tecnico || p.tecnicoId} il ${p.data} @ ${p.clienteId} lavora SOLO senza senior`);
+              }
+            }
+          });
+        }
+
+        // 2. Check macchine duplicate (stessa macchina pianificata >2 volte)
+        const macchCount = {};
+        piano.filter(p => (p.tipo || '') === 'tagliando').forEach(p => {
+          const key = (p.note || '').split('|')[0].trim();
+          if (key && key.length > 3) {
+            if (!macchCount[key]) macchCount[key] = 0;
+            macchCount[key]++;
+          }
+        });
+        Object.entries(macchCount).forEach(([key, cnt]) => {
+          if (cnt > 2) { // >2 perché coppia senior+junior = 2 righe legittime
+            postProcessWarnings.push(`⚠️ DUPLICATO: macchina "${key}" pianificata ${cnt} volte (dovrebbe essere max 2)`);
+          }
+        });
+
+        // 3. Check capacità
+        const nTagliandi = piano.filter(p => (p.tipo || '') === 'tagliando').length;
+        const macchUniche = new Set(piano.filter(p => (p.tipo || '') === 'tagliando').map(p => (p.note || '').split('|')[0].trim()).filter(k => k.length > 3)).size;
+        if (targetTagliandi > 0 && nTagliandi < targetTagliandi * 0.7) {
+          postProcessWarnings.push(`⚠️ CAPACITÀ: solo ${nTagliandi} tagliandi generati su ${targetTagliandi} target (${Math.round(nTagliandi/targetTagliandi*100)}%)`);
+        }
+        if (targetTagliandi > 0 && macchUniche < nTagliandi * 0.4) {
+          postProcessWarnings.push(`⚠️ RIPETIZIONI: solo ${macchUniche} macchine uniche su ${nTagliandi} tagliandi — troppe ripetizioni`);
+        }
+
+        return piano;
+      }
+
+      // ── AUTO-FIX DETERMINISTICO: corregge violazioni nel piano generato dall'AI ──
+      function autoFixPlan(piano) {
+        let fixes = 0;
+
+        // === FIX 1: Rimuovi duplicati macchina (tieni solo la prima occorrenza) ===
+        const macchViste = new Set();
+        const pianoNoDup = [];
+        for (const p of piano) {
+          if ((p.tipo || '') === 'tagliando') {
+            const key = (p.note || '').split('|')[0].trim();
+            if (key && key.length > 3) {
+              if (macchViste.has(key)) {
+                // È una coppia junior+senior? (stessa data+cliente = ok)
+                const original = pianoNoDup.find(r => (r.note || '').split('|')[0].trim() === key && r.data === p.data && r.clienteId === p.clienteId);
+                if (original) {
+                  pianoNoDup.push(p); // coppia legittima
+                } else {
+                  fixes++;
+                  postProcessWarnings.push(`🔧 FIX: rimosso duplicato macchina "${key}" il ${p.data} (${p.tecnicoId})`);
+                  continue; // skip
+                }
+              } else {
+                macchViste.add(key);
+              }
+            }
+          }
+          pianoNoDup.push(p);
+        }
+
+        // === FIX 2: Affiancamento junior — riassegna junior a senior dello stesso giorno ===
+        if (_juniorIds.length > 0) {
+          for (const p of pianoNoDup) {
+            if (!_juniorIds.includes(p.tecnicoId)) continue;
+            // Cerca se c'è un senior allo stesso cliente+data
+            const paired = pianoNoDup.find(r =>
+              r.data === p.data && r.clienteId === p.clienteId &&
+              _seniorIds.includes(r.tecnicoId) && r !== p
+            );
+            if (paired) continue; // già affiancato correttamente
+
+            // Cerca un senior che lavora lo stesso giorno
+            const seniorSameDay = pianoNoDup.find(r =>
+              r.data === p.data && _seniorIds.includes(r.tecnicoId) && r !== p
+            );
+            if (seniorSameDay) {
+              // Riassegna il junior allo stesso cliente del senior
+              const oldCli = p.clienteId;
+              p.clienteId = seniorSameDay.clienteId;
+              p.cliente = seniorSameDay.cliente;
+              p.oraInizio = seniorSameDay.oraInizio;
+              p.furgone = seniorSameDay.furgone;
+              if (seniorSameDay.note) p.note = seniorSameDay.note;
+              fixes++;
+              postProcessWarnings.push(`🔧 FIX: ${p.tecnicoId} il ${p.data} riassegnato a ${seniorSameDay.clienteId} con senior ${seniorSameDay.tecnicoId}`);
+            }
+          }
+        }
+
+        // === FIX 3: Riempi slot vuoti con macchine dal backlog non ancora pianificate ===
+        // Calcola giorni lavorativi e slot disponibili
+        const giorniInPiano = [...new Set(pianoNoDup.map(p => p.data).filter(Boolean))].sort();
+        const tecPerGiorno = {};
+        pianoNoDup.forEach(p => {
+          const key = p.data;
+          if (!tecPerGiorno[key]) tecPerGiorno[key] = new Set();
+          tecPerGiorno[key].add(p.tecnicoId);
+        });
+
+        // Macchine non ancora pianificate (dal tagItems backlog)
+        const pianificateKeys = new Set();
+        pianoNoDup.filter(p => (p.tipo || '') === 'tagliando').forEach(p => {
+          const key = (p.note || '').split('|')[0].trim();
+          if (key && key.length > 3) pianificateKeys.add(key);
+        });
+        const backlogRimanente = (tagItems || []).filter(t => {
+          const mId = t.macchinaId || '';
+          const label = t.macchina || '';
+          return !pianificateKeys.has(mId) && !pianificateKeys.has(label);
+        });
+
+        if (backlogRimanente.length > 0) {
+          // IDs tecnici non-junior attivi
+          const tecNonJunior = allTecnici.filter(t => t.ruolo !== 'admin' && !_juniorIds.includes(t.id)).map(t => t.id);
+          let backlogIdx = 0;
+
+          for (const giorno of giorniInPiano) {
+            if (backlogIdx >= backlogRimanente.length) break;
+            const tecGiorno = tecPerGiorno[giorno] || new Set();
+            // Trova tecnici che NON hanno un intervento questo giorno
+            const tecLiberi = tecNonJunior.filter(id => !tecGiorno.has(id));
+
+            for (const tecId of tecLiberi) {
+              if (backlogIdx >= backlogRimanente.length) break;
+              // Controlla che il tecnico non sia assente
+              const isAbsent = vincoliRules.assenti.some(a => {
+                if (a.id !== tecId) return false;
+                if (a.permanente) return true;
+                if (a.dataFine && a.dataFine < giorno) return false;
+                if (a.dataInizio && a.dataInizio > giorno) return false;
+                return true;
+              });
+              if (isAbsent) continue;
+
+              const item = backlogRimanente[backlogIdx];
+              const tec = allTecnici.find(t => t.id === tecId);
+              const furgone = tec?.automezzo_id || '';
+              pianoNoDup.push({
+                id: null,
+                data: giorno,
+                tecnicoId: tecId,
+                clienteId: item.clienteId || '',
+                tipo: 'tagliando',
+                oraInizio: '08:00',
+                durataOre: item.oreLavoro ? Math.min(8, Math.max(4, item.oreLavoro / 500)) : 6,
+                furgone: furgone,
+                note: `${item.macchina || item.macchinaId} | scad:${item.dataScadenza || '?'} | ${item.oreLavoro ? item.oreLavoro + 'h' : '?'}`
+              });
+              pianificateKeys.add(item.macchinaId || item.macchina || '');
+              backlogIdx++;
+              fixes++;
+            }
+          }
+          if (backlogIdx > 0) {
+            postProcessWarnings.push(`🔧 FIX: aggiunti ${backlogIdx} tagliandi da backlog (slot vuoti riempiti)`);
+          }
+        }
+
+        if (fixes > 0) {
+          postProcessWarnings.push(`✅ AUTO-FIX: ${fixes} correzioni applicate al piano`);
+        }
+
+        return pianoNoDup;
+      }
+
       // ─── GENERAZIONE: chunking settimanale per mese intero ───
       try {
         // Costruisci contesto base (comune a tutti i chunk) — usa override se fornito
@@ -3855,10 +4134,11 @@ ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}`;
 
         const instructions = `ISTRUZIONI GENERAZIONE:
 - Tagliandi/interventi SOLO lun-ven. SABATO e DOMENICA: NIENTE.
-- Lun-ven: TUTTI i ${nTecAttivi} tecnici attivi devono avere interventi OGNI giorno (08:00-17:00) = MINIMO ${nTecAttivi} righe/giorno.
+- ${nTeamEffettivi} team effettivi/giorno (junior si affianca a senior = 1 team). Genera ${nTeamEffettivi} interventi/giorno lavorativo.
+- OGNI macchina/asset va pianificata UNA SOLA VOLTA. NON ripetere la stessa macchina su più giorni/tecnici!
 - Durata: un tagliando puo richiedere 4-8 ore (anche giornata intera). Urgenze 1-3h.
 - "tagliando" e "service" = sinonimi. Nelle note scrivi il MODELLO della macchina (es: "Astronaut A5", "Vector 70") dal contesto TAGLIANDI sopra.
-- AFFIANCAMENTO JUNIOR+SENIOR: genera DUE righe (senior + junior) con STESSO clienteId/data/ora/furgone. Junior usa furgone del senior. MAI due senior insieme. MAI junior da solo.
+- AFFIANCAMENTO JUNIOR [${_juniorIds.join(',')}] + SENIOR [${_seniorIds.join(',')}]: genera DUE righe (senior + junior) con STESSO clienteId/data/ora/furgone. Junior usa furgone del senior. MAI due senior insieme. MAI junior da solo.
 - Tecnici assenti da vincoli o in ferie/malattia/trasferta/installazione: NON inserirli in quei giorni.
 - Usa il FURGONE indicato tra parentesi nel tecnico.
 - Raggruppa per zona (stessa zona per stesso tecnico nello stesso giorno).
@@ -3946,7 +4226,7 @@ ${urgList ? 'URGENZE: ' + urgList : ''}
 CLIENTI: ${cliListShort}
 ${repContext ? repContext.substring(0, 500) : ''}
 ${indispContext ? indispContext.substring(0, 800) : ''}
-${tagliandiContext ? tagliandiContext.substring(0, 1200) : ''}
+${tagliandiContext ? (() => { const lines = tagliandiContext.split('\n'); const scadutiUrgenti = lines.filter(l => l.includes('SCADUTI') || l.includes('URGENTI')).join('\n'); const prossimi = lines.filter(l => l.includes('PROSSIMI')).join('\n').substring(0, 800); return scadutiUrgenti + (prossimi ? '\n' + prossimi : ''); })() : ''}
 ${chunkFileCtx ? 'FILE: ' + chunkFileCtx : ''}
 
 GENERA PIANO per ${targetDays.length} GIORNI: ${targetDays.join(', ')}
@@ -3987,8 +4267,10 @@ ${instructions}`;
           if (!allPiano.length) { sse({type:'error', message:'AI non ha generato nessun intervento. Verifica le API key nei Worker secrets.'}); return; }
 
           const processed = postProcess(allPiano);
+          const fixed = autoFixPlan(processed); // corregge duplicati, affiancamento, slot vuoti
+          postValidate(fixed); // aggiunge warnings per violazioni residue
           // DECODE: rimetti nomi reali nelle risposte per il frontend
-          const decoded = decodePiano(processed);
+          const decoded = decodePiano(fixed);
           const allWarnArr = [...allWarnings, ...postProcessWarnings].map(w => anonDecode(w));
           sse({type:'result', data:{
             summary: anonDecode(`Piano ${meseTarget}: ${decoded.length} interventi su ${[...new Set(decoded.map(p=>p.data))].length} giorni (${chunksDone}/${chunks.length} parti)${postProcessWarnings.length ? ` — ${postProcessWarnings.length} conflitti rimossi` : ''}`),
@@ -4012,7 +4294,10 @@ ${instructions}`;
           if (!rawText) { sse({type:'error', message:'AI non ha generato risposta. Verifica le API key nei Worker secrets.'}); return; }
           const result = parseAIResponse(rawText);
           if (!result) { sse({type:'result', data:{ summary:'Errore formato risposta', piano:[], warnings:['Risposta AI non parsabile. Riprova.'], raw:rawText.substring(0,1500), engine_used:_usedEngine||lastWorking||'unknown' }}); return; }
-          result.piano = decodePiano(postProcess(result.piano));
+          const _processed2 = postProcess(result.piano);
+          const _fixed2 = autoFixPlan(_processed2); // corregge duplicati, affiancamento, slot vuoti
+          postValidate(_fixed2); // aggiunge warnings per violazioni residue
+          result.piano = decodePiano(_fixed2);
           result.summary = anonDecode(result.summary || '');
           result.warnings = (result.warnings || []).map(w => anonDecode(w));
           if (postProcessWarnings.length) {

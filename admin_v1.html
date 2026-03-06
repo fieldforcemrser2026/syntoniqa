@@ -8060,11 +8060,20 @@ async function runAI(promptOverride){
       }
       html+='</div>';
     }
-    // Warnings
+    // Warnings — separa fix applicati (🔧/✅) da violazioni residue (⚠️)
     if(result.warnings&&result.warnings.length){
-      html+=`<div style="padding:10px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius-sm);margin-top:8px;font-size:.8125rem">
-        ⚠️ <strong>Avvisi:</strong> ${result.warnings.join(' · ')}
-      </div>`;
+      const fixWarns=result.warnings.filter(w=>w.startsWith('🔧')||w.startsWith('✅'));
+      const violWarns=result.warnings.filter(w=>!w.startsWith('🔧')&&!w.startsWith('✅'));
+      if(fixWarns.length){
+        html+=`<div style="padding:10px 14px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:var(--radius-sm);margin-top:8px;font-size:.8125rem">
+          🔧 <strong>Correzioni auto-applicate (${fixWarns.length}):</strong><br>${fixWarns.map(w=>'<div style="margin:2px 0;padding-left:8px">'+w+'</div>').join('')}
+        </div>`;
+      }
+      if(violWarns.length){
+        html+=`<div style="padding:10px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius-sm);margin-top:8px;font-size:.8125rem">
+          ⚠️ <strong>Violazioni residue (${violWarns.length}):</strong><br>${violWarns.map(w=>'<div style="margin:2px 0;padding-left:8px">'+w+'</div>').join('')}
+        </div>`;
+      }
     }
     // Raw fallback
     if(result.raw){
