@@ -997,10 +997,13 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <div style="font-weight:700;font-size:.9rem">2</div><div>👁️ Anteprima</div>
 </div>
 <div class="ai-step" data-step="3" onclick="aiGoToStep(3)" style="flex:1;padding:10px 14px;cursor:pointer;text-align:center;font-size:.8rem;transition:all .2s;border-right:1px solid rgba(255,255,255,.1)">
-<div style="font-weight:700;font-size:.9rem">3</div><div>🤖 Genera</div>
+<div style="font-weight:700;font-size:.9rem">3</div><div>📝 Prompt</div>
 </div>
-<div class="ai-step" data-step="4" onclick="aiGoToStep(4)" style="flex:1;padding:10px 14px;cursor:pointer;text-align:center;font-size:.8rem;transition:all .2s">
-<div style="font-weight:700;font-size:.9rem">4</div><div>✅ Applica</div>
+<div class="ai-step" data-step="4" onclick="aiGoToStep(4)" style="flex:1;padding:10px 14px;cursor:pointer;text-align:center;font-size:.8rem;transition:all .2s;border-right:1px solid rgba(255,255,255,.1)">
+<div style="font-weight:700;font-size:.9rem">4</div><div>🏁 Race AI</div>
+</div>
+<div class="ai-step" data-step="5" onclick="aiGoToStep(5)" style="flex:1;padding:10px 14px;cursor:pointer;text-align:center;font-size:.8rem;transition:all .2s">
+<div style="font-weight:700;font-size:.9rem">5</div><div>✅ Applica</div>
 </div>
 </div>
 <style>
@@ -1008,6 +1011,18 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 .ai-step.active{opacity:1;background:rgba(99,102,241,.25)!important}
 .ai-step.done{opacity:.7;background:rgba(16,185,129,.15)!important}
 .ai-step.done::after{content:'✓';position:absolute;top:4px;right:6px;font-size:.65rem;color:#10B981}
+@keyframes raceMove{0%{transform:translateX(0)}100%{transform:translateX(var(--race-pos,0%))}}
+@keyframes racePulse{0%,100%{box-shadow:0 0 0 0 var(--race-color)}50%{box-shadow:0 0 12px 4px var(--race-color)}}
+@keyframes raceWin{0%{transform:scale(1)}50%{transform:scale(1.15)}100%{transform:scale(1)}}
+@keyframes confetti{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(-40px) rotate(720deg);opacity:0}}
+.race-lane{position:relative;height:48px;background:rgba(255,255,255,.04);border-radius:12px;margin-bottom:8px;overflow:hidden;border:1px solid rgba(255,255,255,.08);transition:all .3s}
+.race-lane.active{border-color:var(--race-color);background:linear-gradient(90deg,rgba(255,255,255,.02),var(--race-color-bg))}
+.race-lane.winner{border-color:var(--race-color);background:linear-gradient(90deg,var(--race-color-bg),var(--race-color)22);animation:raceWin .6s ease}
+.race-lane.failed{opacity:.4;filter:grayscale(.8)}
+.race-car{position:absolute;left:8px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:8px;transition:left 1.5s cubic-bezier(.25,.46,.45,.94);z-index:2}
+.race-track{position:absolute;left:0;top:0;height:100%;background:linear-gradient(90deg,var(--race-color)15,var(--race-color)08);border-radius:12px;transition:width 1.5s cubic-bezier(.25,.46,.45,.94)}
+.race-logo{width:28px;height:28px;border-radius:8px;border:2px solid var(--race-color);background:rgba(0,0,0,.5);padding:2px}
+.race-time{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:.72rem;font-weight:600;font-family:'JetBrains Mono',monospace;color:rgba(255,255,255,.4)}
 </style>
 
 <!-- STEP 1: CONFIGURA -->
@@ -1074,7 +1089,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 
 <div style="display:flex;gap:8px;flex-wrap:wrap">
 <button class="btn btn-lg btn-ai" style="opacity:.85" onclick="aiPreviewStep()">👁️ Anteprima Vincoli →</button>
-<button class="btn btn-lg btn-ai" onclick="runAI()">🤖 Genera Piano (diretto)</button>
+<button class="btn btn-lg btn-ai" onclick="aiBuildPrompt()">📝 Vedi Prompt & Genera →</button>
 </div>
 </div><!-- end aiStep1 -->
 
@@ -1086,31 +1101,44 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 </div>
 <div style="display:flex;gap:8px;flex-wrap:wrap">
 <button class="btn btn-lg btn-ghost-light" onclick="aiGoToStep(1)">← Indietro</button>
-<button class="btn btn-lg btn-ai" onclick="aiGenerateFromPreview()">🤖 Genera Piano →</button>
+<button class="btn btn-lg btn-ai" onclick="aiBuildPrompt()">📝 Vedi Prompt AI →</button>
 </div>
 </div>
 
-<!-- STEP 3: GENERAZIONE -->
+<!-- STEP 3: PROMPT EDITOR -->
 <div id="aiStep3" class="ai-step-content" style="display:none">
-<div id="aiGenerationProgress" style="margin-bottom:16px">
-<p style="color:rgba(255,255,255,.5);text-align:center;padding:20px">In attesa di avvio generazione...</p>
+<div style="font-size:.9rem;font-weight:600;color:#fff;margin-bottom:4px">📝 Prompt AI — Rivedi e personalizza</div>
+<p style="font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:14px">Questo è il prompt completo che verrà inviato ai motori AI. Puoi modificarlo o accettarlo così com'è.</p>
+<div id="aiPromptEditorWrap" style="margin-bottom:16px">
+  <p style="color:rgba(255,255,255,.5);text-align:center;padding:40px">⏳ Costruzione prompt in corso...</p>
+</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+<button class="btn btn-lg btn-ghost-light" onclick="aiGoToStep(2)">← Indietro</button>
+<button class="btn btn-lg btn-ai" id="btnLaunchRace" onclick="aiLaunchRace()" disabled>🏁 Lancia Race AI →</button>
+</div>
+</div>
+
+<!-- STEP 4: RACE AI -->
+<div id="aiStep4" class="ai-step-content" style="display:none">
+<div id="aiRaceArena" style="margin-bottom:16px">
+<p style="color:rgba(255,255,255,.5);text-align:center;padding:20px">In attesa di avvio gara...</p>
 </div>
 <div class="ai-result" id="aiResult" style="display:none"></div>
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
 <button class="btn btn-lg btn-ghost-light" onclick="aiGoToStep(1)">← Riconfigura</button>
 <button class="btn btn-lg btn-success" onclick="downloadAIPlanXlsx()" id="btnDownloadPlan" disabled>📥 Scarica Excel</button>
-<button class="btn btn-lg btn-ok" onclick="aiGoToStep(4)" id="btnGoStep4" disabled>Anteprima Piano →</button>
+<button class="btn btn-lg btn-ok" onclick="aiGoToStep(5)" id="btnGoStep4" disabled>Anteprima Piano →</button>
 </div>
 </div>
 
-<!-- STEP 4: APPLICA -->
-<div id="aiStep4" class="ai-step-content" style="display:none">
+<!-- STEP 5: APPLICA -->
+<div id="aiStep5" class="ai-step-content" style="display:none">
 <div style="font-size:.9rem;font-weight:600;color:#fff;margin-bottom:12px">✅ Applica il Piano Generato</div>
 <div id="aiApplyPreview" style="margin-bottom:16px">
 <p style="color:rgba(255,255,255,.5)">Il piano generato è pronto. Verifica e applica al sistema.</p>
 </div>
 <div style="display:flex;gap:8px;flex-wrap:wrap">
-<button class="btn btn-lg btn-ghost-light" onclick="aiGoToStep(3)">← Indietro</button>
+<button class="btn btn-lg btn-ghost-light" onclick="aiGoToStep(4)">← Indietro</button>
 <button class="btn btn-lg btn-ok" onclick="applyAI()" id="btnApplyAI" disabled>✅ Applica al Sistema</button>
 <button class="btn btn-lg btn-info" onclick="submitAIPlanForApproval()" id="btnSubmitPlan" disabled>📤 Invia per Approvazione</button>
 </div>
@@ -7318,7 +7346,7 @@ let AI_PREVIEW_DATA = null;
 function aiGoToStep(step){
   AI_CURRENT_STEP = step;
   // Hide all step contents
-  for(let i=1;i<=4;i++){
+  for(let i=1;i<=5;i++){
     const el=$('aiStep'+i);
     if(el) el.style.display = i===step ? '' : 'none';
   }
@@ -7329,6 +7357,137 @@ function aiGoToStep(step){
     if(sNum === step) s.classList.add('active');
     else if(sNum < step) s.classList.add('done');
   });
+}
+
+// ═══ STEP 3: BUILD PROMPT & EDITOR ═══
+let AI_BUILT_PROMPT = '';
+let AI_BUILT_SYS_PROMPT = '';
+let AI_PROMPT_STATS = {};
+
+async function aiBuildPrompt(){
+  aiGoToStep(3);
+  const wrap=$('aiPromptEditorWrap');
+  if(wrap)wrap.innerHTML='<div style="text-align:center;padding:40px"><div style="font-size:2rem;animation:aiSpin 2s linear infinite">⚙️</div><div style="color:rgba(255,255,255,.5);margin-top:8px">Costruzione prompt AI in corso...</div><div style="font-size:.75rem;color:rgba(255,255,255,.3);margin-top:4px">Caricamento tecnici, macchine, tagliandi, urgenze, vincoli...</div></div>';
+
+  const prompt=$('aiPrompt').value.trim();
+  const meseTarget=$('aiMeseTarget')?.value||'';
+  const modalita=$('aiModalita')?.value||'mese';
+  const settimana=$('aiSettimana')?.value||'1';
+  const ctxFlags={vincoli:$('aiCtxVincoli')?.checked!==false,reperibilita:$('aiCtxRep')?.checked!==false,piano:$('aiCtxPiano')?.checked!==false,urgenze:$('aiCtxUrgenze')?.checked!==false,tagliandi:$('aiCtxTagliandi')?.checked!==false};
+
+  // Prepare file data
+  const filesData=[];
+  for(const f of AI_FILES){const content=await readFileAsText(f);filesData.push({name:f.name,type:f.type,size:f.size,content});}
+
+  let pianoEsistente=[];
+  if(ctxFlags.piano&&meseTarget&&DATA.piano){
+    pianoEsistente=DATA.piano.filter(p=>{const d=(p.Data||'').split('T')[0];return d.startsWith(meseTarget)&&p.Stato!=='annullato';}).map(p=>{
+      const u=(DATA.utenti||[]).find(u=>u.ID===p.TecnicoID)||{};const c=(DATA.clienti||[]).find(c=>c.ID===p.ClienteID)||{};
+      return {data:(p.Data||'').split('T')[0],tecnico:((u.Nome||'')+(u.Cognome?' '+u.Cognome:'')).trim()||p.TecnicoID||'?',tecnicoId:p.TecnicoID,cliente:c.Nome||p.ClienteID||'',note:p.Note||p.TipoIntervento||''};
+    });
+  }
+
+  try{
+    const resp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(JWT_TOKEN||API_TOKEN)},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:{testo:prompt,files:filesData,mese_target:meseTarget,modalita,settimana,ctx:ctxFlags,piano_esistente:pianoEsistente,build_prompt_only:true}}),signal:AbortSignal.timeout(60000)});
+    if(!resp.ok)throw new Error(`HTTP ${resp.status}`);
+    if(!resp.body)throw new Error('Streaming non supportato');
+
+    const reader=resp.body.getReader();const dec=new TextDecoder();let buf='';
+    while(true){
+      const{done,value}=await reader.read();if(done)break;
+      buf+=dec.decode(value,{stream:true});
+      const lines=buf.split('\n');buf=lines.pop();
+      for(const line of lines){
+        if(!line.startsWith('data: '))continue;
+        try{
+          const ev=JSON.parse(line.slice(6));
+          if(ev.type==='prompt_ready'){
+            AI_BUILT_PROMPT=ev.prompt||'';
+            AI_BUILT_SYS_PROMPT=ev.sys_prompt||'';
+            AI_PROMPT_STATS=ev.stats||{};
+          }
+          if(ev.type==='anon'){AI_PROMPT_STATS.anon=ev;}
+          if(ev.type==='debug_prompt'){AI_PROMPT_STATS.debug=ev;}
+        }catch{}
+      }
+    }
+
+    if(!AI_BUILT_PROMPT){throw new Error('Prompt vuoto');}
+    renderPromptEditor();
+  }catch(e){
+    if(wrap)wrap.innerHTML=`<div style="padding:16px;background:rgba(239,68,68,.1);border:1px solid var(--err);border-radius:var(--radius)">❌ Errore costruzione prompt: ${e.message}</div>`;
+  }
+}
+
+function renderPromptEditor(){
+  const wrap=$('aiPromptEditorWrap');if(!wrap)return;
+  const st=AI_PROMPT_STATS;
+  const charCount=AI_BUILT_PROMPT.length;
+  const sections=AI_BUILT_PROMPT.split(/(?=#{3,}|(?:TECNICI|URGENZE|CLIENTI|VINCOLI|REPERIBILITA|PIANO|TAGLIANDI|ISTRUZIONI|OBIETTIVO|REGOLE|JSON))/);
+  const sectionColors=['#6366F1','#F59E0B','#10B981','#EF4444','#8B5CF6','#EC4899','#06B6D4','#F38020'];
+
+  // Stats badges
+  let statsHtml=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+    <span style="font-size:.72rem;padding:3px 10px;background:rgba(16,185,129,.15);border-radius:10px;color:#4ade80;font-weight:600">👥 ${st.tecnici||'?'} tecnici</span>
+    <span style="font-size:.72rem;padding:3px 10px;background:rgba(99,102,241,.15);border-radius:10px;color:#A5B4FC">🔧 ${st.macchine||0} macchine</span>
+    <span style="font-size:.72rem;padding:3px 10px;background:rgba(249,115,22,.15);border-radius:10px;color:#FB923C">🏷️ ${st.tagliandi||0} tagliandi</span>
+    <span style="font-size:.72rem;padding:3px 10px;background:rgba(239,68,68,.15);border-radius:10px;color:#f87171">🚨 ${st.urgenze||0} urgenze</span>
+    ${st.interventi_da_assegnare?`<span style="font-size:.72rem;padding:3px 10px;background:rgba(16,185,129,.2);border:1px solid rgba(16,185,129,.4);border-radius:10px;color:#4ade80;font-weight:600">📋 ${st.interventi_da_assegnare} da assegnare</span>`:''}
+    <span style="font-size:.72rem;padding:3px 10px;background:rgba(129,140,248,.1);border-radius:10px;color:rgba(255,255,255,.5)">📏 ${(charCount/1000).toFixed(1)}k chars</span>
+    ${st.anon_entities?`<span style="font-size:.72rem;padding:3px 10px;background:rgba(16,185,129,.1);border-radius:10px;color:#4ade80">🔒 ${st.anon_entities} entità cifrate</span>`:''}
+  </div>`;
+
+  // Mode toggle
+  let modeHtml=`<div style="display:flex;gap:8px;margin-bottom:10px">
+    <button id="btnPromptView" class="btn btn-sm" style="background:rgba(99,102,241,.3);color:#A5B4FC;border:1px solid rgba(99,102,241,.4)" onclick="togglePromptMode('view')">👁️ Visualizza</button>
+    <button id="btnPromptEdit" class="btn btn-sm" style="background:rgba(255,255,255,.06);color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.1)" onclick="togglePromptMode('edit')">✏️ Modifica</button>
+    <button class="btn btn-sm" style="background:rgba(255,255,255,.06);color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.1)" onclick="navigator.clipboard.writeText(AI_BUILT_PROMPT);toast('Prompt copiato!','ok')">📋 Copia</button>
+    <span style="flex:1"></span>
+    <span id="promptCharCount" style="font-size:.7rem;color:rgba(255,255,255,.3);align-self:center">${charCount.toLocaleString()} caratteri</span>
+  </div>`;
+
+  // View mode: formatted sections
+  let viewHtml='<div id="promptViewMode" style="max-height:500px;overflow-y:auto;border:1.5px solid rgba(99,102,241,.2);border-radius:12px;background:rgba(0,0,0,.3)">';
+  sections.forEach((sec,i)=>{
+    const col=sectionColors[i%sectionColors.length];
+    const firstLine=(sec.split('\n')[0]||'').trim();
+    const isHeader=firstLine.startsWith('#')||/^[A-Z]{4,}/.test(firstLine);
+    if(isHeader){
+      viewHtml+=`<div style="padding:2px 16px 0;margin-top:${i?'4px':'0'}"><div style="font-size:.72rem;font-weight:700;color:${col};letter-spacing:.04em;padding:6px 0;border-bottom:1px solid ${col}33">${firstLine.replace(/^#+\s*/,'')}</div></div>`;
+      viewHtml+=`<pre style="font-size:.7rem;padding:4px 16px 8px;color:rgba(255,255,255,.6);white-space:pre-wrap;word-break:break-word;margin:0;line-height:1.5">${sec.split('\n').slice(1).join('\n').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre>`;
+    }else{
+      viewHtml+=`<pre style="font-size:.7rem;padding:4px 16px 8px;color:rgba(255,255,255,.6);white-space:pre-wrap;word-break:break-word;margin:0;line-height:1.5">${sec.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre>`;
+    }
+  });
+  viewHtml+='</div>';
+
+  // Edit mode: textarea (hidden initially)
+  let editHtml=`<div id="promptEditMode" style="display:none">
+    <textarea id="aiPromptFullEditor" style="width:100%;min-height:400px;max-height:600px;padding:14px 16px;font-family:'JetBrains Mono',monospace;font-size:.72rem;line-height:1.6;background:rgba(0,0,0,.4);color:rgba(255,255,255,.75);border:1.5px solid rgba(99,102,241,.3);border-radius:12px;resize:vertical" oninput="document.getElementById('promptCharCount').textContent=this.value.length.toLocaleString()+' caratteri'">${AI_BUILT_PROMPT.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea>
+    <div style="margin-top:6px;font-size:.7rem;color:rgba(255,255,255,.3)">⚠️ Modifica con attenzione: il formato del prompt influenza la qualità del piano generato.</div>
+  </div>`;
+
+  wrap.innerHTML=statsHtml+modeHtml+viewHtml+editHtml;
+  const btn=$('btnLaunchRace');if(btn)btn.disabled=false;
+}
+
+function togglePromptMode(mode){
+  const viewEl=$('promptViewMode'),editEl=$('promptEditMode');
+  const btnV=$('btnPromptView'),btnE=$('btnPromptEdit');
+  if(mode==='edit'){
+    if(viewEl)viewEl.style.display='none';
+    if(editEl)editEl.style.display='';
+    if(btnV){btnV.style.background='rgba(255,255,255,.06)';btnV.style.color='rgba(255,255,255,.5)';btnV.style.borderColor='rgba(255,255,255,.1)';}
+    if(btnE){btnE.style.background='rgba(99,102,241,.3)';btnE.style.color='#A5B4FC';btnE.style.borderColor='rgba(99,102,241,.4)';}
+  }else{
+    if(viewEl)viewEl.style.display='';
+    if(editEl)editEl.style.display='none';
+    if(btnE){btnE.style.background='rgba(255,255,255,.06)';btnE.style.color='rgba(255,255,255,.5)';btnE.style.borderColor='rgba(255,255,255,.1)';}
+    if(btnV){btnV.style.background='rgba(99,102,241,.3)';btnV.style.color='#A5B4FC';btnV.style.borderColor='rgba(99,102,241,.4)';}
+    // Sync edits back
+    const editor=$('aiPromptFullEditor');
+    if(editor)AI_BUILT_PROMPT=editor.value;
+  }
 }
 
 async function aiPreviewStep(){
@@ -7482,8 +7641,16 @@ async function aiPreviewStep(){
 }
 
 function aiGenerateFromPreview(){
-  aiGoToStep(3);
-  runAI();
+  aiBuildPrompt();
+}
+
+// ═══ STEP 4: RACE AI — Launch generation with edited prompt ═══
+function aiLaunchRace(){
+  // Sync from editor if in edit mode
+  const editor=$('aiPromptFullEditor');
+  if(editor)AI_BUILT_PROMPT=editor.value;
+  aiGoToStep(4);
+  runAI(AI_BUILT_PROMPT);
 }
 
 function updateAIVincoliStatus(){
@@ -7552,16 +7719,16 @@ function updateAIVincoliStatus(){
   el.innerHTML=html;
 }
 
-async function runAI(){
+async function runAI(promptOverride){
   const prompt=$('aiPrompt').value.trim();
   const meseVal=$('aiMeseTarget')?.value||'';
   const hasVincoli=VINCOLI_AUTO.some(v=>VINCOLI_AUTO_SEL[v.id||(v.fonte_tabella+'_'+v.fonte_record_id)]!==false)||VINCOLI_MANUAL.some(r=>r.testo);
-  if(!prompt&&!AI_FILES.length&&!meseVal&&!hasVincoli){toast('Specifica almeno un criterio: testo, mese target, vincoli configurati o file allegati','warn');return}
+  if(!prompt&&!AI_FILES.length&&!meseVal&&!hasVincoli&&!promptOverride){toast('Specifica almeno un criterio: testo, mese target, vincoli configurati o file allegati','warn');return}
 
-  // FIX: vai sempre allo step 3 (dove si trova aiResult) prima di generare
-  aiGoToStep(3);
+  // FIX: vai sempre allo step 4 (dove si trova aiResult) prima di generare
+  aiGoToStep(4);
 
-  // ─── STREAMING LOADING UI ───
+  // ─── RACE VISUALIZATION UI ───
   const _LOGO='https://unpkg.com/@lobehub/icons-static-svg@latest/icons/';
   const _engLabels={
     gemini:   {name:'Gemini',    color:'#4285F4', logo:_LOGO+'gemini.svg'},
@@ -7575,40 +7742,69 @@ async function runAI(){
     workersai:{name:'Workers AI', color:'#F38020', logo:_LOGO+'cloudflare.svg'},
   };
   const _allEng=['gemini','cerebras','groq','openrouter','fireworks','sambanova','mistral','deepseek','workersai'];
-  $('aiResult').style.display='block';
-  $('aiResult').innerHTML=`<div style="background:var(--card);border-radius:var(--radius-lg);overflow:hidden">
-    <!-- Header -->
-    <div style="background:linear-gradient(135deg,#1e1b4b,#312e81);padding:20px 24px;color:white">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
-        <span style="font-size:1.5rem;animation:aiSpin 2s linear infinite">⚙️</span>
-        <div><div style="font-size:.95rem;font-weight:700">Generazione AI in corso...</div>
-        <div id="aiProgressText" style="font-size:.78rem;opacity:.65;margin-top:2px">${meseVal?'Mese: '+meseVal+' · ':''}Preparazione dati...</div></div>
+  const _raceStart=Date.now();
+
+  // Build Race Arena
+  const arena=$('aiRaceArena');
+  arena.innerHTML=`<div style="background:var(--card);border-radius:var(--radius-lg);overflow:hidden">
+    <!-- Race Header -->
+    <div style="background:linear-gradient(135deg,#0f0a1e,#1a1145);padding:20px 24px;color:white;position:relative;overflow:hidden">
+      <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2260%22><rect width=%2260%22 height=%2260%22 fill=%22none%22/><path d=%22M0 30h60M30 0v60%22 stroke=%22rgba(255,255,255,0.03)%22/></svg>');pointer-events:none"></div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;position:relative">
+        <span style="font-size:1.8rem">🏁</span>
+        <div><div style="font-size:1.05rem;font-weight:700;letter-spacing:.02em">AI Engine Race</div>
+        <div id="aiProgressText" style="font-size:.78rem;opacity:.6;margin-top:2px">${meseVal?'Mese: '+meseVal+' · ':''}I motori si sfidano in parallelo...</div></div>
+        <div style="margin-left:auto;text-align:right">
+          <div id="raceTimer" style="font-family:'JetBrains Mono',monospace;font-size:1.3rem;font-weight:700;color:#818CF8">0.0s</div>
+          <div style="font-size:.65rem;opacity:.4">tempo</div>
+        </div>
       </div>
-      <div style="margin-top:14px;height:4px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden">
-        <div id="aiChunkBar" style="height:100%;width:0%;background:linear-gradient(90deg,#818CF8,#6366F1);border-radius:4px;transition:width .5s ease"></div>
+      <div style="margin-top:14px;height:4px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;position:relative">
+        <div id="aiChunkBar" style="height:100%;width:0%;background:linear-gradient(90deg,#818CF8,#6366F1,#A78BFA);border-radius:4px;transition:width .5s ease"></div>
       </div>
-      <div id="aiChunkText" style="font-size:.7rem;opacity:.5;margin-top:4px;text-align:right">In attesa...</div>
+      <div id="aiChunkText" style="font-size:.68rem;opacity:.4;margin-top:4px;text-align:right">In attesa...</div>
     </div>
-    <!-- Anonymization Panel -->
-    <div style="padding:12px 24px;background:rgba(0,0,0,.35);border-bottom:1px solid rgba(255,255,255,.05)">
+    <!-- Anonymization badge -->
+    <div style="padding:10px 24px;background:rgba(0,0,0,.3);border-bottom:1px solid rgba(255,255,255,.04)">
       <div id="aiAnonPanel" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="font-size:.8rem;color:rgba(255,255,255,.35)">🔒 Preparazione anonimizzazione dati...</span>
+        <span style="font-size:.75rem;color:rgba(255,255,255,.3)">🔒 Dati anonimizzati...</span>
       </div>
     </div>
-    <!-- Engines Grid -->
-    <div style="padding:14px 24px 18px">
-      <div style="font-size:.7rem;font-weight:600;color:rgba(255,255,255,.35);letter-spacing:.06em;margin-bottom:8px">MOTORI AI (MoA parallel + fallback cascade)</div>
-      <div id="aiEngineBar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        ${_allEng.map(e=>{const i=_engLabels[e];return`<div id="aiEng_${e}" class="ai-eng-badge" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:16px;font-size:.72rem;font-weight:600;border:1.5px solid rgba(255,255,255,.12);color:rgba(255,255,255,.3);background:rgba(0,0,0,.2);transition:all .4s ease;position:relative;overflow:hidden">
-          <img src="${i.logo}" alt="${i.name}" style="width:18px;height:18px;border-radius:3px;opacity:.4;transition:opacity .4s ease;filter:grayscale(1)" class="ai-eng-logo">
-          <span>${i.name}</span>
-          <span class="ai-eng-status" style="display:none;width:6px;height:6px;border-radius:50%;margin-left:2px"></span>
+    <!-- Race Lanes -->
+    <div style="padding:20px 24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div style="font-size:.72rem;font-weight:700;color:rgba(255,255,255,.4);letter-spacing:.06em">🏎️ RACE LANES — MoA Parallel + Fallback Cascade</div>
+        <div id="raceStatus" style="font-size:.72rem;color:rgba(255,255,255,.3)">Preparazione griglia...</div>
+      </div>
+      <div id="raceLanes">
+        ${_allEng.map(e=>{const i=_engLabels[e];return`
+        <div id="raceLane_${e}" class="race-lane" style="--race-color:${i.color};--race-color-bg:${i.color}15">
+          <div class="race-track" id="raceTrack_${e}" style="width:0%"></div>
+          <div class="race-car" id="raceCar_${e}">
+            <img src="${i.logo}" class="race-logo" style="border-color:${i.color}">
+            <div>
+              <div style="font-size:.78rem;font-weight:700;color:rgba(255,255,255,.7)">${i.name}</div>
+              <div id="raceLabel_${e}" style="font-size:.65rem;color:rgba(255,255,255,.3)">In attesa</div>
+            </div>
+          </div>
+          <div class="race-time" id="raceTime_${e}">—</div>
         </div>`;}).join('')}
+      </div>
+      <div id="raceWinnerBanner" style="display:none;margin-top:16px;padding:16px 20px;background:linear-gradient(135deg,rgba(16,185,129,.15),rgba(99,102,241,.15));border:2px solid rgba(16,185,129,.4);border-radius:16px;text-align:center">
       </div>
     </div>
     <!-- Init data line -->
-    <div style="padding:0 24px 14px"><div id="aiInitText" style="font-size:.72rem;color:rgba(255,255,255,.3)">Caricamento contesto...</div></div>
+    <div style="padding:0 24px 14px"><div id="aiInitText" style="font-size:.72rem;color:rgba(255,255,255,.25)">Caricamento contesto...</div></div>
   </div>`;
+
+  // Race timer
+  const _timerInterval=setInterval(()=>{
+    const el=document.getElementById('raceTimer');
+    if(el)el.textContent=((Date.now()-_raceStart)/1000).toFixed(1)+'s';
+  },100);
+
+  $('aiResult').style.display='block';
+  $('aiResult').innerHTML='';
 
   // Prepare file data
   const filesData=[];
@@ -7626,34 +7822,48 @@ async function runAI(){
     });
   }
 
-  // SSE helpers
+  // SSE helpers — RACE VISUALIZATION
   const _engStatus={};
-  function _updEng(){
-    _allEng.forEach(e=>{
-      const el=document.getElementById('aiEng_'+e);if(!el)return;
-      const i=_engLabels[e];const st=_engStatus[e];
-      const logo=el.querySelector('.ai-eng-logo');
-      const dot=el.querySelector('.ai-eng-status');
-      if(st==='trying'){
-        el.style.border=`1.5px solid ${i.color}`;el.style.color=i.color;
-        el.style.background=`${i.color}18`;el.style.animation='aiPulse 1s ease-in-out infinite';
-        el.style.boxShadow=`0 0 12px ${i.color}30`;
-        if(logo){logo.style.opacity='1';logo.style.filter='grayscale(0)';logo.style.animation='aiSpin 2s linear infinite';}
-        if(dot){dot.style.display='inline-block';dot.style.background=i.color;dot.style.animation='aiPulse 1s ease-in-out infinite';}
-      } else if(st==='ok'){
-        el.style.border=`2px solid ${i.color}`;el.style.color='white';
-        el.style.background=`linear-gradient(135deg,${i.color},${i.color}CC)`;
-        el.style.animation='none';el.style.boxShadow=`0 2px 12px ${i.color}50`;el.style.transform='scale(1.05)';
-        if(logo){logo.style.opacity='1';logo.style.filter='grayscale(0) brightness(10)';logo.style.animation='none';}
-        if(dot){dot.style.display='inline-block';dot.style.background='#4ade80';dot.style.animation='none';}
-      } else if(st==='failed'){
-        el.style.border='1.5px solid rgba(239,68,68,.3)';el.style.color='rgba(239,68,68,.5)';
-        el.style.background='rgba(239,68,68,.06)';el.style.animation='none';
-        el.style.boxShadow='none';el.style.textDecoration='line-through';
-        if(logo){logo.style.opacity='.25';logo.style.filter='grayscale(1)';logo.style.animation='none';}
-        if(dot){dot.style.display='inline-block';dot.style.background='#ef4444';}
-      }
-    });
+  const _engTimes={};
+  function _updRace(engine, status){
+    const lane=document.getElementById('raceLane_'+engine);
+    const track=document.getElementById('raceTrack_'+engine);
+    const car=document.getElementById('raceCar_'+engine);
+    const label=document.getElementById('raceLabel_'+engine);
+    const timeEl=document.getElementById('raceTime_'+engine);
+    const i=_engLabels[engine];if(!lane||!i)return;
+
+    if(status==='trying'){
+      _engTimes[engine]=Date.now();
+      lane.classList.add('active');lane.classList.remove('failed','winner');
+      if(track)track.style.width='15%';
+      if(car){car.style.left='15%';}
+      if(label){label.textContent='In gara...';label.style.color=i.color;}
+      if(timeEl){timeEl.style.color=i.color;timeEl.textContent='...';}
+      // Animate progress randomly
+      let prog=15;
+      const _intv=setInterval(()=>{
+        if(_engStatus[engine]!=='trying'){clearInterval(_intv);return;}
+        prog=Math.min(85,prog+Math.random()*8+2);
+        if(track)track.style.width=prog+'%';
+        if(car)car.style.left=prog+'%';
+        if(timeEl)timeEl.textContent=((Date.now()-_engTimes[engine])/1000).toFixed(1)+'s';
+      },400);
+    } else if(status==='ok'){
+      const elapsed=_engTimes[engine]?((Date.now()-_engTimes[engine])/1000).toFixed(1)+'s':'?';
+      lane.classList.add('winner');lane.classList.remove('active','failed');
+      if(track)track.style.width='100%';
+      if(car)car.style.left='calc(100% - 140px)';
+      if(label){label.textContent='VINCITORE!';label.style.color='#4ade80';label.style.fontWeight='700';}
+      if(timeEl){timeEl.textContent=elapsed;timeEl.style.color='#4ade80';timeEl.style.fontWeight='700';timeEl.style.fontSize='.85rem';}
+    } else if(status==='failed'){
+      const elapsed=_engTimes[engine]?((Date.now()-_engTimes[engine])/1000).toFixed(1)+'s':'?';
+      lane.classList.add('failed');lane.classList.remove('active','winner');
+      if(track)track.style.width='0%';
+      if(car)car.style.left='8px';
+      if(label){label.textContent='Eliminato';label.style.color='#ef4444';}
+      if(timeEl){timeEl.textContent=elapsed;timeEl.style.color='rgba(239,68,68,.5)';}
+    }
   }
   function _updChunk(done,total,label){
     const pb=document.getElementById('aiChunkBar');const pt=document.getElementById('aiChunkText');
@@ -7669,7 +7879,9 @@ async function runAI(){
   }
 
   try{
-    const resp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(JWT_TOKEN||API_TOKEN)},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:{testo:prompt,files:filesData,mese_target:meseTarget,modalita,settimana,ctx:ctxFlags,piano_esistente:pianoEsistente}}),signal:AbortSignal.timeout(180000)});
+    const _vincoliPayload={testo:prompt,files:filesData,mese_target:meseTarget,modalita,settimana,ctx:ctxFlags,piano_esistente:pianoEsistente};
+    if(promptOverride)_vincoliPayload.prompt_override=promptOverride;
+    const resp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(JWT_TOKEN||API_TOKEN)},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:_vincoliPayload}),signal:AbortSignal.timeout(180000)});
     if(!resp.ok)throw new Error(`HTTP ${resp.status}`);
     if(!resp.body)throw new Error('Streaming non supportato dal browser');
     const reader=resp.body.getReader();const dec=new TextDecoder();let buf='';let result=null;
@@ -7681,37 +7893,18 @@ async function runAI(){
         if(!line.startsWith('data: '))continue;
         try{
           const ev=JSON.parse(line.slice(6));
-          if(ev.type==='init'){const el=document.getElementById('aiInitText');if(el)el.textContent=`${ev.n.tecnici} tecnici · ${ev.n.clienti} clienti · ${ev.n.urgenze} urgenze · ${ev.n.tagliandi} tagliandi caricati`;}
+          if(ev.type==='init'){
+            const el=document.getElementById('aiInitText');
+            if(el)el.textContent=`${ev.n.tecnici} tecnici · ${ev.n.clienti} clienti · ${ev.n.urgenze} urgenze · ${ev.n.tagliandi} tagliandi caricati`;
+            const rs=document.getElementById('raceStatus');if(rs)rs.textContent='Dati caricati, motori in avvio...';
+          }
           else if(ev.type==='debug_prompt'){
             window._lastAIPromptDebug=ev;
             const el=document.getElementById('aiInitText');
-            if(el)el.textContent=`📊 Dati: ${ev.tecnici_count} tecnici · ${ev.macchine_loaded} macchine · ${ev.assets_loaded} assets · ${ev.tagliandi_count} tagliandi · ${ev.urgenze_count} urgenze · Prompt ${ev.prompt_length} chars`;
-            // Mostra pannello debug LIVE durante caricamento
-            let liveDbg=document.getElementById('aiLiveDebug');
-            if(!liveDbg){liveDbg=document.createElement('details');liveDbg.id='aiLiveDebug';liveDbg.style.cssText='margin-top:10px;border:1px solid rgba(99,102,241,.25);border-radius:8px';
-              const container=document.getElementById('aiProgress')||document.getElementById('aiInitText')?.parentElement;
-              if(container)container.parentElement.appendChild(liveDbg);
-            }
-            if(liveDbg){
-              liveDbg.innerHTML=`<summary style="cursor:pointer;font-size:.78rem;font-weight:600;color:rgba(99,102,241,.8);padding:8px 12px;background:rgba(99,102,241,.08);border-radius:8px">🔍 Debug Prompt AI LIVE (${ev.prompt_length} chars)</summary>
-              <div style="padding:10px 12px">
-                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
-                  <span style="font-size:.72rem;padding:2px 8px;background:rgba(16,185,129,.15);border-radius:8px;color:var(--ok)">✅ ${ev.tecnici_count} tecnici</span>
-                  <span style="font-size:.72rem;padding:2px 8px;background:rgba(99,102,241,.15);border-radius:8px;color:#A5B4FC">🔧 ${ev.macchine_loaded} macchine</span>
-                  <span style="font-size:.72rem;padding:2px 8px;background:rgba(99,102,241,.15);border-radius:8px;color:#A5B4FC">📦 ${ev.assets_loaded} assets</span>
-                  <span style="font-size:.72rem;padding:2px 8px;background:rgba(249,115,22,.15);border-radius:8px;color:#FB923C">🏷️ ${ev.tagliandi_count} tagliandi</span>
-                  <span style="font-size:.72rem;padding:2px 8px;background:rgba(239,68,68,.15);border-radius:8px;color:var(--err)">🚨 ${ev.urgenze_count} urgenze</span>
-                  ${ev.interventi_da_assegnare?`<span style="font-size:.72rem;padding:2px 8px;background:rgba(16,185,129,.2);border:1px solid rgba(16,185,129,.4);border-radius:8px;color:var(--ok);font-weight:600">📋 ${ev.interventi_da_assegnare} DA ASSEGNARE</span>`:''}
-                  ${ev.piano_assegnato?`<span style="font-size:.72rem;padding:2px 8px;background:rgba(59,130,246,.1);border-radius:8px;color:var(--info)">✅ ${ev.piano_assegnato} già assegnati</span>`:''}
-                </div>
-                <div style="font-size:.72rem;color:rgba(255,255,255,.5);margin-bottom:6px">Prompt inviato (primi 3000 chars):</div>
-                <pre style="font-size:.68rem;overflow-x:auto;overflow-y:auto;max-height:250px;padding:10px;background:rgba(0,0,0,.4);border-radius:6px;color:rgba(255,255,255,.65);white-space:pre-wrap;word-break:break-word">${(ev.prompt_preview||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre>
-              </div>`;
-            }
+            if(el)el.textContent=`📊 ${ev.tecnici_count} tecnici · ${ev.macchine_loaded} macchine · ${ev.tagliandi_count} tagliandi · ${ev.urgenze_count} urgenze · ${ev.prompt_length} chars`;
           }
           else if(ev.type==='anon'){_updAnon(ev);}
           else if(ev.type==='engine_debug'){
-            // Debug: mostra perché un motore ha fallito
             const el=document.getElementById('aiInitText');
             if(el){
               if(ev.engine==='CASCADE'){
@@ -7724,21 +7917,35 @@ async function runAI(){
           }
           else if(ev.type==='moa_start'){
             const pt=document.getElementById('aiProgressText');
-            if(pt)pt.innerHTML=`🧠 <b>MoA Parallel</b> — ${ev.engines.map(e=>_engLabels[e]?.name||e).join(' + ')} in gara...`;
+            if(pt)pt.innerHTML=`🏎️ <b>Race Parallela</b> — ${ev.engines.map(e=>'<span style="color:'+(_engLabels[e]?.color||'#fff')+'">'+(_engLabels[e]?.name||e)+'</span>').join(' vs ')}`;
+            const rs=document.getElementById('raceStatus');if(rs){rs.textContent='GARA IN CORSO!';rs.style.color='#818CF8';rs.style.fontWeight='700';}
           }
           else if(ev.type==='moa_result'){
             const pt=document.getElementById('aiProgressText');
+            const i=_engLabels[ev.winner];
             if(pt&&ev.winner){
-              const scores=ev.scores||[];
-              pt.innerHTML=`🏆 <b>${_engLabels[ev.winner]?.name||ev.winner}</b> vince! (score: ${ev.bestScore}) — `
-                +scores.map(s=>`${_engLabels[s.engine]?.ico||''}${s.engine}:${s.score}`).join(' · ');
+              pt.innerHTML=`🏆 <span style="color:${i?.color||'#4ade80'};font-weight:700">${i?.name||ev.winner}</span> vince la gara! Score: ${ev.bestScore}`;
             }
+            // Show winner banner
+            const banner=document.getElementById('raceWinnerBanner');
+            if(banner&&ev.winner){
+              banner.style.display='block';
+              const elapsed=_engTimes[ev.winner]?((Date.now()-_engTimes[ev.winner])/1000).toFixed(1)+'s':'?';
+              banner.innerHTML=`<div style="font-size:2rem;margin-bottom:4px">🏆</div>
+                <div style="font-size:1.1rem;font-weight:700;color:#4ade80">
+                  <img src="${i?.logo||''}" style="width:24px;height:24px;vertical-align:middle;margin-right:6px;border-radius:4px">
+                  ${i?.name||ev.winner} vince in ${elapsed}!
+                </div>
+                <div style="font-size:.78rem;color:rgba(255,255,255,.5);margin-top:4px">Score qualità: ${ev.bestScore} — Piano pronto per la revisione</div>`;
+            }
+            const rs=document.getElementById('raceStatus');if(rs){rs.textContent='GARA COMPLETATA';rs.style.color='#4ade80';}
           }
           else if(ev.type==='engine'){
             _engStatus[ev.engine]=ev.status;
             if(ev.status==='ok')Object.keys(_engStatus).forEach(k=>{if(_engStatus[k]==='trying')_engStatus[k]='failed';});
-            _updEng();
-            const pt=document.getElementById('aiProgressText');if(pt&&ev.status==='trying')pt.textContent=`Provo ${_engLabels[ev.engine]?.name||ev.engine}...`+( ev.chunk?` (${ev.chunk})`:'');
+            _updRace(ev.engine,ev.status);
+            const pt=document.getElementById('aiProgressText');
+            if(pt&&ev.status==='trying')pt.innerHTML=`🏎️ <span style="color:${_engLabels[ev.engine]?.color||'#fff'}">${_engLabels[ev.engine]?.name||ev.engine}</span> in gara...`+(ev.chunk?` (${ev.chunk})`:'');
           }
           else if(ev.type==='progress'){const pt=document.getElementById('aiProgressText');if(pt)pt.textContent=ev.message;if(ev.total>1)_updChunk(Math.max(0,ev.chunk-1),ev.total,ev.message);}
           else if(ev.type==='chunk'){_updChunk(ev.done,ev.total,ev.label);}
@@ -7747,6 +7954,7 @@ async function runAI(){
         }catch(pe){if(pe.message&&!pe.message.includes('JSON'))throw pe;}
       }
     }
+    clearInterval(_timerInterval);
     if(!result)throw new Error('Nessuna risposta ricevuta dal worker');
     AI_PLAN=result;
     if(!result||typeof result!=='object'||(!result.piano&&!result.summary)){
@@ -7872,10 +8080,12 @@ async function runAI(){
     $('btnSubmitPlan').disabled=false;
     $('btnDownloadPlan').disabled=false;
     if($('btnGoStep4')) $('btnGoStep4').disabled=false;
-    // Mark step 3 as done in stepper
-    document.querySelectorAll('#aiStepper .ai-step[data-step="3"]').forEach(s=>s.classList.add('done'));
+    // Mark step 4 as done in stepper
+    document.querySelectorAll('#aiStepper .ai-step[data-step="4"]').forEach(s=>s.classList.add('done'));
     toast(`Piano generato: ${piano.length} interventi, ${nGiorni} giorni`,'ok');
   }catch(e){
+    clearInterval(_timerInterval);
+    $('aiResult').style.display='block';
     $('aiResult').innerHTML=`<div style="padding:16px;background:rgba(239,68,68,.1);border:1px solid var(--err);border-radius:var(--radius)">
       <strong>❌ Errore</strong><br>${escapeHtml(e.message)}<br><span style="font-size:.75rem;color:var(--gray)">Prova con un prompt più breve o riprova tra qualche secondo.</span>
     </div>`;

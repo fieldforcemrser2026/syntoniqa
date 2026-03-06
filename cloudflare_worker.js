@@ -3103,7 +3103,7 @@ NOTA ID: se stai ASSEGNANDO un intervento esistente dalla lista INTERVENTI DA AS
 
       // ─── Debug SSE: emetti il prompt prima della chiamata AI ───
       const _senzaTec = interventiDaAssegnare ? (allPianoDb.filter(p => !p.tecnico_id || p.tecnico_id === 'null' || p.tecnico_id === '').length) : 0;
-      sse({type:'debug_prompt', prompt_preview: prompt.substring(0, 4000), prompt_length: prompt.length,
+      sse({type:'debug_prompt', prompt_full: prompt, prompt_length: prompt.length,
            tagliandi_count: tagItems.length, urgenze_count: allUrgenze.length,
            tecnici_count: allTecnici.filter(t=>t.ruolo!=='admin').length,
            macchine_loaded: allMacchine.length, assets_loaded: allAssets.length,
@@ -3111,9 +3111,29 @@ NOTA ID: se stai ASSEGNANDO un intervento esistente dalla lista INTERVENTI DA AS
            piano_assegnato: allPianoDb.length - _senzaTec,
            mese_target: meseTarget, modalita: modalita });
 
+      // ─── BUILD PROMPT ONLY mode: restituisci il prompt e chiudi ───
+      const _defaultSysPrompt = `Sei un pianificatore FSM (manutenzione robot Lely). Rispondi SOLO JSON valido.`;
+      if (vincoli.build_prompt_only) {
+        sse({type:'prompt_ready', prompt: prompt, sys_prompt: _defaultSysPrompt,
+             stats: {
+               tecnici: allTecnici.filter(t=>t.ruolo!=='admin').length,
+               macchine: allMacchine.length, assets: allAssets.length,
+               tagliandi: tagItems.length, urgenze: allUrgenze.length,
+               interventi_da_assegnare: _senzaTec,
+               piano_assegnato: allPianoDb.length - _senzaTec,
+               vincoli_auto: vincoliText?.length || 0,
+               anon_entities: Object.keys(anonMap.encode).length
+             }});
+        sse({type:'done'});
+        return;
+      }
+
+      // ─── PROMPT OVERRIDE: se il frontend ha editato il prompt, usalo ───
+      const finalPrompt = vincoli.prompt_override || prompt;
+
       // ─── AI Call con ANONYMIZATION layer ───
       const validIds = new Set(allTecnici.map(t => t.id));
-      const sysPrompt = `Sei un pianificatore FSM (manutenzione robot Lely). Rispondi SOLO JSON valido. Regole INVIOLABILI: (1) Se ci sono INTERVENTI DA ASSEGNARE, il tuo compito è assegnare tecnico+data+furgone a ciascuno. Usa il campo "id" con l'ID esistente (es: INT_xxx). (2) UN tagliando = 1 solo tecnico = 1 sola riga. NON mettere due tecnici sullo stesso intervento salvo affiancamento ESPLICITO. (3) Usa SOLO codici ID dalla lista. NON inventare ID. (4) Nel campo note scrivi modello macchina + data scadenza (es: "Astronaut A5 | scad:2026-03-10 | 2800h"). Formato: {"summary":"...","piano":[{"id":"INT_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}`;
+      const sysPrompt = vincoli.sys_prompt_override || `Sei un pianificatore FSM (manutenzione robot Lely). Rispondi SOLO JSON valido. Regole INVIOLABILI: (1) Se ci sono INTERVENTI DA ASSEGNARE, il tuo compito è assegnare tecnico+data+furgone a ciascuno. Usa il campo "id" con l'ID esistente (es: INT_xxx). (2) UN tagliando = 1 solo tecnico = 1 sola riga. NON mettere due tecnici sullo stesso intervento salvo affiancamento ESPLICITO. (3) Usa SOLO codici ID dalla lista. NON inventare ID. (4) Nel campo note scrivi modello macchina + data scadenza (es: "Astronaut A5 | scad:2026-03-10 | 2800h"). Formato: {"summary":"...","piano":[{"id":"INT_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}`;
 
       // Helper: costruisce prompt compatto per Workers AI (rimuove file e comprime dati)
       function buildCompactPrompt() {
@@ -3249,50 +3269,49 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         const fallbackEngines = available.filter(n => !parallelEngines.includes(n));
 
         if (parallelEngines.length >= 2) {
-          sse({type:'moa_start', engines: parallelEngines, mode: 'parallel'});
-          // Lancia tutti in parallelo
+          sse({type:'moa_start', engines: parallelEngines, mode: 'parallel_race'});
           parallelEngines.forEach(n => onEngine?.({engine:n, status:'trying'}));
 
-          const results = await Promise.allSettled(
-            parallelEngines.map(async (name) => {
-              const eng = engines[name];
-              const text = await eng.tryFn(promptText);
-              return { name, text };
-            })
-          );
+          // RACE: il primo che risponde con JSON valido vince — non aspettare gli altri
+          const raceResult = await new Promise((resolve) => {
+            let settled = false;
+            let failCount = 0;
+            parallelEngines.forEach(async (name) => {
+              try {
+                const eng = engines[name];
+                const text = await eng.tryFn(promptText);
+                if (settled) return;
+                if (text) {
+                  const { score } = _scoreAIResponse(text);
+                  if (score >= 10) {
+                    settled = true;
+                    resolve({ name, text, score });
+                    return;
+                  }
+                }
+                failCount++;
+                onEngine?.({engine:name, status:'failed'});
+                if (failCount >= parallelEngines.length) resolve(null);
+              } catch {
+                failCount++;
+                onEngine?.({engine:name, status:'failed'});
+                if (failCount >= parallelEngines.length) resolve(null);
+              }
+            });
+            // Timeout di sicurezza: 25s max per il race parallelo
+            setTimeout(() => { if (!settled) resolve(null); }, 25000);
+          });
 
-          // Valuta e scegli il migliore
-          let bestName = null, bestText = null, bestScore = 0;
-          const scores = [];
-          for (const r of results) {
-            if (r.status === 'rejected' || !r.value?.text) {
-              const nm = r.value?.name || r.reason?.name || '?';
-              onEngine?.({engine:nm, status:'failed'});
-              scores.push({engine:nm, score:0, reason:'no_response'});
-              continue;
-            }
-            const { name, text } = r.value;
-            const { score } = _scoreAIResponse(text);
-            scores.push({engine:name, score});
-            if (score > bestScore) { bestScore = score; bestName = name; bestText = text; }
+          if (raceResult) {
+            sse({type:'moa_result', winner: raceResult.name, bestScore: raceResult.score});
+            parallelEngines.forEach(n => onEngine?.({engine:n, status: n === raceResult.name ? 'ok' : 'failed'}));
+            _usedEngine = raceResult.name; lastWorking = raceResult.name;
+            return raceResult.text;
           }
 
-          // Segnala risultati MoA
-          sse({type:'moa_result', scores, winner: bestName, bestScore});
-
-          if (bestText && bestScore >= 10) {
-            // Segna il vincitore ok, gli altri failed
-            for (const s of scores) {
-              onEngine?.({engine:s.engine, status: s.engine === bestName ? 'ok' : 'failed'});
-            }
-            _usedEngine = bestName; lastWorking = bestName;
-            return bestText;
-          }
-
-          // Tutti i paralleli hanno fallito — segna failed
+          // Tutti i paralleli hanno fallito
           parallelEngines.forEach(n => onEngine?.({engine:n, status:'failed'}));
         } else if (parallelEngines.length === 1) {
-          // Solo 1 motore disponibile — cascade classico
           fallbackEngines.unshift(parallelEngines[0]);
         }
 
@@ -3779,8 +3798,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
       // ─── GENERAZIONE: chunking settimanale per mese intero ───
       try {
-        // Costruisci contesto base (comune a tutti i chunk)
-        const baseContext = `PLANNER FSM — ${meseTarget || 'Piano interventi'}
+        // Costruisci contesto base (comune a tutti i chunk) — usa override se fornito
+        const baseContext = finalPrompt !== prompt ? finalPrompt : `PLANNER FSM — ${meseTarget || 'Piano interventi'}
 OGGI: ${oggiIt} (${isoOggi})
 
 ########## VINCOLI CONFIGURATI (INVIOLABILI — rispetta OGNI regola senza eccezioni) ##########
