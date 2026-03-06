@@ -1164,6 +1164,20 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 </div>
 </div>
 
+<!-- Modale Visualizzazione Piano Approvativo -->
+<div class="modal-overlay" id="modalViewPlan" onclick="if(event.target===this)closeModal('modalViewPlan')">
+<div class="modal" style="max-width:800px">
+<div class="modal-head"><h2>📋 Dettaglio Piano</h2><button class="modal-close" onclick="closeModal('modalViewPlan')">&times;</button></div>
+<div class="modal-body" id="viewPlanContent" style="max-height:70vh;overflow-y:auto">
+</div>
+<div class="modal-foot">
+<button class="btn btn-ghost" onclick="closeModal('modalViewPlan')">Chiudi</button>
+<button class="btn btn-ok" id="btnApprovePlan" style="display:none" onclick="approveFromModal()">✅ Approva</button>
+<button class="btn btn-err" id="btnRejectPlan" style="display:none" onclick="rejectFromModal()">❌ Rifiuta</button>
+</div>
+</div>
+</div>
+
 <!-- Vista Tecnico: Piano Personale -->
 <div class="card" style="margin-top:16px" id="cardTecnicoPlan">
 <div class="card-head"><h3>👷 Piano Personale</h3>
@@ -8283,7 +8297,7 @@ async function renderApprovalQueue(){
         <td>${statusTag(a.stato)}</td>
         <td>${a.approvato_da_nome||a.approvato_da||'—'}</td>
         <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${a.note_approvazione||'—'}</td>
-        <td>${canApprove?`<button class="btn btn-xs btn-ok" onclick="approveOrReject('${a.id}','approvato')">✅</button> <button class="btn btn-xs btn-err" onclick="approveOrReject('${a.id}','rifiutato')">❌</button>`:`<button class="btn btn-xs btn-ghost" onclick="viewApprovalPlan('${a.id}')">👁️</button>`}</td>
+        <td><button class="btn btn-xs btn-ghost" onclick="viewApprovalPlan('${a.id}')">👁️</button>${canApprove?` <button class="btn btn-xs btn-ok" onclick="approveOrReject('${a.id}','approvato')">✅</button> <button class="btn btn-xs btn-err" onclick="approveOrReject('${a.id}','rifiutato')">❌</button>`:''}</td>
       </tr>`;
     }).join('');
   }catch(e){
@@ -8311,27 +8325,52 @@ async function approveOrReject(id,stato){
   }catch(e){toast(e.message,'err')}
 }
 
+var _viewingApprovalId=null;
 async function viewApprovalPlan(id){
+  _viewingApprovalId=id;
+  const content=$('viewPlanContent');if(!content)return;
+  content.innerHTML='<div style="text-align:center;padding:24px;color:var(--gray)">Caricamento...</div>';
+  openModal('modalViewPlan');
   try{
     const data=await apiCall('getApproval',{id},'POST');
-    if(data&&data.piano){
-      AI_PLAN=data.piano;
-      // Scroll to AI result and show
-      $('aiResult').style.display='block';
-      if(typeof data.piano==='object'&&data.piano.piano){
-        let html='<h4>📋 Piano #'+id+'</h4>';
-        if(Array.isArray(data.piano.piano)){
-          html+='<table class="tbl" style="font-size:.8125rem"><thead><tr><th>Data</th><th>Tecnico</th><th>Cliente</th><th>Tipo</th></tr></thead><tbody>';
-          data.piano.piano.forEach(r=>{html+=`<tr><td>${r.data||''}</td><td>${r.tecnico||''}</td><td>${r.cliente||''}</td><td>${r.tipo||''}</td></tr>`;});
-          html+='</tbody></table>';
-        }
-        $('aiResult').innerHTML=html;
-      } else {
-        $('aiResult').textContent=JSON.stringify(data.piano,null,2);
-      }
-      const btnApply=$('btnApplyAI');if(btnApply)btnApply.disabled=data.stato!=='approvato';
+    if(!data){content.innerHTML='<p style="color:var(--err)">Approvazione non trovata</p>';return}
+    AI_PLAN=data.piano;
+    let html='<div style="margin-bottom:12px"><strong>ID:</strong> <code>'+id+'</code> · <strong>Stato:</strong> '+statusTag(data.stato)+' · <strong>Creato:</strong> '+(data.creato_da||'?')+' il '+fmtDate(data.data_creazione)+'</div>';
+    if(data.approvato_da)html+='<div style="margin-bottom:12px"><strong>Approvato da:</strong> '+data.approvato_da+' il '+fmtDate(data.data_approvazione)+'</div>';
+    if(data.note_approvazione)html+='<div style="margin-bottom:12px"><strong>Note:</strong> '+data.note_approvazione+'</div>';
+    html+='<hr style="margin:12px 0">';
+    // Render piano
+    const piano=data.piano;
+    if(piano&&typeof piano==='object'&&Array.isArray(piano.piano)){
+      html+='<div style="font-weight:600;margin-bottom:8px">📋 '+piano.piano.length+' interventi pianificati</div>';
+      html+='<div style="overflow-x:auto"><table class="tbl" style="font-size:.8rem"><thead><tr><th>Data</th><th>Ora</th><th>Tecnico</th><th>Cliente</th><th>Tipo</th><th>Durata</th></tr></thead><tbody>';
+      piano.piano.forEach(r=>{
+        html+='<tr><td>'+(r.data||'')+'</td><td>'+(r.ora_inizio||r.ora||'')+'</td><td>'+(r.tecnico_nome||r.tecnico||'')+'</td><td>'+(r.cliente_nome||r.cliente||'')+'</td><td>'+(r.tipo||'')+'</td><td>'+(r.durata||'')+'h</td></tr>';
+      });
+      html+='</tbody></table></div>';
+      if(piano.note)html+='<div style="margin-top:8px;font-size:.8rem;color:var(--gray)"><strong>Note AI:</strong> '+piano.note+'</div>';
+    } else if(piano){
+      html+='<pre style="font-size:.75rem;overflow-x:auto;padding:12px;background:var(--gray5);border-radius:var(--radius-sm);max-height:400px;overflow-y:auto">'+JSON.stringify(piano,null,2).replace(/</g,'&lt;')+'</pre>';
+    } else {
+      html+='<p style="color:var(--gray)">Nessun piano associato</p>';
     }
-  }catch(e){toast(e.message,'err')}
+    content.innerHTML=html;
+    // Show approve/reject buttons if in_attesa and user is admin/caposquadra
+    const cuR=(USER||{}).Ruolo||(USER||{}).ruolo||'';
+    const canAct=(cuR==='admin'||cuR==='caposquadra')&&data.stato==='in_attesa';
+    const btnA=$('btnApprovePlan');if(btnA)btnA.style.display=canAct?'':'none';
+    const btnR=$('btnRejectPlan');if(btnR)btnR.style.display=canAct?'':'none';
+  }catch(e){content.innerHTML='<p style="color:var(--err)">Errore: '+e.message+'</p>'}
+}
+async function approveFromModal(){
+  if(!_viewingApprovalId)return;
+  await approveOrReject(_viewingApprovalId,'approvato');
+  closeModal('modalViewPlan');
+}
+async function rejectFromModal(){
+  if(!_viewingApprovalId)return;
+  await approveOrReject(_viewingApprovalId,'rifiutato');
+  closeModal('modalViewPlan');
 }
 
 // ============ VISTA TECNICO: PIANO PERSONALE ============
