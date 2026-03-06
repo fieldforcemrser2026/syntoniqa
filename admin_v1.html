@@ -1014,20 +1014,17 @@ Ogni tagliando richiede 2 persone (senior + junior)" style="width:100%;min-heigh
 
 <!-- STEPPER -->
 <div id="aiStepper" style="display:flex;gap:0;margin-bottom:20px;background:rgba(255,255,255,.06);border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.1)">
-<div class="ai-step active" data-step="1" onclick="aiGoToStep(1)" style="flex:1;padding:10px 14px;cursor:pointer;text-align:center;font-size:.8rem;transition:all .2s;border-right:1px solid rgba(255,255,255,.1)">
-<div style="font-weight:700;font-size:.9rem">1</div><div>⚙️ Configura</div>
+<div class="ai-step active" data-step="1" onclick="aiGoToStep(1)" style="flex:1;padding:12px 14px;cursor:pointer;text-align:center;font-size:.8rem;transition:all .2s;border-right:1px solid rgba(255,255,255,.1)">
+<div style="font-weight:700;font-size:.95rem">1</div><div>⚙️ Configura</div>
 </div>
-<div class="ai-step" data-step="2" onclick="aiGoToStep(2)" style="flex:1;padding:10px 14px;cursor:pointer;text-align:center;font-size:.8rem;transition:all .2s;border-right:1px solid rgba(255,255,255,.1)">
-<div style="font-weight:700;font-size:.9rem">2</div><div>👁️ Anteprima</div>
+<div class="ai-step" data-step="2" onclick="aiGoToStep(2)" style="flex:1;padding:12px 14px;cursor:pointer;text-align:center;font-size:.8rem;transition:all .2s;border-right:1px solid rgba(255,255,255,.1)">
+<div style="font-weight:700;font-size:.95rem">2</div><div>📐 Piano Base</div>
 </div>
-<div class="ai-step" data-step="3" onclick="aiGoToStep(3)" style="flex:1;padding:10px 14px;cursor:pointer;text-align:center;font-size:.8rem;transition:all .2s;border-right:1px solid rgba(255,255,255,.1)">
-<div style="font-weight:700;font-size:.9rem">3</div><div>📝 Prompt</div>
+<div class="ai-step" data-step="3" onclick="aiGoToStep(3)" style="flex:1;padding:12px 14px;cursor:pointer;text-align:center;font-size:.8rem;transition:all .2s;border-right:1px solid rgba(255,255,255,.1)">
+<div style="font-weight:700;font-size:.95rem">3</div><div>🤖 AI Review</div>
 </div>
-<div class="ai-step" data-step="4" onclick="aiGoToStep(4)" style="flex:1;padding:10px 14px;cursor:pointer;text-align:center;font-size:.8rem;transition:all .2s;border-right:1px solid rgba(255,255,255,.1)">
-<div style="font-weight:700;font-size:.9rem">4</div><div>🏁 Race AI</div>
-</div>
-<div class="ai-step" data-step="5" onclick="aiGoToStep(5)" style="flex:1;padding:10px 14px;cursor:pointer;text-align:center;font-size:.8rem;transition:all .2s">
-<div style="font-weight:700;font-size:.9rem">5</div><div>✅ Applica</div>
+<div class="ai-step" data-step="4" onclick="aiGoToStep(4)" style="flex:1;padding:12px 14px;cursor:pointer;text-align:center;font-size:.8rem;transition:all .2s">
+<div style="font-weight:700;font-size:.95rem">4</div><div>✅ Revisiona</div>
 </div>
 </div>
 <style>
@@ -1039,6 +1036,61 @@ Ogni tagliando richiede 2 persone (senior + junior)" style="width:100%;min-heigh
 @keyframes racePulse{0%,100%{box-shadow:0 0 0 0 var(--race-color)}50%{box-shadow:0 0 12px 4px var(--race-color)}}
 @keyframes raceWin{0%{transform:scale(1)}50%{transform:scale(1.15)}100%{transform:scale(1)}}
 @keyframes confetti{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(-40px) rotate(720deg);opacity:0}}
+@keyframes sugSlideIn{0%{transform:translateX(40px);opacity:0}100%{transform:translateX(0);opacity:1}}
+@keyframes sugGlow{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}50%{box-shadow:0 0 16px 4px rgba(16,185,129,.3)}}
+@keyframes sugReject{0%{max-height:400px;opacity:1}100%{max-height:60px;opacity:.4}}
+@keyframes pulseReviewer{0%,100%{opacity:.6}50%{opacity:1}}
+@keyframes countUp{0%{transform:scale(1.4);color:#4ade80}100%{transform:scale(1);color:inherit}}
+.sug-card{border:1.5px solid rgba(255,255,255,.15);border-radius:12px;padding:16px;margin-bottom:10px;background:rgba(99,102,241,.06);transition:all .3s cubic-bezier(.4,0,.2,1);animation:sugSlideIn .4s ease-out both;position:relative;overflow:hidden}
+.sug-card:hover{border-color:rgba(255,255,255,.3);transform:translateY(-1px);box-shadow:0 4px 20px rgba(0,0,0,.2)}
+.sug-card.accepted{border-color:#10B981;background:rgba(16,185,129,.08);animation:sugGlow 1.5s ease}
+.sug-card.accepted::before{content:'✓';position:absolute;top:8px;right:10px;font-size:1.2rem;color:#10B981;font-weight:700}
+.sug-card.rejected{opacity:.4;border-color:rgba(107,114,128,.3);background:rgba(107,114,128,.04);max-height:60px;overflow:hidden;transition:all .4s}
+.sug-card .sug-header{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.sug-card .cat-badge{font-size:.7rem;padding:3px 8px;border-radius:6px;font-weight:600;letter-spacing:.02em}
+.sug-card .cat-badge.geography{background:rgba(59,130,246,.2);color:#60a5fa}
+.sug-card .cat-badge.workload{background:rgba(245,158,11,.2);color:#fbbf24}
+.sug-card .cat-badge.pairing{background:rgba(236,72,153,.2);color:#f472b6}
+.sug-card .cat-badge.priority{background:rgba(239,68,68,.2);color:#f87171}
+.sug-card .cat-badge.timing{background:rgba(6,182,212,.2);color:#22d3ee}
+.sug-card .sev-badge{font-size:.65rem;padding:2px 7px;border-radius:4px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.sug-card .sev-badge.critical{background:rgba(239,68,68,.25);color:#ef4444;box-shadow:0 0 8px rgba(239,68,68,.2)}
+.sug-card .sev-badge.warning{background:rgba(245,158,11,.25);color:#f59e0b}
+.sug-card .sev-badge.info{background:rgba(59,130,246,.2);color:#3b82f6}
+.sug-card .src-badge{font-size:.6rem;padding:2px 6px;border-radius:3px;font-weight:700;margin-left:auto}
+.sug-card .src-badge.openai{background:linear-gradient(135deg,#7C3AED,#6D28D9);color:#fff}
+.sug-card .src-badge.claude{background:linear-gradient(135deg,#EC4899,#DB2777);color:#fff}
+.sug-card .src-badge.both{background:linear-gradient(135deg,#F59E0B,#D97706);color:#fff}
+.sug-card .sug-diff{background:rgba(0,0,0,.2);padding:10px 12px;border-radius:8px;margin:10px 0;font-family:'JetBrains Mono',monospace;font-size:.72rem;display:grid;gap:6px}
+.sug-card .diff-row{display:grid;grid-template-columns:70px 1fr 24px 1fr;gap:6px;align-items:center}
+.sug-card .diff-label{color:rgba(255,255,255,.45);font-size:.68rem}
+.sug-card .diff-before{background:rgba(239,68,68,.12);padding:4px 8px;border-radius:4px;color:#fca5a5;border:1px solid rgba(239,68,68,.15)}
+.sug-card .diff-after{background:rgba(16,185,129,.12);padding:4px 8px;border-radius:4px;color:#6ee7b7;border:1px solid rgba(16,185,129,.15)}
+.sug-card .diff-arrow{color:rgba(255,255,255,.3);text-align:center;font-size:.8rem}
+.sug-card .sug-reasoning{font-size:.78rem;color:rgba(255,255,255,.65);margin:10px 0;line-height:1.4}
+.sug-card .sug-confidence{font-size:.72rem;color:rgba(255,255,255,.4);margin:8px 0;display:flex;align-items:center;gap:8px}
+.sug-card .conf-bar{height:4px;border-radius:2px;flex:1;background:rgba(255,255,255,.1);overflow:hidden}
+.sug-card .conf-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,#10B981,#3b82f6);transition:width .5s}
+.sug-card .sug-actions{display:flex;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,.08)}
+.sug-card .btn-sug{flex:1;padding:8px 12px;border:none;border-radius:8px;font-size:.78rem;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit}
+.sug-card .btn-sug.accept{background:#10B981;color:#fff}
+.sug-card .btn-sug.accept:hover{background:#059669;transform:scale(1.02)}
+.sug-card .btn-sug.reject{background:rgba(107,114,128,.25);color:rgba(255,255,255,.6)}
+.sug-card .btn-sug.reject:hover{background:rgba(107,114,128,.4)}
+.reviewer-lane{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px 14px;transition:all .3s}
+.reviewer-lane.active{border-color:var(--rev-color);background:linear-gradient(135deg,rgba(255,255,255,.04),var(--rev-bg))}
+.reviewer-lane.complete{border-color:#10B981;background:rgba(16,185,129,.08)}
+.reviewer-lane.error{border-color:#ef4444;background:rgba(239,68,68,.06);opacity:.6}
+.reviewer-lane .rev-progress{height:4px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden;margin-top:8px}
+.reviewer-lane .rev-fill{height:100%;border-radius:2px;transition:width .8s cubic-bezier(.4,0,.2,1)}
+.review-split{display:grid;grid-template-columns:1fr 1fr;gap:16px;min-height:400px}
+@media(max-width:900px){.review-split{grid-template-columns:1fr;}}
+.review-plan-side{max-height:600px;overflow-y:auto;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px}
+.review-sug-side{max-height:600px;overflow-y:auto;padding-right:4px}
+.review-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
+.review-stat{background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.25);border-radius:10px;padding:14px;text-align:center}
+.review-stat .stat-val{font-size:1.6rem;font-weight:700;color:var(--c1,#00C9A7)}
+.review-stat .stat-lbl{font-size:.7rem;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.03em;margin-top:4px}
 .race-lane{position:relative;height:48px;background:rgba(255,255,255,.04);border-radius:12px;margin-bottom:8px;overflow:hidden;border:1px solid rgba(255,255,255,.08);transition:all .3s}
 .race-lane.active{border-color:var(--race-color);background:linear-gradient(90deg,rgba(255,255,255,.02),var(--race-color-bg))}
 .race-lane.winner{border-color:var(--race-color);background:linear-gradient(90deg,var(--race-color-bg),var(--race-color)22);animation:raceWin .6s ease}
@@ -1112,50 +1164,117 @@ Ogni tagliando richiede 2 persone (senior + junior)" style="width:100%;min-heigh
 </div>
 
 <div style="display:flex;gap:8px;flex-wrap:wrap">
-<button class="btn btn-lg btn-ai" style="opacity:.85" onclick="aiPreviewStep()">👁️ Anteprima Vincoli →</button>
-<button class="btn btn-lg btn-ai" onclick="aiBuildPrompt()">📝 Vedi Prompt & Genera →</button>
+<button class="btn btn-lg btn-ai" onclick="aiGenerateWithReview()">🚀 Genera Piano + AI Review →</button>
+<button class="btn btn-lg btn-ghost-light" style="opacity:.7" onclick="aiBuildPrompt()">📝 Genera senza Review (legacy)</button>
 </div>
 </div><!-- end aiStep1 -->
 
-<!-- STEP 2: ANTEPRIMA VINCOLI -->
+<!-- STEP 2: PIANO BASE (deterministico) -->
 <div id="aiStep2" class="ai-step-content" style="display:none">
-<div style="font-size:.9rem;font-weight:600;color:#fff;margin-bottom:12px">👁️ Anteprima Contesto — Verifica prima di generare</div>
-<div id="aiPreviewContent" style="margin-bottom:16px">
-<p style="color:rgba(255,255,255,.5);text-align:center;padding:20px">Carica l'anteprima dal passo 1...</p>
+<div style="font-size:.95rem;font-weight:700;color:#fff;margin-bottom:4px">📐 Piano Base — Generazione Deterministica</div>
+<p style="font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:14px">Piano generato algoritmicamente con zone matching, affiancamento junior e copertura completa.</p>
+<div id="aiDetProgress" style="text-align:center;padding:40px">
+<div style="font-size:2.5rem;animation:aiSpin 2s linear infinite">📐</div>
+<div style="color:rgba(255,255,255,.6);margin-top:10px;font-size:.85rem">Generazione piano deterministico in corso...</div>
+<div style="font-size:.72rem;color:rgba(255,255,255,.3);margin-top:4px">Zone matching · Junior pairing · Installazioni · Assenze</div>
 </div>
-<div style="display:flex;gap:8px;flex-wrap:wrap">
-<button class="btn btn-lg btn-ghost-light" onclick="aiGoToStep(1)">← Indietro</button>
-<button class="btn btn-lg btn-ai" onclick="aiBuildPrompt()">📝 Vedi Prompt AI →</button>
+<div id="aiDetResult" style="display:none">
+<!-- Stats boxes -->
+<div class="review-stats" id="aiDetStats"></div>
+<!-- Piano table -->
+<div id="aiDetTable" style="max-height:400px;overflow-y:auto;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px;margin-bottom:14px"></div>
+<!-- Warnings -->
+<div id="aiDetWarnings" style="margin-bottom:14px"></div>
 </div>
-</div>
-
-<!-- STEP 3: PROMPT EDITOR -->
-<div id="aiStep3" class="ai-step-content" style="display:none">
-<div style="font-size:.9rem;font-weight:600;color:#fff;margin-bottom:4px">📝 Prompt AI — Rivedi e personalizza</div>
-<p style="font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:14px">Questo è il prompt completo che verrà inviato ai motori AI. Puoi modificarlo o accettarlo così com'è.</p>
-<div id="aiPromptEditorWrap" style="margin-bottom:16px">
-  <p style="color:rgba(255,255,255,.5);text-align:center;padding:40px">⏳ Costruzione prompt in corso...</p>
-</div>
-<div style="display:flex;gap:8px;flex-wrap:wrap">
-<button class="btn btn-lg btn-ghost-light" onclick="aiGoToStep(2)">← Indietro</button>
-<button class="btn btn-lg btn-ai" id="btnLaunchRace" onclick="aiLaunchRace()" disabled>🏁 Lancia Race AI →</button>
-</div>
-</div>
-
-<!-- STEP 4: RACE AI -->
-<div id="aiStep4" class="ai-step-content" style="display:none">
-<div id="aiRaceArena" style="margin-bottom:16px">
-<p style="color:rgba(255,255,255,.5);text-align:center;padding:20px">In attesa di avvio gara...</p>
-</div>
-<div class="ai-result" id="aiResult" style="display:none"></div>
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
 <button class="btn btn-lg btn-ghost-light" onclick="aiGoToStep(1)">← Riconfigura</button>
 <button class="btn btn-lg btn-success" onclick="downloadAIPlanXlsx()" id="btnDownloadPlan" disabled>📥 Scarica Excel</button>
-<button class="btn btn-lg btn-ok" onclick="aiGoToStep(5)" id="btnGoStep4" disabled>Anteprima Piano →</button>
+<button class="btn btn-lg btn-ai" id="btnGoReview" onclick="aiGoToStep(3)" disabled>🤖 AI Review →</button>
 </div>
 </div>
 
-<!-- STEP 5: APPLICA -->
+<!-- STEP 3: AI REVIEW (OpenAI + Claude) -->
+<div id="aiStep3" class="ai-step-content" style="display:none">
+<div style="font-size:.95rem;font-weight:700;color:#fff;margin-bottom:4px">🤖 AI Review — OpenAI + Claude analizzano il piano</div>
+<p style="font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:14px">Due AI premium analizzano il piano e suggeriscono ottimizzazioni. Accetta o rifiuta ogni suggerimento.</p>
+
+<!-- Reviewer status cards -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px" id="aiReviewerPanel">
+<div class="reviewer-lane" id="revLaneOpenai" style="--rev-color:#7C3AED;--rev-bg:rgba(124,58,237,.08)">
+<div style="display:flex;align-items:center;gap:8px">
+<div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#7C3AED,#6D28D9);display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:700;color:#fff">O</div>
+<div><div style="font-weight:700;font-size:.85rem;color:#A78BFA">OpenAI GPT-4o-mini</div>
+<div style="font-size:.7rem;color:rgba(255,255,255,.4)" id="revStatusOpenai">In attesa...</div></div>
+<div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:.75rem;color:rgba(255,255,255,.3)" id="revTimeOpenai"></div>
+</div>
+<div class="rev-progress"><div class="rev-fill" id="revFillOpenai" style="width:0%;background:linear-gradient(90deg,#7C3AED,#A78BFA)"></div></div>
+</div>
+<div class="reviewer-lane" id="revLaneClaude" style="--rev-color:#EC4899;--rev-bg:rgba(236,72,153,.08)">
+<div style="display:flex;align-items:center;gap:8px">
+<div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#EC4899,#DB2777);display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:700;color:#fff">C</div>
+<div><div style="font-weight:700;font-size:.85rem;color:#F472B6">Claude Haiku 4.5</div>
+<div style="font-size:.7rem;color:rgba(255,255,255,.4)" id="revStatusClaude">In attesa...</div></div>
+<div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:.75rem;color:rgba(255,255,255,.3)" id="revTimeClaude"></div>
+</div>
+<div class="rev-progress"><div class="rev-fill" id="revFillClaude" style="width:0%;background:linear-gradient(90deg,#EC4899,#F472B6)"></div></div>
+</div>
+</div>
+
+<!-- Split view: piano left, suggestions right -->
+<div class="review-split">
+<div class="review-plan-side" id="aiReviewPlanSide">
+<div style="font-size:.8rem;font-weight:600;color:rgba(255,255,255,.6);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">📋 Piano Base</div>
+<div id="aiReviewPlanTable"><p style="color:rgba(255,255,255,.4);text-align:center;padding:20px;font-size:.8rem">Il piano apparirà qui dopo la generazione...</p></div>
+</div>
+<div class="review-sug-side" id="aiReviewSugSide">
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+<span style="font-size:.8rem;font-weight:600;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.04em">💡 Suggerimenti AI</span>
+<span id="aiSugCounter" style="font-size:.72rem;padding:2px 8px;background:rgba(99,102,241,.2);border-radius:10px;color:#818CF8;font-weight:600">0 / 0</span>
+<div style="margin-left:auto;display:flex;gap:4px">
+<button class="btn btn-xs" style="font-size:.65rem;padding:3px 8px;background:rgba(16,185,129,.2);color:#10B981;border:1px solid rgba(16,185,129,.3);border-radius:6px" onclick="aiToggleAllSuggestions(true)">✅ Tutti</button>
+<button class="btn btn-xs" style="font-size:.65rem;padding:3px 8px;background:rgba(107,114,128,.2);color:rgba(255,255,255,.5);border:1px solid rgba(107,114,128,.3);border-radius:6px" onclick="aiToggleAllSuggestions(false)">❌ Nessuno</button>
+</div>
+</div>
+<div id="aiSugContainer"><p style="color:rgba(255,255,255,.4);text-align:center;padding:30px;font-size:.8rem">I suggerimenti appariranno qui quando le AI completano l'analisi...</p></div>
+</div>
+</div>
+
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+<button class="btn btn-lg btn-ghost-light" onclick="aiGoToStep(2)">← Piano Base</button>
+<button class="btn btn-lg btn-ok" id="btnGoApply" onclick="aiApplyAndGoStep4()" disabled>✅ Applica Selezione & Revisiona →</button>
+</div>
+</div>
+
+<!-- STEP 4: REVISIONA & APPLICA -->
+<div id="aiStep4" class="ai-step-content" style="display:none">
+<div style="font-size:.95rem;font-weight:700;color:#fff;margin-bottom:4px">✅ Revisiona & Applica</div>
+<p style="font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:14px">Piano finale con le ottimizzazioni selezionate. Verifica e applica al sistema.</p>
+
+<!-- Summary stats -->
+<div class="review-stats" id="aiFinalStats"></div>
+
+<!-- Applied suggestions -->
+<div id="aiFinalApplied" style="margin-bottom:14px"></div>
+
+<!-- Rejected suggestions (collapsible) -->
+<div id="aiFinalRejected" style="margin-bottom:14px"></div>
+
+<!-- Final plan table -->
+<div id="aiFinalTable" style="max-height:450px;overflow-y:auto;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px;margin-bottom:14px"></div>
+
+<!-- Race arena (legacy, hidden but available for old flow) -->
+<div id="aiRaceArena" style="display:none"></div>
+<div class="ai-result" id="aiResult" style="display:none"></div>
+
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+<button class="btn btn-lg btn-ghost-light" onclick="aiGoToStep(3)">← AI Review</button>
+<button class="btn btn-lg btn-ghost-light" onclick="aiGoToStep(1)">⚙️ Riconfigura</button>
+<button class="btn btn-lg btn-success" onclick="downloadAIPlanXlsx()" id="btnDownloadFinal">📥 Scarica Excel</button>
+<button class="btn btn-lg btn-ok" onclick="aiApplyToSystem()" id="btnApplyFinal">✅ Applica al Sistema</button>
+</div>
+</div>
+
+<!-- STEP 5: LEGACY (hidden, kept for backward compat) -->
 <div id="aiStep5" class="ai-step-content" style="display:none">
 <div style="font-size:.9rem;font-weight:600;color:#fff;margin-bottom:12px">✅ Applica il Piano Generato</div>
 <div id="aiApplyPreview" style="margin-bottom:16px">
@@ -7391,18 +7510,449 @@ let AI_PREVIEW_DATA = null;
 
 function aiGoToStep(step){
   AI_CURRENT_STEP = step;
-  // Hide all step contents
+  // Hide all step contents (4 main + 1 legacy)
   for(let i=1;i<=5;i++){
     const el=$('aiStep'+i);
     if(el) el.style.display = i===step ? '' : 'none';
   }
-  // Update stepper UI
+  // Update stepper UI (4 steps visible)
   document.querySelectorAll('#aiStepper .ai-step').forEach(s=>{
     const sNum = parseInt(s.dataset.step);
     s.classList.remove('active','done');
     if(sNum === step) s.classList.add('active');
     else if(sNum < step) s.classList.add('done');
   });
+}
+
+// ═══════════════════════════════════════════════════════
+// ═══ NEW: AI REVIEW FLOW (Deterministic + AI Review) ═══
+// ═══════════════════════════════════════════════════════
+
+let AI_DET_PLAN = null; // Piano deterministico grezzo
+let AI_SUGGESTIONS = []; // Suggerimenti AI merged
+let AI_ACCEPTED = new Set(); // IDs suggerimenti accettati
+let AI_REVIEW_TIMER = null;
+
+async function aiGenerateWithReview(){
+  const meseTarget=$('aiMeseTarget')?.value||'';
+  if(!meseTarget){toast('Seleziona un mese target','err');return;}
+
+  aiGoToStep(2);
+  // Reset state
+  AI_DET_PLAN = null; AI_SUGGESTIONS = []; AI_ACCEPTED = new Set();
+  $('aiDetProgress').style.display='';
+  $('aiDetResult').style.display='none';
+  $('btnGoReview').disabled=true;
+  $('btnDownloadPlan').disabled=true;
+  $('btnGoApply').disabled=true;
+
+  const prompt=$('aiPrompt').value.trim();
+  const modalita=$('aiModalita')?.value||'mese';
+  const settimana=$('aiSettimana')?.value||'1';
+  const ctxFlags={vincoli:$('aiCtxVincoli')?.checked!==false,reperibilita:$('aiCtxRep')?.checked!==false,piano:$('aiCtxPiano')?.checked!==false,urgenze:$('aiCtxUrgenze')?.checked!==false,tagliandi:$('aiCtxTagliandi')?.checked!==false};
+
+  // Prepare files
+  const filesData=[];
+  for(const f of AI_FILES){const content=await readFileAsText(f);filesData.push({name:f.name,type:f.type,size:f.size,content});}
+
+  let pianoEsistente=[];
+  if(ctxFlags.piano&&meseTarget&&DATA.piano){
+    pianoEsistente=DATA.piano.filter(p=>{const d=(p.Data||'').split('T')[0];return d.startsWith(meseTarget)&&p.Stato!=='annullato';}).map(p=>{
+      const u=(DATA.utenti||[]).find(u=>u.ID===p.TecnicoID)||{};const c=(DATA.clienti||[]).find(c=>c.ID===p.ClienteID)||{};
+      return {data:(p.Data||'').split('T')[0],tecnico:((u.Nome||'')+(u.Cognome?' '+u.Cognome:'')).trim()||p.TecnicoID||'?',tecnicoId:p.TecnicoID,cliente:c.Nome||p.ClienteID||'',note:p.Note||p.TipoIntervento||''};
+    });
+  }
+
+  // Timer
+  const t0=Date.now();
+  AI_REVIEW_TIMER=setInterval(()=>{
+    const el=$('revTimeOpenai');const el2=$('revTimeClaude');
+    const sec=((Date.now()-t0)/1000).toFixed(0);
+    if(el)el.textContent=sec+'s';if(el2)el2.textContent=sec+'s';
+  },500);
+
+  try{
+    const _payload={testo:prompt,files:filesData,mese_target:meseTarget,modalita,settimana,ctx:ctxFlags,piano_esistente:pianoEsistente,withReview:true};
+    const resp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(JWT_TOKEN||API_TOKEN)},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:_payload}),signal:AbortSignal.timeout(120000)});
+    if(!resp.ok)throw new Error(`HTTP ${resp.status}`);
+    if(!resp.body)throw new Error('Streaming non supportato');
+
+    const reader=resp.body.getReader();const dec=new TextDecoder();let buf='';
+    while(true){
+      const {done,value}=await reader.read();if(done)break;
+      buf+=dec.decode(value,{stream:true});
+      const lines=buf.split('\n');buf=lines.pop();
+      for(const line of lines){
+        if(!line.startsWith('data: '))continue;
+        try{
+          const ev=JSON.parse(line.slice(6));
+
+          // ── PHASE 1 events ──
+          if(ev.type==='init'||ev.type==='debug_prompt'||ev.type==='engine_debug'){
+            const pr=$('aiDetProgress');
+            if(pr){
+              const msgs=[];
+              if(ev.type==='init') msgs.push(`${ev.n?.tecnici||0} tecnici · ${ev.n?.clienti||0} clienti · ${ev.n?.tagliandi||0} tagliandi`);
+              if(ev.type==='engine_debug'&&ev.engine==='DETERMINISTIC') msgs.push(`✅ ${ev.righe||0} righe, ${ev.giorni||0} giorni, ${ev.tecnici||0} tecnici`);
+              if(msgs.length) pr.querySelector('div:last-child').textContent=msgs.join(' — ');
+            }
+          }
+          else if(ev.type==='progress'){
+            const pr=$('aiDetProgress');
+            if(pr) pr.querySelector('div:nth-child(2)').textContent=ev.message||'...';
+          }
+          else if(ev.type==='phase_complete'&&ev.phase===1){
+            // Piano deterministico pronto!
+            AI_DET_PLAN=ev.data;
+            AI_PLAN=ev.data; // backward compat
+            $('aiDetProgress').style.display='none';
+            $('aiDetResult').style.display='';
+            _renderDetPlan(ev.data);
+            $('btnDownloadPlan').disabled=false;
+            $('btnGoReview').disabled=false;
+            // Auto-advance to Step 3 after 1s
+            setTimeout(()=>aiGoToStep(3),800);
+          }
+
+          // ── PHASE 2 events ──
+          else if(ev.type==='phase_start'&&ev.phase===2){
+            $('revStatusOpenai').textContent='Analisi in corso...';
+            $('revStatusClaude').textContent='Analisi in corso...';
+            $('revLaneOpenai').classList.add('active');
+            $('revLaneClaude').classList.add('active');
+            $('revFillOpenai').style.width='15%';
+            $('revFillClaude').style.width='15%';
+          }
+          else if(ev.type==='reviewer_status'){
+            const eng=ev.engine;
+            const lane=$('revLane'+_cap(eng));
+            const status=$('revStatus'+_cap(eng));
+            const fill=$('revFill'+_cap(eng));
+            const time=$('revTime'+_cap(eng));
+
+            if(ev.status==='analyzing'){
+              if(status)status.textContent='Analisi in corso...';
+              if(fill)fill.style.width=(ev.progress_pct||15)+'%';
+            }
+            else if(ev.status==='parsing'){
+              if(status)status.textContent='Parsing risultati...';
+              if(fill)fill.style.width='80%';
+            }
+            else if(ev.status==='complete'){
+              if(status)status.textContent=`✅ ${ev.count||0} suggerimenti — ${ev.elapsed||'?'}s`;
+              if(fill)fill.style.width='100%';
+              if(lane){lane.classList.remove('active');lane.classList.add('complete');}
+              if(time)time.textContent=ev.elapsed+'s';
+            }
+            else if(ev.status==='error'||ev.status==='skipped'){
+              if(status)status.textContent=`❌ ${ev.reason||ev.status}`;
+              if(fill)fill.style.width='100%';fill.style.background='#ef4444';
+              if(lane){lane.classList.remove('active');lane.classList.add('error');}
+            }
+          }
+          else if(ev.type==='phase_complete'&&ev.phase===2){
+            // Suggerimenti pronti!
+            AI_SUGGESTIONS=ev.data?.suggestions||[];
+            _renderSuggestions(AI_SUGGESTIONS);
+            clearInterval(AI_REVIEW_TIMER);
+            if(AI_SUGGESTIONS.length) $('btnGoApply').disabled=false;
+          }
+          else if(ev.type==='result'){
+            // Risultato finale
+            AI_PLAN=ev.data;
+            if(ev.data?.suggestions?.length&&!AI_SUGGESTIONS.length){
+              AI_SUGGESTIONS=ev.data.suggestions;
+              _renderSuggestions(AI_SUGGESTIONS);
+            }
+            clearInterval(AI_REVIEW_TIMER);
+            $('btnGoApply').disabled=false;
+          }
+          else if(ev.type==='error'){throw new Error(ev.message);}
+        }catch(pe){if(pe.message&&!pe.message.includes('JSON'))throw pe;}
+      }
+    }
+  }catch(e){
+    clearInterval(AI_REVIEW_TIMER);
+    toast('Errore: '+(e.message||'sconosciuto'),'err');
+    $('aiDetProgress').innerHTML=`<div style="color:var(--err);padding:20px;text-align:center"><strong>❌ Errore</strong><br>${e.message||'Errore sconosciuto'}</div>`;
+  }
+}
+
+function _cap(s){return s?s.charAt(0).toUpperCase()+s.slice(1):'';}
+
+function _renderDetPlan(data){
+  const piano=data?.piano||[];
+  const stats=data?.stats||{};
+  const warnings=data?.warnings||[];
+
+  // Stats boxes
+  const nGiorni=[...new Set(piano.map(p=>p.data||p.Data))].length;
+  const nTecnici=[...new Set(piano.map(p=>p.tecnicoId||p.TecnicoID||p.tecnico))].length;
+  $('aiDetStats').innerHTML=`
+    <div class="review-stat"><div class="stat-val">${piano.length}</div><div class="stat-lbl">Interventi</div></div>
+    <div class="review-stat"><div class="stat-val">${nGiorni}</div><div class="stat-lbl">Giorni</div></div>
+    <div class="review-stat"><div class="stat-val">${nTecnici}</div><div class="stat-lbl">Tecnici</div></div>
+    <div class="review-stat"><div class="stat-val">${stats.tagUsed||'?'}</div><div class="stat-lbl">Tagliandi</div></div>
+  `;
+
+  // Piano table
+  _renderPlanTable($('aiDetTable'), piano, false);
+
+  // Also populate review pane
+  _renderPlanTable($('aiReviewPlanTable'), piano, true);
+
+  // Warnings
+  if(warnings.length){
+    $('aiDetWarnings').innerHTML=warnings.map(w=>{
+      const isGood=w.startsWith('✅')||w.startsWith('🔧')||w.startsWith('📐');
+      return `<span style="display:inline-block;padding:3px 10px;margin:2px;border-radius:8px;font-size:.72rem;background:${isGood?'rgba(16,185,129,.15)':'rgba(245,158,11,.15)'};color:${isGood?'#4ade80':'#fbbf24'}">${w}</span>`;
+    }).join('');
+  }
+}
+
+function _renderPlanTable(container, piano, compact){
+  if(!container)return;
+  const byDate={};
+  piano.forEach(p=>{const d=p.data||p.Data||'?';if(!byDate[d])byDate[d]=[];byDate[d].push(p)});
+  const tecColors={};
+  const palette=['#00C9A7','#3B7EF7','#10B981','#F59E0B','#8B5CF6','#EC4899','#06B6D4','#EF4444','#84CC16','#F97316'];
+  let ci=0;
+  const giorni=['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+
+  let html='';
+  for(const [dt,items] of Object.entries(byDate)){
+    const d=new Date(dt);const dayName=giorni[d.getDay()]||'?';
+    if(!compact) html+=`<div style="font-size:.78rem;font-weight:700;color:#818CF8;margin:10px 0 4px;padding:6px 10px;background:rgba(99,102,241,.1);border-radius:6px">${dayName} ${dt} — ${items.length} interventi</div>`;
+    else html+=`<div style="font-size:.7rem;font-weight:600;color:#818CF8;margin:8px 0 3px">${dayName} ${dt.split('-').slice(1).join('/')} (${items.length})</div>`;
+
+    for(const p of items){
+      const tid=p.tecnicoId||p.TecnicoID||p.tecnico||'?';
+      if(!tecColors[tid]){tecColors[tid]=palette[ci%palette.length];ci++;}
+      const color=tecColors[tid];
+      const tNome=p.TecnicoNome||p.tecnicoNome||tid;
+      const cNome=p.ClienteNome||p.clienteNome||p.clienteId||p.ClienteID||'';
+      const tipo=p.tipo||p.Tipo||p.TipoIntervento||'tagliando';
+      const note=(p.note||p.Note||'').substring(0,compact?40:80);
+      const tipoIcon=tipo.includes('install')?'🏗️':tipo.includes('urgenz')?'🚨':tipo.includes('controllo')?'🔍':'🔧';
+
+      if(compact){
+        html+=`<div style="display:flex;gap:6px;align-items:center;padding:3px 6px;border-left:3px solid ${color};margin-bottom:2px;font-size:.68rem">
+          <span>${tipoIcon}</span>
+          <span style="color:${color};font-weight:600;min-width:60px">${tNome.split(' ')[0]||tid}</span>
+          <span style="color:rgba(255,255,255,.5);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cNome} ${note?'— '+note:''}</span>
+        </div>`;
+      } else {
+        html+=`<div style="display:flex;gap:8px;align-items:center;padding:6px 10px;border-left:3px solid ${color};margin-bottom:3px;background:rgba(255,255,255,.03);border-radius:0 6px 6px 0;font-size:.75rem">
+          <span style="font-size:.9rem">${tipoIcon}</span>
+          <span style="color:${color};font-weight:600;min-width:100px">${tNome}</span>
+          <span style="color:rgba(255,255,255,.6);min-width:120px">${cNome}</span>
+          <span style="color:rgba(255,255,255,.4);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${note}</span>
+        </div>`;
+      }
+    }
+  }
+  container.innerHTML=html||'<p style="color:rgba(255,255,255,.4);text-align:center;padding:20px">Nessun intervento</p>';
+}
+
+function _renderSuggestions(suggestions){
+  const container=$('aiSugContainer');
+  if(!container)return;
+  if(!suggestions.length){
+    container.innerHTML='<div style="text-align:center;padding:30px;color:rgba(255,255,255,.4)"><div style="font-size:2rem;margin-bottom:8px">🎯</div>Nessun suggerimento — il piano è già ottimale!</div>';
+    _updateSugCounter();return;
+  }
+
+  let html='';
+  suggestions.forEach((sug,i)=>{
+    const catIcons={geography:'🗺️',workload:'⚖️',pairing:'👥',priority:'🚨',timing:'⏱️'};
+    const catIcon=catIcons[sug.category]||'💡';
+    const srcBadge=sug.sources?.length>1
+      ?'<span class="src-badge both">🤝 Entrambi</span>'
+      :sug.sources?.[0]==='openai'
+        ?'<span class="src-badge openai">OpenAI</span>'
+        :'<span class="src-badge claude">Claude</span>';
+
+    const confPct=Math.round((sug.confidence||0.5)*100);
+
+    // Diff section
+    let diffHtml='';
+    if(sug.current){
+      const cur=sug.current;const prop=sug.proposed||{};
+      if(cur.tecnicoId||prop.tecnicoId) diffHtml+=`<div class="diff-row"><span class="diff-label">Tecnico</span><span class="diff-before">${cur.tecnicoId||'—'}</span><span class="diff-arrow">→</span><span class="diff-after">${prop.tecnicoId||'(invariato)'}</span></div>`;
+      if(cur.data||prop.data) diffHtml+=`<div class="diff-row"><span class="diff-label">Data</span><span class="diff-before">${cur.data||'—'}</span><span class="diff-arrow">→</span><span class="diff-after">${prop.data||'(invariata)'}</span></div>`;
+      if(cur.clienteId||prop.clienteId) diffHtml+=`<div class="diff-row"><span class="diff-label">Cliente</span><span class="diff-before">${cur.clienteId||'—'}</span><span class="diff-arrow">→</span><span class="diff-after">${prop.clienteId||'(invariato)'}</span></div>`;
+    }
+
+    html+=`<div class="sug-card" data-sug-id="${sug.id}" style="animation-delay:${i*0.1}s">
+      <div class="sug-header">
+        <span class="cat-badge ${sug.category||''}">${catIcon} ${(sug.category||'altro').charAt(0).toUpperCase()+(sug.category||'altro').slice(1)}</span>
+        <span class="sev-badge ${sug.severity||'info'}">${sug.severity||'info'}</span>
+        ${srcBadge}
+      </div>
+      <div style="font-weight:600;font-size:.85rem;color:#fff;margin-bottom:4px">${_esc(sug.title||'Suggerimento')}</div>
+      <div style="font-size:.78rem;color:rgba(255,255,255,.6);line-height:1.4;margin-bottom:8px">${_esc(sug.description||'')}</div>
+      ${diffHtml?'<div class="sug-diff">'+diffHtml+'</div>':''}
+      ${sug.proposed?.reasoning?'<div class="sug-reasoning">💡 '+_esc(sug.proposed.reasoning)+'</div>':''}
+      <div class="sug-confidence"><span>${confPct}%</span><div class="conf-bar"><div class="conf-fill" style="width:${confPct}%"></div></div></div>
+      <div class="sug-actions">
+        <button class="btn-sug accept" onclick="aiToggleSuggestion('${sug.id}',true)">✅ Accetta</button>
+        <button class="btn-sug reject" onclick="aiToggleSuggestion('${sug.id}',false)">❌ Rifiuta</button>
+      </div>
+    </div>`;
+  });
+  container.innerHTML=html;
+  _updateSugCounter();
+}
+
+function _esc(s){return (s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function aiToggleSuggestion(id, accept){
+  const card=document.querySelector(`[data-sug-id="${id}"]`);
+  if(!card)return;
+  card.classList.remove('accepted','rejected');
+  if(accept){
+    card.classList.add('accepted');
+    AI_ACCEPTED.add(id);
+  } else {
+    card.classList.add('rejected');
+    AI_ACCEPTED.delete(id);
+  }
+  _updateSugCounter();
+  $('btnGoApply').disabled=false;
+}
+
+function aiToggleAllSuggestions(accept){
+  AI_SUGGESTIONS.forEach(s=>{
+    const card=document.querySelector(`[data-sug-id="${s.id}"]`);
+    if(!card)return;
+    card.classList.remove('accepted','rejected');
+    if(accept){card.classList.add('accepted');AI_ACCEPTED.add(s.id);}
+    else{card.classList.add('rejected');AI_ACCEPTED.delete(s.id);}
+  });
+  _updateSugCounter();
+}
+
+function _updateSugCounter(){
+  const el=$('aiSugCounter');
+  if(el)el.textContent=`${AI_ACCEPTED.size} / ${AI_SUGGESTIONS.length} accettati`;
+}
+
+function aiApplyAndGoStep4(){
+  // Apply accepted suggestions to plan
+  const piano=JSON.parse(JSON.stringify(AI_DET_PLAN?.piano||AI_PLAN?.piano||[]));
+  const accepted=AI_SUGGESTIONS.filter(s=>AI_ACCEPTED.has(s.id));
+  const rejected=AI_SUGGESTIONS.filter(s=>!AI_ACCEPTED.has(s.id));
+  const modifiedRows=new Set();
+
+  // Apply each accepted suggestion
+  for(const sug of accepted){
+    if(!sug.current)continue;
+    // Find matching row in piano
+    const idx=piano.findIndex(p=>{
+      const pDate=p.data||p.Data||'';
+      const pTec=p.tecnicoId||p.TecnicoID||'';
+      return pDate===sug.current.data && pTec===sug.current.tecnicoId;
+    });
+    if(idx<0)continue;
+
+    // Apply proposed changes
+    if(sug.proposed?.tecnicoId){
+      piano[idx].tecnicoId=sug.proposed.tecnicoId;
+      piano[idx].TecnicoID=sug.proposed.tecnicoId;
+      // Update tecnico name
+      const tec=(DATA.utenti||[]).find(u=>u.ID===sug.proposed.tecnicoId);
+      if(tec){piano[idx].TecnicoNome=`${tec.Nome||''} ${tec.Cognome||''}`.trim();piano[idx].tecnicoNome=piano[idx].TecnicoNome;}
+    }
+    if(sug.proposed?.data){
+      piano[idx].data=sug.proposed.data;piano[idx].Data=sug.proposed.data;
+    }
+    if(sug.proposed?.clienteId){
+      piano[idx].clienteId=sug.proposed.clienteId;piano[idx].ClienteID=sug.proposed.clienteId;
+    }
+    modifiedRows.add(idx);
+  }
+
+  // Store final plan
+  AI_PLAN={...AI_PLAN, piano, _modified:modifiedRows, _accepted:accepted, _rejected:rejected};
+
+  // Render Step 4
+  aiGoToStep(4);
+  _renderFinalStep(piano, accepted, rejected, modifiedRows);
+}
+
+function _renderFinalStep(piano, accepted, rejected, modifiedRows){
+  // Stats
+  const nGiorni=[...new Set(piano.map(p=>p.data||p.Data))].length;
+  const nTecnici=[...new Set(piano.map(p=>p.tecnicoId||p.TecnicoID))].length;
+  $('aiFinalStats').innerHTML=`
+    <div class="review-stat"><div class="stat-val">${piano.length}</div><div class="stat-lbl">Interventi Totali</div></div>
+    <div class="review-stat"><div class="stat-val">${nGiorni}</div><div class="stat-lbl">Giorni</div></div>
+    <div class="review-stat"><div class="stat-val" style="color:#10B981">${accepted.length}</div><div class="stat-lbl">Suggerimenti Applicati</div></div>
+    <div class="review-stat"><div class="stat-val" style="color:#6b7280">${rejected.length}</div><div class="stat-lbl">Suggerimenti Scartati</div></div>
+  `;
+
+  // Applied suggestions
+  if(accepted.length){
+    $('aiFinalApplied').innerHTML=`<div style="font-size:.82rem;font-weight:600;color:#10B981;margin-bottom:6px">🎯 Modifiche Applicate</div>`+
+      accepted.map(s=>`<div style="padding:6px 10px;margin:3px 0;background:rgba(16,185,129,.08);border-left:3px solid #10B981;border-radius:0 6px 6px 0;font-size:.75rem">
+        <strong>${_esc(s.title)}</strong> — ${_esc(s.description||'').substring(0,100)}
+      </div>`).join('');
+  }
+
+  // Rejected suggestions (collapsible)
+  if(rejected.length){
+    $('aiFinalRejected').innerHTML=`<details><summary style="cursor:pointer;font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:4px">❌ ${rejected.length} suggerimenti scartati</summary>
+      ${rejected.map(s=>`<div style="padding:4px 10px;margin:2px 0;background:rgba(107,114,128,.06);border-left:2px solid rgba(107,114,128,.3);border-radius:0 4px 4px 0;font-size:.7rem;color:rgba(255,255,255,.4)">
+        ${_esc(s.title)} — ${_esc(s.description||'').substring(0,80)}
+      </div>`).join('')}
+    </details>`;
+  }
+
+  // Final table with modified rows highlighted
+  _renderFinalPlanTable($('aiFinalTable'), piano, modifiedRows);
+}
+
+function _renderFinalPlanTable(container, piano, modifiedRows){
+  if(!container)return;
+  const byDate={};
+  piano.forEach((p,i)=>{const d=p.data||p.Data||'?';if(!byDate[d])byDate[d]=[];byDate[d].push({...p,_origIdx:i})});
+  const tecColors={};
+  const palette=['#00C9A7','#3B7EF7','#10B981','#F59E0B','#8B5CF6','#EC4899','#06B6D4','#EF4444','#84CC16','#F97316'];
+  let ci=0;
+  const giorni=['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+
+  let html='';
+  for(const [dt,items] of Object.entries(byDate)){
+    const d=new Date(dt);const dayName=giorni[d.getDay()]||'?';
+    html+=`<div style="font-size:.78rem;font-weight:700;color:#818CF8;margin:10px 0 4px;padding:6px 10px;background:rgba(99,102,241,.1);border-radius:6px">${dayName} ${dt} — ${items.length} interventi</div>`;
+    for(const p of items){
+      const tid=p.tecnicoId||p.TecnicoID||'?';
+      if(!tecColors[tid]){tecColors[tid]=palette[ci%palette.length];ci++;}
+      const color=tecColors[tid];
+      const tNome=p.TecnicoNome||p.tecnicoNome||tid;
+      const cNome=p.ClienteNome||p.clienteNome||p.clienteId||'';
+      const note=(p.note||p.Note||'').substring(0,80);
+      const isModified=modifiedRows.has(p._origIdx);
+      const tipo=p.tipo||p.Tipo||'tagliando';
+      const tipoIcon=tipo.includes('install')?'🏗️':tipo.includes('urgenz')?'🚨':'🔧';
+
+      html+=`<div style="display:flex;gap:8px;align-items:center;padding:6px 10px;border-left:3px solid ${isModified?'#10B981':color};margin-bottom:3px;background:${isModified?'rgba(16,185,129,.08)':'rgba(255,255,255,.03)'};border-radius:0 6px 6px 0;font-size:.75rem${isModified?';border:1px solid rgba(16,185,129,.2)':''}">
+        <span style="font-size:.9rem">${tipoIcon}</span>
+        <span style="color:${color};font-weight:600;min-width:100px">${tNome}</span>
+        <span style="color:rgba(255,255,255,.6);min-width:120px">${cNome}</span>
+        <span style="color:rgba(255,255,255,.4);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${note}</span>
+        ${isModified?'<span style="font-size:.65rem;padding:2px 6px;background:rgba(16,185,129,.2);color:#10B981;border-radius:4px;font-weight:600">OTTIMIZZATO</span>':''}
+      </div>`;
+    }
+  }
+  container.innerHTML=html||'<p style="color:rgba(255,255,255,.4);text-align:center;padding:20px">Nessun intervento</p>';
+}
+
+function aiApplyToSystem(){
+  if(!AI_PLAN?.piano?.length){toast('Nessun piano da applicare','err');return;}
+  // Reuse existing apply logic
+  if(typeof applyAIPlanToSystem==='function'){applyAIPlanToSystem();return;}
+  toast('Piano pronto per il download. Usa "Scarica Excel" per esportarlo.','ok');
 }
 
 // ═══ STEP 3: BUILD PROMPT & EDITOR ═══

@@ -3118,6 +3118,8 @@ async function handlePost(action, body, env) {
           macchinaLabel: `${m.modello||m.tipo||m.seriale||'?'}`,
           cliente: m.cliente_id || '?',
           clienteId: m.cliente_id || '',
+          clienteNome: cli?.nome_interno || cli?.nome_account || m.cliente_id || '?',
+          citta: cli?.citta_fatturazione || '',
           data: m.prossimo_tagliando,
           giorniScadenza: ggDiff,
           urgenza: ggDiff < 0 ? 'SCADUTO' : ggDiff <= 7 ? 'URGENTE' : ggDiff <= 30 ? 'PROSSIMO' : 'PROGRAMMATO',
@@ -3128,12 +3130,15 @@ async function handlePost(action, body, env) {
       for (const a of allAssets) {
         if (!a.prossimo_controllo) continue;
         const ggDiff = Math.round((new Date(a.prossimo_controllo) - new Date(oggi)) / 86400000);
+        const aCli = allClienti.find(c => c.codice_m3 === a.codice_m3) || {};
         tagItems.push({
           tipo: 'controllo',
           macchina: a.id || `ASSET_${a.numero_serie||'?'}`,
           macchinaLabel: `${a.nome_asset||a.modello||a.gruppo_attrezzatura||'?'}`,
           cliente: a.codice_m3 || '?',
           clienteId: a.codice_m3 || '',
+          clienteNome: aCli?.nome_interno || aCli?.nome_account || a.codice_m3 || '?',
+          citta: aCli?.citta_fatturazione || '',
           data: a.prossimo_controllo,
           giorniScadenza: ggDiff,
           urgenza: ggDiff < 0 ? 'SCADUTO' : ggDiff <= 7 ? 'URGENTE' : ggDiff <= 30 ? 'PROSSIMO' : 'PROGRAMMATO'
@@ -4867,22 +4872,76 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         return pianoNoDup;
       }
 
-      // ─── DETERMINISTIC PLAN BUILDER ───
-      // Costruisce un piano COMPLETO basato su regole, poi (opzionalmente) lo passa all'AI per ottimizzare
+      // ─── DETERMINISTIC PLAN BUILDER (con matching ZONE GEOGRAFICHE) ───
       function _buildDeterministicPlan(workDays, tagBacklog, installBacklog) {
         const plan = [];
-        let tagIdx = 0;
         let instIdx = 0;
+
+        // Copia backlog per gestire splice/assegnamento senza modificare l'originale
+        const backlog = tagBacklog.map((t, i) => ({ ...t, _idx: i }));
+        const usedMachines = new Set(); // macchina_id o macchinaLabel già assegnate
 
         // Tecnici attivi (no admin)
         const tecAttivi2 = allTecnici.filter(t => (t.ruolo || '').toLowerCase() !== 'admin');
         const seniors2 = tecAttivi2.filter(t => _seniorIds.includes(t.id));
         const juniors2 = tecAttivi2.filter(t => _juniorIds.includes(t.id));
+        // Tecnici "indipendenti" = non junior, non senior (es: tecnico semplice senza affiancamento)
         const indipendenti2 = tecAttivi2.filter(t => !_juniorIds.includes(t.id) && !_seniorIds.includes(t.id));
 
-        // Clienti map per nome leggibile
+        // Clienti map per nome leggibile e zona
         const cliMap = {};
-        (allClienti || []).forEach(c => { if (c.codice_m3) cliMap[c.codice_m3] = c.nome_interno || c.nome_account || c.codice_m3; });
+        (allClienti || []).forEach(c => {
+          if (c.codice_m3) cliMap[c.codice_m3] = {
+            nome: c.nome_interno || c.nome_account || c.codice_m3,
+            citta: (c.citta_fatturazione || '').toLowerCase(),
+            prov: (c.provincia || c.prov || '').toLowerCase()
+          };
+        });
+
+        // ── ZONA MATCHING: cerca nel backlog un tagliando vicino alla base del tecnico ──
+        // Strategia: cerca prima nella stessa città, poi stessa provincia, poi qualsiasi
+        function pickFromBacklog(tecBase) {
+          const base = (tecBase || '').toLowerCase();
+          if (!base) {
+            // Nessuna base: prendi il più urgente disponibile
+            const idx = backlog.findIndex(b => !usedMachines.has(b.macchina) && !usedMachines.has(b.macchinaLabel));
+            return idx >= 0 ? backlog.splice(idx, 1)[0] : null;
+          }
+
+          // 1. Stessa città (match esatto o contiene)
+          let idx = backlog.findIndex(b => {
+            if (usedMachines.has(b.macchina) || usedMachines.has(b.macchinaLabel)) return false;
+            const bCitta = (b.citta || '').toLowerCase();
+            return bCitta && (bCitta.includes(base) || base.includes(bCitta));
+          });
+          if (idx >= 0) return backlog.splice(idx, 1)[0];
+
+          // 2. Stessa provincia (match sulla provincia del cliente)
+          idx = backlog.findIndex(b => {
+            if (usedMachines.has(b.macchina) || usedMachines.has(b.macchinaLabel)) return false;
+            const cli = cliMap[b.clienteId];
+            if (!cli) return false;
+            return cli.prov && cli.prov.includes(base.substring(0, 3));
+          });
+          if (idx >= 0) return backlog.splice(idx, 1)[0];
+
+          // 3. Cerca nelle prime 30 posizioni (look-ahead limitato per performance)
+          idx = backlog.findIndex((b, i) => {
+            if (i > 30) return false;
+            return !usedMachines.has(b.macchina) && !usedMachines.has(b.macchinaLabel);
+          });
+          if (idx >= 0) return backlog.splice(idx, 1)[0];
+
+          // 4. Fallback: qualsiasi
+          idx = backlog.findIndex(b => !usedMachines.has(b.macchina) && !usedMachines.has(b.macchinaLabel));
+          return idx >= 0 ? backlog.splice(idx, 1)[0] : null;
+        }
+
+        function makeNote(item) {
+          return `${item.macchinaLabel || '?'} | scad:${item.data || '?'}${item.oreLavoro ? ' | ore:' + item.oreLavoro : ''}`;
+        }
+
+        let totalTagUsed = 0;
 
         for (const giorno of workDays) {
           const usedToday = new Set();
@@ -4894,7 +4953,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             if (inst.data_fine_prevista && inst.data_fine_prevista < giorno) { instIdx++; continue; }
             const tecIds = inst.tecnici_ids ? (Array.isArray(inst.tecnici_ids) ? inst.tecnici_ids : inst.tecnici_ids.split(',').map(s=>s.trim())) : [];
             let assigned = false;
-            const assignTec = tecIds.length > 0 ? tecIds : [];
+            const assignTec = tecIds.length > 0 ? [...tecIds] : [];
             if (!assignTec.length) {
               const free = seniors2.find(t => !usedToday.has(t.id) && !_isAbsent(t.id, giorno) && !_isTrasferta(t.id, giorno) && !_isReperibilita(t.id, giorno));
               if (free) assignTec.push(free.id);
@@ -4903,11 +4962,12 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               if (usedToday.has(tid)) continue;
               const tec = tecAttivi2.find(t => t.id === tid);
               if (!tec || _isAbsent(tid, giorno) || _isTrasferta(tid, giorno)) continue;
+              const cNome = cliMap[inst.cliente_id]?.nome || inst.cliente_id || '?';
               plan.push({
                 id: null, data: giorno, tecnicoId: tid,
                 clienteId: inst.cliente_id || '', tipo: 'installazione',
                 oraInizio: '08:00', durataOre: 8, furgone: tec.automezzo_id || '',
-                note: `Installazione presso ${cliMap[inst.cliente_id] || inst.cliente_id || '?'}`
+                note: `Installazione presso ${cNome}`
               });
               usedToday.add(tid);
               assigned = true;
@@ -4916,28 +4976,31 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             else break;
           }
 
-          // B) Senior indipendenti + tecnici indipendenti → 1 tagliando ciascuno dal backlog
-          const allIndep = [...seniors2, ...indipendenti2];
-          for (const tec of allIndep) {
+          // B) SENIOR → 1 tagliando nella propria ZONA dal backlog
+          for (const tec of seniors2) {
             if (usedToday.has(tec.id)) continue;
             if (_isAbsent(tec.id, giorno) || _isTrasferta(tec.id, giorno) || _isReperibilita(tec.id, giorno)) continue;
-            if (tagIdx >= tagBacklog.length) break;
 
-            const item = tagBacklog[tagIdx];
+            const item = pickFromBacklog(tec.base);
+            if (!item) continue;
+
+            usedMachines.add(item.macchina);
+            usedMachines.add(item.macchinaLabel);
+            totalTagUsed++;
+
             plan.push({
               id: null, data: giorno, tecnicoId: tec.id,
               clienteId: item.clienteId || '', tipo: item.tipo || 'tagliando',
               oraInizio: '08:00',
               durataOre: item.oreLavoro ? Math.min(8, Math.max(4, item.oreLavoro / 500)) : 6,
               furgone: tec.automezzo_id || '',
-              note: `${item.macchinaLabel || '?'} | scad:${item.data || '?'}${item.oreLavoro ? ' | ore:' + item.oreLavoro : ''}`,
+              note: makeNote(item),
               macchina_id: item.macchina || null
             });
             usedToday.add(tec.id);
-            tagIdx++;
           }
 
-          // C) Junior → affianca a un senior GIÀ assegnato oggi
+          // C) JUNIOR → affiancati a un senior GIÀ assegnato oggi (STESSO giorno + cliente)
           for (const jr of juniors2) {
             if (usedToday.has(jr.id)) continue;
             if (_isAbsent(jr.id, giorno) || _isReperibilita(jr.id, giorno) || _isTrasferta(jr.id, giorno)) continue;
@@ -4959,8 +5022,32 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               usedToday.add(jr.id);
             }
           }
+
+          // D) INDIPENDENTI → tagliando nella propria zona
+          for (const tec of indipendenti2) {
+            if (usedToday.has(tec.id)) continue;
+            if (_isAbsent(tec.id, giorno) || _isTrasferta(tec.id, giorno) || _isReperibilita(tec.id, giorno)) continue;
+
+            const item = pickFromBacklog(tec.base);
+            if (!item) continue;
+
+            usedMachines.add(item.macchina);
+            usedMachines.add(item.macchinaLabel);
+            totalTagUsed++;
+
+            plan.push({
+              id: null, data: giorno, tecnicoId: tec.id,
+              clienteId: item.clienteId || '', tipo: item.tipo || 'tagliando',
+              oraInizio: '08:00',
+              durataOre: item.oreLavoro ? Math.min(8, Math.max(4, item.oreLavoro / 500)) : 6,
+              furgone: tec.automezzo_id || '',
+              note: makeNote(item),
+              macchina_id: item.macchina || null
+            });
+            usedToday.add(tec.id);
+          }
         }
-        return { plan, tagUsed: tagIdx, instUsed: instIdx };
+        return { plan, tagUsed: totalTagUsed, instUsed: instIdx };
       }
 
       // ─── GENERAZIONE: chunking settimanale per mese intero ───
@@ -5127,12 +5214,217 @@ ${instructions}`;
           // DECODE: rimetti nomi reali
           const decoded = decodePiano(fixed);
           const allWarnArr = [...allWarnings, ...postProcessWarnings].map(w => anonDecode(w));
-          sse({type:'result', data:{
-            summary: anonDecode(`Piano ${meseTarget}: ${decoded.length} interventi su ${detStats.giorni} giorni — ${detStats.tagUsed} tagliandi + ${detStats.instUsed} installazioni — 100% deterministico`),
+
+          // ═══════════════════════════════════════════════════════
+          // ═══ AI REVIEW PHASE (opzionale): OpenAI + Claude ═══
+          // ═══════════════════════════════════════════════════════
+          const withReview = vincoli.withReview === true || vincoli.withReview === 'true';
+
+          if (!withReview) {
+            // Senza review: restituisci piano deterministico direttamente
+            sse({type:'result', data:{
+              summary: anonDecode(`Piano ${meseTarget}: ${decoded.length} interventi su ${detStats.giorni} giorni — ${detStats.tagUsed} tagliandi + ${detStats.instUsed} installazioni — 100% deterministico`),
+              piano: decoded,
+              warnings: allWarnArr,
+              chunks: 1,
+              engine_used: 'deterministic'
+            }}); return;
+          }
+
+          // ── PHASE 1 COMPLETE: invia piano deterministico al frontend ──
+          sse({type:'phase_complete', phase:1, data:{
+            summary: anonDecode(`Piano base: ${decoded.length} interventi su ${detStats.giorni} giorni`),
             piano: decoded,
             warnings: allWarnArr,
-            chunks: 1,
+            stats: detStats,
             engine_used: 'deterministic'
+          }});
+
+          // ── PHASE 2: AI REVIEW con OpenAI (primary) + Claude (secondary) ──
+          sse({type:'phase_start', phase:2, message:'OpenAI e Claude stanno analizzando il piano...'});
+
+          // Build review context: piano compatto + tecnici + vincoli
+          const tecniciCtx = tecAttivi.map(t => `${t.id}|${t.nome} ${t.cognome}|${t.ruolo}|base:${t.base||'?'}|furgone:${t.automezzo_id||'?'}`).join('\n');
+          const pianoCompatto = decoded.slice(0, 150).map(p =>
+            `${p.Data||p.data}|${p.TecnicoNome||p.tecnicoId}|${p.ClienteNome||p.clienteId}|${p.Tipo||p.tipo}|${(p.Note||p.note||'').substring(0,60)}`
+          ).join('\n');
+
+          const reviewPrompt = `Sei un esperto di ottimizzazione field service per manutenzione robot Lely (mungitrici, alimentatori, etc.).
+Analizza questo piano deterministico e suggerisci 3-8 MIGLIORAMENTI CONCRETI.
+
+REGOLE DI ANALISI:
+- Cerca INEFFICIENZE GEOGRAFICHE: tecnico mandato lontano dalla base quando ce n'è uno più vicino libero
+- Cerca SQUILIBRI DI CARICO: un tecnico ha troppi interventi, un altro troppo pochi
+- Cerca PRIORITÀ ERRATE: macchine SCADUTE pianificate tardi, macchine non urgenti pianificate prima
+- Cerca AFFIANCAMENTI MIGLIORABILI: junior abbinato a senior non ottimale
+- Cerca OTTIMIZZAZIONI TEMPORALI: raggruppare interventi nella stessa zona nello stesso giorno
+
+Per OGNI suggerimento fornisci:
+- id: "SUG_001", "SUG_002", etc.
+- category: "geography" | "workload" | "pairing" | "priority" | "timing"
+- severity: "info" | "warning" | "critical"
+- title: breve (max 10 parole italiano)
+- description: cosa non va e perché (italiano)
+- current: { "data": "YYYY-MM-DD", "tecnicoId": "TEC_xxx", "clienteId": "CLI_xxx" }
+- proposed: { "tecnicoId": "TEC_yyy" (opzionale), "data": "YYYY-MM-DD" (opzionale), "reasoning": "spiegazione" }
+- confidence: 0.0-1.0
+
+TECNICI DISPONIBILI:
+${tecniciCtx}
+
+REGOLE TEAM:
+- Junior (Emanuele, Gino, Giuseppe) devono lavorare con un Senior (Jacopo, Anton, Giovanni)
+- Fabio lavora solo
+- I tecnici hanno basi geografiche — preferire interventi vicini alla base
+
+PIANO DETERMINISTICO (${decoded.length} interventi):
+${pianoCompatto}
+
+Rispondi SOLO JSON valido: {"suggestions":[...], "overall_assessment":"valutazione breve del piano"}`;
+
+          // Lancia OpenAI e Claude in parallelo con timeout
+          async function _reviewOpenAI() {
+            if (!env.OPENAI_KEY) { sse({type:'reviewer_status', engine:'openai', status:'skipped', reason:'OPENAI_KEY non configurata'}); return null; }
+            sse({type:'reviewer_status', engine:'openai', status:'analyzing', progress_pct:10});
+            try {
+              const t0 = Date.now();
+              const res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.OPENAI_KEY}` },
+                body: JSON.stringify({
+                  model: 'gpt-4o-mini',
+                  messages: [
+                    { role: 'system', content: 'Sei un esperto field service optimizer. Rispondi SOLO JSON valido.' },
+                    { role: 'user', content: reviewPrompt }
+                  ],
+                  max_tokens: 4096, temperature: 0.3,
+                  response_format: { type: 'json_object' }
+                })
+              }, 25000);
+              const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+              sse({type:'reviewer_status', engine:'openai', status:'parsing', progress_pct:80, elapsed});
+              if (!res.ok) { sse({type:'reviewer_status', engine:'openai', status:'error', reason:`HTTP ${res.status}`}); return null; }
+              const d = await res.json();
+              const text = d.choices?.[0]?.message?.content || '';
+              if (!text) { sse({type:'reviewer_status', engine:'openai', status:'error', reason:'empty response'}); return null; }
+              const parsed = JSON.parse(text);
+              const sugs = (parsed.suggestions || []).map(s => ({ ...s, engine: 'openai' }));
+              sse({type:'reviewer_status', engine:'openai', status:'complete', count:sugs.length, elapsed, assessment: parsed.overall_assessment || ''});
+              return { suggestions: sugs, assessment: parsed.overall_assessment || '' };
+            } catch(e) {
+              sse({type:'reviewer_status', engine:'openai', status:'error', reason: e.name === 'AbortError' ? 'TIMEOUT 25s' : (e.message||'unknown')});
+              return null;
+            }
+          }
+
+          async function _reviewClaude() {
+            if (!env.ANTHROPIC_KEY) { sse({type:'reviewer_status', engine:'claude', status:'skipped', reason:'ANTHROPIC_KEY non configurata'}); return null; }
+            sse({type:'reviewer_status', engine:'claude', status:'analyzing', progress_pct:10});
+            try {
+              const t0 = Date.now();
+              const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-api-key': env.ANTHROPIC_KEY,
+                  'anthropic-version': '2023-06-01'
+                },
+                body: JSON.stringify({
+                  model: 'claude-haiku-4-5-20251001',
+                  max_tokens: 4096, temperature: 0.3,
+                  system: 'Sei un esperto field service optimizer. Rispondi SOLO JSON valido.',
+                  messages: [{ role: 'user', content: reviewPrompt }]
+                })
+              }, 25000);
+              const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+              sse({type:'reviewer_status', engine:'claude', status:'parsing', progress_pct:80, elapsed});
+              if (!res.ok) { sse({type:'reviewer_status', engine:'claude', status:'error', reason:`HTTP ${res.status}`}); return null; }
+              const d = await res.json();
+              const textBlock = (d.content || []).find(b => b.type === 'text');
+              const text = textBlock?.text || '';
+              if (!text) { sse({type:'reviewer_status', engine:'claude', status:'error', reason:'empty response'}); return null; }
+              const parsed = JSON.parse(text);
+              const sugs = (parsed.suggestions || []).map(s => ({ ...s, engine: 'claude' }));
+              sse({type:'reviewer_status', engine:'claude', status:'complete', count:sugs.length, elapsed, assessment: parsed.overall_assessment || ''});
+              return { suggestions: sugs, assessment: parsed.overall_assessment || '' };
+            } catch(e) {
+              sse({type:'reviewer_status', engine:'claude', status:'error', reason: e.name === 'AbortError' ? 'TIMEOUT 25s' : (e.message||'unknown')});
+              return null;
+            }
+          }
+
+          // ── Lancia entrambi in parallelo ──
+          const [openaiResult, claudeResult] = await Promise.all([_reviewOpenAI(), _reviewClaude()]);
+
+          // ── MERGE suggerimenti ──
+          function _mergeSuggestions(oaiRes, clRes) {
+            const allSugs = [];
+            if (oaiRes?.suggestions) allSugs.push(...oaiRes.suggestions);
+            if (clRes?.suggestions) allSugs.push(...clRes.suggestions);
+            if (!allSugs.length) return { merged: [], assessments: { openai: oaiRes?.assessment, claude: clRes?.assessment } };
+
+            // Dedup per category + data + tecnicoId corrente
+            const dedupMap = new Map();
+            for (const sug of allSugs) {
+              const key = `${sug.category||'?'}|${sug.current?.data||'?'}|${sug.current?.tecnicoId||'?'}`;
+              if (dedupMap.has(key)) {
+                const existing = dedupMap.get(key);
+                if (!existing.sources) existing.sources = [existing.engine || 'unknown'];
+                existing.sources.push(sug.engine || 'unknown');
+                existing.confidence = Math.min(1, (existing.confidence || 0.5) + 0.2); // boost consenso
+                // Arricchisci reasoning se diverso
+                if (sug.proposed?.reasoning && sug.proposed.reasoning !== existing.proposed?.reasoning) {
+                  existing.proposed = existing.proposed || {};
+                  existing.proposed.reasoning = (existing.proposed.reasoning || '') + ' | ' + sug.proposed.reasoning;
+                }
+              } else {
+                sug.sources = [sug.engine || 'unknown'];
+                dedupMap.set(key, sug);
+              }
+            }
+
+            // Ranking: severity × consensus
+            const sevScore = { critical: 3, warning: 2, info: 1 };
+            const merged = [...dedupMap.values()].sort((a, b) => {
+              const aScore = (sevScore[a.severity] || 0) * (a.sources?.length || 1);
+              const bScore = (sevScore[b.severity] || 0) * (b.sources?.length || 1);
+              if (bScore !== aScore) return bScore - aScore;
+              return (b.confidence || 0) - (a.confidence || 0);
+            });
+
+            // Assegna ID sequenziali
+            merged.forEach((s, i) => { s.id = `SUG_${String(i + 1).padStart(3, '0')}`; });
+
+            return {
+              merged,
+              assessments: { openai: oaiRes?.assessment, claude: clRes?.assessment },
+              stats: {
+                openai_count: oaiRes?.suggestions?.length || 0,
+                claude_count: clRes?.suggestions?.length || 0,
+                merged_count: merged.length,
+                consensus_count: merged.filter(s => s.sources?.length > 1).length
+              }
+            };
+          }
+
+          const mergeResult = _mergeSuggestions(openaiResult, claudeResult);
+
+          // ── PHASE 2 COMPLETE: invia suggerimenti ──
+          sse({type:'phase_complete', phase:2, data:{
+            suggestions: mergeResult.merged,
+            assessments: mergeResult.assessments,
+            stats: mergeResult.stats
+          }});
+
+          // ── RESULT FINALE con piano + suggerimenti ──
+          sse({type:'result', data:{
+            summary: anonDecode(`Piano ${meseTarget}: ${decoded.length} interventi — ${mergeResult.merged.length} suggerimenti AI (${mergeResult.stats?.consensus_count || 0} in consenso)`),
+            piano: decoded,
+            warnings: allWarnArr,
+            suggestions: mergeResult.merged,
+            assessments: mergeResult.assessments,
+            chunks: 1,
+            engine_used: 'deterministic+review'
           }}); return;
 
         } else {
