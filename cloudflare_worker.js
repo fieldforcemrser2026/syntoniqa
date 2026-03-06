@@ -9795,7 +9795,8 @@ async function checkInterventoReminders(env) {
         ).catch(() => {});
       }
     }
-    env.DEBUG_LOG && console.log(`[CRON] checkInterventoReminders: ${pianificati?.length || 0} pianificati, ${inCorso?.length || 0} in_corso checked`);
+  }
+  env.DEBUG_LOG && console.log(`[CRON] checkInterventoReminders: ${pianificati?.length || 0} pianificati, ${inCorso?.length || 0} in_corso checked`);
   } catch (e) {
     console.error(JSON.stringify({
       context: 'checkInterventoReminders',
