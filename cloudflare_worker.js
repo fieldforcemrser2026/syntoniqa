@@ -4362,48 +4362,91 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       }
 
       // ─── Parse vincoli per estrarre regole programmatiche ───
-      // assenti: array di {id, dataInizio?, dataFine?, permanente} per controllo date-aware
-      // Usa _autoParseVincoloServer per estrarre soggetti/date dal testo
-      const vincoliRules = { assenti: [], affiancamenti: [] };
+      // Il planner deterministico DEVE applicare TUTTI i vincoli — non solo passarli come testo
+      const vincoliRules = { assenti: [], affiancamenti: [], clientiEsclusi: new Set(), customRules: [] };
+
+      // Helper: parsea una singola regola testuale ed estrae azioni programmatiche
+      function _parseRuleAction(testo, soggetti, dataInizio, dataFine, permanente) {
+        if (!testo) return;
+        const txt = testo.toLowerCase();
+
+        // ── ASSENZE: tecnici non disponibili ──
+        if (txt.match(/assent|non disponibil|ferie|malattia|indisponibil/)) {
+          for (const id of soggetti) {
+            vincoliRules.assenti.push({ id, dataInizio, dataFine, permanente: !!permanente });
+          }
+        }
+
+        // ── AFFIANCAMENTI: junior con senior ──
+        if (txt.match(/affianc|accompagn|coppia|deve lavorare con|junior.*senior/)) {
+          const juniorIds = soggetti.filter(id => {
+            const t = allTecnici.find(tt => tt.id === id);
+            return t && _isJunior(t);
+          });
+          const seniorIds = soggetti.filter(id => {
+            const t = allTecnici.find(tt => tt.id === id);
+            return t && _isSenior(t);
+          });
+          vincoliRules.affiancamenti.push({
+            junior: juniorIds.length ? juniorIds : soggetti,
+            senior: seniorIds.length ? seniorIds : [],
+            testo
+          });
+        }
+
+        // ── ESCLUSIONE CLIENTI: "non paga", "non va assistito", "sospeso", "non pianificare" ──
+        if (txt.match(/non paga|non va assistit|sospes[oa]|non pianificar|non programmar|non manuten|esclud|non servir|non inviare|bloccato/)) {
+          // Cerca nomi di clienti nel testo
+          for (const cli of allClienti) {
+            const nomeInt = (cli.nome_interno || '').toLowerCase();
+            const nomeAcc = (cli.nome_account || '').toLowerCase();
+            const codice = (cli.codice_m3 || '').toLowerCase();
+            if (nomeInt && nomeInt.length > 3 && txt.includes(nomeInt)) {
+              vincoliRules.clientiEsclusi.add(cli.codice_m3 || cli.id);
+            } else if (nomeAcc && nomeAcc.length > 3 && txt.includes(nomeAcc)) {
+              vincoliRules.clientiEsclusi.add(cli.codice_m3 || cli.id);
+            } else if (codice && codice.length > 2 && txt.includes(codice)) {
+              vincoliRules.clientiEsclusi.add(cli.codice_m3 || cli.id);
+            }
+          }
+        }
+
+        // ── BASE/CITTÀ TECNICO: "Giovanni è di Bologna", "Giuseppe base Bologna" ──
+        if (txt.match(/\bbase\b|è di\b|sono di\b|abita a\b|risiede a\b|proviene da/)) {
+          for (const id of soggetti) {
+            const tec = allTecnici.find(t => t.id === id);
+            if (!tec) continue;
+            // Estrai città dal testo
+            const cityMatch = txt.match(/(?:base|è di|sono di|abita a|risiede a)\s+(\w[\w\s]*\w)/);
+            if (cityMatch) {
+              const city = cityMatch[1].trim().toLowerCase();
+              // Se la base nel DB è vuota o diversa, aggiornala in memoria
+              if (!tec.base || tec.base.toLowerCase() !== city) {
+                tec.base = city;
+              }
+            }
+          }
+        }
+
+        // Salva comunque come custom rule per logging/debug
+        vincoliRules.customRules.push({ testo, soggetti, dataInizio, dataFine, permanente });
+      }
+
       if (vincoliCfg.length) {
         try {
           const vc = safeJSON(vincoliCfg[0].valore, {vincoli:[]});
           const oggi2 = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
 
           // Processa manual_rules (v3 text-only + v2)
-          const manRules = vc.manual_rules || [];
-          for (const r of manRules) {
+          for (const r of (vc.manual_rules || [])) {
             if (!r.testo) continue;
             const parsed = _autoParseVincoloServer(r.testo);
-            // Merge: preferisci soggetti salvati se presenti, altrimenti auto-parsati
             const soggetti = (r.soggetti?.length) ? r.soggetti : parsed.soggetti;
             const perm = r.permanente !== undefined ? r.permanente : parsed.permanente;
             const dFine = r.data_fine || parsed.dataFine;
             const dInizio = r.data_inizio || parsed.dataInizio;
             if (!perm && dFine && dFine < oggi2) continue;
-
-            const txt = (r.testo || '').toLowerCase();
-            if (txt.match(/assent|non disponibil|ferie|malattia|indisponibil/)) {
-              for (const id of soggetti) {
-                vincoliRules.assenti.push({ id, dataInizio: dInizio, dataFine: dFine, permanente: !!perm });
-              }
-            }
-            if (txt.match(/affianc|accompagn|coppia|deve lavorare con|junior.*senior/)) {
-              // Separa junior e senior dal testo se possibile
-              const juniorIds = soggetti.filter(id => {
-                const t = allTecnici.find(tt => tt.id === id);
-                return t && ['tecnico junior'].includes((t.ruolo||'').toLowerCase());
-              });
-              const seniorIds = soggetti.filter(id => {
-                const t = allTecnici.find(tt => tt.id === id);
-                return t && ['caposquadra','tecnico senior'].includes((t.ruolo||'').toLowerCase());
-              });
-              vincoliRules.affiancamenti.push({
-                junior: juniorIds.length ? juniorIds : soggetti,
-                senior: seniorIds.length ? seniorIds : [],
-                testo: r.testo
-              });
-            }
+            _parseRuleAction(r.testo, soggetti, dInizio, dFine, perm);
           }
 
           // LEGACY: old categories format
@@ -4416,21 +4459,22 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               const dFine = r.data_fine || parsed.dataFine;
               const dInizio = r.data_inizio || parsed.dataInizio;
               if (!perm && dFine && dFine < oggi2) continue;
-
-              const txt = (r.testo || '').toLowerCase();
-              if (txt.match(/assent|non disponibil|ferie|malattia|indisponibil/)) {
-                for (const id of soggetti) {
-                  vincoliRules.assenti.push({ id, dataInizio: dInizio, dataFine: dFine, permanente: !!perm });
-                }
-              }
-              if (txt.match(/affianc|accompagn|coppia|deve lavorare con|junior.*senior/)) {
-                vincoliRules.affiancamenti.push({
-                  junior: r.soggetti || soggetti,
-                  senior: r.riferimenti || [],
-                  testo: r.testo
-                });
-              }
+              _parseRuleAction(r.testo, soggetti, dInizio, dFine, perm);
             }
+          }
+        } catch {}
+      }
+
+      // ── PARSE ANCHE planner_rules (regole persistenti) ──
+      if (plannerRulesCfg?.length && plannerRulesCfg[0]?.valore) {
+        try {
+          const pr = safeJSON(plannerRulesCfg[0].valore, { rules: [] });
+          const rules = pr.rules || (typeof pr === 'string' ? pr.split('\n') : []);
+          for (const rule of rules) {
+            const txt = typeof rule === 'string' ? rule : (rule.testo || '');
+            if (!txt.trim()) continue;
+            const parsed = _autoParseVincoloServer(txt);
+            _parseRuleAction(txt, parsed.soggetti, parsed.dataInizio, parsed.dataFine, parsed.permanente);
           }
         } catch {}
       }
@@ -4612,7 +4656,28 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           postProcessWarnings.push(`⚠️ RIPETIZIONI: solo ${macchUniche} macchine uniche su ${nTagliandi} tagliandi — troppe ripetizioni`);
         }
 
-        return piano;
+        // 4. VINCOLI: rimuovi righe per clienti esclusi (Bonvicini etc.)
+        if (vincoliRules.clientiEsclusi.size > 0) {
+          const beforeLen = piano.length;
+          const removed = [];
+          for (let i = piano.length - 1; i >= 0; i--) {
+            if (vincoliRules.clientiEsclusi.has(piano[i].clienteId) || vincoliRules.clientiEsclusi.has(piano[i].cliente)) {
+              removed.push(`${piano[i].tecnico || piano[i].tecnicoId} @ ${piano[i].cliente || piano[i].clienteId} il ${piano[i].data}`);
+              piano.splice(i, 1);
+            }
+          }
+          if (removed.length) {
+            postProcessWarnings.push(`🚫 VINCOLO CLIENTI ESCLUSI: rimosse ${removed.length} righe (clienti: ${[...vincoliRules.clientiEsclusi].join(', ')})`);
+          }
+        }
+
+        // 5. VALIDAZIONE: rimuovi righe senza tecnico o cliente (nessun buco!)
+        const blanks = piano.filter(p => !p.tecnicoId || !p.clienteId);
+        if (blanks.length) {
+          postProcessWarnings.push(`⚠️ Rimosse ${blanks.length} righe senza tecnico o cliente assegnato`);
+        }
+
+        return piano.filter(p => p.tecnicoId && p.clienteId);
       }
 
       // ── HELPER: check disponibilità tecnico (usato da autoFixPlan E _buildDeterministicPlan) ──
@@ -5372,11 +5437,28 @@ ${instructions}`;
 
           sse({type:'progress', message:'📐 Generazione piano deterministico...', chunk:1, total:1});
 
+          // ── APPLICA VINCOLI DETERMINISTICI al backlog ──
+          // 1) Escludi clienti bloccati/sospesi/non paganti
+          let tagBacklogFiltered = tagItems;
+          if (vincoliRules.clientiEsclusi.size > 0) {
+            const before = tagBacklogFiltered.length;
+            tagBacklogFiltered = tagBacklogFiltered.filter(t => !vincoliRules.clientiEsclusi.has(t.clienteId) && !vincoliRules.clientiEsclusi.has(t.cliente));
+            const excluded = before - tagBacklogFiltered.length;
+            if (excluded > 0) {
+              allWarnings.add(`🚫 Esclusi ${excluded} tagliandi per clienti bloccati: ${[...vincoliRules.clientiEsclusi].join(', ')}`);
+            }
+          }
+
+          // 2) Log vincoli applicati per debug
+          sse({type:'vincoli_applied', assenti: vincoliRules.assenti.length, affiancamenti: vincoliRules.affiancamenti.length,
+               clientiEsclusi: [...vincoliRules.clientiEsclusi], customRules: vincoliRules.customRules.length,
+               vincoliText_length: vincoliText?.length || 0});
+
           // Raccogli TUTTI i giorni lavorativi dal chunking
           const allChunkDays = chunks.flatMap(c => c.workDays.map(wd => wd.split('(')[0]));
 
-          // Build deterministic plan
-          const detResult = _buildDeterministicPlan(allChunkDays, tagItems, allInstallazioni || []);
+          // Build deterministic plan (con backlog filtrato)
+          const detResult = _buildDeterministicPlan(allChunkDays, tagBacklogFiltered, allInstallazioni || []);
           const detPlan = detResult.plan;
           const detStats = {
             righe: detPlan.length,
@@ -5442,16 +5524,22 @@ ${instructions}`;
           const reviewPrompt = `Sei un esperto di ottimizzazione field service per manutenzione robot Lely (mungitrici, alimentatori, etc.).
 Analizza questo piano deterministico e suggerisci 3-8 MIGLIORAMENTI CONCRETI.
 
+########## VINCOLI E REGOLE ATTIVE (DEVI rispettare questi vincoli nell'analisi!) ##########
+${vincoliText || '(Nessun vincolo configurato)'}
+##########
+
 REGOLE DI ANALISI:
+- VERIFICA che il piano rispetti TUTTI i vincoli sopra elencati — se non li rispetta, segnala come "critical"
 - Cerca INEFFICIENZE GEOGRAFICHE: tecnico mandato lontano dalla base quando ce n'è uno più vicino libero
 - Cerca SQUILIBRI DI CARICO: un tecnico ha troppi interventi, un altro troppo pochi
 - Cerca PRIORITÀ ERRATE: macchine SCADUTE pianificate tardi, macchine non urgenti pianificate prima
 - Cerca AFFIANCAMENTI MIGLIORABILI: junior abbinato a senior non ottimale
 - Cerca OTTIMIZZAZIONI TEMPORALI: raggruppare interventi nella stessa zona nello stesso giorno
+- Cerca VIOLAZIONI VINCOLI: clienti esclusi ancora nel piano, tecnici in reperibilità con tagliandi, etc.
 
 Per OGNI suggerimento fornisci:
 - id: "SUG_001", "SUG_002", etc.
-- category: "geography" | "workload" | "pairing" | "priority" | "timing"
+- category: "geography" | "workload" | "pairing" | "priority" | "timing" | "constraint_violation"
 - severity: "info" | "warning" | "critical"
 - title: breve (max 10 parole italiano)
 - description: cosa non va e perché (italiano)
