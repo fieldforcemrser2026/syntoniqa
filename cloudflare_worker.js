@@ -3419,61 +3419,60 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           sse({type:'moa_start', engines: parallelEngines, mode: 'best_of'});
           parallelEngines.forEach(n => onEngine?.({engine:n, status:'trying'}));
 
-          // BEST-OF: lancia tutti in parallelo, aspetta TUTTE le risposte, scegli la migliore
-          const raceResult = await new Promise((resolve) => {
-            const results = [];
-            let doneCount = 0;
-            const total = parallelEngines.length;
-            let resolved = false;
+          // BEST-OF: lancia tutti in parallelo con Promise.allSettled + timeout
+          const raceResult = await (async () => {
+            const engineTimeout = 55000; // 55s per singolo engine (impostato nei try* functions)
+            const globalTimeout = 60000; // 60s max totale — aspetta tutte le risposte
 
-            function checkAllDone() {
-              doneCount++;
-              if (doneCount >= total && !resolved) {
-                resolved = true;
-                if (results.length > 0) {
-                  results.sort((a, b) => b.score - a.score);
-                  resolve(results[0]);
-                } else {
-                  resolve(null);
-                }
-              }
-            }
-
-            parallelEngines.forEach(async (name) => {
+            // Crea una promise per ogni engine con timeout individuale
+            const enginePromises = parallelEngines.map(async (name) => {
               try {
                 const eng = engines[name];
                 const text = await eng.tryFn(promptText);
                 if (text) {
                   const { score } = _scoreAIResponse(text);
                   if (score >= 10) {
-                    results.push({ name, text, score });
                     onEngine?.({engine:name, status:'ok', score});
+                    return { name, text, score };
                   } else {
                     onEngine?.({engine:name, status:'low_score', score});
+                    return null;
                   }
                 } else {
                   onEngine?.({engine:name, status:'failed'});
+                  return null;
                 }
               } catch(e) {
                 onEngine?.({engine:name, status:'failed', error: e.message});
                 sse({type:'engine_debug', engine:name, status:'exception', reason:e.message||'unknown'});
+                return null;
               }
-              checkAllDone();
             });
 
-            // Timeout: 45s max per chunk — aspetta tutti i motori
-            setTimeout(() => {
-              if (!resolved) {
-                resolved = true;
-                if (results.length > 0) {
-                  results.sort((a, b) => b.score - a.score);
-                  resolve(results[0]);
-                } else {
-                  resolve(null);
-                }
-              }
-            }, 45000);
-          });
+            // Race: allSettled vs timeout globale
+            const timeoutPromise = new Promise(r => setTimeout(() => r('TIMEOUT'), globalTimeout));
+            const settled = await Promise.race([
+              Promise.allSettled(enginePromises).then(res => res.map(r => r.status === 'fulfilled' ? r.value : null).filter(Boolean)),
+              timeoutPromise
+            ]);
+
+            // Se timeout, raccogli i risultati parziali già completati
+            let results;
+            if (settled === 'TIMEOUT') {
+              sse({type:'engine_debug', engine:'MOA', status:'timeout', reason:`Global timeout ${globalTimeout}ms — checking partial results`});
+              // Attendi ancora 200ms per raccogliere le ultime risposte
+              const partial = await Promise.allSettled(enginePromises.map(p => Promise.race([p, new Promise(r => setTimeout(() => r(null), 200))])));
+              results = partial.map(r => r.status === 'fulfilled' ? r.value : null).filter(Boolean);
+            } else {
+              results = settled;
+            }
+
+            if (results.length > 0) {
+              results.sort((a, b) => b.score - a.score);
+              return results[0];
+            }
+            return null;
+          })();
 
           if (raceResult) {
             sse({type:'moa_result', winner: raceResult.name, bestScore: raceResult.score, mode: 'best_of', candidates: parallelEngines.length});
@@ -3546,7 +3545,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'gemini', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'gemini', status:'exception', reason});
           return null;
         }
@@ -3565,7 +3564,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 2048, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          }, 40000);
+          }, 55000);
           sse({type:'engine_debug', engine:'cerebras', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'cerebras', status:res.status, reason:'rate_limit_or_auth'});
@@ -3582,7 +3581,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'cerebras', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'cerebras', status:'exception', reason});
           return null;
         }
@@ -3600,7 +3599,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 16384, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          }, 40000);
+          }, 55000);
           sse({type:'engine_debug', engine:'groq', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'groq', status:res.status, reason:'rate_limit_or_auth'});
@@ -3617,7 +3616,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'groq', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'groq', status:'exception', reason});
           return null;
         }
@@ -3635,7 +3634,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 16384, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          }, 40000);
+          }, 55000);
           sse({type:'engine_debug', engine:'mistral', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'mistral', status:res.status, reason:'rate_limit_or_auth'});
@@ -3652,7 +3651,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'mistral', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'mistral', status:'exception', reason});
           return null;
         }
@@ -3670,7 +3669,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 16384, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          }, 40000);
+          }, 55000);
           sse({type:'engine_debug', engine:'deepseek', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'deepseek', status:res.status, reason:'rate_limit_or_auth'});
@@ -3691,7 +3690,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'deepseek', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'deepseek', status:'exception', reason});
           return null;
         }
@@ -3716,7 +3715,9 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       async function tryAnthropic(promptText) {
         try {
           // Claude Haiku 4.5 — veloce, economico ($1/M in, $5/M out), qualità >> Llama
-          sse({type:'engine_debug', engine:'anthropic', status:'calling', reason:'Calling Claude Haiku 4.5...'});
+          const promptLen = promptText.length;
+          sse({type:'engine_debug', engine:'anthropic', status:'calling', reason:`Calling Claude Haiku 4.5... (prompt: ${promptLen} chars)`});
+          const t0 = Date.now();
           const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
             method: 'POST',
             headers: {
@@ -3731,11 +3732,13 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               system: sysPrompt,
               messages: [{ role: 'user', content: promptText }]
             })
-          }, 40000);
-          sse({type:'engine_debug', engine:'anthropic', status:'response', reason:`HTTP ${res.status}`});
+          }, 55000); // 55s — prompt lunghi possono richiedere più tempo
+          const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+          sse({type:'engine_debug', engine:'anthropic', status:'response', reason:`HTTP ${res.status} in ${elapsed}s`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
-            sse({type:'engine_debug', engine:'anthropic', status:res.status, reason:'rate_limit_or_auth'});
-            return null; // NON disabilitare — 429 è temporaneo
+            const errBody = await res.text().catch(()=>'');
+            sse({type:'engine_debug', engine:'anthropic', status:res.status, reason:`rate_limit_or_auth: ${errBody.substring(0,200)}`});
+            return null;
           }
           if (!res.ok) {
             const errBody = await res.text().catch(()=>'');
@@ -3745,11 +3748,14 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           const d = await res.json();
           const textBlock = (d.content || []).find(b => b.type === 'text');
           const text = textBlock?.text || null;
-          if (!text) sse({type:'engine_debug', engine:'anthropic', status:200, reason:'empty_response', raw:JSON.stringify(d).substring(0,200)});
-          else sse({type:'engine_debug', engine:'anthropic', status:'ok', reason:`${text.length} chars received`});
+          if (!text) {
+            sse({type:'engine_debug', engine:'anthropic', status:200, reason:`empty_response — stop: ${d.stop_reason||'?'}, usage: ${JSON.stringify(d.usage||{})}`, raw:JSON.stringify(d).substring(0,200)});
+          } else {
+            sse({type:'engine_debug', engine:'anthropic', status:'ok', reason:`${text.length} chars in ${elapsed}s`});
+          }
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'anthropic', status:'exception', reason});
           return null;
         }
@@ -3758,22 +3764,26 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       async function tryOpenAI(promptText) {
         try {
           // GPT-4o-mini — veloce (2-5s), economico ($0.15/M in, $0.60/M out), qualità >> Llama
-          sse({type:'engine_debug', engine:'openai', status:'calling', reason:'Calling GPT-4o-mini...'});
+          const promptLen = promptText.length;
+          sse({type:'engine_debug', engine:'openai', status:'calling', reason:`Calling GPT-4o-mini... (prompt: ${promptLen} chars)`});
+          const bodyPayload = JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
+            max_tokens: 8192, temperature: 0.3,
+            response_format: { type: 'json_object' }
+          });
+          const t0 = Date.now();
           const res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.OPENAI_KEY}` },
-            body: JSON.stringify({
-              model: 'gpt-4o-mini',
-              messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
-              max_tokens: 8192, temperature: 0.3,
-              response_format: { type: 'json_object' }
-            })
-          }, 40000);
-          sse({type:'engine_debug', engine:'openai', status:'response', reason:`HTTP ${res.status}`});
+            body: bodyPayload
+          }, 55000); // 55s — GPT-4o-mini può essere lento con prompt lunghi
+          const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+          sse({type:'engine_debug', engine:'openai', status:'response', reason:`HTTP ${res.status} in ${elapsed}s`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             const errBody = await res.text().catch(()=>'');
             sse({type:'engine_debug', engine:'openai', status:res.status, reason:`rate_limit_or_auth: ${errBody.substring(0,200)}`});
-            return null; // NON disabilitare — 429 è temporaneo
+            return null;
           }
           if (!res.ok) {
             const errBody = await res.text().catch(()=>'');
@@ -3782,11 +3792,14 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           }
           const d = await res.json();
           const text = d.choices?.[0]?.message?.content || null;
-          if (!text) sse({type:'engine_debug', engine:'openai', status:200, reason:'empty_response'});
-          else sse({type:'engine_debug', engine:'openai', status:'ok', reason:`${text.length} chars received`});
+          if (!text) {
+            sse({type:'engine_debug', engine:'openai', status:200, reason:`empty_response — finish_reason: ${d.choices?.[0]?.finish_reason||'?'}, usage: ${JSON.stringify(d.usage||{})}`});
+          } else {
+            sse({type:'engine_debug', engine:'openai', status:'ok', reason:`${text.length} chars in ${elapsed}s`});
+          }
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'openai', status:'exception', reason});
           return null;
         }
@@ -3812,7 +3825,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 16384, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          }, 40000);
+          }, 55000);
           sse({type:'engine_debug', engine:'openrouter', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'openrouter', status:res.status, reason:'rate_limit_or_auth'});
@@ -3829,7 +3842,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'openrouter', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'openrouter', status:'exception', reason});
           return null;
         }
@@ -3848,7 +3861,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 4096, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          }, 40000);
+          }, 55000);
           sse({type:'engine_debug', engine:'fireworks', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'fireworks', status:res.status, reason:'rate_limit_or_auth'});
@@ -3865,7 +3878,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'fireworks', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'fireworks', status:'exception', reason});
           return null;
         }
@@ -3884,7 +3897,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               messages: [{ role: 'system', content: sysPrompt + '\nIMPORTANTE: Rispondi ESCLUSIVAMENTE con JSON valido. Nessun testo prima o dopo.' }, { role: 'user', content: promptText }],
               max_tokens: 16384, temperature: 0.3
             })
-          }, 40000);
+          }, 55000);
           sse({type:'engine_debug', engine:'sambanova', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'sambanova', status:res.status, reason:'rate_limit_or_auth'});
@@ -3901,7 +3914,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'sambanova', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'sambanova', status:'exception', reason});
           return null;
         }
