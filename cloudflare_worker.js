@@ -4035,32 +4035,55 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           pianoNoDup.push(p);
         }
 
-        // === FIX 2: Affiancamento junior — riassegna junior a senior dello stesso giorno ===
+        // === FIX 2: Affiancamento junior — PAIRING STABILE 1:1 per giorno ===
         if (_juniorIds.length > 0) {
-          for (const p of pianoNoDup) {
-            if (!_juniorIds.includes(p.tecnicoId)) continue;
-            // Cerca se c'è un senior allo stesso cliente+data
-            const paired = pianoNoDup.find(r =>
-              r.data === p.data && r.clienteId === p.clienteId &&
-              _seniorIds.includes(r.tecnicoId) && r !== p
-            );
-            if (paired) continue; // già affiancato correttamente
+          // Raggruppa per giorno
+          const dayMap = {};
+          pianoNoDup.forEach(p => { if (p.data) { if (!dayMap[p.data]) dayMap[p.data] = []; dayMap[p.data].push(p); } });
 
-            // Cerca un senior che lavora lo stesso giorno
-            const seniorSameDay = pianoNoDup.find(r =>
-              r.data === p.data && _seniorIds.includes(r.tecnicoId) && r !== p
-            );
-            if (seniorSameDay) {
-              // Riassegna il junior allo stesso cliente del senior
-              const oldCli = p.clienteId;
-              p.clienteId = seniorSameDay.clienteId;
-              p.cliente = seniorSameDay.cliente;
-              p.oraInizio = seniorSameDay.oraInizio;
-              p.furgone = seniorSameDay.furgone;
-              if (seniorSameDay.note) p.note = seniorSameDay.note;
+          for (const [day, items] of Object.entries(dayMap)) {
+            const jrItems = items.filter(p => _juniorIds.includes(p.tecnicoId));
+            const srItems = items.filter(p => _seniorIds.includes(p.tecnicoId));
+            if (!jrItems.length || !srItems.length) continue;
+
+            // Matching 1:1: ogni junior va col senior più vicino (round-robin)
+            const usedSeniors = new Set();
+            for (const jr of jrItems) {
+              // Già correttamente affiancato?
+              const alreadyPaired = srItems.find(s => s.clienteId === jr.clienteId && !usedSeniors.has(s.tecnicoId));
+              if (alreadyPaired) { usedSeniors.add(alreadyPaired.tecnicoId); continue; }
+
+              // Trova un senior libero (non ancora preso da un altro junior)
+              const availSr = srItems.find(s => !usedSeniors.has(s.tecnicoId));
+              if (!availSr) continue;
+              usedSeniors.add(availSr.tecnicoId);
+
+              // Riassegna il junior
+              jr.clienteId = availSr.clienteId;
+              jr.cliente = availSr.cliente;
+              jr.oraInizio = availSr.oraInizio || '08:00';
+              jr.furgone = availSr.furgone || '';
+              jr.tipo = availSr.tipo || 'tagliando';
+              jr.macchina_id = availSr.macchina_id || null;
+              const srTec = allTecnici.find(t => t.id === availSr.tecnicoId);
+              const srName = srTec ? `${srTec.nome} ${srTec.cognome}` : availSr.tecnicoId;
+              jr.note = `Affiancamento con ${srName} — ${(availSr.note || '').substring(0, 80)}`;
               fixes++;
-              postProcessWarnings.push(`🔧 FIX: ${p.tecnicoId} il ${p.data} riassegnato a ${seniorSameDay.clienteId} con senior ${seniorSameDay.tecnicoId}`);
             }
+          }
+        }
+
+        // === FIX 2b: Pulisci note con UUID grezzi — sostituisci con nome macchina da DB ===
+        const _macMap = {};
+        (allMacchine || []).forEach(m => { if (m.id) _macMap[m.id] = m.modello || m.tipo || m.seriale || m.id; });
+        (allAssets || []).forEach(a => { if (a.id) _macMap[a.id] = a.nome_asset || a.modello || a.gruppo_attrezzatura || a.id; });
+        for (const p of pianoNoDup) {
+          if (!p.note) continue;
+          // Sostituisci UUID con nome macchina: "uuid | scad:..." → "NomeMacchina | scad:..."
+          const uuidMatch = (p.note || '').match(/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+          if (uuidMatch) {
+            const mName = _macMap[uuidMatch[1]] || '?';
+            p.note = p.note.replace(uuidMatch[1], mName);
           }
         }
 

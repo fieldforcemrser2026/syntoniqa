@@ -7815,7 +7815,7 @@ async function runAI(promptOverride){
       </div>
     </div>
     <!-- Init data line -->
-    <div style="padding:0 24px 14px"><div id="aiInitText" style="font-size:.72rem;color:rgba(255,255,255,.25)">Caricamento contesto...</div></div>
+    <div style="padding:0 24px 14px"><div id="aiInitText" style="font-size:.78rem;color:rgba(255,255,255,.7);line-height:1.5">Caricamento contesto...</div></div>
   </div>`;
 
   // Race timer
@@ -7927,15 +7927,19 @@ async function runAI(promptOverride){
           else if(ev.type==='anon'){_updAnon(ev);}
           else if(ev.type==='engine_debug'){
             const el=document.getElementById('aiInitText');
+            if(!window._aiEngineLog)window._aiEngineLog=[];
             if(el){
               if(ev.engine==='CASCADE'&&ev.status==='init'){
-                el.innerHTML=`🔧 Motori: <b>${ev.available||'?'}</b> | Skippati: <span style="color:var(--warn)">${ev.skipped||'nessuno'}</span> | Paralleli: <b>${ev.parallel||'?'}</b>`;
-              } else if(ev.engine==='CASCADE'){
+                const skipParts=(ev.skipped||'').split(',').filter(Boolean);
+                const skipHtml=skipParts.map(s=>{const [n,r]=s.split(':');return `<span style="color:var(--err)">${n}</span><small>(${r==='no_key'?'chiave mancante':'disabilitato'})</small>`;}).join(', ');
+                el.innerHTML=`🔧 <b>Disponibili:</b> ${ev.available||'?'} | <b>Paralleli:</b> ${ev.parallel||'?'}${skipParts.length?` | <b>Esclusi:</b> ${skipHtml}`:''}`;
+              } else if(ev.engine==='CASCADE'&&ev.status==='all_failed'){
                 el.innerHTML=`<span style="color:var(--err);font-weight:600">❌ TUTTI I MOTORI FALLITI</span> — ${(ev.reason||'').substring(0,200)}`;
-              } else {
-                // Mostra errore engine specifico in console E in UI
-                const msg=`⚠️ ${ev.engine}: ${ev.status==='exception'?'Exception':'HTTP '+ev.status} — ${(ev.reason||'').substring(0,120)}`;
-                el.textContent=msg;
+              } else if(ev.engine!=='CASCADE'){
+                const color=ev.status==='exception'?'var(--err)':'#F59E0B';
+                const reason=(ev.reason||'sconosciuto').substring(0,100);
+                window._aiEngineLog.push(`<span style="color:${color}">⚠️ ${ev.engine}: ${reason}</span>`);
+                el.innerHTML=window._aiEngineLog.slice(-5).join('<br>');
               }
             }
             console.warn('AI Engine Debug:', ev);
