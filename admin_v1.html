@@ -2513,9 +2513,9 @@ const TECH_ROLES=['tecnico','tecnico_senior','tecnico_junior','caposquadra'];
 const isTecRole=(r)=>TECH_ROLES.includes(r);
 let DATA={},USER=null,MAP=null,MARKERS=[],AI_PLAN=null,MAP_WAYPOINTS=[];
 const API_URL = (window.SYNTONIQA_CONFIG&&window.SYNTONIQA_CONFIG.api&&window.SYNTONIQA_CONFIG.api.url)
-  || 'https://syntoniqa-api.YOUR_SUBDOMAIN.workers.dev';
+  || 'https://syntoniqa-mrs-api.fieldforcemrser.workers.dev';
 const API_TOKEN = (window.SYNTONIQA_CONFIG&&window.SYNTONIQA_CONFIG.api&&window.SYNTONIQA_CONFIG.api.token)
-  || 'FF_TOKEN_CAMBIA_QUESTO_IN_PRODUZIONE';
+  || '';
 let JWT_TOKEN = null;
 let calDate=new Date(), repFilter='attivi', pagFilter='bozze';
 
@@ -9180,15 +9180,18 @@ function renderPMTree(){
   const cliF=$('pmCliFilter')?.value||'';
   const hideAssigned=$('pmHideAssigned')?.checked;
 
-  // Build set di macchine/seriali già pianificati con tecnico assegnato
-  const plannedMacIds=new Set();
+  // Build set di seriali già pianificati con tecnico assegnato
   const plannedSerials=new Set();
   if(hideAssigned){
+    // Lookup macchina_id → seriale
+    const macIdToSerial={};
+    (DATA.macchine||[]).forEach(m=>{if(m.Seriale)macIdToSerial[m.ID]=m.Seriale;});
     (DATA.piano||[]).filter(p=>!p.Obsoleto&&p.Stato==='pianificato'&&p.TecnicoID).forEach(p=>{
-      if(p.MacchinaID)plannedMacIds.add(p.MacchinaID);
       // Estrai S/N dalla nota [PM LSSA] ... S/N:xxx
       const snM=(p.Note||'').match(/S\/N:([^\s,]+)/);
       if(snM)plannedSerials.add(snM[1]);
+      // Anche via macchina_id → seriale
+      if(p.MacchinaID&&macIdToSerial[p.MacchinaID])plannedSerials.add(macIdToSerial[p.MacchinaID]);
     });
   }
 
@@ -9201,17 +9204,16 @@ function renderPMTree(){
     // Nascondi asset già pianificati con tecnico assegnato
     if(hideAssigned)assets=assets.filter(a=>{
       const sn=(a.numero_serie||'').trim();
-      if(sn&&plannedSerials.has(sn))return false;
-      if(a._macchina_id&&plannedMacIds.has(a._macchina_id))return false;
-      return true;
+      return !(sn&&plannedSerials.has(sn));
     });
     return{...c,assets};
   });
   if(cliF)clienti=clienti.filter(c=>c.codice_m3===cliF);
   clienti=clienti.filter(c=>c.assets.length>0);
 
-  // Stats totali (su tutti gli assets non filtrati)
-  const allAssets=(PM_OVERVIEW.clienti||[]).flatMap(c=>c.assets||[]);
+  // Stats totali (filtrati per pianificati se checkbox attivo)
+  let allAssets=(PM_OVERVIEW.clienti||[]).flatMap(c=>c.assets||[]);
+  if(hideAssigned)allAssets=allAssets.filter(a=>{const sn=(a.numero_serie||'').trim();return !(sn&&plannedSerials.has(sn));});
   const cnt=f=>allAssets.filter(a=>pmWindowFilter(getPMAssetStatus(a.prossimo_controllo).days,f)).length;
   const scadutiN=cnt('scaduti'),prox30N=cnt('30gg'),prox60N=cnt('60gg'),prox90N=cnt('90gg'),okN=cnt('ok'),nodateN=cnt('nodate');
 
