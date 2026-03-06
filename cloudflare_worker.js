@@ -2010,7 +2010,9 @@ async function handlePost(action, body, env) {
       const bucket  = 'syntoniqa-allegati';
       const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
       const path    = `${riferimentoTipo}/${riferimentoId}/${Date.now()}_${safeName}`;
-      const fileData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+      let fileData;
+      try { fileData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0)); }
+      catch(e) { return err('base64Data non valido: ' + e.message); }
 
       const uploadRes = await fetch(
         `${env.SUPABASE_URL}/storage/v1/object/${bucket}/${path}`,
@@ -2040,14 +2042,18 @@ async function handlePost(action, body, env) {
 
     case 'uploadFotoProfilo': {
       const { userId, base64Data, mimeType } = body;
+      if (!userId || !base64Data) return err('userId e base64Data richiesti');
       const bucket = 'syntoniqa-profili';
       const path   = `profili/${userId}.jpg`;
-      const fileData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-      
-      await fetch(`${env.SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
-        method: 'POST', headers: { 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`, 'Content-Type': mimeType },
-        body: fileData
+      let fpData;
+      try { fpData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0)); }
+      catch(e) { return err('base64Data foto non valido'); }
+
+      const fpRes = await fetch(`${env.SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+        method: 'POST', headers: { 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`, 'Content-Type': mimeType || 'image/jpeg' },
+        body: fpData
       });
+      if (!fpRes.ok) { const fpErr = await fpRes.text().catch(()=>''); return err(`Upload foto fallito: ${fpRes.status} ${fpErr.substring(0,200)}`); }
       const url = `${env.SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
       await sb(env, `utenti?id=eq.${userId}`, 'PATCH', { foto_url: url });
       return ok({ url });
@@ -2063,7 +2069,8 @@ async function handlePost(action, body, env) {
         headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ from: brand(env).emailFrom, to, subject, html, text })
       });
-      const result = await res.json();
+      if (!res.ok) { const errText = await res.text().catch(()=>''); return err(`Email API error ${res.status}: ${errText.substring(0,200)}`); }
+      const result = await res.json().catch(()=>({}));
       return ok({ result });
     }
 

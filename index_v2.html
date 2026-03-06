@@ -2432,8 +2432,8 @@ function intAllegatoChange(input){
 
 async function saveCreaInt(){
   try{
-    const clienteID=$('ciCliente').value;
-    const note=$('ciNote').value.trim();
+    const clienteID=$('ciCliente')?.value;
+    const note=($('ciNote')?.value||'').trim();
     if(!clienteID){toast('Seleziona un cliente','warn');return}
     if(!note){toast('Descrivi il motivo dell\'intervento','warn');return}
 
@@ -2489,7 +2489,7 @@ async function saveCreaInt(){
     // Upload allegato
     if(intAllegatoFile){
       try{
-        await apiCall('uploadFile',{base64Data:intAllegatoFile.base64,mimeType:intAllegatoFile.type,fileName:intAllegatoFile.name,uploaderId:USER?.ID,riferimentoTipo:'piano',riferimentoId:result?.id||result?.intervento?.ID||''},'POST');
+        await apiCall('uploadFile',{base64Data:intAllegatoFile.base64,mimeType:intAllegatoFile.type,fileName:intAllegatoFile.name,uploaderId:USER?.ID,riferimentoTipo:'piano',riferimentoId:result?.intervento?.ID||result?.piano?.ID||result?.id||''},'POST');
       }catch(e){}
     }
 
@@ -2529,8 +2529,10 @@ async function saveCreaInt(){
 }
 
 function calcOraFine(oraInizio,durata){
-  const [h,m]=(oraInizio||'08:00').split(':').map(Number);
-  const totMin=h*60+m+Math.round(durata*60);
+  const parts=(oraInizio||'08:00').split(':').map(Number);
+  const h=isNaN(parts[0])?8:parts[0], m=isNaN(parts[1])?0:parts[1];
+  const dur=isNaN(durata)?2:durata;
+  const totMin=h*60+m+Math.round(dur*60);
   const fh=Math.floor(totMin/60)%24;
   const fm=totMin%60;
   return String(fh).padStart(2,'0')+':'+String(fm).padStart(2,'0');
@@ -2923,7 +2925,8 @@ function renderKpi(){
 
 // ============ SERVICE WORKER + OFFLINE ============
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('sw.js').then(reg=>{
+  navigator.serviceWorker.register('sw.js').catch(e=>console.warn('[SW] Registration failed:',e)).then(reg=>{
+    if(!reg) return;
     console.log('[SW] Registrato, scope:',reg.scope);
     // Check for updates
     reg.addEventListener('updatefound',()=>{

@@ -460,6 +460,8 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
   input,select,textarea{font-size:16px !important}  /* prevent iOS zoom */
   .modal{width:98% !important;max-width:100vw !important;max-height:95vh !important}
   .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .card-body{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .card-body .tbl{min-width:600px}
   .sidebar{-webkit-overflow-scrolling:touch}
   .tag,.badge{padding:4px 10px;font-size:.75rem}
   td,th{padding:8px 10px}
@@ -472,6 +474,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
   .grid-4,.grid-3,.grid-2{grid-template-columns:1fr !important;gap:8px !important}
   .header{padding:0 8px}
   .header h1{font-size:.85rem}
+  .card-body .tbl{min-width:500px}
 }
 
 /* ===== PAGELLINO ===== */
@@ -931,7 +934,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <div style="border-top:1px solid #E5E7EB;padding-top:10px;margin-top:8px">
 <div style="font-size:.75rem;color:var(--gray);margin-bottom:6px">Suggerimenti rapidi:</div>
 <div style="display:flex;flex-wrap:wrap;gap:4px" id="vincoliQuickAdd">
-<button class="btn btn-sm btn-outline" onclick="(()=>{const tec=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Ruolo==='tecnico');const cap=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Ruolo==='caposquadra');const j=tec.slice(0,3).map(u=>u.Nome).join('/')||'[Junior]';const s=cap.slice(0,2).map(u=>u.Nome).join('/')||'[Senior]';addManualVincolo('👥 Accoppiamento Junior+Senior',j+' devono lavorare affiancati a un senior ('+s+')')})()">👥 Junior+Senior</button>
+<button class="btn btn-sm btn-outline" onclick="(()=>{const jun=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&(u.Ruolo==='tecnico_junior'||u.Ruolo==='tecnico'));const sen=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&(u.Ruolo==='caposquadra'||u.Ruolo==='tecnico_senior'));const j=jun.slice(0,3).map(u=>u.Nome).join('/')||'[Junior]';const s=sen.slice(0,2).map(u=>u.Nome).join('/')||'[Senior]';addManualVincolo('👥 Accoppiamento Junior+Senior',j+' devono lavorare affiancati a un senior ('+s+')')})()">👥 Junior+Senior</button>
 <button class="btn btn-sm btn-outline" onclick="addManualVincolo('🚫 Tecnico non disponibile','[Nome] non disponibile per [motivo]')">🚫 Non disponibile</button>
 <button class="btn btn-sm btn-outline" onclick="addManualVincolo('🔧 Competenza specifica','Solo [Nome] può intervenire su [tipo macchina]')">🔧 Competenza</button>
 <button class="btn btn-sm btn-outline" onclick="addManualVincolo('🚗 Furgone fuori servizio','Furgone [FURG_X] in officina dal [data] al [data]')">🚗 Furgone KO</button>
@@ -2491,6 +2494,8 @@ Workers AI è incluso in Cloudflare e non richiede chiavi aggiuntive.
 
 <script>
 // ============ GLOBAL STATE ============
+const TECH_ROLES=['tecnico','tecnico_senior','tecnico_junior','caposquadra'];
+const isTecRole=(r)=>TECH_ROLES.includes(r);
 let DATA={},USER=null,MAP=null,MARKERS=[],AI_PLAN=null,MAP_WAYPOINTS=[];
 const API_URL = (window.SYNTONIQA_CONFIG&&window.SYNTONIQA_CONFIG.api&&window.SYNTONIQA_CONFIG.api.url)
   || 'https://syntoniqa-api.YOUR_SUBDOMAIN.workers.dev';
@@ -2799,7 +2804,7 @@ function enterApp(){
 
 // ============ POPULATE SELECTS ============
 function populateSelects(){
-  const tecs=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Attivo&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
+  const tecs=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Attivo&&isTecRole(u.Ruolo));
   const clis=(DATA.clienti||[]).filter(c=>!c.Obsoleto&&!(c.Nome||'').startsWith('Should Fail'));
   const automezziList=(DATA.automezzi||[]).filter(f=>!f.Obsoleto);
   const tipi=(DATA.tipiIntervento||[]).filter(t=>t.Attivo);
@@ -2855,7 +2860,7 @@ function populateSelects(){
   const cfg=DATA.config||{};
 
   // Ruoli utente (da config o default)
-  const ruoliDefault=[{v:'admin',l:'Admin'},{v:'caposquadra',l:'Caposquadra'},{v:'tecnico',l:'Tecnico'},{v:'magazziniere',l:'Magazziniere'},{v:'commerciale',l:'Commerciale'}];
+  const ruoliDefault=[{v:'admin',l:'Admin'},{v:'caposquadra',l:'Caposquadra'},{v:'tecnico_senior',l:'Tecnico Senior'},{v:'tecnico',l:'Tecnico'},{v:'tecnico_junior',l:'Tecnico Junior'},{v:'magazziniere',l:'Magazziniere'},{v:'commerciale',l:'Commerciale'}];
   let ruoli=ruoliDefault;
   try{if(cfg.ruoli_utente)ruoli=JSON.parse(cfg.ruoli_utente)}catch(e){}
   const ruoloSel=$('nuRuolo');
@@ -3065,7 +3070,7 @@ function renderDashboard(){
   }
   const automezziAtt=autoOggiIds.length;
   const automezziTot=(DATA.automezzi||[]).filter(f=>!f.Obsoleto).length;
-  const tecs=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Attivo&&u.Ruolo==='tecnico').length;
+  const tecs=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Attivo&&isTecRole(u.Ruolo)).length;
   const reps=(DATA.reperibilita||[]).filter(r=>!r.Obsoleto&&r.Stato==='attiva'&&r.DataInizio<=d&&r.DataFine>=d);
 
   const oggiComp=oggi.filter(p=>p.Stato==='completato').length;
@@ -3156,7 +3161,7 @@ function renderDashboard(){
   }else{alertEl.style.display='none'}
 
   // 2. ATTIVITÀ TECNICI (tutti, con status differenziato)
-  const tecnici=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
+  const tecnici=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&isTecRole(u.Ruolo));
   $('tecniciDash').innerHTML=tecnici.map(t=>{
     const isAttivo=t.Attivo&&t.Attivo!=='false';
     const intTec=oggi.filter(p=>p.TecnicoID===t.ID);
@@ -4610,7 +4615,7 @@ function renderTecnici(){
     <td><input type="checkbox" class="sel-chk" onchange="toggleSelectRow('tecnici','${t.ID}',this.checked)"></td>
     <td>${foto}</td>
     <td><strong>${(t.Nome||'')+' '+(t.Cognome||'')}</strong></td>
-    <td><span class="tag ${t.Ruolo==='admin'?'tag-purple':t.Ruolo==='caposquadra'?'tag-info':'tag-gray'}">${t.Ruolo}</span>${t.AncheCaposquadra?'<span class="tag tag-info" style="margin-left:3px;font-size:.6rem">+capo</span>':''}</td>
+    <td><span class="tag ${t.Ruolo==='admin'?'tag-purple':t.Ruolo==='caposquadra'?'tag-info':t.Ruolo==='tecnico_senior'?'tag-ok':t.Ruolo==='tecnico_junior'?'tag-warn':'tag-gray'}">${t.Ruolo?.replace('_',' ')}</span>${t.AncheCaposquadra?'<span class="tag tag-info" style="margin-left:3px;font-size:.6rem">+capo</span>':''}</td>
     <td>${sq?sq.Nome:'—'}</td>
     <td>${fmtAutoId(t.AutomezzoID)}</td>
     <td>${t.Base||'—'}</td>
@@ -4690,7 +4695,7 @@ function showCalDay(ds){
 // Palette colori tecnici — indice stabile per tecnico (stesso colore in ogni periodo)
 const TECH_COLORS=['#3B7EF7','#EF4444','#10B981','#F59E0B','#8B5CF6','#EC4899','#06B6D4','#84CC16','#F97316','#6366F1'];
 function getTecColor(tecId){
-  const tecs=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&['tecnico','caposquadra','tecnico_senior','tecnico_junior'].includes(u.Ruolo));
+  const tecs=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&isTecRole(u.Ruolo));
   const idx=tecs.findIndex(t=>t.ID===tecId);
   return TECH_COLORS[(idx>=0?idx:0)%TECH_COLORS.length];
 }
@@ -4742,7 +4747,7 @@ async function geocodeCity(city){
 
 function fillMapTecPanel(){
   const list=$('mapTecCbList');if(!list)return;
-  const tecs=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&['tecnico','caposquadra','tecnico_senior','tecnico_junior'].includes(u.Ruolo));
+  const tecs=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&isTecRole(u.Ruolo));
   const prevSelected=_getSelectedTecnici();
   list.innerHTML=tecs.map((t,i)=>{
     const col=TECH_COLORS[i%TECH_COLORS.length];
@@ -5208,7 +5213,7 @@ async function loadKPI(){
       <div class="kpi purple"><div class="kpi-val">${ordiniInAttesa}</div><div class="kpi-lbl">Ordini In Attesa</div></div>
     `;
     // Classifica tecnici — calcolo locale
-    const tecnici=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
+    const tecnici=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&isTecRole(u.Ruolo));
     const rows=tecnici.map(t=>{
       const tp=piano.filter(p=>p.TecnicoID===t.ID);
       const co=tp.filter(p=>p.Stato==='completato'||p.Stato==='chiuso').length;
@@ -6619,7 +6624,7 @@ var _origShowSec=typeof showSec==='function'?showSec:null;
 // We'll hook into showSec after page load
 
 // ============ EDIT STATE ============
-var EDITING={utente:null,cliente:null,macchina:null,automezzo:null,ordine:null,installazione:null,checklist:null,documento:null};
+var EDITING={utente:null,cliente:null,macchina:null,automezzo:null,ordine:null,installazione:null,checklist:null,documento:null,piano:null,urgenza:null,reperibilita:null,trasferta:null};
 
 // ============ EDIT OPEN FUNCTIONS ============
 function editUtente(id){
@@ -8398,7 +8403,7 @@ function showDetail(type,id){
       item=(DATA.piano||[]).find(p=>p.ID===id);if(!item)return;
       title='📋 Intervento '+id;
       const intClienti=(DATA.clienti||[]).filter(c=>!c.Obsoleto);
-      const intTecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
+      const intTecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&isTecRole(u.Ruolo));
       const intFurgoni=(DATA.automezzi||[]).filter(f=>!f.Obsoleto);
       const intTipi=(DATA.tipiIntervento||[]).filter(t=>t.Attivo!==false);
       html=`<div class="grid-2 mb">
@@ -8436,7 +8441,7 @@ function showDetail(type,id){
       item=(DATA.urgenze||[]).find(u=>u.ID===id);if(!item)return;
       title='🚨 Urgenza '+id;
       const urgClienti=(DATA.clienti||[]).filter(c=>!c.Obsoleto);
-      const urgTecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
+      const urgTecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&isTecRole(u.Ruolo));
       const urgPriorita=(DATA.priorita||[]).filter(p=>p.Attivo!==false);
       html=`<div class="grid-2 mb">
         <div><strong>Cliente:</strong> <select id="edUrgCliente" class="inp" style="display:inline;width:auto;min-width:180px">
@@ -8535,7 +8540,7 @@ function showDetail(type,id){
     case 'reperibilita': {
       item=(DATA.reperibilita||[]).find(r=>r.ID===id);if(!item)return;
       title='🌙 Reperibilità '+id;
-      const repTecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'||u.Ruolo==='admin'));
+      const repTecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&(isTecRole(u.Ruolo)||u.Ruolo==='admin'));
       html=`<div class="grid-2 mb">
         <div><strong>Tecnico:</strong> <select id="edRepTecnico" class="inp" style="display:inline;width:auto">
           ${repTecnici.map(t=>`<option value="${t.ID}" ${t.ID===item.TecnicoID?'selected':''}>${t.Nome} ${t.Cognome||''}</option>`).join('')}
@@ -10023,7 +10028,7 @@ function renderTelegramConfig(){
   const config=DATA.config||{};
   $('cfgTgToken').value=config.telegram_bot_token||'';
 
-  const tecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&u.Attivo!=='false'&&['tecnico','team_leader'].includes(u.Ruolo));
+  const tecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&u.Attivo!=='false'&&isTecRole(u.Ruolo));
   let connected=0;
   let html='<table class="tbl"><thead><tr><th style="width:30px">Stato</th><th>Tecnico</th><th>Ruolo</th><th>Chat ID Telegram</th><th style="width:50px">Test</th></tr></thead><tbody>';
   tecnici.forEach(t=>{
@@ -10067,7 +10072,7 @@ async function autoDetectTelegramIds(){
     let html='<div class="alert-ok">';
     html+=`<div style="font-weight:600;margin-bottom:8px">🎉 Trovati ${userList.length} utenti Telegram:</div>`;
     html+='<table class="tbl" style="font-size:.8rem"><thead><tr><th>Nome TG</th><th>Username</th><th>Chat ID</th><th>Assegna a</th></tr></thead><tbody>';
-    const tecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&u.Attivo!=='false'&&['tecnico','team_leader'].includes(u.Ruolo));
+    const tecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&u.Attivo!=='false'&&isTecRole(u.Ruolo));
     userList.forEach(u=>{
       const fullName=(u.firstName+' '+u.lastName).trim();
       html+=`<tr><td>${fullName}</td><td>${u.username?'@'+u.username:'—'}</td><td><code>${u.chatId}</code></td>`;
@@ -10101,7 +10106,7 @@ async function saveTelegramConfig(){
   // Salva anche i chat ID di ogni tecnico
   const tecnici=(DATA.utenti||[]).filter(
     u=>u.Attivo&&u.Attivo!=='false'
-      &&['tecnico','team_leader'].includes(u.Ruolo));
+      &&isTecRole(u.Ruolo));
   for(const t of tecnici){
     const el=document.getElementById('tgchat_'+t.ID);
     if(el && el.value.trim()){
@@ -10135,7 +10140,7 @@ async function sendTelegramBroadcast(){
   const config=DATA.config||{};
   const token=config.telegram_bot_token;
   if(!token){toast('Configura prima il Bot Token','err');return}
-  const tecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&u.Attivo!=='false'&&['tecnico','team_leader'].includes(u.Ruolo));
+  const tecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&u.Attivo!=='false'&&isTecRole(u.Ruolo));
   let sent=0,fail=0;
   for(const t of tecnici){
     if(dest!=='all'&&t.ID!==dest)continue;
@@ -10187,7 +10192,7 @@ function renderTelegramExtras(){
   const sel=$('tgMsgDest');
   if(sel){
     sel.innerHTML='<option value="all">🔔 Tutti i tecnici con Chat ID</option>';
-    const tecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&u.Attivo!=='false'&&['tecnico','team_leader'].includes(u.Ruolo));
+    const tecnici=(DATA.utenti||[]).filter(u=>u.Attivo&&u.Attivo!=='false'&&isTecRole(u.Ruolo));
     tecnici.forEach(t=>{
       const chatId=config['telegram_chatid_'+t.ID];
       if(chatId)sel.innerHTML+='<option value="'+t.ID+'">'+t.Nome+' '+t.Cognome+'</option>';
@@ -10903,7 +10908,7 @@ function initPlanner(){
   if(sel){
     const prevVal = sel.value;
     sel.innerHTML = '<option value="">Tutti i tecnici</option>';
-    const tecs = (DATA.utenti||[]).filter(u => !u.Obsoleto && (u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
+    const tecs = (DATA.utenti||[]).filter(u => !u.Obsoleto && isTecRole(u.Ruolo));
     tecs.forEach(t => {
       const o = document.createElement('option');
       o.value = t.ID;
@@ -10938,7 +10943,7 @@ function renderPlanner(){
   const titleEl = document.getElementById('plannerTitle');
   if(titleEl) titleEl.textContent = fmt(week[0]) + ' - ' + fmt(week[6]) + ' ' + week[0].getFullYear();
 
-  let tecnici = (DATA.utenti||[]).filter(u => !u.Obsoleto && (u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
+  let tecnici = (DATA.utenti||[]).filter(u => !u.Obsoleto && isTecRole(u.Ruolo));
   if(filtTec) tecnici = tecnici.filter(u => u.ID === filtTec);
 
   const weekStrs = week.map(d => d.toISOString().split('T')[0]);
@@ -11119,7 +11124,7 @@ async function runAIPlanner(){
   const week = [];
   for(let i=0;i<7;i++){ const d=new Date(PLANNER_DATE); d.setDate(d.getDate()+i); week.push(d.toISOString().split('T')[0]); }
   const urgenze = (DATA.urgenze||[]).filter(u=>!u.Obsoleto&&u.Stato!=='risolta');
-  const tecnici = (DATA.utenti||[]).filter(u=>!u.Obsoleto&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
+  const tecnici = (DATA.utenti||[]).filter(u=>!u.Obsoleto&&isTecRole(u.Ruolo));
   const meseTarget = week[0].substring(0,7);
   const prompt = `Settimana ${week[0]} - ${week[6]}: ${urgenze.length} urgenze aperte (${urgenze.filter(u=>u.Priorita==='CRITICA').length} critiche). Rispetta SLA, ottimizza zone, distribuisci carico.`;
   // Naviga subito alla sezione AI Planner mostrando lo step 3
@@ -11182,7 +11187,7 @@ async function loadKPIWithCharts(){
 
   // Charts 3 & 4: Per tecnico
   // Calcolo KPI tecnici da DATA — no API call (risposta non compatibile con formato atteso)
-  const allTecnici=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'));
+  const allTecnici=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&isTecRole(u.Ruolo));
   const kpiData=allTecnici.map(t=>{
     const tp=piano.filter(p=>p.TecnicoID===t.ID);
     const co=tp.filter(p=>p.Stato==='completato'||p.Stato==='chiuso').length;
