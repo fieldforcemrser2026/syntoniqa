@@ -2938,7 +2938,12 @@ async function handlePost(action, body, env) {
       }
 
       // Automezzi context
-      const autoList = allAutomezzi.map(a => `${a.id}(${a.targa||''},${a.stato||'attivo'})`).join('; ');
+      // Automezzi: usa tabella automezzi se disponibile, altrimenti estrai da utenti.automezzo_id
+      let autoList = allAutomezzi.map(a => `${a.id}(${a.targa||''},${a.stato||'attivo'})`).join('; ');
+      if (!autoList) {
+        const furgFromTec = [...new Set(allTecnici.filter(t => t.automezzo_id).map(t => t.automezzo_id))];
+        if (furgFromTec.length) autoList = furgFromTec.map(f => `${f}(assegnato)`).join('; ');
+      }
 
       // Tagliandi/Service scaduti e in scadenza — prioritized list (only if ctx.tagliandi)
       let tagliandiContext = '';
