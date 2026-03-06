@@ -7753,7 +7753,7 @@ async function runAI(promptOverride){
   const _LOGO='https://unpkg.com/@lobehub/icons-static-svg@latest/icons/';
   const _engLabels={
     anthropic:{name:'Claude',    color:'#D97706', logo:_LOGO+'anthropic.svg'},
-    openai:   {name:'GPT-4o',    color:'#10B981', logo:_LOGO+'openai.svg'},
+    openai:   {name:'GPT-4o-mini',color:'#10B981', logo:_LOGO+'openai.svg'},
     gemini:   {name:'Gemini',    color:'#4285F4', logo:_LOGO+'gemini.svg'},
     cerebras: {name:'Cerebras',  color:'#FF6B35', logo:_LOGO+'cerebras.svg'},
     groq:     {name:'Groq',      color:'#F55036', logo:_LOGO+'groq.svg'},
@@ -7931,9 +7931,15 @@ async function runAI(promptOverride){
             const el=document.getElementById('aiInitText');
             if(!window._aiEngineLog)window._aiEngineLog=[];
             if(el){
-              if(ev.engine==='CASCADE'&&ev.status==='init'){
+              if(ev.engine==='KEY_CHECK'){
+                // Mostra stato chiavi premium
+                const kc=[['Claude',ev.anthropic_key],['OpenAI',ev.openai_key],['Gemini',ev.gemini_key]];
+                const kcHtml=kc.map(([n,v])=>`<span style="color:${v==='MISSING'?'var(--err)':'#4ade80'}">${n}: ${v}</span>`).join(' · ');
+                window._aiEngineLog.push(`🔑 ${kcHtml}`);
+                el.innerHTML=window._aiEngineLog.slice(-5).join('<br>');
+              } else if(ev.engine==='CASCADE'&&ev.status==='init'){
                 const skipParts=(ev.skipped||'').split(',').filter(Boolean);
-                const skipHtml=skipParts.map(s=>{const [n,r]=s.split(':');return `<span style="color:var(--err)">${n}</span><small>(${r==='no_key'?'chiave mancante':'disabilitato'})</small>`;}).join(', ');
+                const skipHtml=skipParts.map(s=>{const parts=s.split(':');const n=parts[0];const r=parts.slice(1).join(':');return `<span style="color:var(--err)">${n}</span><small>(${r.includes('no_key')?'chiave mancante: '+r:r==='disabled_db'?'disabilitato da DB':'disabilitato'})</small>`;}).join(', ');
                 el.innerHTML=`🔧 <b>Disponibili:</b> ${ev.available||'?'} | <b>Paralleli:</b> ${ev.parallel||'?'}${skipParts.length?` | <b>Esclusi:</b> ${skipHtml}`:''}`;
               } else if(ev.engine==='CASCADE'&&ev.status==='all_failed'){
                 el.innerHTML=`<span style="color:var(--err);font-weight:600">❌ TUTTI I MOTORI FALLITI</span> — ${(ev.reason||'').substring(0,200)}`;

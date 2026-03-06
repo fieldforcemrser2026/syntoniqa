@@ -3377,15 +3377,28 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
       async function callAI(promptText, onEngine) {
         // 1. Identifica motori disponibili (non disabilitati, con chiave)
+        // RESET disabled per motori NON disabilitati da DB (solo errori temporanei 429 del chunk precedente)
+        const dbDisabled = new Set();
+        for (const name of engineRanking) {
+          if (engines[name]?.disabled) dbDisabled.add(name);
+        }
+
         const available = [];
         const skipped = [];
         for (const name of engineRanking) {
           const eng = engines[name];
           if (!eng) continue;
-          if (eng.disabled) { skipped.push(`${name}:disabled`); continue; }
-          if (!env[eng.envKey]) { skipped.push(`${name}:no_key`); continue; }
+          if (dbDisabled.has(name)) { skipped.push(`${name}:disabled_db`); continue; }
+          const keyVal = env[eng.envKey];
+          if (!keyVal) { skipped.push(`${name}:no_key(${eng.envKey})`); continue; }
           available.push(name);
         }
+        // Debug: mostra stato chiavi premium per diagnosi
+        sse({type:'engine_debug', engine:'KEY_CHECK', status:'info',
+          anthropic_key: env.ANTHROPIC_KEY ? `set(${String(env.ANTHROPIC_KEY).length}ch)` : 'MISSING',
+          openai_key: env.OPENAI_KEY ? `set(${String(env.OPENAI_KEY).length}ch)` : 'MISSING',
+          gemini_key: env.GEMINI_KEY ? `set(${String(env.GEMINI_KEY).length}ch)` : 'MISSING'
+        });
 
         if (!available.length) {
           sse({type:'engine_debug', engine:'CASCADE', status:'no_engines', reason:`Nessun motore disponibile. Skipped: ${skipped.join(', ')}`});
@@ -3505,7 +3518,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       async function tryGemini(promptText) {
         try {
           // Gemini 2.5 Flash (gratis, molto meglio del 2.0-flash nel planning)
-          const res = await fetch(
+          sse({type:'engine_debug', engine:'gemini', status:'calling', reason:'Calling Gemini 2.5 Flash...'});
+          const res = await fetchWithTimeout(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${env.GEMINI_KEY}`,
             { method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -3513,11 +3527,11 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
                 contents: [{ parts: [{ text: promptText }] }],
                 generationConfig: { maxOutputTokens: 16384, temperature: 0.3, responseMimeType: 'application/json' }
               })
-            }
+            }, 55000
           );
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'gemini', status:res.status, reason:'rate_limit_or_auth'});
-            engines.gemini.disabled = true; return null;
+            return null; // NON disabilitare — 429 è temporaneo, riprova al prossimo chunk
           }
           if (!res.ok) {
             const errBody = await res.text().catch(()=>'');
@@ -3527,9 +3541,11 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           const gd = await res.json();
           const text = gd.candidates?.[0]?.content?.parts?.[0]?.text || null;
           if (!text) sse({type:'engine_debug', engine:'gemini', status:200, reason:'empty_response', candidates:JSON.stringify(gd.candidates||[]).substring(0,200)});
+          else sse({type:'engine_debug', engine:'gemini', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          sse({type:'engine_debug', engine:'gemini', status:'exception', reason:e.message||'unknown'});
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
+          sse({type:'engine_debug', engine:'gemini', status:'exception', reason});
           return null;
         }
       }
@@ -3537,7 +3553,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       async function tryCerebras(promptText) {
         try {
           // Cerebras: llama3.1-8b (8K context — prompt+output devono stare in 8192 tok)
-          const res = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+          sse({type:'engine_debug', engine:'cerebras', status:'calling', reason:'Calling Cerebras Llama 3.1 8B...'});
+          const res = await fetchWithTimeout('https://api.cerebras.ai/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.CEREBRAS_KEY}` },
             body: JSON.stringify({
@@ -3546,10 +3563,11 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 2048, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          });
+          }, 55000);
+          sse({type:'engine_debug', engine:'cerebras', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'cerebras', status:res.status, reason:'rate_limit_or_auth'});
-            engines.cerebras.disabled = true; return null;
+            return null;
           }
           if (!res.ok) {
             const errBody = await res.text().catch(()=>'');
@@ -3559,16 +3577,19 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           const cd = await res.json();
           const text = cd.choices?.[0]?.message?.content || null;
           if (!text) sse({type:'engine_debug', engine:'cerebras', status:200, reason:'empty_response'});
+          else sse({type:'engine_debug', engine:'cerebras', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          sse({type:'engine_debug', engine:'cerebras', status:'exception', reason:e.message||'unknown'});
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
+          sse({type:'engine_debug', engine:'cerebras', status:'exception', reason});
           return null;
         }
       }
 
       async function tryGroq(promptText) {
         try {
-          const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          sse({type:'engine_debug', engine:'groq', status:'calling', reason:'Calling Groq Llama 3.3 70B...'});
+          const res = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.GROQ_KEY}` },
             body: JSON.stringify({
@@ -3577,10 +3598,11 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 16384, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          });
+          }, 55000);
+          sse({type:'engine_debug', engine:'groq', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'groq', status:res.status, reason:'rate_limit_or_auth'});
-            engines.groq.disabled = true; return null;
+            return null;
           }
           if (!res.ok) {
             const errBody = await res.text().catch(()=>'');
@@ -3590,16 +3612,19 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           const gd = await res.json();
           const text = gd.choices?.[0]?.message?.content || null;
           if (!text) sse({type:'engine_debug', engine:'groq', status:200, reason:'empty_response'});
+          else sse({type:'engine_debug', engine:'groq', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          sse({type:'engine_debug', engine:'groq', status:'exception', reason:e.message||'unknown'});
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
+          sse({type:'engine_debug', engine:'groq', status:'exception', reason});
           return null;
         }
       }
 
       async function tryMistral(promptText) {
         try {
-          const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
+          sse({type:'engine_debug', engine:'mistral', status:'calling', reason:'Calling Mistral Small...'});
+          const res = await fetchWithTimeout('https://api.mistral.ai/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.MISTRAL_KEY}` },
             body: JSON.stringify({
@@ -3608,10 +3633,11 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 16384, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          });
+          }, 55000);
+          sse({type:'engine_debug', engine:'mistral', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'mistral', status:res.status, reason:'rate_limit_or_auth'});
-            engines.mistral.disabled = true; return null;
+            return null;
           }
           if (!res.ok) {
             const errBody = await res.text().catch(()=>'');
@@ -3621,16 +3647,19 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           const d = await res.json();
           const text = d.choices?.[0]?.message?.content || null;
           if (!text) sse({type:'engine_debug', engine:'mistral', status:200, reason:'empty_response'});
+          else sse({type:'engine_debug', engine:'mistral', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          sse({type:'engine_debug', engine:'mistral', status:'exception', reason:e.message||'unknown'});
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
+          sse({type:'engine_debug', engine:'mistral', status:'exception', reason});
           return null;
         }
       }
 
       async function tryDeepSeek(promptText) {
         try {
-          const res = await fetch('https://api.deepseek.com/chat/completions', {
+          sse({type:'engine_debug', engine:'deepseek', status:'calling', reason:'Calling DeepSeek Chat...'});
+          const res = await fetchWithTimeout('https://api.deepseek.com/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.DEEPSEEK_KEY}` },
             body: JSON.stringify({
@@ -3639,10 +3668,15 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 16384, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          });
+          }, 55000);
+          sse({type:'engine_debug', engine:'deepseek', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'deepseek', status:res.status, reason:'rate_limit_or_auth'});
-            engines.deepseek.disabled = true; return null;
+            return null;
+          }
+          if (res.status === 402) {
+            sse({type:'engine_debug', engine:'deepseek', status:402, reason:'Insufficient Balance'});
+            return null;
           }
           if (!res.ok) {
             const errBody = await res.text().catch(()=>'');
@@ -3652,9 +3686,11 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           const d = await res.json();
           const text = d.choices?.[0]?.message?.content || null;
           if (!text) sse({type:'engine_debug', engine:'deepseek', status:200, reason:'empty_response'});
+          else sse({type:'engine_debug', engine:'deepseek', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          sse({type:'engine_debug', engine:'deepseek', status:'exception', reason:e.message||'unknown'});
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
+          sse({type:'engine_debug', engine:'deepseek', status:'exception', reason});
           return null;
         }
       }
@@ -3697,7 +3733,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           sse({type:'engine_debug', engine:'anthropic', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'anthropic', status:res.status, reason:'rate_limit_or_auth'});
-            engines.anthropic.disabled = true; return null;
+            return null; // NON disabilitare — 429 è temporaneo
           }
           if (!res.ok) {
             const errBody = await res.text().catch(()=>'');
@@ -3711,7 +3747,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'anthropic', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 22s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'anthropic', status:'exception', reason});
           return null;
         }
@@ -3735,7 +3771,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             const errBody = await res.text().catch(()=>'');
             sse({type:'engine_debug', engine:'openai', status:res.status, reason:`rate_limit_or_auth: ${errBody.substring(0,200)}`});
-            engines.openai.disabled = true; return null;
+            return null; // NON disabilitare — 429 è temporaneo
           }
           if (!res.ok) {
             const errBody = await res.text().catch(()=>'');
@@ -3748,7 +3784,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'openai', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 22s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'openai', status:'exception', reason});
           return null;
         }
@@ -3759,7 +3795,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       async function tryOpenRouter(promptText) {
         try {
           // OpenRouter: API OpenAI-compatibile, Llama 3.3 70B free (confermato attivo mar 2026)
-          const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          sse({type:'engine_debug', engine:'openrouter', status:'calling', reason:'Calling OpenRouter Llama 3.3 70B...'});
+          const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -3773,10 +3810,11 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 16384, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          });
+          }, 55000);
+          sse({type:'engine_debug', engine:'openrouter', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'openrouter', status:res.status, reason:'rate_limit_or_auth'});
-            engines.openrouter.disabled = true; return null;
+            return null;
           }
           if (!res.ok) {
             const errBody = await res.text().catch(()=>'');
@@ -3786,9 +3824,11 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           const d = await res.json();
           const text = d.choices?.[0]?.message?.content || null;
           if (!text) sse({type:'engine_debug', engine:'openrouter', status:200, reason:'empty_response'});
+          else sse({type:'engine_debug', engine:'openrouter', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          sse({type:'engine_debug', engine:'openrouter', status:'exception', reason:e.message||'unknown'});
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
+          sse({type:'engine_debug', engine:'openrouter', status:'exception', reason});
           return null;
         }
       }
@@ -3796,7 +3836,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       async function tryFireworks(promptText) {
         try {
           // Fireworks AI: specializzato in structured JSON output, molto veloce
-          const res = await fetch('https://api.fireworks.ai/inference/v1/chat/completions', {
+          sse({type:'engine_debug', engine:'fireworks', status:'calling', reason:'Calling Fireworks Llama 3.3 70B...'});
+          const res = await fetchWithTimeout('https://api.fireworks.ai/inference/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.FIREWORKS_KEY}` },
             body: JSON.stringify({
@@ -3805,10 +3846,11 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 4096, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          });
+          }, 55000);
+          sse({type:'engine_debug', engine:'fireworks', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'fireworks', status:res.status, reason:'rate_limit_or_auth'});
-            engines.fireworks.disabled = true; return null;
+            return null;
           }
           if (!res.ok) {
             const errBody = await res.text().catch(()=>'');
@@ -3818,9 +3860,11 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           const d = await res.json();
           const text = d.choices?.[0]?.message?.content || null;
           if (!text) sse({type:'engine_debug', engine:'fireworks', status:200, reason:'empty_response'});
+          else sse({type:'engine_debug', engine:'fireworks', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          sse({type:'engine_debug', engine:'fireworks', status:'exception', reason:e.message||'unknown'});
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
+          sse({type:'engine_debug', engine:'fireworks', status:'exception', reason});
           return null;
         }
       }
@@ -3829,7 +3873,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         try {
           // SambaNova: Llama 4 Maverick su chip custom, free tier 20 req/min
           // NOTA: SambaNova NON supporta response_format json_object — usiamo solo il system prompt
-          const res = await fetch('https://api.sambanova.ai/v1/chat/completions', {
+          sse({type:'engine_debug', engine:'sambanova', status:'calling', reason:'Calling SambaNova Llama 4 Maverick...'});
+          const res = await fetchWithTimeout('https://api.sambanova.ai/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.SAMBANOVA_KEY}` },
             body: JSON.stringify({
@@ -3837,10 +3882,11 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               messages: [{ role: 'system', content: sysPrompt + '\nIMPORTANTE: Rispondi ESCLUSIVAMENTE con JSON valido. Nessun testo prima o dopo.' }, { role: 'user', content: promptText }],
               max_tokens: 16384, temperature: 0.3
             })
-          });
+          }, 55000);
+          sse({type:'engine_debug', engine:'sambanova', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'sambanova', status:res.status, reason:'rate_limit_or_auth'});
-            engines.sambanova.disabled = true; return null;
+            return null;
           }
           if (!res.ok) {
             const errBody = await res.text().catch(()=>'');
@@ -3850,9 +3896,11 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           const d = await res.json();
           const text = d.choices?.[0]?.message?.content || null;
           if (!text) sse({type:'engine_debug', engine:'sambanova', status:200, reason:'empty_response'});
+          else sse({type:'engine_debug', engine:'sambanova', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          sse({type:'engine_debug', engine:'sambanova', status:'exception', reason:e.message||'unknown'});
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 55s' : (e.message||'unknown');
+          sse({type:'engine_debug', engine:'sambanova', status:'exception', reason});
           return null;
         }
       }
