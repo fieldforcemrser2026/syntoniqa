@@ -2698,7 +2698,7 @@ function toast(msg,type='info',duration=4000){
   if(_tc){while(_tc.children.length>=5)_tc.children[0].remove()}
   const d=document.createElement('div');
   d.className='toast '+type;
-  if(msg&&msg.includes('<'))d.innerHTML=msg;else d.textContent=msg;
+  d.textContent=msg;
   if(_tc)_tc.appendChild(d);
   setTimeout(()=>d.remove(),duration)
 }
@@ -3283,7 +3283,7 @@ function renderDashboard(){
   $('tblUrgDash').innerHTML=urgOpen.length?urgOpen.map(u=>`<tr>
     <td><span class="tag" style="background:${getColor(DATA.priorita||[],u.PrioritaID)}20;color:${getColor(DATA.priorita||[],u.PrioritaID)}">${getName(DATA.priorita||[],u.PrioritaID)}</span></td>
     <td>${getName(DATA.clienti||[],u.ClienteID)}</td>
-    <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.Problema||'—'}</td>
+    <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.Problema)||'—'}</td>
     <td>${slaTag(u.SLAStatus)}</td>
     <td>${statusTag(u.Stato)}</td>
     <td>${u.Stato==='aperta'?`<button class="btn btn-primary btn-xs" onclick="openAssegna('${u.ID}')">👤</button> `:''}${u.Stato==='assegnata'||u.Stato==='schedulata'?`<button class="btn btn-warn btn-xs" onclick="urgAction('${u.ID}','startUrgenza')">⚡</button> `:''}${u.Stato==='in_corso'?`<button class="btn btn-ok btn-xs" onclick="urgAction('${u.ID}','resolveUrgenza')">✅</button> `:''}<button class="btn btn-ghost btn-xs" onclick="showDetail('urgenza','${u.ID}')">👁️</button></td>
@@ -4002,7 +4002,7 @@ function renderUrgenze(){
     <td><span class="tag" style="background:${getColor(DATA.priorita||[],u.PrioritaID)}20;color:${getColor(DATA.priorita||[],u.PrioritaID)}">${getName(DATA.priorita||[],u.PrioritaID)}</span></td>
     <td>${getName(DATA.clienti||[],u.ClienteID)}</td>
     <td>${getName(DATA.macchine||[],u.MacchinaID,'Tipo')}</td>
-    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.Problema||'—'}</td>
+    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.Problema)||'—'}</td>
     <td>${u.TecnicoAssegnato?getName(DATA.utenti||[],u.TecnicoAssegnato):'<em style="color:var(--gray)">Non assegnata</em>'}</td>
     <td style="min-width:120px">${slaTag(u.SLAStatus)}</td>
     <td>${statusTag(u.Stato)}</td>
@@ -4250,7 +4250,7 @@ function renderOrdini(){
   $('tblOrdini').innerHTML=pagedOrd.length?pagedOrd.map(o=>`<tr id="row_ordini_${o.ID}" data-id="${o.ID}">
     <td><input type="checkbox" class="sel-chk" onchange="toggleSelectRow('ordini','${o.ID}',this.checked)"></td>
     <td><strong>${o.Codice||'—'}</strong></td>
-    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.Descrizione||'—'}</td>
+    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.Descrizione)||'—'}</td>
     <td>${o.Quantita||1}</td>
     <td>${getName(DATA.utenti||[],o.TecnicoID)}</td>
     <td>${getName(DATA.clienti||[],o.ClienteID)}</td>
@@ -6085,13 +6085,14 @@ async function loadChatMessages(){
   }catch(e){console.error('Chat load error:',e)}
 }
 
-function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 
 function formatChatMsg(txt,isMine){
   let h=escHtml(txt);
-  h=h.replace(/(https?:\/\/[^\s]+)/g,function(url){
-    if(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url))return '<a href="'+url+'" target="_blank"><img src="'+url+'" style="max-width:250px;max-height:180px;border-radius:8px;margin:4px 0;display:block" onerror="this.outerHTML=\'📎 <a href=\\\'\'+this.src+\'\\\' target=_blank>File</a>\'"></a>';
-    return '<a href="'+url+'" target="_blank" style="color:'+(isMine?'#dbeafe':'var(--c1)')+';text-decoration:underline">🔗 Link</a>';
+  h=h.replace(/(https?:\/\/[^\s&<>"']+)/g,function(url){
+    const safeUrl=url.replace(/"/g,'%22').replace(/'/g,'%27');
+    if(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(safeUrl))return '<a href="'+safeUrl+'" target="_blank" rel="noopener"><img src="'+safeUrl+'" style="max-width:250px;max-height:180px;border-radius:8px;margin:4px 0;display:block" loading="lazy"></a>';
+    return '<a href="'+safeUrl+'" target="_blank" rel="noopener" style="color:'+(isMine?'#dbeafe':'var(--c1)')+';text-decoration:underline">🔗 Link</a>';
   });
   return h.replace(/\n/g,'<br>');
 }
@@ -6105,7 +6106,7 @@ function adminChatAllegatoChange(input){
   reader.onload=function(){
     adminChatAllegato={base64:reader.result.split(',')[1],type:file.type,name:file.name};
     $('adminChatAllegatoPreview').style.display='block';
-    $('adminChatAllegatoPreview').innerHTML='<div style="display:flex;align-items:center;gap:8px;font-size:.8rem"><span>'+(file.type.startsWith('image/')?'🖼️':'📄')+'</span><span style="flex:1">'+file.name+'</span><button onclick="adminChatAllegato=null;$(\'adminChatAllegatoPreview\').style.display=\'none\'" style="background:none;border:none;color:var(--err);cursor:pointer">✕</button></div>';
+    $('adminChatAllegatoPreview').innerHTML='<div style="display:flex;align-items:center;gap:8px;font-size:.8rem"><span>'+(file.type.startsWith('image/')?'🖼️':'📄')+'</span><span style="flex:1">'+escHtml(file.name)+'</span><button onclick="adminChatAllegato=null;$(\'adminChatAllegatoPreview\').style.display=\'none\'" style="background:none;border:none;color:var(--err);cursor:pointer">✕</button></div>';
     input.value='';
   };
   reader.readAsDataURL(file);
@@ -11184,7 +11185,28 @@ async function runBackupNow(){
 
 // ============ KEYBOARD SHORTCUTS ============
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){document.querySelectorAll('.modal-overlay.show').forEach(m=>m.classList.remove('show'))}
+  // Escape — chiudi modali
+  if(e.key==='Escape'){document.querySelectorAll('.modal-overlay.show').forEach(m=>m.classList.remove('show'));return}
+  // Non intercettare se focus è in un input/textarea/select
+  const tag=document.activeElement?.tagName;
+  if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return;
+  // Ctrl/Cmd + shortcut
+  if(e.ctrlKey||e.metaKey){
+    if(e.key==='k'){e.preventDefault();const act=document.querySelector('.sec.active');const si=act?.querySelector('input[type="text"],input[type="search"]');if(si){si.focus();si.select()};return}  // Ctrl+K → Focus search in active section
+    if(e.key==='r'&&!e.shiftKey){e.preventDefault();refreshData();toast('🔄 Aggiornamento...','info',1500);return}  // Ctrl+R → Refresh data
+  }
+  // Alt + number → quick nav to section
+  if(e.altKey&&e.key>='1'&&e.key<='9'){
+    e.preventDefault();
+    const navMap=['dashboard','piano','urgenze','ordini','clienti','tecnici','mappa','calendar','config'];
+    const idx=parseInt(e.key)-1;
+    if(idx<navMap.length&&typeof showSec==='function')showSec(navMap[idx]);
+    return;
+  }
+  // ? → show shortcuts help
+  if(e.key==='?'&&!e.shiftKey){
+    toast('⌨️ Esc=chiudi | Ctrl+K=cerca | Ctrl+R=aggiorna | Alt+1-9=naviga sezioni','info',5000);
+  }
 });
 
 
@@ -12072,7 +12094,7 @@ function renderPlanner(){
       dayUrg.forEach(u => {
         const prio = getName(DATA.priorita||[],u.PrioritaID);
         const col = prioColor[u.PrioritaID]||prioColor[prio]||'#6B7280';
-        html += '<div draggable="true" ondragstart="onPlannerDragStart(event,\'urgenza\',\'' + u.ID + '\')" style="background:' + col + '22;border-left:3px solid ' + col + ';padding:3px 5px;margin-bottom:2px;border-radius:0 4px 4px 0;font-size:.67rem;cursor:grab;position:relative" onclick="showPlannerItem(\'urgenza\',\'' + u.ID + '\')" title="Urgenza: '+(u.Problema||'').replace(/"/g,'')+' — Clicca per dettagli, trascina per spostare">&#x1F6A8; ' + (u.Problema||'').substring(0,20) + '</div>';
+        html += '<div draggable="true" ondragstart="onPlannerDragStart(event,\'urgenza\',\'' + u.ID + '\')" style="background:' + col + '22;border-left:3px solid ' + col + ';padding:3px 5px;margin-bottom:2px;border-radius:0 4px 4px 0;font-size:.67rem;cursor:grab;position:relative" onclick="showPlannerItem(\'urgenza\',\'' + u.ID + '\')" title="'+esc((u.Problema||'').substring(0,60))+'">&#x1F6A8; ' + esc((u.Problema||'').substring(0,20)) + '</div>';
       });
 
       dayItems.forEach(p => {
@@ -12166,7 +12188,7 @@ function showPlannerDay(ds){
     html += urgs.map(u=>{
       const prio = getName(DATA.priorita||[],u.PrioritaID);
       const cli = getName(DATA.clienti||[],u.ClienteID);
-      return '<div class="planner-urgenza"><div>&#x1F6A8; <strong>'+prio+'</strong> — '+(u.Problema||'')+' — '+cli+'</div><div><button class="btn btn-sm btn-outline" onclick="showPlannerItem(\'urgenza\',\''+u.ID+'\')" title="Dettagli">👁️</button></div></div>';
+      return '<div class="planner-urgenza"><div>&#x1F6A8; <strong>'+esc(prio)+'</strong> — '+esc(u.Problema||'')+'— '+esc(cli)+'</div><div><button class="btn btn-sm btn-outline" onclick="showPlannerItem(\'urgenza\',\''+u.ID+'\')" title="Dettagli">👁️</button></div></div>';
     }).join('');
   }
   if(!items.length && !urgs.length) html = '<p style="color:var(--gray)">Nessun intervento pianificato per questo giorno. Usa \"+ Intervento\" per aggiungerne uno.</p>';

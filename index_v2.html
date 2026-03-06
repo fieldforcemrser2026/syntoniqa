@@ -1057,7 +1057,7 @@ async function refreshData(silent){
       let url=API_URL+'?'+new URLSearchParams({action:'getAll',userId:USER?.ID||''});
       const r=await fetch(url,{signal:AbortSignal.timeout(15000),headers:{'Authorization':'Bearer '+authToken}});
       const json=await r.json();
-      if(json.success&&json.data){DATA=json.data;if(USER&&USER.ID){const fresh=(DATA.utenti||[]).find(x=>x.ID===USER.ID);if(fresh)USER={...fresh}}renderAllForce()}
+      if(json.success&&json.data){DATA=json.data;_lastRefresh=Date.now();if(USER&&USER.ID){const fresh=(DATA.utenti||[]).find(x=>x.ID===USER.ID);if(fresh)USER={...fresh}}renderAllForce()}
     }catch(e){console.warn('[SILENT-REFRESH]',e.message)}
     return;
   }
@@ -1452,8 +1452,8 @@ function showInt(id){
     '<div><span style="color:var(--gray)">Km / Ore</span><br><strong>'+(p.KmPercorsi||'—')+' / '+(p.OreLavorate||'—')+'</strong></div>'+
     '<div><span style="color:var(--gray)">Durata stimata</span><br><strong>'+(p.DurataOre||'—')+'h</strong></div>'+
     '</div>'+
-    (p.Note?'<div style="margin-bottom:12px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm);font-size:.8125rem">'+p.Note+'</div></div>':'')+
-    (p.NoteCompletamento?'<div style="margin-bottom:12px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note completamento</div><div style="background:#D1FAE5;padding:12px;border-radius:var(--radius-sm);font-size:.8125rem">'+p.NoteCompletamento+'</div></div>':'')+
+    (p.Note?'<div style="margin-bottom:12px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm);font-size:.8125rem">'+esc(p.Note)+'</div></div>':'')+
+    (p.NoteCompletamento?'<div style="margin-bottom:12px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note completamento</div><div style="background:#D1FAE5;padding:12px;border-radius:var(--radius-sm);font-size:.8125rem">'+esc(p.NoteCompletamento)+'</div></div>':'')+
     (p.Stato==='in_corso'?'<div style="border:1px dashed var(--border);border-radius:8px;padding:12px;margin-bottom:12px"><strong style="font-size:.85rem">📷 Foto Intervento</strong><div style="display:flex;gap:8px;margin-top:8px"><label class="btn btn-outline" style="flex:1;text-align:center;cursor:pointer;font-size:.8rem">📸 Scatta<input type="file" accept="image/*" capture="environment" style="display:none" onchange="uploadFotoInt(this,\''+id+'\')"></label><label class="btn btn-outline" style="flex:1;text-align:center;cursor:pointer;font-size:.8rem">📁 Galleria<input type="file" accept="image/*" style="display:none" onchange="uploadFotoInt(this,\''+id+'\')"></label></div><div id="fotoIntPrev_'+id+'" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div></div>':'')+
     (p.Stato==='in_corso'||p.Stato==='completato'?buildChecklistUI(id, p):'') +
     '<div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">'+
@@ -1638,9 +1638,9 @@ function showUrg(id){
     '<div><span style="color:var(--gray)">Data Prevista</span><br><strong>'+fmtDate(u.DataPrevista)+'</strong></div>'+
     '<div><span style="color:var(--gray)">SLA</span><br><strong style="color:'+(u.SLAStatus==='ok'?'var(--ok)':'var(--err)')+'">'+( u.SLAStatus||'—')+'</strong></div>'+
     '</div>'+
-    '<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Problema</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+(u.Problema||'—')+'</div></div>'+
-    (u.Note?'<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+u.Note+'</div></div>':'')+
-    (u.NoteAi?'<div style="margin-bottom:16px;background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:12px"><strong>🤖 Analisi AI:</strong><br>'+u.NoteAi+(u.AiConfidence?' <span style="color:var(--gray);font-size:.8em">('+Math.round((u.AiConfidence||0)*100)+'%)</span>':'')+'</div>':'')+
+    '<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Problema</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+esc(u.Problema||'—')+'</div></div>'+
+    (u.Note?'<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+esc(u.Note)+'</div></div>':'')+
+    (u.NoteAi?'<div style="margin-bottom:16px;background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.3);border-radius:8px;padding:12px"><strong>🤖 Analisi AI:</strong><br>'+esc(u.NoteAi)+(u.AiConfidence?' <span style="color:var(--gray);font-size:.8em">('+Math.round((u.AiConfidence||0)*100)+'%)</span>':'')+'</div>':'')+
     '<div style="margin-bottom:16px;border:1px dashed rgba(124,58,237,0.4);border-radius:8px;padding:12px;background:rgba(124,58,237,0.05)">'+
     '<strong>📷 Analisi Guasto AI</strong><br>'+
     '<input type="file" id="aiVisionFileTec_'+u.ID+'" accept="image/*" capture="environment" style="display:none" onchange="previewAIPhotoTec(\''+u.ID+'\')">'+
@@ -1786,8 +1786,8 @@ function renderNot(){
   $('notList').innerHTML=items.length?items.map(n=>{
     const unread=n.Stato==='inviata';
     return '<div class="notif-item'+(unread?' unread':'')+'"><div class="dot-n'+(unread?'':' read')+'"></div><div class="n-info">'+
-      '<div style="display:flex;justify-content:space-between"><strong style="font-size:.875rem">'+(n.Oggetto||n.Tipo||'Notifica')+'</strong><span style="font-size:.6875rem;color:var(--gray)">'+fmtDateTime(n.DataInvio)+'</span></div>'+
-      '<div style="font-size:.8125rem;color:var(--gray);margin-top:2px">'+(n.Testo||'').substring(0,100)+'</div>'+
+      '<div style="display:flex;justify-content:space-between"><strong style="font-size:.875rem">'+esc(n.Oggetto||n.Tipo||'Notifica')+'</strong><span style="font-size:.6875rem;color:var(--gray)">'+fmtDateTime(n.DataInvio)+'</span></div>'+
+      '<div style="font-size:.8125rem;color:var(--gray);margin-top:2px">'+esc((n.Testo||'').substring(0,100))+'</div>'+
       (unread?'<button class="btn btn-sm btn-ok" style="margin-top:8px" onclick="markNot(\''+n.ID+'\')">✅ Ricevuta</button>':'')+
       '</div></div>';
   }).join(''):'<div class="empty"><div class="ico">🔔</div><p>Nessuna notifica</p></div>';
@@ -1829,8 +1829,8 @@ function renderRich(){
     return '<div class="card" style="border-left:4px solid '+borderColor+'"><div class="card-body">'+
     '<div style="display:flex;justify-content:space-between;margin-bottom:4px"><strong>'+(tipoIco[r.Tipo]||'📝')+' '+(r.Tipo||'—')+'</strong>'+statusTag(r.Stato)+'</div>'+
     '<div style="font-size:.875rem">📅 '+fmtDate(r.DataInizio)+(r.DataFine&&r.DataFine!==r.DataInizio?' → '+fmtDate(r.DataFine):'')+'</div>'+
-    '<div style="font-size:.8125rem;color:var(--gray);margin-top:4px">'+(r.Motivo||'—')+'</div>'+
-    (r.NoteAdmin?'<div style="font-size:.75rem;color:var(--c1);margin-top:4px;border-top:1px solid var(--gray4);padding-top:4px">💬 Admin: '+r.NoteAdmin+'</div>':'')+
+    '<div style="font-size:.8125rem;color:var(--gray);margin-top:4px">'+esc(r.Motivo||'—')+'</div>'+
+    (r.NoteAdmin?'<div style="font-size:.75rem;color:var(--c1);margin-top:4px;border-top:1px solid var(--gray4);padding-top:4px">💬 Admin: '+esc(r.NoteAdmin)+'</div>':'')+
     '</div></div>';
   }).join(''):'<div class="empty"><div class="ico">📝</div><p>Nessuna richiesta</p></div>';
 }
@@ -1855,7 +1855,7 @@ function renderTrasf(){
     return '<div class="card" '+(active?'style="border-left:4px solid var(--c1)"':'')+'><div class="card-body">'+
       '<div style="display:flex;justify-content:space-between;margin-bottom:4px"><strong>'+getName(DATA.clienti,t.ClienteID)+'</strong>'+statusTag(t.Stato)+'</div>'+
       '<div style="font-size:.875rem">📅 '+fmtDate(t.DataInizio)+' → '+fmtDate(t.DataFine)+'</div>'+
-      (t.Motivo?'<div style="font-size:.8125rem;color:var(--gray);margin-top:4px">'+t.Motivo+'</div>':'')+
+      (t.Motivo?'<div style="font-size:.8125rem;color:var(--gray);margin-top:4px">'+esc(t.Motivo)+'</div>':'')+
       (active?'<div style="margin-top:6px"><span class="tag tag-warn">🧳 In trasferta adesso</span></div>':'')+
       '</div></div>';
   }).join(''):'<div class="empty"><div class="ico">🧳</div><p>Nessuna trasferta</p></div>';
@@ -1904,12 +1904,12 @@ function showCliDetail(id){
   $('suTitle').textContent='🏢 '+getName(DATA.clienti,c.ID);
   $('suBody').innerHTML=
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:.8125rem;margin-bottom:16px">'+
-    '<div><span style="color:var(--gray)">Città</span><br><strong>'+(c.Citta||'—')+(c.Prov?' ('+c.Prov+')':'')+'</strong></div>'+
-    '<div><span style="color:var(--gray)">Telefono</span><br><strong>'+(c.Telefono||'—')+'</strong></div>'+
-    '<div><span style="color:var(--gray)">Email</span><br><strong>'+(c.Email||'—')+'</strong></div>'+
-    '<div><span style="color:var(--gray)">Contratto</span><br><strong>'+(c.Contratto||'—')+'</strong></div>'+
+    '<div><span style="color:var(--gray)">Città</span><br><strong>'+esc(c.Citta||'—')+(c.Prov?' ('+esc(c.Prov)+')':'')+'</strong></div>'+
+    '<div><span style="color:var(--gray)">Telefono</span><br><strong>'+esc(c.Telefono||'—')+'</strong></div>'+
+    '<div><span style="color:var(--gray)">Email</span><br><strong>'+esc(c.Email||'—')+'</strong></div>'+
+    '<div><span style="color:var(--gray)">Contratto</span><br><strong>'+esc(c.Contratto||'—')+'</strong></div>'+
     '</div>'+
-    (c.Note?'<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+c.Note+'</div></div>':'')+
+    (c.Note?'<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+esc(c.Note)+'</div></div>':'')+
     '<div style="font-weight:600;font-size:.8125rem;margin-bottom:8px">Ultimi interventi</div>'+
     (interventi.length?interventi.map(p=>'<div style="padding:8px 12px;border-left:3px solid '+getColor(DATA.tipiIntervento,p.TipoInterventoID)+';margin-bottom:6px;background:var(--gray5);border-radius:0 var(--radius-sm) var(--radius-sm) 0;font-size:.8125rem"><strong>'+fmtDate(p.Data)+'</strong> '+getName(DATA.tipiIntervento,p.TipoInterventoID)+' '+statusTag(p.Stato)+'</div>').join(''):'<div style="font-size:.8125rem;color:var(--gray)">Nessun intervento</div>')+
     '<div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">'+
@@ -1960,7 +1960,7 @@ function showMacDetail(id){
     '<div><span style="color:var(--gray)">Cliente</span><br><strong>'+(cli?getName(DATA.clienti,cli.ID):'—')+'</strong></div>'+
     '<div><span style="color:var(--gray)">Garanzia fino</span><br><strong>'+(garFino?fmtDate(garFino):'—')+'</strong></div>'+
     '</div>'+
-    (m.Note?'<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+m.Note+'</div></div>':'')+
+    (m.Note?'<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+esc(m.Note)+'</div></div>':'')+
     (prossimoInt?'<div style="margin-bottom:16px;padding:10px 14px;background:#EFF6FF;border-radius:10px;font-size:.8125rem"><strong>➡️ Prossimo:</strong> '+fmtDate(prossimoInt.Data)+' '+fmtTime(prossimoInt.OraInizio)+' · '+getName(DATA.tipiIntervento,prossimoInt.TipoInterventoID)+'</div>':'')+
     '<div style="font-weight:600;font-size:.8125rem;margin-bottom:8px">Ultimi interventi</div>'+
     (interventi.length?interventi.map(p=>'<div style="padding:8px 12px;border-left:3px solid '+getColor(DATA.tipiIntervento,p.TipoInterventoID)+';margin-bottom:6px;background:var(--gray5);border-radius:0 var(--radius-sm) var(--radius-sm) 0;font-size:.8125rem"><strong>'+fmtDate(p.Data)+'</strong> '+getName(DATA.tipiIntervento,p.TipoInterventoID)+' '+statusTag(p.Stato)+'</div>').join(''):'<div style="font-size:.8125rem;color:var(--gray)">Nessun intervento</div>')+
@@ -2664,7 +2664,7 @@ function showInstDetail(id){
     '<div><span style="color:var(--gray)">Avanzamento</span><br><strong>'+(i.Avanzamento||0)+'%</strong></div>'+
     '</div>'+
     (i.Avanzamento!=null?'<div style="margin-bottom:16px"><div style="height:8px;background:var(--gray4);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+(i.Avanzamento||0)+'%;background:var(--ok);border-radius:4px;transition:width .3s"></div></div></div>':'')+
-    (i.Note?'<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+i.Note+'</div></div>':'')+
+    (i.Note?'<div style="margin-bottom:16px"><div style="font-size:.75rem;color:var(--gray);margin-bottom:4px">Note</div><div style="background:var(--gray5);padding:12px;border-radius:var(--radius-sm)">'+esc(i.Note)+'</div></div>':'')+
     '<div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">'+
     (cObj?.Telefono?'<a href="tel:'+cObj.Telefono+'" class="btn btn-outline">📞 Chiama cliente</a>':'')+
     (cObj?.Latitudine&&cObj?.Longitudine?'<a href="https://www.google.com/maps/dir/?api=1&destination='+cObj.Latitudine+','+cObj.Longitudine+'&travelmode=driving" target="_blank" class="btn btn-outline">📍 Naviga</a>':'')+
@@ -3027,6 +3027,17 @@ function renderKpi(){
   </tr>`).join(''):'<tr><td colspan="5" class="empty">Nessun intervento nel periodo</td></tr>';
 }
 
+// ============ AUTO-REFRESH ON VISIBILITY + CONNECTION-AWARE ============
+let _lastRefresh=Date.now();
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'&&USER&&Date.now()-_lastRefresh>120000){
+    // App tornata in primo piano dopo >2 min → refresh silenzioso
+    _lastRefresh=Date.now();
+    refreshData(true);
+  }
+});
+// Connection-aware: se torna online da offline, il refresh è già gestito da window.online
+
 // ============ SERVICE WORKER + OFFLINE ============
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').then(reg=>{
@@ -3090,7 +3101,7 @@ function showOfflineBanner(msg,btnText,btnAction){
     banner.style.cssText='position:fixed;top:0;left:0;right:0;background:#FEF3C7;color:#92400E;padding:calc(var(--safe-t,0px) + 6px) 16px 6px;font-size:.8rem;text-align:center;z-index:10000;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,.15)';
     document.body.prepend(banner);
   }
-  banner.innerHTML=`<span>${msg}</span>`;
+  banner.innerHTML=`<span>${esc(msg)}</span>`;
   if(btnText&&btnAction){
     const btn=document.createElement('button');
     btn.textContent=btnText;
