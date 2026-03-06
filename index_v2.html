@@ -67,18 +67,18 @@
   --radius:12px; --radius-sm:8px;
   --safe-b:env(safe-area-inset-bottom,0px);
   --safe-t:env(safe-area-inset-top,0px);
+  --border:#E5E7EB;
 }
 [data-theme="dark"]{
   --gray:#9CA3AF; --gray2:#6B7280; --gray3:#374151; --gray4:#1F2937; --gray5:#111827;
   --dark:#F9FAFB; --white:#1F2937;
   --shadow:0 1px 3px rgba(0,0,0,.3);
   --shadow-lg:0 8px 24px rgba(0,0,0,.4);
+  --border:#374151;
 }
 [data-theme="dark"] body{background:#111827}
 [data-theme="dark"] .login{background:linear-gradient(160deg,#0F172A,var(--c1))}
-[data-theme="dark"] .card{border-color:#374151}
-[data-theme="dark"] .card-head{border-color:#374151}
-[data-theme="dark"] .bnav{background:#1F2937;border-color:#374151}
+[data-theme="dark"] .bnav{background:#1F2937}
 [data-theme="dark"] .hdr{box-shadow:0 2px 8px rgba(0,0,0,.4)}
 [data-theme="dark"] .sheet-overlay{background:rgba(0,0,0,.6)}
 [data-theme="dark"] .sheet-content{background:#1F2937}
@@ -130,7 +130,7 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 .hdr button{background:none;border:none;color:var(--white);font-size:1.25rem;cursor:pointer;padding:10px;min-height:44px;min-width:44px;display:flex;align-items:center;justify-content:center}
 
 /* BOTTOM NAV */
-.bnav{position:fixed;bottom:0;left:0;right:0;height:var(--nh);background:var(--white);border-top:1px solid #E5E7EB;display:flex;justify-content:space-around;align-items:center;z-index:100;padding-bottom:var(--safe-b)}
+.bnav{position:fixed;bottom:0;left:0;right:0;height:var(--nh);background:var(--white);border-top:1px solid var(--border);display:flex;justify-content:space-around;align-items:center;z-index:100;padding-bottom:var(--safe-b)}
 .bnav button{display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;color:var(--gray2);font-size:.625rem;font-family:var(--font);font-weight:500;cursor:pointer;padding:8px 14px;min-height:48px;transition:.15s;position:relative}
 .bnav button .ico{font-size:1.25rem}
 .bnav button.active{color:var(--c1);font-weight:600}
@@ -154,14 +154,14 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 .skel-text.short{width:50%}
 
 /* CARDS */
-.card{background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-bottom:12px;border:1px solid #E5E7EB}
-.card-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #E5E7EB}
+.card{background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-bottom:12px;border:1px solid var(--border)}
+.card-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border)}
 .card-head h3{font-size:.875rem;font-weight:600}
 .card-body{padding:14px 16px}
 .card-body.np{padding:0}
 
 /* INTERVENTION ITEM */
-.int-item{padding:14px 16px;border-bottom:1px solid #E5E7EB;display:flex;gap:12px;align-items:flex-start;cursor:pointer;transition:background .1s}
+.int-item{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:flex-start;cursor:pointer;transition:background .1s}
 .int-item:active{background:var(--gray5)}
 .int-item .time-block{min-width:48px;text-align:center}
 .int-item .time-block .time{font-size:1rem;font-weight:700;color:var(--c1)}
@@ -181,10 +181,10 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 
 /* KPI */
 .kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
-.kpi-mini{background:var(--white);border-radius:var(--radius-sm);padding:12px;text-align:center;box-shadow:var(--shadow);border:1px solid #E5E7EB}
+.kpi-mini{background:var(--white);border-radius:var(--radius-sm);padding:12px;text-align:center;box-shadow:var(--shadow);border:1px solid var(--border)}
 .kpi-mini .val{font-size:1.375rem;font-weight:700;letter-spacing:-.02em}
 .kpi-mini .lbl{font-size:.625rem;color:var(--gray);text-transform:uppercase;margin-top:2px}
-.kpi-box{background:var(--white);border-radius:var(--radius-sm);padding:12px 8px;text-align:center;box-shadow:var(--shadow);border:1px solid #E5E7EB}
+.kpi-box{background:var(--white);border-radius:var(--radius-sm);padding:12px 8px;text-align:center;box-shadow:var(--shadow);border:1px solid var(--border)}
 .kpi-val{font-size:1.5rem;font-weight:700;letter-spacing:-.02em}
 .kpi-lbl{font-size:.6rem;color:var(--gray);text-transform:uppercase;margin-top:2px}
 
@@ -214,13 +214,13 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 
 /* MENU GRID */
 .menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
-.menu-item{padding:16px;background:var(--white);border:1px solid #E5E7EB;border-radius:var(--radius);text-align:center;cursor:pointer;transition:all .15s}
+.menu-item{padding:16px;background:var(--white);border:1px solid var(--border);border-radius:var(--radius);text-align:center;cursor:pointer;transition:all .15s}
 .menu-item:active{background:var(--gray5);transform:scale(.95)}
 .menu-item .ico{font-size:1.75rem;margin-bottom:6px;display:block}
 .menu-item .lbl{font-size:.8125rem;font-weight:600;color:var(--dark)}
 
 /* NOTIF ITEM */
-.notif-item{padding:14px 16px;border-bottom:1px solid #E5E7EB;display:flex;gap:12px}
+.notif-item{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;gap:12px}
 .notif-item.unread{background:#FEF3C7}
 .notif-item .dot-n{width:10px;height:10px;border-radius:50%;background:var(--c1);flex-shrink:0;margin-top:4px}
 .notif-item .dot-n.read{background:var(--gray3)}
@@ -243,11 +243,11 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 .chat-msgs{flex:1;overflow-y:auto;padding:8px 0;display:flex;flex-direction:column;gap:6px}
 .chat-msg{max-width:85%;padding:10px 14px;border-radius:16px;font-size:.8125rem;line-height:1.4;word-break:break-word}
 .chat-msg.mine{align-self:flex-end;background:var(--c1);color:var(--white);border-bottom-right-radius:4px}
-.chat-msg.other{align-self:flex-start;background:var(--white);border:1px solid #E5E7EB;border-bottom-left-radius:4px}
+.chat-msg.other{align-self:flex-start;background:var(--white);border:1px solid var(--border);border-bottom-left-radius:4px}
 .chat-msg .sender{font-size:.6875rem;font-weight:600;opacity:.8;margin-bottom:2px}
 .chat-msg .meta{font-size:.625rem;opacity:.6;text-align:right;margin-top:2px}
 .chat-msg.tg{border-left:3px solid #0088cc}
-.chat-input-bar{display:flex;gap:8px;padding:8px 0 4px;border-top:1px solid #E5E7EB;margin-top:auto}
+.chat-input-bar{display:flex;gap:8px;padding:8px 0 4px;border-top:1px solid var(--border);margin-top:auto}
 .chat-input-bar input{flex:1;padding:10px 14px;border:1.5px solid var(--gray3);border-radius:24px;font-size:.875rem;font-family:var(--font)}
 .chat-input-bar input:focus{border-color:var(--c1);outline:none}
 .chat-input-bar button{width:44px;height:44px;border-radius:50%;background:var(--c1);border:none;color:var(--white);font-size:1.1rem;cursor:pointer}
@@ -347,9 +347,9 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <div class="toast-c" id="toasts"></div>
 <!-- Global loading overlay -->
 <div id="globalLoad" style="display:none;position:fixed;inset:0;background:rgba(5,12,20,.35);z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(2px)">
-  <div style="background:#fff;padding:24px 32px;border-radius:16px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.2)">
-    <div style="width:36px;height:36px;border:3px solid #E5E7EB;border-top-color:var(--c1);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto"></div>
-    <p style="margin:12px 0 0;font-size:.8125rem;color:#6B7280">Operazione in corso...</p>
+  <div style="background:var(--white);padding:24px 32px;border-radius:16px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+    <div style="width:36px;height:36px;border:3px solid var(--gray3);border-top-color:var(--c1);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto"></div>
+    <p style="margin:12px 0 0;font-size:.8125rem;color:var(--gray)">Operazione in corso...</p>
   </div>
 </div>
 
@@ -380,11 +380,11 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 </div>
 
 <!-- HEADER -->
-<header class="hdr" id="hdr" style="display:none">
+<header class="hdr" id="hdr" style="display:none" role="banner">
 <h1 id="hdrTitle">Home</h1>
 <div style="display:flex;gap:6px;align-items:center">
-<span id="hdrDate" style="font-size:.6875rem;opacity:.7"></span>
-<button onclick="goPage('notifiche')" id="btnNotHdr" style="position:relative">🔔</button>
+<span id="hdrDate" style="font-size:.6875rem;opacity:.7" aria-live="polite"></span>
+<button onclick="goPage('notifiche')" id="btnNotHdr" aria-label="Notifiche" style="position:relative">🔔</button>
 </div>
 </header>
 
@@ -465,7 +465,7 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <button class="btn btn-xs btn-outline" onclick="insertCmd('/risolto ')" style="margin:0 2px;font-size:.7rem">/risolto</button>
 <button class="btn btn-xs btn-outline" onclick="insertCmd('/ordine ')" style="margin:0 2px;font-size:.7rem">/ordine</button>
 </div>
-<div id="chatAllegatoPreview" style="display:none;padding:6px 10px;background:var(--gray5);border-top:1px solid #E5E7EB"></div>
+<div id="chatAllegatoPreview" style="display:none;padding:6px 10px;background:var(--gray5);border-top:1px solid var(--border)"></div>
 <div class="chat-input-bar">
 <label style="cursor:pointer;font-size:1.2rem;padding:0 4px;display:flex;align-items:center" title="Allega foto/file">📎<input type="file" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" style="display:none" onchange="chatAllegatoChange(this)"></label>
 <input type="text" id="chatInput" placeholder="Scrivi messaggio..." onkeydown="if(event.key==='Enter')sendChatMsg()" onfocus="showChatCmds()" style="flex:1">
@@ -658,12 +658,12 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 </main>
 
 <!-- BOTTOM NAV -->
-<nav class="bnav" id="bnav" style="display:none">
-<button class="active" onclick="goPage('home')" data-p="home"><span class="ico">🏠</span>Home</button>
-<button onclick="goPage('interventi')" data-p="interventi"><span class="ico">📋</span>Interventi</button>
-<button onclick="goPage('urgenze')" data-p="urgenze"><span class="ico">🚨</span>Urgenze</button>
-<button onclick="goPage('chat')" data-p="chat" id="navChat" style="position:relative"><span class="ico">💬</span>Chat TG<span id="chatBadge" style="display:none;position:absolute;top:2px;right:4px;background:var(--err);color:#fff;border-radius:50%;font-size:.55rem;min-width:14px;height:14px;line-height:14px;text-align:center;padding:0 3px"></span></button>
-<button onclick="goPage('menu')" data-p="menu"><span class="ico">⋯</span>Menu</button>
+<nav class="bnav" id="bnav" style="display:none" role="tablist" aria-label="Navigazione principale">
+<button class="active" onclick="goPage('home')" data-p="home" aria-label="Home" role="tab" aria-selected="true"><span class="ico">🏠</span>Home</button>
+<button onclick="goPage('interventi')" data-p="interventi" aria-label="Interventi" role="tab"><span class="ico">📋</span>Interventi</button>
+<button onclick="goPage('urgenze')" data-p="urgenze" aria-label="Urgenze" role="tab"><span class="ico">🚨</span>Urgenze</button>
+<button onclick="goPage('chat')" data-p="chat" id="navChat" aria-label="Chat Telegram" role="tab" style="position:relative"><span class="ico">💬</span>Chat TG<span id="chatBadge" style="display:none;position:absolute;top:2px;right:4px;background:var(--err);color:#fff;border-radius:50%;font-size:.55rem;min-width:14px;height:14px;line-height:14px;text-align:center;padding:0 3px"></span></button>
+<button onclick="goPage('menu')" data-p="menu" aria-label="Menu" role="tab"><span class="ico">⋯</span>Menu</button>
 </nav>
 
 <!-- ==================== SHEETS ==================== -->
@@ -982,17 +982,18 @@ function toast(m,t){
   else if(t==='ok'&&navigator.vibrate)navigator.vibrate([30,20,30]);
   setTimeout(()=>{d.classList.add('out');setTimeout(()=>d.remove(),250)},3200);
 }
-function openSheet(id){$(id).classList.add('show')}
-function closeSheet(id){$(id).classList.remove('show')}
+function openSheet(id){const el=$(id);if(!el)return;el.classList.add('show');el.setAttribute('role','dialog');el.setAttribute('aria-modal','true')}
+function closeSheet(id){const el=$(id);if(!el)return;el.classList.remove('show');el.removeAttribute('aria-modal')}
+function showSkel(elId,n){const el=$(elId);if(!el)return;el.innerHTML=Array.from({length:n||3},()=>'<div class="skel skel-card"></div>').join('')}
 
 // ============ NAVIGATION ============
 function goPage(name){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.bnav button').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.bnav button').forEach(b=>{b.classList.remove('active');b.setAttribute('aria-selected','false')});
   const pg=$('pg'+name.charAt(0).toUpperCase()+name.slice(1));
   if(pg){pg.classList.add('active');pg.style.animation='none';pg.offsetHeight;pg.style.animation=''}
   const btn=document.querySelector('.bnav button[data-p="'+name+'"]');
-  if(btn){btn.classList.add('active');if(navigator.vibrate)navigator.vibrate(10)}
+  if(btn){btn.classList.add('active');btn.setAttribute('aria-selected','true');if(navigator.vibrate)navigator.vibrate(10)}
   const t={'home':'🏠 Home','interventi':'📋 Interventi','urgenze':'🚨 Urgenze','ordini':'📦 Ordini','menu':'⋯ Menu',
     'chat':'💬 Chat Telegram','notifiche':'🔔 Notifiche','richieste':'📝 Richieste','reperibilita':'📞 Reperibilità','trasferte':'🧳 Trasferte',
     'installazioni':'🔧 Installazioni','clienti':'🏢 Clienti','macchine':'⚙️ Macchine','documenti':'📁 Documenti',
@@ -1200,6 +1201,8 @@ function enterApp(){
     }
   }
   fillSelects();
+  // Show skeleton before render (fast, so often imperceptible — but covers slow devices)
+  showSkel('homeList',3);showSkel('homeKpi',4);
   renderAll();
   // Auto-refresh silenzioso ogni 120s (senza overlay — ridotto da 60s)
   if(window._autoRefreshTimer) clearInterval(window._autoRefreshTimer);
@@ -1380,7 +1383,7 @@ function renderHome(){
         '<button class="btn btn-xs" style="background:var(--warn);color:#fff;margin-top:6px;font-size:.7rem;padding:4px 10px" onclick="event.stopPropagation();startUrg(\''+u.ID+'\')">⚡ Inizia</button>':
         u.Stato==='in_corso'?
         '<button class="btn btn-xs" style="background:var(--ok);color:#fff;margin-top:6px;font-size:.7rem;padding:4px 10px" onclick="event.stopPropagation();resolveUrg(\''+u.ID+'\')">✅ Risolvi</button>':'';
-      return '<div style="padding:10px 16px;border-bottom:1px solid #E5E7EB;cursor:pointer" onclick="showUrg(\''+u.ID+'\')">'+
+      return '<div style="padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer" onclick="showUrg(\''+u.ID+'\')">'+
         '<div style="display:flex;justify-content:space-between;margin-bottom:2px"><span class="tag" style="background:'+pc+'20;color:'+pc+'">'+getName(DATA.priorita,u.PrioritaID)+'</span>'+statusTag(u.Stato)+'</div>'+
         '<div style="font-weight:600;font-size:.875rem">'+getName(DATA.clienti,u.ClienteID)+'</div>'+
         '<div style="font-size:.75rem;color:var(--gray)">'+(u.Problema||'').substring(0,60)+'</div>'+actionBtn+'</div>';
