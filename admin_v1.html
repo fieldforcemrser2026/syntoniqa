@@ -7752,6 +7752,8 @@ async function runAI(promptOverride){
   // ─── RACE VISUALIZATION UI ───
   const _LOGO='https://unpkg.com/@lobehub/icons-static-svg@latest/icons/';
   const _engLabels={
+    anthropic:{name:'Claude',    color:'#D97706', logo:_LOGO+'anthropic.svg'},
+    openai:   {name:'GPT-4o',    color:'#10B981', logo:_LOGO+'openai.svg'},
     gemini:   {name:'Gemini',    color:'#4285F4', logo:_LOGO+'gemini.svg'},
     cerebras: {name:'Cerebras',  color:'#FF6B35', logo:_LOGO+'cerebras.svg'},
     groq:     {name:'Groq',      color:'#F55036', logo:_LOGO+'groq.svg'},
@@ -7762,7 +7764,7 @@ async function runAI(promptOverride){
     deepseek: {name:'DeepSeek',  color:'#0EA5E9', logo:_LOGO+'deepseek.svg'},
     workersai:{name:'Workers AI', color:'#F38020', logo:_LOGO+'cloudflare.svg'},
   };
-  const _allEng=['gemini','cerebras','groq','openrouter','fireworks','sambanova','mistral','deepseek','workersai'];
+  const _allEng=['anthropic','openai','gemini','cerebras','groq','openrouter','fireworks','sambanova','mistral','deepseek','workersai'];
   const _raceStart=Date.now();
 
   // Build Race Arena
