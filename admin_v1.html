@@ -7618,12 +7618,12 @@ async function aiGenerateWithReview(){
 
           // ── PHASE 2 events ──
           else if(ev.type==='phase_start'&&ev.phase===2){
-            $('revStatusOpenai').textContent='Analisi in corso...';
-            $('revStatusClaude').textContent='Analisi in corso...';
-            $('revLaneOpenai').classList.add('active');
-            $('revLaneClaude').classList.add('active');
-            $('revFillOpenai').style.width='15%';
-            $('revFillClaude').style.width='15%';
+            if($('revStatusOpenai'))$('revStatusOpenai').textContent='Analisi in corso...';
+            if($('revStatusClaude'))$('revStatusClaude').textContent='Analisi in corso...';
+            if($('revLaneOpenai'))$('revLaneOpenai').classList.add('active');
+            if($('revLaneClaude'))$('revLaneClaude').classList.add('active');
+            if($('revFillOpenai'))$('revFillOpenai').style.width='15%';
+            if($('revFillClaude'))$('revFillClaude').style.width='15%';
           }
           else if(ev.type==='reviewer_status'){
             const eng=ev.engine;

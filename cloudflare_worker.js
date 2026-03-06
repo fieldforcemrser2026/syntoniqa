@@ -5355,6 +5355,7 @@ ${instructions}`;
           sse({type:'phase_start', phase:2, message:'OpenAI e Claude stanno analizzando il piano...'});
 
           // Build review context: piano compatto + tecnici + vincoli
+          const tecAttivi = allTecnici.filter(t => (t.ruolo || '').toLowerCase() !== 'admin');
           const tecniciCtx = tecAttivi.map(t => `${t.id}|${t.nome} ${t.cognome}|${t.ruolo}|base:${t.base||'?'}|furgone:${t.automezzo_id||'?'}`).join('\n');
           const pianoCompatto = decoded.slice(0, 150).map(p =>
             `${p.data||p.Data}|${p.tecnico||p.TecnicoNome||p.tecnicoId}|${p.cliente||p.ClienteNome||p.clienteId}|${p.tipo||p.Tipo}|${(p.note||p.Note||'').substring(0,60)}`
