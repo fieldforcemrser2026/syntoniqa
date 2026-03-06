@@ -5676,7 +5676,9 @@ ${instructions}`;
           const tecniciCtx = tecAttivi.map(t => {
             const ruolo = (t.ruolo || 'tecnico').toLowerCase();
             const isJunior = _isJunior(t);
-            return `${t.id}|${t.nome} ${t.cognome}|${t.ruolo}|base:${t.base||'?'}|furgone:${t.automezzo_id||'?'}|${isJunior?'JUNIOR':'SENIOR/CAPO'}`;
+            const isSenior = _isSenior(t);
+            const tag = isJunior ? '⚠️JUNIOR(non può stare da solo!)' : isSenior ? 'SENIOR/CAPO' : 'TECNICO_INDIPENDENTE';
+            return `${t.id}|${t.nome} ${t.cognome}|ruolo:${t.ruolo}|BASE:${t.base||'NON SPECIFICATA'}|furgone:${_furgLabel(t.automezzo_id)}|${tag}`;
           }).join('\n');
 
           // Contesto reperibilità attive nel mese
@@ -5691,16 +5693,21 @@ ${instructions}`;
 
           // Contesto geografico clienti (città per stima distanze)
           const clientiGeo = {};
+          const clientiNomeMap = {};
           allClienti.forEach(c => {
             const id = c.codice_m3 || c.id;
             if (id && c.citta_fatturazione) clientiGeo[id] = c.citta_fatturazione;
+            if (id) clientiNomeMap[id] = c.nome_interno || c.nome_account || id;
           });
-          const clientiGeoCtx = Object.entries(clientiGeo).map(([id, citta]) => `${id}|${citta}`).join('\n');
+          const clientiGeoCtx = Object.entries(clientiGeo).map(([id, citta]) => `${clientiNomeMap[id]||id}|${citta}`).join('\n');
 
           const pianoCompatto = decoded.slice(0, 150).map(p => {
             const cid = p.clienteId || p.ClienteID || '';
+            const tid = p.tecnicoId || p.TecnicoID || '';
             const citta = clientiGeo[cid] || '';
-            return `${p.data||p.Data}|${p.tecnico||p.TecnicoNome||p.tecnicoId}|${p.cliente||p.ClienteNome||cid}|${citta?'('+citta+')':''}|${p.tipo||p.Tipo}|${(p.note||p.Note||'').substring(0,40)}`;
+            const tec = tecAttivi.find(t => t.id === tid);
+            const ruoloTag = tec ? (_isJunior(tec) ? '[JR]' : _isSenior(tec) ? '[SR]' : '') : '';
+            return `${p.data||p.Data}|${p.tecnico||p.TecnicoNome||tid}${ruoloTag}|${p.cliente||p.ClienteNome||cid}|${citta?'('+citta+')':''}|${p.tipo||p.Tipo}|${(p.note||p.Note||'').substring(0,40)}`;
           }).join('\n');
 
           // Conta interventi per tecnico per verificare bilanciamento
@@ -5761,14 +5768,19 @@ Per OGNI suggerimento fornisci:
 TECNICI DISPONIBILI (con base e ruolo):
 ${tecniciCtx}
 
-REGOLE TEAM (IMPORTANTI — derivate dai ruoli DB, NON hardcoded):
-- Tecnici con ruolo "junior" (vedi lista sopra dove indicato JUNIOR): devono SEMPRE lavorare affiancati a un SENIOR
-- Tecnici con ruolo "senior" o "caposquadra": possono lavorare da soli
-- Tecnici con ruolo "tecnico" (senza qualifica): lavorano da soli, indipendenti
-- JUNIOR NON fanno reperibilità — MAI. Non segnalare violazioni di reperibilità per junior.
-- REPERIBILITÀ: il tecnico in reperibilità NON deve avere tagliandi/interventi programmati in quei giorni (vale solo per senior/caposquadra)
+REGOLE TEAM (⚠️ CRITICHE — VIOLAZIONE = severity "critical"):
+- ⛔ JUNIOR DA SOLO = VIOLAZIONE CRITICA: se nel piano un tecnico marcato "⚠️JUNIOR" appare in un giorno/cliente SENZA un SENIOR affiancato, segnala SEMPRE come severity "critical" category "pairing". I junior sono: quelli con tag "⚠️JUNIOR(non può stare da solo!)" nella lista sopra.
+- Tecnici "SENIOR/CAPO": possono lavorare da soli.
+- Tecnici "TECNICO_INDIPENDENTE": possono lavorare da soli.
+- REPERIBILITÀ: il tecnico in reperibilità NON deve avere tagliandi/interventi programmati in quei giorni (vale solo per senior/caposquadra). Junior NON fanno MAI reperibilità — non segnalare violazioni reperibilità per junior.
 - Max 2 tecnici per cliente per giorno (1 senior + 1 junior). MAI 2 senior sullo stesso cliente.
 - Se un tagliando dura 2 giorni, lo STESSO tecnico che lo inizia deve finirlo.
+
+REGOLE GEOGRAFICHE (⚠️ IMPORTANTI):
+- Confronta la BASE del tecnico (campo BASE nella lista sopra) con la CITTÀ del cliente (campo in CLIENTI E LOCALITÀ sotto)
+- Se due tecnici hanno la STESSA base (es. entrambi "BASE:Bologna"), NON segnalare uno come "più vicino" dell'altro — sono equivalenti geograficamente
+- Segnala come "geography" solo se un tecnico viene mandato LONTANO dalla sua base (>50km stimati) quando c'è un tecnico disponibile con base PIÙ VICINA al cliente
+- ATTENZIONE: non confondere la base del tecnico con la località del cliente!
 
 REPERIBILITÀ ATTIVE NEL MESE:
 ${repCtx || '(Nessuna reperibilità nel periodo)'}
@@ -5922,6 +5934,32 @@ Rispondi SOLO JSON valido: {"suggestions":[...], "overall_assessment":"valutazio
               if (s.title) s.title = anonDecode(s.title);
               if (s.description) s.description = anonDecode(s.description);
               if (s.proposed?.reasoning) s.proposed.reasoning = anonDecode(s.proposed.reasoning);
+              // DECODE EXTRA: sostituisci codice_m3 (es: CLI_50001416) con nome cliente leggibile
+              // e TEC_xxx con nome tecnico in TUTTI i campi testuali
+              const _decodeAllIds = (text) => {
+                if (!text) return text;
+                let out = text;
+                // Replace client codice_m3 patterns (any word matching a client code)
+                allClienti.forEach(c => {
+                  const code = c.codice_m3 || c.id;
+                  if (!code || code.length < 3) return;
+                  const nome = c.nome_interno || c.nome_account || code;
+                  if (nome === code) return; // no point replacing with same thing
+                  // Replace exact matches (word boundary)
+                  out = out.split(code).join(nome);
+                });
+                // Replace TEC_xxx patterns
+                allTecnici.forEach(t => {
+                  if (!t.id || t.id.length < 3) return;
+                  const nome = `${t.nome} ${t.cognome}`.trim();
+                  if (!nome || nome === t.id) return;
+                  out = out.split(t.id).join(nome);
+                });
+                return out;
+              };
+              if (s.title) s.title = _decodeAllIds(s.title);
+              if (s.description) s.description = _decodeAllIds(s.description);
+              if (s.proposed?.reasoning) s.proposed.reasoning = _decodeAllIds(s.proposed.reasoning);
             });
 
             return {
