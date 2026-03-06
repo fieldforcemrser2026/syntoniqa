@@ -3219,7 +3219,19 @@ NOTA ID: se stai ASSEGNANDO un intervento esistente dalla lista INTERVENTI DA AS
 
       // ─── AI Call con ANONYMIZATION layer ───
       const validIds = new Set(allTecnici.map(t => t.id));
-      const sysPrompt = vincoli.sys_prompt_override || `Sei un pianificatore FSM (manutenzione robot Lely). Rispondi SOLO JSON valido. Regole INVIOLABILI: (1) Se ci sono INTERVENTI DA ASSEGNARE, il tuo compito è assegnare tecnico+data+furgone a ciascuno. Usa il campo "id" con l'ID esistente (es: INT_xxx). (2) UN tagliando = 1 solo tecnico = 1 sola riga. NON mettere due tecnici sullo stesso intervento salvo affiancamento ESPLICITO. (3) Usa SOLO codici ID dalla lista. NON inventare ID. (4) Nel campo note scrivi modello macchina + data scadenza (es: "Astronaut A5 | scad:2026-03-10 | 2800h"). Formato: {"summary":"...","piano":[{"id":"INT_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza|installazione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}`;
+      const sysPrompt = vincoli.sys_prompt_override || `Sei un pianificatore FSM (manutenzione robot Lely). Rispondi SOLO JSON valido.
+
+REGOLE INVIOLABILI:
+1. REPERIBILITÀ: Chi è in reperibilità NON PUÒ fare NESSUN altro intervento quel giorno/settimana. NON generare righe "reperibilità" — la reperibilità è già gestita dal sistema. Genera SOLO tagliandi, urgenze, installazioni, controlli.
+2. INSTALLAZIONI hanno PRIORITÀ ASSOLUTA sui tagliandi. Il tecnico assegnato a un'installazione NON può fare tagliandi nello stesso periodo.
+3. TAGLIANDI: Ogni tagliando richiede 2 persone (1 senior + 1 junior). Genera DUE righe con stesso cliente/data/ora: una per il senior, una per il junior. Il junior usa il furgone del senior. MAI junior da solo. MAI senior da solo (eccetto caposquadra).
+4. PRIORITÀ TAGLIANDI: I tagliandi con scadenza più vicina vanno assegnati PRIMA (ordina per data scadenza crescente).
+5. Ogni macchina/asset UNA SOLA VOLTA nel piano. NON ripetere.
+6. Usa SOLO codici ID dalla lista. NON inventare ID.
+7. Note: scrivi NOME MACCHINA (es: "Astronaut A5 | scad:2026-03-10 | 2800h"), MAI UUID.
+8. Se ci sono INTERVENTI DA ASSEGNARE (con ID), assegna tecnico+data+furgone a ciascuno.
+
+Formato JSON: {"summary":"...","piano":[{"id":"INT_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza|installazione|controllo","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"NomeMacchina | scad:DATA | Xh"}],"warnings":["..."]}`;
 
       // Helper: costruisce prompt compatto per Workers AI (rimuove file e comprime dati)
       function buildCompactPrompt() {
@@ -3241,14 +3253,13 @@ CLIENTI: ${cCli}
 ${tagliandiContext ? tagliandiContext.substring(0,500) : ''}
 
 ${periodoIstruzione || 'Genera piano mese intero'}
-- SOLO lun-ven. Sab/Dom: solo reperibilita urgenze, no tagliandi.
-- 1 riga per tecnico per giorno (ogni tecnico almeno 1 intervento/giorno).
-- REGOLA: UN tagliando = 1 SOLO tecnico. NON mettere due tecnici sullo stesso intervento salvo affiancamento esplicito da vincolo.
-- Tagliando=4-8h. Urgenza=1-3h.
-- AFFIANCAMENTO solo se vincolo lo dice esplicitamente: DUE righe (senior+junior) stesso cliente/data/ora/furgone.
+- SOLO lun-ven. Sab/Dom: NIENTE.
+- NON generare righe "reperibilità". Chi è in reperibilità NON va pianificato.
+- INSTALLAZIONI: priorità assoluta su tagliandi.
+- TAGLIANDI: SEMPRE in coppia (1 senior + 1 junior). DUE righe con stesso cliente/data/ora.
+- PRIORITÀ: tagliandi con scadenza più vicina PRIMA.
+- Ogni macchina UNA SOLA VOLTA. Note = nome macchina (MAI UUID).
 - Tecnici assenti da vincoli: NON inserirli.
-- note = modello macchina + scadenza se disponibile (es: Astronaut A5 | scad:2026-03-10).
-- Distribuisci clienti: non stesso tecnico+cliente ogni giorno per settimane.
 - Usa furgone indicato nel tecnico. Usa SOLO codici dalla lista. NON inventare ID.
 
 JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA"}],"warnings":[]}`;
@@ -3371,6 +3382,18 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             });
             score -= juniorSoli * 8; // -8 per ogni junior solo
           }
+
+          // ── PENALITÀ: righe "reperibilità" (l'AI non deve generarle) ──
+          const repRows = obj.piano.filter(p => (p.tipo || '').toLowerCase().includes('reperibilit'));
+          score -= repRows.length * 10; // -10 per ogni riga di reperibilità
+
+          // ── PENALITÀ: note con UUID (l'AI deve usare nomi macchina) ──
+          const uuidNotes = obj.piano.filter(p => /^[0-9a-f]{8}-/.test(p.note || ''));
+          score -= uuidNotes.length * 2; // -2 per ogni UUID nelle note
+
+          // ── BONUS: installazioni presenti e prioritizzate ──
+          const hasInstall = obj.piano.some(p => p.tipo === 'installazione');
+          if (hasInstall) score += 5;
 
           return { score, parsed: obj };
         } catch { return { score: 0, parsed: null }; }
@@ -4119,6 +4142,27 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             return false;
           }
 
+          // Check reperibilità — chi è reperibile NON può fare altri interventi
+          if (p.tipo !== 'reperibilità') {
+            const conflictRep = allRep.find(r => {
+              if (r.tecnico_id !== p.tecnicoId) return false;
+              if (!r.data_inizio || !r.data_fine) return false;
+              return r.data_inizio <= pData && r.data_fine >= pData;
+            });
+            if (conflictRep) {
+              const tName = p.tecnico || p.tecnicoId;
+              postProcessWarnings.push(`${tName} in reperibilità il ${pData} — rimosso (no altri interventi durante reperibilità)`);
+              return false;
+            }
+          }
+
+          // Rimuovi righe di tipo "reperibilità" generate dall'AI (non devono essere nel piano)
+          if (p.tipo === 'reperibilità') {
+            const tName = p.tecnico || p.tecnicoId;
+            postProcessWarnings.push(`${tName}: rimossa riga "reperibilità" il ${pData} — la reperibilità è gestita automaticamente`);
+            return false;
+          }
+
           return true;
         });
       }
@@ -4315,6 +4359,18 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           return false;
         }
 
+        // Check se tecnico è in reperibilità in un giorno (NON può fare altri interventi)
+        function _isReperibilita(tecId, giorno) {
+          for (const r of (allRep || [])) {
+            if (r.tecnico_id !== tecId) continue;
+            if (!r.data_inizio || !r.data_fine) continue;
+            if (r.data_inizio > giorno) continue;
+            if (r.data_fine < giorno) continue;
+            return true;
+          }
+          return false;
+        }
+
         // Check se tecnico è in trasferta in un giorno
         function _isTrasferta(tecId, giorno) {
           for (const tr of (allTrasferte || [])) {
@@ -4357,7 +4413,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               }
             } else {
               // Installazione senza tecnici assegnati — assegna un senior libero
-              const seniorLibero = tecNonJunior.find(t => !tecGiorno.has(t.id) && !_isAbsent(t.id, giorno) && !_isTrasferta(t.id, giorno));
+              const seniorLibero = tecNonJunior.find(t => !tecGiorno.has(t.id) && !_isAbsent(t.id, giorno) && !_isTrasferta(t.id, giorno) && !_isReperibilita(t.id, giorno));
               if (seniorLibero) {
                 pianoNoDup.push({
                   id: null, data: giorno, tecnicoId: seniorLibero.id,
@@ -4381,6 +4437,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             if (tecGiorno.has(tec.id)) continue;
             if (_isAbsent(tec.id, giorno)) continue;
             if (_isTrasferta(tec.id, giorno)) continue;
+            if (_isReperibilita(tec.id, giorno)) continue;
             if (backlogIdx >= backlogRimanente.length) break;
 
             const item = backlogRimanente[backlogIdx];
@@ -4405,6 +4462,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           for (const jr of tecJunior) {
             if (tecGiorno.has(jr.id)) continue;
             if (_isAbsent(jr.id, giorno)) continue;
+            if (_isReperibilita(jr.id, giorno)) continue;
             // Trova un senior che è già assegnato questo giorno
             const seniorToday = pianoNoDup.find(p =>
               p.data === giorno && _seniorIds.includes(p.tecnicoId) && p.tipo !== 'reperibilita'
@@ -4460,19 +4518,20 @@ ${tagliandiContext}
 ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}`;
 
         const instructions = `ISTRUZIONI GENERAZIONE:
-- Tagliandi/interventi SOLO lun-ven. SABATO e DOMENICA: NIENTE.
-- ${nTeamEffettivi} team effettivi/giorno (junior si affianca a senior = 1 team). Genera ${nTeamEffettivi} interventi/giorno lavorativo.
-- OGNI macchina/asset va pianificata UNA SOLA VOLTA. NON ripetere la stessa macchina su più giorni/tecnici!
-- Durata: un tagliando puo richiedere 4-8 ore (anche giornata intera). Urgenze 1-3h.
-- "tagliando" e "service" = sinonimi. Nelle note scrivi il MODELLO della macchina (es: "Astronaut A5", "Vector 70") dal contesto TAGLIANDI sopra.
-- AFFIANCAMENTO JUNIOR [${_juniorIds.join(',')}] + SENIOR [${_seniorIds.join(',')}]: genera DUE righe (senior + junior) con STESSO clienteId/data/ora/furgone. Junior usa furgone del senior. MAI due senior insieme. MAI junior da solo.
-- Tecnici assenti da vincoli o in ferie/malattia/trasferta/installazione: NON inserirli in quei giorni.
+- SOLO lun-ven. SABATO e DOMENICA: NIENTE.
+- NON generare righe di tipo "reperibilità". Chi è in reperibilità NON VA PIANIFICATO per nessun intervento.
+- INSTALLAZIONI: priorità assoluta. Tecnici assegnati a installazioni NON possono fare tagliandi nello stesso periodo.
+- TAGLIANDI IN COPPIA OBBLIGATORIA: ogni tagliando richiede 2 persone. JUNIOR [${_juniorIds.join(',')}] + SENIOR [${_seniorIds.join(',')}]. Genera SEMPRE DUE righe: (senior + junior) con STESSO clienteId/data/ora. Junior usa furgone del senior. MAI junior da solo. MAI due junior insieme.
+- PRIORITÀ SCADENZE: tagliandi con scadenza più vicina PRIMA. Tagliandi SCADUTI sono urgentissimi.
+- OGNI macchina/asset UNA SOLA VOLTA. NON ripetere la stessa macchina.
+- Durata: tagliando 4-8h (giornata intera). Urgenza 1-3h. Controllo 2-4h.
+- Nelle note scrivi il NOME MODELLO della macchina (es: "Astronaut A5 | scad:2026-03-10"), MAI codici UUID.
+- Tecnici assenti (vincoli, ferie, malattia, trasferta): NON inserirli.
 - Usa il FURGONE indicato tra parentesi nel tecnico.
 - Raggruppa per zona (stessa zona per stesso tecnico nello stesso giorno).
-- Urgenze → primi giorni. Tagliandi scaduti → massima priorita.
-- Usa SOLO codici dalla lista (tecnicoId, clienteId). NON inventare nomi.
+- ${nTeamEffettivi} team effettivi/giorno. Genera ${nTeamEffettivi * 2} righe/giorno (2 per team: senior+junior).
 ${seniorConstraint}
-JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza|installazione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina (es: Astronaut A5)"}],"warnings":["..."]}`;
+JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza|installazione|controllo","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"NomeMacchina | scad:DATA"}],"warnings":["..."]}`;
 
         // ── CHUNKING SETTIMANALE: max 5 giorni per chunk = output gestibile ──
         // Sempre chunking per meseTarget (mese/vuoti/settimana)
