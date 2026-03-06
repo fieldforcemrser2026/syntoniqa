@@ -7793,9 +7793,9 @@ function _renderSuggestions(suggestions){
     let diffHtml='';
     if(sug.current){
       const cur=sug.current;const prop=sug.proposed||{};
-      if(cur.tecnicoId||prop.tecnicoId) diffHtml+=`<div class="diff-row"><span class="diff-label">Tecnico</span><span class="diff-before">${cur.tecnicoId||'—'}</span><span class="diff-arrow">→</span><span class="diff-after">${prop.tecnicoId||'(invariato)'}</span></div>`;
+      if(cur.tecnicoId||prop.tecnicoId) diffHtml+=`<div class="diff-row"><span class="diff-label">Tecnico</span><span class="diff-before">${cur.tecnicoNome||cur.tecnicoId||'—'}</span><span class="diff-arrow">→</span><span class="diff-after">${prop.tecnicoNome||prop.tecnicoId||'(invariato)'}</span></div>`;
       if(cur.data||prop.data) diffHtml+=`<div class="diff-row"><span class="diff-label">Data</span><span class="diff-before">${cur.data||'—'}</span><span class="diff-arrow">→</span><span class="diff-after">${prop.data||'(invariata)'}</span></div>`;
-      if(cur.clienteId||prop.clienteId) diffHtml+=`<div class="diff-row"><span class="diff-label">Cliente</span><span class="diff-before">${cur.clienteId||'—'}</span><span class="diff-arrow">→</span><span class="diff-after">${prop.clienteId||'(invariato)'}</span></div>`;
+      if(cur.clienteId||prop.clienteId) diffHtml+=`<div class="diff-row"><span class="diff-label">Cliente</span><span class="diff-before">${cur.clienteNome||cur.clienteId||'—'}</span><span class="diff-arrow">→</span><span class="diff-after">${prop.clienteNome||prop.clienteId||'(invariato)'}</span></div>`;
     }
 
     html+=`<div class="sug-card" data-sug-id="${sug.id}" style="animation-delay:${i*0.1}s">
@@ -8842,17 +8842,49 @@ async function downloadAIPlanXlsx(){
 
   const wb=XLSX.utils.book_new();
 
-  // Header row
-  const header=['Data','Giorno','Tecnico','Furgone','Cliente','Tipo Intervento','Ora Inizio','Durata (h)','Note'];
+  // Header row — TUTTE LE COLONNE SEPARATE (LSSA + PM dati)
+  const header=['Data','Giorno','Tecnico','Furgone','Cliente','Macchina','Modello','Tipo Robot','Seriale',
+    'Tipo Intervento','Scadenza PM','Stato','Ore Lavoro','km','Ultimo Tagliando','Ora Inizio','Durata (h)','Note'];
   const giorni=['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+
+  // Helper: trova furgone leggibile
+  function _xlsFurg(r){
+    if(r.furgone && r.furgone.length<15) return r.furgone;
+    const tec=(DATA.utenti||[]).find(u=>u.ID===r.tecnicoId||u.Nome===r.tecnico);
+    const aid=tec?.AutomezzoID||r.furgone||'';
+    if(!aid)return '';
+    // Cerca targa negli automezzi
+    const auto=(DATA.automezzi||[]).find(a=>a.ID===aid);
+    if(auto) return auto.Targa||auto.Modello||aid;
+    if(aid.length>12) return aid.substring(0,8)+'…';
+    return aid;
+  }
+
   const rows=AI_PLAN.piano.map(r=>{
     const d=r.data?new Date(r.data+'T00:00:00'):null;
     const giorno=d?giorni[d.getDay()]:'';
     const tecNome=r.tecnico||getName(DATA.utenti||[],r.tecnicoId);
-    // Trova furgone del tecnico
-    const tec=(DATA.utenti||[]).find(u=>u.ID===r.tecnicoId||u.Nome===r.tecnico);
-    const furg=tec?.AutomezzoID||'';
-    return[r.data||'',giorno,tecNome,furg,r.cliente||'',r.tipo||'',r.oraInizio||'08:00',r.durataOre||2,r.note||''];
+    const furg=_xlsFurg(r);
+    return[
+      r.data||'',
+      giorno,
+      tecNome,
+      furg,
+      r.cliente||'',
+      r.macchinaLabel||'',
+      r.macchinaModello||'',
+      r.machinaTipo||'',
+      r.seriale||'',
+      r.tipo||'',
+      r.scadenza||'',
+      r.statoScaduto||'',
+      r.oreLavoro||'',
+      r.km||'',
+      r.ultimoTagliando||'',
+      r.oraInizio||'08:00',
+      r.durataOre||2,
+      r.note||''
+    ];
   });
 
   // Raggruppa per data
@@ -8867,8 +8899,8 @@ async function downloadAIPlanXlsx(){
   });
 
   const ws=XLSX.utils.aoa_to_sheet(allRows);
-  // Larghezza colonne
-  ws['!cols']=[{wch:12},{wch:5},{wch:14},{wch:8},{wch:20},{wch:16},{wch:10},{wch:10},{wch:30}];
+  // Larghezza colonne: Data,Giorno,Tecnico,Furgone,Cliente,Macchina,Modello,TipoRobot,Seriale,TipoInt,ScadenzaPM,Stato,OreLav,km,UltimoTag,OraInizio,Durata,Note
+  ws['!cols']=[{wch:12},{wch:5},{wch:16},{wch:12},{wch:22},{wch:18},{wch:20},{wch:16},{wch:14},{wch:14},{wch:12},{wch:10},{wch:10},{wch:6},{wch:12},{wch:10},{wch:8},{wch:30}];
   XLSX.utils.book_append_sheet(wb,ws,'Piano Generato');
 
   // Summary sheet
@@ -8884,9 +8916,10 @@ async function downloadAIPlanXlsx(){
   const byTec={};
   AI_PLAN.piano.forEach((r,i)=>{const t=r.tecnico||r.tecnicoId||'?';if(!byTec[t])byTec[t]=[];byTec[t].push(rows[i])});
   Object.entries(byTec).forEach(([tec,items])=>{
-    const tecRows=[['Data','Giorno','Cliente','Tipo','Ora','Durata','Note'],...items.map(r=>[r[0],r[1],r[4],r[5],r[6],r[7],r[8]])];
+    const tecHeader=['Data','Giorno','Cliente','Macchina','Tipo Robot','Tipo','Scadenza','Stato','Ore Lavoro','km','Ora','Durata','Note'];
+    const tecRows=[tecHeader,...items.map(r=>[r[0],r[1],r[4],r[5],r[7],r[9],r[10],r[11],r[12],r[13],r[15],r[16],r[17]])];
     const wst=XLSX.utils.aoa_to_sheet(tecRows);
-    wst['!cols']=[{wch:12},{wch:5},{wch:20},{wch:16},{wch:8},{wch:8},{wch:30}];
+    wst['!cols']=[{wch:12},{wch:5},{wch:22},{wch:18},{wch:16},{wch:14},{wch:12},{wch:10},{wch:10},{wch:6},{wch:8},{wch:8},{wch:30}];
     XLSX.utils.book_append_sheet(wb,wst,tec.substring(0,31));
   });
 

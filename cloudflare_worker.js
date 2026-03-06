@@ -3105,6 +3105,18 @@ async function handlePost(action, body, env) {
       // Tagliandi/Service scaduti e in scadenza — prioritized list (only if ctx.tagliandi)
       let tagliandiContext = '';
       const oggi = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
+      // Mappa automezzi: id → targa/modello leggibile
+      const autoMap = {};
+      (allAutomezzi||[]).forEach(a => { if(a.id) autoMap[a.id] = a.targa || a.modello || a.id; });
+      function _furgLabel(autoId) {
+        if (!autoId) return '';
+        if (autoMap[autoId]) return autoMap[autoId];
+        // Se è un ID leggibile tipo FURG_x, usalo così
+        if (autoId.startsWith('FURG_') || autoId.startsWith('AUT_') && autoId.length < 10) return autoId;
+        // UUID lungo → cerca corrispondenza
+        return autoId.substring(0, 8) + '…';
+      }
+
       const tagItems = [];
       if (ctx.tagliandi) {
       // From macchine table (prossimo_tagliando)
@@ -3112,15 +3124,23 @@ async function handlePost(action, body, env) {
         if (!m.prossimo_tagliando) continue;
         const cli = allClienti.find(c => c.codice_m3 === m.cliente_id) || {};
         const ggDiff = Math.round((new Date(m.prossimo_tagliando) - new Date(oggi)) / 86400000);
+        // Label leggibile: tipo (es: "Astronaut A5") → modello (codice prodotto) → seriale
+        const tipoLabel = m.tipo && m.tipo.length > 3 ? m.tipo : '';
+        const label = tipoLabel || m.modello || m.seriale || '?';
         tagItems.push({
           tipo: 'tagliando',
           macchina: m.id,
-          macchinaLabel: `${m.modello||m.tipo||m.seriale||'?'}`,
+          macchinaLabel: label,
+          macchinaModello: m.modello || '',
+          machinaTipo: m.tipo || '',
+          seriale: m.seriale || '',
           cliente: m.cliente_id || '?',
           clienteId: m.cliente_id || '',
           clienteNome: cli?.nome_interno || cli?.nome_account || m.cliente_id || '?',
           citta: cli?.citta_fatturazione || '',
+          provincia: cli?.provincia || cli?.prov || '',
           data: m.prossimo_tagliando,
+          ultimoTagliando: m.ultimo_tagliando || '',
           giorniScadenza: ggDiff,
           urgenza: ggDiff < 0 ? 'SCADUTO' : ggDiff <= 7 ? 'URGENTE' : ggDiff <= 30 ? 'PROSSIMO' : 'PROGRAMMATO',
           oreLavoro: m.ore_lavoro || null
@@ -3135,13 +3155,19 @@ async function handlePost(action, body, env) {
           tipo: 'controllo',
           macchina: a.id || `ASSET_${a.numero_serie||'?'}`,
           macchinaLabel: `${a.nome_asset||a.modello||a.gruppo_attrezzatura||'?'}`,
+          macchinaModello: a.modello || '',
+          machinaTipo: a.gruppo_attrezzatura || '',
+          seriale: a.numero_serie || '',
           cliente: a.codice_m3 || '?',
           clienteId: a.codice_m3 || '',
           clienteNome: aCli?.nome_interno || aCli?.nome_account || a.codice_m3 || '?',
           citta: aCli?.citta_fatturazione || '',
+          provincia: aCli?.provincia || aCli?.prov || '',
           data: a.prossimo_controllo,
+          ultimoTagliando: '',
           giorniScadenza: ggDiff,
-          urgenza: ggDiff < 0 ? 'SCADUTO' : ggDiff <= 7 ? 'URGENTE' : ggDiff <= 30 ? 'PROSSIMO' : 'PROGRAMMATO'
+          urgenza: ggDiff < 0 ? 'SCADUTO' : ggDiff <= 7 ? 'URGENTE' : ggDiff <= 30 ? 'PROSSIMO' : 'PROGRAMMATO',
+          oreLavoro: null
         });
       }
       // Sort by urgenza: scaduti first, then by date ascending
@@ -3214,16 +3240,26 @@ async function handlePost(action, body, env) {
         const baseCode = t.base ? (cittaMap[t.base] || t.base) : '?';
         return `${t.id}(${t.ruolo},zona:${baseCode},furgone:${furgLabel})`;
       }).join('; ');
-      // Calcola senior/junior per regola distribuzione — match robusto con spazi E underscore
-      // DB usa: "caposquadra", "tecnico senior", "tecnico junior" (con spazio)
-      const allSeniors = allTecnici.filter(t => {
+      // Calcola senior/junior per regola distribuzione — match robusto + fallback nomi noti
+      // DB usa: "caposquadra", "tecnico senior", "tecnico junior", o anche solo "tecnico"
+      const _KNOWN_SENIOR_NAMES = ['jacopo','anton','giovanni'];
+      const _KNOWN_JUNIOR_NAMES = ['giuseppe','fabrizio','emanuele','gino'];
+      function _isSenior(t) {
         const r = (t.ruolo||'').toLowerCase().replace(/_/g,' ').trim();
-        return r === 'caposquadra' || r === 'senior' || r.includes('senior');
-      });
-      const allJuniors = allTecnici.filter(t => {
+        if (r === 'caposquadra' || r === 'senior' || r.includes('senior')) return true;
+        // Fallback: match per nome noto
+        const n = (t.nome||'').toLowerCase();
+        return _KNOWN_SENIOR_NAMES.includes(n);
+      }
+      function _isJunior(t) {
         const r = (t.ruolo||'').toLowerCase().replace(/_/g,' ').trim();
-        return r === 'junior' || r.includes('junior');
-      });
+        if (r === 'junior' || r.includes('junior')) return true;
+        // Fallback: match per nome noto
+        const n = (t.nome||'').toLowerCase();
+        return _KNOWN_JUNIOR_NAMES.includes(n);
+      }
+      const allSeniors = allTecnici.filter(t => t.ruolo !== 'admin' && _isSenior(t));
+      const allJuniors = allTecnici.filter(t => t.ruolo !== 'admin' && _isJunior(t) && !_isSenior(t));
       const seniorConstraint = allSeniors.length
         ? `\nREGOLA SENIOR (INVIOLABILE): i ${allSeniors.length} senior [${allSeniors.map(t=>t.id).join(',')}] sono RISORSE SCARSE. (1) MAI due senior insieme allo stesso cliente/giorno — devono essere su squadre separate. (2) Tecnici junior [${allJuniors.map(t=>t.id).join(',')}] NON vanno MAI da soli — abbinali SEMPRE a un senior diverso (1 junior per senior al massimo per giorno).`
         : '';
@@ -4412,6 +4448,10 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             const cli = allClienti.find(c => c.codice_m3 === p.clienteId);
             if (cli) p.cliente = cli.nome_interno || cli.nome_account || p.clienteId;
           }
+          // Furgone: da ID raw a label leggibile (targa/modello)
+          if (p.furgone && p.furgone.length > 12) {
+            p.furgone = _furgLabel(p.furgone);
+          }
           // Note: decode qualsiasi codice rimasto (macchine, città)
           if (p.note) p.note = anonDecode(p.note);
           return p;
@@ -4432,11 +4472,11 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             );
             if (match) { p.tecnicoId = match.id; p.tecnico = match.nome + ' ' + match.cognome; }
           }
-          // Fix furgone: SEMPRE usa il furgone dal DB (ignora quello AI)
+          // Fix furgone: SEMPRE usa il furgone dal DB (ignora quello AI) — label leggibile
           if (p.tecnicoId) {
             const tec = allTecnici.find(t => t.id === p.tecnicoId);
             if (tec && tec.automezzo_id) {
-              p.furgone = tec.automezzo_id;
+              p.furgone = _furgLabel(tec.automezzo_id);
             } else if (tec) {
               p.furgone = '';
             }
@@ -4849,9 +4889,18 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
                 id: null, data: giorno, tecnicoId: jr.id,
                 clienteId: seniorToday.clienteId || '', tipo: seniorToday.tipo || 'tagliando',
                 oraInizio: seniorToday.oraInizio || '08:00', durataOre: seniorToday.durataOre || 6,
-                furgone: seniorToday.furgone || '',
+                furgone: _furgLabel(jr.automezzo_id || '') || seniorToday.furgone || '',
                 note: `Affiancamento con ${_srName} — ${(seniorToday.note || '').substring(0, 80)}`,
-                macchina_id: seniorToday.macchina_id || null
+                macchina_id: seniorToday.macchina_id || null,
+                macchinaLabel: seniorToday.macchinaLabel || '',
+                macchinaModello: seniorToday.macchinaModello || '',
+                machinaTipo: seniorToday.machinaTipo || '',
+                seriale: seniorToday.seriale || '',
+                scadenza: seniorToday.scadenza || '',
+                statoScaduto: seniorToday.statoScaduto || '',
+                oreLavoro: seniorToday.oreLavoro || '',
+                ultimoTagliando: seniorToday.ultimoTagliando || '',
+                km: seniorToday.km || ''
               });
               tecGiorno.add(jr.id);
               if (!tecPerGiorno[giorno]) tecPerGiorno[giorno] = new Set();
@@ -5069,8 +5118,10 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               plan.push({
                 id: null, data: giorno, tecnicoId: tid,
                 clienteId: inst.cliente_id || '', tipo: 'installazione',
-                oraInizio: '08:00', durataOre: 8, furgone: tec.automezzo_id || '',
-                note: `Installazione presso ${cNome}`
+                oraInizio: '08:00', durataOre: 8, furgone: _furgLabel(tec.automezzo_id),
+                note: `Installazione presso ${cNome}`,
+                macchinaLabel: '', macchinaModello: '', machinaTipo: '', seriale: '',
+                scadenza: '', statoScaduto: '', oreLavoro: '', ultimoTagliando: '', km: ''
               });
               usedToday.add(tid);
               assigned = true;
@@ -5096,9 +5147,18 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               clienteId: item.clienteId || '', tipo: item.tipo || 'tagliando',
               oraInizio: '08:00',
               durataOre: item.oreLavoro ? Math.min(8, Math.max(4, item.oreLavoro / 500)) : 6,
-              furgone: tec.automezzo_id || '',
+              furgone: _furgLabel(tec.automezzo_id),
               note: makeNote(item),
-              macchina_id: item.macchina || null
+              macchina_id: item.macchina || null,
+              macchinaLabel: item.macchinaLabel || '',
+              macchinaModello: item.macchinaModello || '',
+              machinaTipo: item.machinaTipo || '',
+              seriale: item.seriale || '',
+              scadenza: item.data || '',
+              statoScaduto: item.urgenza || '',
+              oreLavoro: item.oreLavoro || '',
+              ultimoTagliando: item.ultimoTagliando || '',
+              km: item._km != null && item._km < 900 ? item._km : ''
             });
             usedToday.add(tec.id);
           }
@@ -5124,9 +5184,18 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
                 id: null, data: giorno, tecnicoId: jr.id,
                 clienteId: seniorEntry.clienteId || '', tipo: seniorEntry.tipo || 'tagliando',
                 oraInizio: seniorEntry.oraInizio || '08:00', durataOre: seniorEntry.durataOre || 6,
-                furgone: seniorEntry.furgone || '',
+                furgone: _furgLabel(jr.automezzo_id || '') || seniorEntry.furgone || '',
                 note: `Affiancamento con ${srName} — ${(seniorEntry.note || '').substring(0, 80)}`,
-                macchina_id: seniorEntry.macchina_id || null
+                macchina_id: seniorEntry.macchina_id || null,
+                macchinaLabel: seniorEntry.macchinaLabel || '',
+                macchinaModello: seniorEntry.macchinaModello || '',
+                machinaTipo: seniorEntry.machinaTipo || '',
+                seriale: seniorEntry.seriale || '',
+                scadenza: seniorEntry.scadenza || '',
+                statoScaduto: seniorEntry.statoScaduto || '',
+                oreLavoro: seniorEntry.oreLavoro || '',
+                ultimoTagliando: seniorEntry.ultimoTagliando || '',
+                km: seniorEntry.km || ''
               });
               usedToday.add(jr.id);
             }
@@ -5150,9 +5219,18 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               clienteId: item.clienteId || '', tipo: item.tipo || 'tagliando',
               oraInizio: '08:00',
               durataOre: item.oreLavoro ? Math.min(8, Math.max(4, item.oreLavoro / 500)) : 6,
-              furgone: tec.automezzo_id || '',
+              furgone: _furgLabel(tec.automezzo_id),
               note: makeNote(item),
-              macchina_id: item.macchina || null
+              macchina_id: item.macchina || null,
+              macchinaLabel: item.macchinaLabel || '',
+              macchinaModello: item.macchinaModello || '',
+              machinaTipo: item.machinaTipo || '',
+              seriale: item.seriale || '',
+              scadenza: item.data || '',
+              statoScaduto: item.urgenza || '',
+              oreLavoro: item.oreLavoro || '',
+              ultimoTagliando: item.ultimoTagliando || '',
+              km: item._km != null && item._km < 900 ? item._km : ''
             });
             usedToday.add(tec.id);
           }
@@ -5504,8 +5582,35 @@ Rispondi SOLO JSON valido: {"suggestions":[...], "overall_assessment":"valutazio
               return (b.confidence || 0) - (a.confidence || 0);
             });
 
-            // Assegna ID sequenziali
-            merged.forEach((s, i) => { s.id = `SUG_${String(i + 1).padStart(3, '0')}`; });
+            // Assegna ID sequenziali e DECODE: sostituisci TEC_xxx/CLI_xxx con nomi leggibili
+            merged.forEach((s, i) => {
+              s.id = `SUG_${String(i + 1).padStart(3, '0')}`;
+              // Decode tecnico ID → nome
+              const _decodeTec = (tid) => {
+                if (!tid) return tid;
+                const t = allTecnici.find(x => x.id === tid);
+                return t ? `${t.nome} ${t.cognome}`.trim() : tid;
+              };
+              const _decodeCli = (cid) => {
+                if (!cid) return cid;
+                const c = allClienti.find(x => x.codice_m3 === cid || x.id === cid);
+                return c ? (c.nome_interno || c.nome_account || cid) : cid;
+              };
+              // Decode current
+              if (s.current) {
+                if (s.current.tecnicoId) s.current.tecnicoNome = _decodeTec(s.current.tecnicoId);
+                if (s.current.clienteId) s.current.clienteNome = _decodeCli(s.current.clienteId);
+              }
+              // Decode proposed
+              if (s.proposed) {
+                if (s.proposed.tecnicoId) s.proposed.tecnicoNome = _decodeTec(s.proposed.tecnicoId);
+                if (s.proposed.clienteId) s.proposed.clienteNome = _decodeCli(s.proposed.clienteId);
+              }
+              // Decode title e description: sostituisci eventuali TEC_xxx / codice_m3 rimasti
+              if (s.title) s.title = anonDecode(s.title);
+              if (s.description) s.description = anonDecode(s.description);
+              if (s.proposed?.reasoning) s.proposed.reasoning = anonDecode(s.proposed.reasoning);
+            });
 
             return {
               merged,
