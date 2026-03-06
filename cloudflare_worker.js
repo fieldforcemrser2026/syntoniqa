@@ -3358,12 +3358,12 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
       async function tryCerebras(promptText) {
         try {
-          // Cerebras: llama-3.3-70b rimosso → qwen-3-235b (235B, molto più potente)
+          // Cerebras: gpt-oss-120b (120B production, stabile)
           const res = await fetch('https://api.cerebras.ai/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.CEREBRAS_KEY}` },
             body: JSON.stringify({
-              model: 'qwen-3-235b-a22b-instruct-2507',
+              model: 'gpt-oss-120b',
               messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
               max_tokens: 16384, temperature: 0.3,
               response_format: { type: 'json_object' }

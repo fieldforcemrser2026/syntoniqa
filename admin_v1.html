@@ -5512,7 +5512,7 @@ async function saveAllConfig(){
 // ============ AI ENGINE RANKING ============
 const AI_ENGINES = [
   { id:'gemini',    name:'Google Gemini 2.5',    key:'GEMINI_KEY',    icon:'🔵', desc:'Gratis: 250 req/g, 1M context. Modello: gemini-2.5-flash' },
-  { id:'cerebras',  name:'Cerebras Qwen 235B',   key:'CEREBRAS_KEY',  icon:'🟠', desc:'Gratis beta, 235B parametri su wafer-scale chip' },
+  { id:'cerebras',  name:'Cerebras GPT-OSS 120B', key:'CEREBRAS_KEY',  icon:'🟠', desc:'Gratis, 120B production su wafer-scale chip' },
   { id:'groq',      name:'Groq Llama 70B',       key:'GROQ_KEY',      icon:'🔴', desc:'Gratis: 14.400 req/g, 300+ tok/sec' },
   { id:'openrouter',name:'OpenRouter Llama 4',    key:'OPENROUTER_KEY',icon:'🌐', desc:'Gratis: 20+ modelli free, Llama 4 Maverick 400B' },
   { id:'fireworks', name:'Fireworks AI',          key:'FIREWORKS_KEY', icon:'🎆', desc:'Gratis: specializzato JSON output, molto veloce' },
@@ -7999,7 +7999,7 @@ async function applyAI(forceOverwrite){
 // ============ WORKFLOW APPROVATIVO ============
 async function submitAIPlanForApproval(){
   if(!AI_PLAN){toast('Genera prima un piano','warn');return}
-  const currentUser=SESSION?.user||{};
+  const currentUser=USER||{};
   try{
     const id='APR_'+Date.now();
     await apiCall('createApproval',{
@@ -8025,7 +8025,7 @@ async function renderApprovalQueue(){
       return;
     }
     tbody.innerHTML=approvals.map(a=>{
-      const currentUser=SESSION?.user||{};
+      const currentUser=USER||{};
       const canApprove=(currentUser.ruolo==='admin'||currentUser.ruolo==='caposquadra')&&a.stato==='in_attesa';
       return `<tr>
         <td><code>${a.id}</code></td>
@@ -8045,7 +8045,7 @@ async function renderApprovalQueue(){
 async function approveOrReject(id,stato){
   const note=stato==='rifiutato'?prompt('Motivo del rifiuto:'):null;
   if(stato==='rifiutato'&&note===null)return;
-  const currentUser=SESSION?.user||{};
+  const currentUser=USER||{};
   try{
     await apiCall('updateApproval',{
       id, stato,
@@ -8089,7 +8089,7 @@ async function viewApprovalPlan(id){
 async function renderTecnicoPlan(){
   const grid=$('tecnicoPlanGrid');if(!grid)return;
   const view=$('tecViewSelect')?.value||'mio';
-  const currentUser=SESSION?.user||{};
+  const currentUser=USER||{};
   const piano=(DATA.piano||[]).filter(p=>!p.Obsoleto);
   const utenti=DATA.utenti||[];
 
