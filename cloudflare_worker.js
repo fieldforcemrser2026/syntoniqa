@@ -3677,8 +3677,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
       async function tryAnthropic(promptText) {
         try {
-          // Claude Sonnet 4.5 — Anthropic Messages API
-          sse({type:'engine_debug', engine:'anthropic', status:'calling', reason:'Calling Anthropic API...'});
+          // Claude Haiku 3.5 — veloce (2-5s), economico ($1/M in, $5/M out), qualità >> Llama
+          sse({type:'engine_debug', engine:'anthropic', status:'calling', reason:'Calling Claude Haiku 3.5...'});
           const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
             method: 'POST',
             headers: {
@@ -3687,7 +3687,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               'anthropic-version': '2023-06-01'
             },
             body: JSON.stringify({
-              model: 'claude-sonnet-4-5-20250929',
+              model: 'claude-haiku-3-5-20241022',
               max_tokens: 8192,
               temperature: 0.3,
               system: sysPrompt,
@@ -3719,13 +3719,13 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
       async function tryOpenAI(promptText) {
         try {
-          // GPT-4o — OpenAI Chat Completions
-          sse({type:'engine_debug', engine:'openai', status:'calling', reason:'Calling OpenAI API...'});
+          // GPT-4o-mini — veloce (2-5s), economico ($0.15/M in, $0.60/M out), qualità >> Llama
+          sse({type:'engine_debug', engine:'openai', status:'calling', reason:'Calling GPT-4o-mini...'});
           const res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.OPENAI_KEY}` },
             body: JSON.stringify({
-              model: 'gpt-4o',
+              model: 'gpt-4o-mini',
               messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
               max_tokens: 8192, temperature: 0.3,
               response_format: { type: 'json_object' }
