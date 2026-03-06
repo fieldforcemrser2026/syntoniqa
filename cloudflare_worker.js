@@ -3536,14 +3536,14 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
       async function tryCerebras(promptText) {
         try {
-          // Cerebras: llama3.1-8b (unico modello disponibile, velocissimo ~2200 tok/s)
+          // Cerebras: llama3.1-8b (8K context — prompt+output devono stare in 8192 tok)
           const res = await fetch('https://api.cerebras.ai/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.CEREBRAS_KEY}` },
             body: JSON.stringify({
               model: 'llama3.1-8b',
-              messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
-              max_tokens: 16384, temperature: 0.3,
+              messages: [{ role: 'system', content: sysPrompt.substring(0, 2000) }, { role: 'user', content: promptText.substring(0, 4000) }],
+              max_tokens: 2048, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
           });
@@ -3780,7 +3780,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             body: JSON.stringify({
               model: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
               messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
-              max_tokens: 16384, temperature: 0.3,
+              max_tokens: 4096, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
           });
