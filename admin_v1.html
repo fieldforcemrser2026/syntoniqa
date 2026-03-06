@@ -934,11 +934,12 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <div style="border-top:1px solid #E5E7EB;padding-top:10px;margin-top:8px">
 <div style="font-size:.75rem;color:var(--gray);margin-bottom:6px">Suggerimenti rapidi:</div>
 <div style="display:flex;flex-wrap:wrap;gap:4px" id="vincoliQuickAdd">
-<button class="btn btn-sm btn-outline" onclick="(()=>{const jun=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&(u.Ruolo==='tecnico_junior'||u.Ruolo==='tecnico'));const sen=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&(u.Ruolo==='caposquadra'||u.Ruolo==='tecnico_senior'));const j=jun.slice(0,3).map(u=>u.Nome).join('/')||'[Junior]';const s=sen.slice(0,2).map(u=>u.Nome).join('/')||'[Senior]';addManualVincolo('👥 Accoppiamento Junior+Senior',j+' devono lavorare affiancati a un senior ('+s+')')})()">👥 Junior+Senior</button>
-<button class="btn btn-sm btn-outline" onclick="addManualVincolo('🚫 Tecnico non disponibile','[Nome] non disponibile per [motivo]')">🚫 Non disponibile</button>
-<button class="btn btn-sm btn-outline" onclick="addManualVincolo('🔧 Competenza specifica','Solo [Nome] può intervenire su [tipo macchina]')">🔧 Competenza</button>
-<button class="btn btn-sm btn-outline" onclick="addManualVincolo('🚗 Furgone fuori servizio','Furgone [FURG_X] in officina dal [data] al [data]')">🚗 Furgone KO</button>
-<button class="btn btn-sm btn-outline" onclick="addManualVincolo('📍 Zona geografica','[Nome] preferibilmente in zona [città/area]')">📍 Zona</button>
+<button class="btn btn-sm btn-outline" onclick="addManualVincolo('👥 Affiancamento','Emanuele deve lavorare affiancato a Jacopo o Anton')">👥 Affiancamento</button>
+<button class="btn btn-sm btn-outline" onclick="addManualVincolo('🚫 Assenza','Mirko assente fino al 14/03')">🚫 Assenza</button>
+<button class="btn btn-sm btn-outline" onclick="addManualVincolo('🔧 Competenza','Solo Giovanni può intervenire sugli Astronaut')">🔧 Competenza</button>
+<button class="btn btn-sm btn-outline" onclick="addManualVincolo('🚗 Furgone KO','Furgone FURG_4 in officina dal 10/03 al 15/03')">🚗 Furgone KO</button>
+<button class="btn btn-sm btn-outline" onclick="addManualVincolo('📍 Zona','Fabio preferibilmente in zona Parma')">📍 Zona</button>
+<button class="btn btn-sm btn-outline" onclick="addManualVincolo('','')">✏️ Regola libera</button>
 </div>
 </div>
 </div>
@@ -950,6 +951,26 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <div class="card-body">
 <div id="vincoliSummaryBox" style="background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);border-radius:8px;padding:14px;font-size:.8125rem">
 <p style="color:var(--gray)">Carica i vincoli automatici per vedere il riepilogo.</p>
+</div>
+</div>
+</div>
+
+<!-- CARD 4: Regole Persistenti (sempre attive nel planner) -->
+<div class="card">
+<div class="card-head">
+<h3>📌 Regole Persistenti</h3>
+<span style="font-size:.7rem;color:var(--gray)">Sempre attive in ogni generazione AI</span>
+</div>
+<div class="card-body">
+<p style="font-size:.75rem;color:var(--gray);margin-bottom:8px">Queste regole vengono SEMPRE iniettate nel prompt AI, indipendentemente dai vincoli manuali. Scrivi una regola per riga.</p>
+<textarea id="plannerRulesTextarea" placeholder="Es:
+Emanuele, Gino e Giuseppe devono sempre lavorare affiancati a un senior
+Mirko assente fino al 14/03
+Fabio lavora sempre da solo
+Ogni tagliando richiede 2 persone (senior + junior)" style="width:100%;min-height:120px;padding:10px;border:1px solid #E5E7EB;border-radius:8px;font-size:.8125rem;resize:vertical;line-height:1.5;font-family:inherit"></textarea>
+<div style="display:flex;gap:8px;margin-top:8px">
+<button class="btn btn-sm btn-ok" onclick="savePlannerRules()">💾 Salva Regole</button>
+<button class="btn btn-sm btn-outline" onclick="loadPlannerRules()">🔄 Ricarica</button>
 </div>
 </div>
 </div>
@@ -10451,13 +10472,7 @@ function addManualVincolo(titolo, testoDefault){
   VINCOLI_MANUAL.push({
     id: 'mr_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
     titolo: titolo || '',
-    testo: testoDefault || '',
-    soggetti: [],
-    priorita: 'media',
-    tipo_regola: 'vincolo',
-    permanente: true,
-    data_inizio: null,
-    data_fine: null
+    testo: testoDefault || ''
   });
   renderManualVincoliUI();
   updateVincoliSummary();
@@ -10488,39 +10503,119 @@ function renderManualVincoliUI(){
     container.innerHTML = '<p style="text-align:center;padding:16px;color:var(--gray);font-size:.8125rem">Nessuna regola manuale. Usa i suggerimenti rapidi o clicca "+ Nuova Regola".</p>';
     return;
   }
-  const tecOptions = (DATA.utenti||[]).filter(u=>!u.Obsoleto).map(u=>`<option value="${u.ID}">${u.Nome||''} ${u.Cognome||''}</option>`).join('');
 
   container.innerHTML = VINCOLI_MANUAL.map((r, idx) => {
-    const selSubj = (r.soggetti||[]);
-    return `<div style="border:1px solid ${r.priorita==='alta'?'#F59E0B':r.priorita==='bassa'?'#D1D5DB':'#E5E7EB'};border-radius:8px;padding:10px;margin-bottom:8px;background:${r.priorita==='alta'?'rgba(245,158,11,.05)':'white'}">
+    // Auto-parse preview: mostra soggetti e date estratti dal testo
+    const parsed = autoParseVincolo(r.testo || '');
+    const parsedBadges = [];
+    if(parsed.soggetti.length) parsedBadges.push(`👤 ${parsed.soggetti.map(s=>s.nome).join(', ')}`);
+    if(parsed.dataInizio||parsed.dataFine) parsedBadges.push(`📅 ${parsed.dataInizio||'...'} → ${parsed.dataFine||'...'}`);
+    if(parsed.tipo) parsedBadges.push(parsed.tipo==='vincolo'?'🔒 Vincolo':parsed.tipo==='preferenza'?'💡 Preferenza':'📝 Nota');
+    if(parsed.priorita==='alta') parsedBadges.push('⚠️ Alta');
+    const badgeHtml = parsedBadges.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${parsedBadges.map(b=>`<span style="font-size:.65rem;background:rgba(99,102,241,.1);color:#6366F1;padding:1px 6px;border-radius:10px">${b}</span>`).join('')}</div>` : '';
+
+    return `<div style="border:1px solid #E5E7EB;border-radius:8px;padding:10px;margin-bottom:8px;background:white">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <input type="text" value="${esc(r.titolo||'')}" onchange="manualVincoloChanged(${idx},'titolo',this.value)" placeholder="Titolo regola (es: 👥 Junior+Senior)" style="border:none;font-weight:600;font-size:.8125rem;flex:1;background:transparent">
+        <input type="text" value="${esc(r.titolo||'')}" onchange="manualVincoloChanged(${idx},'titolo',this.value)" placeholder="Titolo (opzionale)" style="border:none;font-weight:600;font-size:.8125rem;flex:1;background:transparent;color:#374151">
         <button onclick="removeManualVincolo(${idx})" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:.9rem" title="Elimina regola">✕</button>
       </div>
-      <textarea onchange="manualVincoloChanged(${idx},'testo',this.value)" placeholder="Descrivi la regola in linguaggio naturale..." style="width:100%;min-height:42px;padding:6px 8px;border:1px solid #E5E7EB;border-radius:6px;font-size:.8125rem;resize:vertical">${esc(r.testo||'')}</textarea>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center">
-        <select multiple onchange="manualVincoloMultiChanged(${idx},'soggetti',this)" style="min-width:160px;min-height:28px;font-size:.75rem;border:1px solid #E5E7EB;border-radius:4px;padding:2px" title="Soggetti coinvolti">
-          <option value="" disabled>Soggetti...</option>
-          ${tecOptions.replace(new RegExp(`value="(${selSubj.join('|')||'___NONE___'})"`, 'g'), (m) => m + ' selected')}
-        </select>
-        <select onchange="manualVincoloChanged(${idx},'priorita',this.value)" style="font-size:.75rem;padding:2px 6px;border:1px solid #E5E7EB;border-radius:4px" title="Priorità">
-          <option value="alta" ${r.priorita==='alta'?'selected':''}>⚠️ Alta</option>
-          <option value="media" ${r.priorita==='media'||!r.priorita?'selected':''}>Media</option>
-          <option value="bassa" ${r.priorita==='bassa'?'selected':''}>Bassa</option>
-        </select>
-        <select onchange="manualVincoloChanged(${idx},'tipo_regola',this.value)" style="font-size:.75rem;padding:2px 6px;border:1px solid #E5E7EB;border-radius:4px" title="Tipo regola">
-          <option value="vincolo" ${r.tipo_regola==='vincolo'||!r.tipo_regola?'selected':''}>🔒 Vincolo</option>
-          <option value="preferenza" ${r.tipo_regola==='preferenza'?'selected':''}>💡 Preferenza</option>
-          <option value="nota" ${r.tipo_regola==='nota'?'selected':''}>📝 Nota</option>
-        </select>
-        <label style="font-size:.7rem;display:flex;align-items:center;gap:3px">
-          <input type="checkbox" ${r.permanente!==false?'checked':''} onchange="manualVincoloChanged(${idx},'permanente',this.checked)"> Permanente
-        </label>
-        ${r.permanente===false ? `<input type="date" value="${r.data_inizio||''}" onchange="manualVincoloChanged(${idx},'data_inizio',this.value)" style="font-size:.7rem;padding:2px 4px;border:1px solid #E5E7EB;border-radius:4px" title="Dal">
-        <input type="date" value="${r.data_fine||''}" onchange="manualVincoloChanged(${idx},'data_fine',this.value)" style="font-size:.7rem;padding:2px 4px;border:1px solid #E5E7EB;border-radius:4px" title="Al">` : ''}
-      </div>
+      <textarea onchange="manualVincoloChanged(${idx},'testo',this.value)" oninput="debounceParsePreview(${idx})" placeholder="Scrivi la regola in linguaggio naturale. Es: 'Mirko assente fino al 14/03', 'Emanuele deve lavorare con Jacopo', 'Fabio preferibilmente in zona Parma'..." style="width:100%;min-height:50px;padding:8px 10px;border:1px solid #E5E7EB;border-radius:6px;font-size:.8125rem;resize:vertical;line-height:1.4">${esc(r.testo||'')}</textarea>
+      ${badgeHtml}
     </div>`;
   }).join('');
+}
+
+// Auto-parse vincolo text → soggetti, date, tipo, priorità
+function autoParseVincolo(testo){
+  const result = { soggetti: [], dataInizio: null, dataFine: null, tipo: 'vincolo', priorita: 'media', permanente: true };
+  if(!testo) return result;
+  const txt = testo.toLowerCase();
+
+  // 1) Detect tipo
+  if(txt.match(/preferi|possibilmente|meglio se|sarebbe bene|idealmente/)) result.tipo = 'preferenza';
+  else if(txt.match(/nota:|info:|fyi|per info/)) result.tipo = 'nota';
+  else result.tipo = 'vincolo';
+
+  // 2) Detect priorità
+  if(txt.match(/urgente|importante|priorit[aà] alta|obbligatorio|assolutamente|tassativo/)) result.priorita = 'alta';
+
+  // 3) Detect soggetti: match technician names from DATA.utenti
+  const tecnici = (DATA.utenti||[]).filter(u=>!u.Obsoleto && u.Ruolo!=='admin');
+  for(const t of tecnici){
+    const nome = (t.Nome||'').toLowerCase();
+    const cognome = (t.Cognome||'').toLowerCase();
+    const full = `${nome} ${cognome}`.trim();
+    // Match full name, first name or last name (min 3 chars to avoid false positives)
+    if(full && txt.includes(full)) { result.soggetti.push({id:t.ID, nome:`${t.Nome} ${t.Cognome}`}); continue; }
+    if(cognome && cognome.length >= 3 && txt.includes(cognome)) { result.soggetti.push({id:t.ID, nome:`${t.Nome} ${t.Cognome}`}); continue; }
+    if(nome && nome.length >= 3 && txt.includes(nome)) { result.soggetti.push({id:t.ID, nome:`${t.Nome} ${t.Cognome}`}); continue; }
+    // Also match TEC_xxx IDs directly
+    if(t.ID && testo.includes(t.ID)) { result.soggetti.push({id:t.ID, nome:`${t.Nome} ${t.Cognome}`}); }
+  }
+
+  // 4) Detect dates: DD/MM, DD/MM/YYYY, DD-MM-YYYY, "marzo", "aprile", etc.
+  const mesi = {gennaio:'01',febbraio:'02',marzo:'03',aprile:'04',maggio:'05',giugno:'06',luglio:'07',agosto:'08',settembre:'09',ottobre:'10',novembre:'11',dicembre:'12'};
+  const anno = new Date().getFullYear();
+
+  // "dal DD/MM al DD/MM"
+  const dalAl = txt.match(/dal\s+(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\s+al\s+(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/);
+  if(dalAl){
+    const y1 = dalAl[3] ? (dalAl[3].length===2?'20'+dalAl[3]:dalAl[3]) : anno;
+    const y2 = dalAl[6] ? (dalAl[6].length===2?'20'+dalAl[6]:dalAl[6]) : anno;
+    result.dataInizio = `${y1}-${dalAl[2].padStart(2,'0')}-${dalAl[1].padStart(2,'0')}`;
+    result.dataFine = `${y2}-${dalAl[5].padStart(2,'0')}-${dalAl[4].padStart(2,'0')}`;
+    result.permanente = false;
+  }
+  // "fino al DD/MM"
+  if(!dalAl){
+    const finoAl = txt.match(/fino\s+al?\s+(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/);
+    if(finoAl){
+      const y = finoAl[3] ? (finoAl[3].length===2?'20'+finoAl[3]:finoAl[3]) : anno;
+      result.dataFine = `${y}-${finoAl[2].padStart(2,'0')}-${finoAl[1].padStart(2,'0')}`;
+      result.permanente = false;
+    }
+  }
+  // "dal DD/MM" (solo inizio)
+  if(!result.dataInizio && !result.dataFine){
+    const dalSolo = txt.match(/dal\s+(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/);
+    if(dalSolo){
+      const y = dalSolo[3] ? (dalSolo[3].length===2?'20'+dalSolo[3]:dalSolo[3]) : anno;
+      result.dataInizio = `${y}-${dalSolo[2].padStart(2,'0')}-${dalSolo[1].padStart(2,'0')}`;
+      result.permanente = false;
+    }
+  }
+  // "dal DD mese al DD mese"
+  if(!result.dataInizio && !result.dataFine){
+    const dalMeseAl = txt.match(/dal\s+(\d{1,2})\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+al\s+(\d{1,2})\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)/);
+    if(dalMeseAl){
+      result.dataInizio = `${anno}-${mesi[dalMeseAl[2]]}-${dalMeseAl[1].padStart(2,'0')}`;
+      result.dataFine = `${anno}-${mesi[dalMeseAl[4]]}-${dalMeseAl[3].padStart(2,'0')}`;
+      result.permanente = false;
+    }
+  }
+  // "fino a mese" / "fino a fine mese"
+  if(!result.dataFine){
+    const finoMese = txt.match(/fino\s+a(?:l|lla fine di)?\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)/);
+    if(finoMese){
+      const m = parseInt(mesi[finoMese[1]]);
+      const lastDay = new Date(anno, m, 0).getDate();
+      result.dataFine = `${anno}-${mesi[finoMese[1]]}-${String(lastDay).padStart(2,'0')}`;
+      result.permanente = false;
+    }
+  }
+
+  return result;
+}
+
+let _parsePreviewTimer = null;
+function debounceParsePreview(idx){
+  clearTimeout(_parsePreviewTimer);
+  _parsePreviewTimer = setTimeout(()=>{
+    // Salva il testo corrente poi re-render
+    const ta = document.querySelectorAll('#vincoliManualContainer textarea')[idx];
+    if(ta) VINCOLI_MANUAL[idx].testo = ta.value;
+    renderManualVincoliUI();
+  }, 600);
 }
 
 // ---- BLOCCO 3: Riepilogo ----
@@ -10583,18 +10678,33 @@ function updateVincoliSummary(){
 // ---- Salvataggio regole manuali ----
 async function saveVincoliAll(){
   try {
-    // Salva regole manuali nel vecchio formato config (retrocompatibile) + nuovo
+    // Auto-parse ogni regola prima di salvare (arricchisce con soggetti/date estratti)
+    const enrichedRules = VINCOLI_MANUAL.map(r => {
+      const parsed = autoParseVincolo(r.testo || '');
+      return {
+        id: r.id,
+        titolo: r.titolo || '',
+        testo: r.testo || '',
+        // Campi auto-estratti dal testo
+        soggetti: parsed.soggetti.map(s => s.id),
+        tipo_regola: parsed.tipo,
+        priorita: parsed.priorita,
+        permanente: parsed.permanente,
+        data_inizio: parsed.dataInizio,
+        data_fine: parsed.dataFine
+      };
+    });
     const payload = {
       action: 'saveVincoliCategories',
       userId: USER?.ID || '',
       vincoli: {
-        categories: [],  // vecchio formato vuoto (migrato)
-        manual_rules: VINCOLI_MANUAL,
+        categories: [],
+        manual_rules: enrichedRules,
         auto_selections: VINCOLI_AUTO_SEL,
         meta: {
           ultimo_aggiornamento: new Date().toISOString(),
           aggiornato_da: USER?.ID || 'admin',
-          formato: 'v2_vincoli_redesign'
+          formato: 'v3_text_only'
         }
       }
     };
@@ -10603,7 +10713,7 @@ async function saveVincoliAll(){
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+(JWT_TOKEN||API_TOKEN)},
       body: JSON.stringify(payload)
     });
-    toast('Vincoli e regole salvati con successo!', 'ok');
+    toast('Regole salvate! Soggetti e date estratti automaticamente dal testo.', 'ok');
   } catch(e) { toast('Errore salvataggio: ' + e.message, 'err'); }
 }
 
@@ -10612,23 +10722,35 @@ async function loadVincoliManual(){
   try {
     const r = await apiCall('getVincoliCategories', {}, 'POST');
     if(r && r.manual_rules && Array.isArray(r.manual_rules)){
-      VINCOLI_MANUAL = r.manual_rules;
+      // v3 text-only: solo id, titolo, testo
+      VINCOLI_MANUAL = r.manual_rules.map(rule => ({
+        id: rule.id || 'mr_'+Date.now(),
+        titolo: rule.titolo || '',
+        testo: rule.testo || ''
+      }));
     } else if(r && r.categories && r.categories.length){
-      // Migrazione dal vecchio formato: estrai le regole
+      // Migrazione dal vecchio formato: estrai le regole (solo testo)
       VINCOLI_MANUAL = [];
       r.categories.forEach(cat => {
         (cat.regole||[]).forEach(regola => {
           if(regola.testo){
+            // Migra: ricostruisci testo completo con info soggetti/date se c'erano
+            let testo = regola.testo;
+            // Se c'erano soggetti selezionati manualmente, appendili al testo
+            if(regola.soggetti?.length && !regola.soggetti.some(id => testo.includes(id))){
+              const nomi = regola.soggetti.map(id => {
+                const u = (DATA.utenti||[]).find(u=>u.ID===id);
+                return u ? `${u.Nome||''} ${u.Cognome||''}`.trim() : id;
+              }).filter(Boolean);
+              if(nomi.length) testo += ` (${nomi.join(', ')})`;
+            }
+            if(!regola.permanente && (regola.data_inizio || regola.data_fine)){
+              testo += ` dal ${regola.data_inizio||'...'} al ${regola.data_fine||'...'}`;
+            }
             VINCOLI_MANUAL.push({
               id: regola.id || 'mr_mig_'+Date.now(),
               titolo: (cat.icona||'') + ' ' + (cat.nome||''),
-              testo: regola.testo,
-              soggetti: regola.soggetti || [],
-              priorita: regola.priorita || 'media',
-              tipo_regola: regola.tipo_regola || 'vincolo',
-              permanente: regola.permanente !== false,
-              data_inizio: regola.data_inizio || null,
-              data_fine: regola.data_fine || null
+              testo
             });
           }
         });
@@ -10661,22 +10783,24 @@ function buildVincoliPromptText(){
     text += '\n';
   }
 
-  // 2) Regole manuali
+  // 2) Regole manuali — auto-parse soggetti/date/tipo dal testo
   const manAttive = VINCOLI_MANUAL.filter(r => {
     if(!r.testo) return false;
-    if(r.permanente !== false) return true;
-    if(r.data_fine && r.data_fine < oggi) return false;
-    if(r.data_inizio && r.data_inizio > oggi) return false;
+    // Auto-parse per verificare se la regola è ancora attiva (date)
+    const parsed = autoParseVincolo(r.testo);
+    if(!parsed.permanente && parsed.dataFine && parsed.dataFine < oggi) return false;
+    if(!parsed.permanente && parsed.dataInizio && parsed.dataInizio > oggi) return false;
     return true;
   });
   if(manAttive.length){
     text += '=== REGOLE MANUALI (configurate dall\'admin) ===\n';
     manAttive.forEach(r => {
+      const parsed = autoParseVincolo(r.testo);
       let line = `- ${r.testo}`;
-      if(r.soggetti?.length) line += ` (Soggetti: ${r.soggetti.map(getName_).join(', ')})`;
-      if(!r.permanente && (r.data_inizio || r.data_fine)) line += ` (${r.data_inizio?'Dal '+r.data_inizio:''}${r.data_fine?' Al '+r.data_fine:''})`;
-      line += r.tipo_regola === 'vincolo' ? ' [VINCOLO OBBLIGATORIO]' : r.tipo_regola === 'preferenza' ? ' [PREFERENZA]' : ' [NOTA]';
-      if(r.priorita === 'alta') line += ' ⚠️PRIORITA ALTA';
+      if(parsed.soggetti.length) line += ` (Soggetti: ${parsed.soggetti.map(s=>s.nome).join(', ')} → ID: ${parsed.soggetti.map(s=>s.id).join(', ')})`;
+      if(parsed.dataInizio || parsed.dataFine) line += ` (${parsed.dataInizio?'Dal '+parsed.dataInizio:''}${parsed.dataFine?' Al '+parsed.dataFine:''})`;
+      line += parsed.tipo === 'vincolo' ? ' [VINCOLO OBBLIGATORIO]' : parsed.tipo === 'preferenza' ? ' [PREFERENZA]' : ' [NOTA]';
+      if(parsed.priorita === 'alta') line += ' ⚠️PRIORITA ALTA';
       text += line + '\n';
     });
   }
@@ -10687,7 +10811,26 @@ function buildVincoliPromptText(){
 // ---- Retrocompatibilità: alias per vecchie chiamate ----
 async function loadVincoliCategories(){
   await loadVincoliManual();
+  await loadPlannerRules();
   initVincoliMese();
+}
+
+// ---- Planner Rules: regole persistenti ----
+async function loadPlannerRules(){
+  try {
+    const r = await apiCall('getPlannerRules', {}, 'POST');
+    const ta = $('plannerRulesTextarea');
+    if(ta && r?.rules?.length) ta.value = r.rules.join('\n');
+  } catch(e) { console.warn('[PlannerRules] load error:', e.message); }
+}
+async function savePlannerRules(){
+  try {
+    const ta = $('plannerRulesTextarea');
+    if(!ta) return;
+    const rules = ta.value.split('\n').map(l => l.trim()).filter(Boolean);
+    await apiCall('savePlannerRules', { rules }, 'POST');
+    toast(`${rules.length} regole persistenti salvate!`, 'ok');
+  } catch(e) { toast('Errore: ' + e.message, 'err'); }
 }
 
 

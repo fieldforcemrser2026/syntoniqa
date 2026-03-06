@@ -2293,25 +2293,63 @@ async function handlePost(action, body, env) {
         sb(env, 'piano', 'GET', null, `?data=gte.${meseTarget}-01&data=lte.${meseTarget}-31&stato=in.(pianificato,in_corso)&obsoleto=eq.false&select=id,data,tecnico_id,cliente_id&limit=500`).catch(()=>[])
       ]);
 
-      // ─── 2. PARSE VINCOLI ────────────────────────────────────────
+      // ─── 2. PARSE VINCOLI (v3 text-only + legacy) ─────────────────
+      // Helper: estrai soggetti TEC_ID dal testo libero
+      function _parseSubjectsFromText(testo) {
+        const ids = [];
+        if (!testo) return ids;
+        const txt = testo.toLowerCase();
+        for (const t of allTecnici) {
+          if ((t.ruolo || '').toLowerCase() === 'admin') continue;
+          const nome = (t.nome || '').toLowerCase();
+          const cognome = (t.cognome || '').toLowerCase();
+          const full = `${nome} ${cognome}`.trim();
+          if (full && txt.includes(full)) { ids.push(t.id); continue; }
+          if (cognome && cognome.length >= 3 && txt.includes(cognome)) { ids.push(t.id); continue; }
+          if (nome && nome.length >= 3 && txt.includes(nome)) { ids.push(t.id); continue; }
+          if (t.id && testo.includes(t.id)) { ids.push(t.id); }
+        }
+        return ids;
+      }
+
       const vincoliRules = { assenti: new Set(), affiancamenti: [], reperibilita: {}, custom: [] };
       if (vincoliCfg.length) {
         try {
           const vc = safeJSON(vincoliCfg[0].valore, {vincoli:[]});
           const oggiISO = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
+
+          // Process manual_rules (v3/v2)
+          for (const r of (vc.manual_rules || [])) {
+            if (!r.testo) continue;
+            const soggetti = (r.soggetti?.length) ? r.soggetti : _parseSubjectsFromText(r.testo);
+            const perm = r.permanente !== undefined ? r.permanente : true;
+            if (!perm && r.data_fine && r.data_fine < oggiISO) continue;
+
+            const txt = (r.testo || '').toLowerCase();
+            if (txt.match(/assent|non disponibil|ferie|malattia|indisponibil/)) {
+              for (const id of soggetti) vincoliRules.assenti.add(id);
+            }
+            if (txt.match(/affianc|accompagn|coppia|deve lavorare con|junior.*senior/)) {
+              vincoliRules.affiancamenti.push({ junior: soggetti, senior: r.riferimenti || [] });
+            }
+            vincoliRules.custom.push({ testo: r.testo, soggetti, priorita: r.priorita });
+          }
+
+          // LEGACY: categories
           for (const cat of (vc.categories || []).filter(c => c.attiva !== false)) {
             for (const r of (cat.regole || [])) {
               if (!r.testo) continue;
+              const soggetti = (r.soggetti?.length) ? r.soggetti : _parseSubjectsFromText(r.testo);
               const attiva = r.permanente || !(r.data_fine && r.data_fine < oggiISO);
               if (!attiva) continue;
               const txt = (r.testo || '').toLowerCase();
               if (txt.match(/assent|non disponibil|ferie|malattia|indisponibil/)) {
-                for (const id of (r.soggetti || [])) vincoliRules.assenti.add(id);
+                for (const id of soggetti) vincoliRules.assenti.add(id);
               }
               if (txt.match(/affianc|accompagn|coppia|deve lavorare con|junior.*senior/)) {
-                vincoliRules.affiancamenti.push({ junior: r.soggetti || [], senior: r.riferimenti || [] });
+                vincoliRules.affiancamenti.push({ junior: soggetti, senior: r.riferimenti || [] });
               }
-              vincoliRules.custom.push({ testo: r.testo, soggetti: r.soggetti || [], priorita: r.priorita });
+              vincoliRules.custom.push({ testo: r.testo, soggetti, priorita: r.priorita });
             }
           }
         } catch {}
@@ -2741,35 +2779,123 @@ async function handlePost(action, body, env) {
         meseTarget ? sb(env, 'richieste', 'GET', null, `?stato=eq.approvata&obsoleto=eq.false&data_inizio=lte.${meseEnd}&data_fine=gte.${meseStart}&select=id,tecnico_id,tipo,data_inizio,data_fine,motivo&limit=100`) : Promise.resolve([]),
         meseTarget ? sb(env, 'trasferte', 'GET', null, `?obsoleto=eq.false&data_inizio=lte.${meseEnd}&data_fine=gte.${meseStart}&select=id,tecnico_id,tecnici_ids,cliente_id,data_inizio,data_fine&limit=50`) : Promise.resolve([]),
         meseTarget ? sb(env, 'installazioni', 'GET', null, `?obsoleto=eq.false&stato=in.(pianificato,in_corso,pianificata)&data_inizio=lte.${meseEnd}&select=id,tecnici_ids,cliente_id,data_inizio,data_fine_prevista,stato&limit=50`) : Promise.resolve([]),
-        meseTarget ? sb(env, 'piano', 'GET', null, `?obsoleto=eq.false&stato=neq.annullato&data=gte.${meseStart}&data=lte.${meseEnd}&select=id,tecnico_id,tecnici_ids,cliente_id,data,ora_inizio,tipo_intervento_id,note,stato&limit=500`) : Promise.resolve([])
+        meseTarget ? sb(env, 'piano', 'GET', null, `?obsoleto=eq.false&stato=neq.annullato&data=gte.${meseStart}&data=lte.${meseEnd}&select=id,tecnico_id,tecnici_ids,cliente_id,data,ora_inizio,tipo_intervento_id,note,stato&limit=500`) : Promise.resolve([]),
+        sb(env, 'config', 'GET', null, '?chiave=eq.planner_rules&limit=1').catch(()=>[])
       ]);
-      const [allTecnici, allUrgenze, allClienti, vincoliCfg, allRep, allAutomezzi, allMacchine, allAssets, allRichieste, allTrasferte, allInstallazioni, allPianoDb] = _psResults.map(_safePS);
+      const [allTecnici, allUrgenze, allClienti, vincoliCfg, allRep, allAutomezzi, allMacchine, allAssets, allRichieste, allTrasferte, allInstallazioni, allPianoDb, plannerRulesCfg] = _psResults.map(_safePS);
       sse({type:'init', message:'Dati caricati', n:{tecnici:allTecnici.filter(t=>t.ruolo!=='admin').length, clienti:allClienti.length, urgenze:allUrgenze.length, tagliandi:allMacchine.length+allAssets.length}});
 
-      // Parse vincoli: NEW v2 format (manual_rules) + legacy categories
+      // Parse vincoli: v3 text-only + v2 + legacy
       let vincoliText = '';
+
+      // ─── Server-side auto-parse: estrae soggetti (TEC_ID) e date dal testo libero ───
+      function _autoParseVincoloServer(testo) {
+        const result = { soggetti: [], dataInizio: null, dataFine: null, tipo: 'vincolo', priorita: 'media', permanente: true };
+        if (!testo) return result;
+        const txt = testo.toLowerCase();
+
+        // Tipo
+        if (txt.match(/preferi|possibilmente|meglio se|sarebbe bene|idealmente/)) result.tipo = 'preferenza';
+        else if (txt.match(/nota:|info:|fyi|per info/)) result.tipo = 'nota';
+
+        // Priorità
+        if (txt.match(/urgente|importante|priorit[aà] alta|obbligatorio|assolutamente|tassativo/)) result.priorita = 'alta';
+
+        // Soggetti: match nomi tecnici
+        for (const t of allTecnici) {
+          if ((t.ruolo || '').toLowerCase() === 'admin') continue;
+          const nome = (t.nome || '').toLowerCase();
+          const cognome = (t.cognome || '').toLowerCase();
+          const full = `${nome} ${cognome}`.trim();
+          if (full && txt.includes(full)) { result.soggetti.push(t.id); continue; }
+          if (cognome && cognome.length >= 3 && txt.includes(cognome)) { result.soggetti.push(t.id); continue; }
+          if (nome && nome.length >= 3 && txt.includes(nome)) { result.soggetti.push(t.id); continue; }
+          if (t.id && testo.includes(t.id)) { result.soggetti.push(t.id); }
+        }
+
+        // Date
+        const mesi = {gennaio:'01',febbraio:'02',marzo:'03',aprile:'04',maggio:'05',giugno:'06',luglio:'07',agosto:'08',settembre:'09',ottobre:'10',novembre:'11',dicembre:'12'};
+        const anno = new Date().getFullYear();
+
+        const dalAl = txt.match(/dal\s+(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\s+al\s+(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/);
+        if (dalAl) {
+          const y1 = dalAl[3] ? (dalAl[3].length===2?'20'+dalAl[3]:dalAl[3]) : anno;
+          const y2 = dalAl[6] ? (dalAl[6].length===2?'20'+dalAl[6]:dalAl[6]) : anno;
+          result.dataInizio = `${y1}-${dalAl[2].padStart(2,'0')}-${dalAl[1].padStart(2,'0')}`;
+          result.dataFine = `${y2}-${dalAl[5].padStart(2,'0')}-${dalAl[4].padStart(2,'0')}`;
+          result.permanente = false;
+        }
+        if (!dalAl) {
+          const finoAl = txt.match(/fino\s+al?\s+(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/);
+          if (finoAl) {
+            const y = finoAl[3] ? (finoAl[3].length===2?'20'+finoAl[3]:finoAl[3]) : anno;
+            result.dataFine = `${y}-${finoAl[2].padStart(2,'0')}-${finoAl[1].padStart(2,'0')}`;
+            result.permanente = false;
+          }
+        }
+        if (!result.dataInizio && !result.dataFine) {
+          const dalSolo = txt.match(/dal\s+(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/);
+          if (dalSolo) {
+            const y = dalSolo[3] ? (dalSolo[3].length===2?'20'+dalSolo[3]:dalSolo[3]) : anno;
+            result.dataInizio = `${y}-${dalSolo[2].padStart(2,'0')}-${dalSolo[1].padStart(2,'0')}`;
+            result.permanente = false;
+          }
+        }
+        if (!result.dataInizio && !result.dataFine) {
+          const dalMeseAl = txt.match(/dal\s+(\d{1,2})\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+al\s+(\d{1,2})\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)/);
+          if (dalMeseAl) {
+            result.dataInizio = `${anno}-${mesi[dalMeseAl[2]]}-${dalMeseAl[1].padStart(2,'0')}`;
+            result.dataFine = `${anno}-${mesi[dalMeseAl[4]]}-${dalMeseAl[3].padStart(2,'0')}`;
+            result.permanente = false;
+          }
+        }
+        if (!result.dataFine) {
+          const finoMese = txt.match(/fino\s+a(?:l|lla fine di)?\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)/);
+          if (finoMese) {
+            const m = parseInt(mesi[finoMese[1]]);
+            const lastDay = new Date(anno, m, 0).getDate();
+            result.dataFine = `${anno}-${mesi[finoMese[1]]}-${String(lastDay).padStart(2,'0')}`;
+            result.permanente = false;
+          }
+        }
+        return result;
+      }
+
       if (ctx.vincoli && vincoliCfg.length) {
         try {
           const vc = safeJSON(vincoliCfg[0].valore, {vincoli:[]});
           const oggi = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
           const getName = (id) => { const u = allTecnici.find(t => t.id === id); return u ? `${u.nome} ${u.cognome}` : id; };
 
-          // NEW v2: manual_rules (flat array from redesigned UI)
+          // v3/v2: manual_rules
           const manualRules = vc.manual_rules || [];
           if (manualRules.length) {
             vincoliText += '\n=== REGOLE MANUALI (configurate dall\'admin) ===\n';
             manualRules.filter(r => {
               if (!r.testo) return false;
-              if (r.permanente !== false) return true;
-              if (r.data_fine && r.data_fine < oggi) return false;
-              if (r.data_inizio && r.data_inizio > oggi) return false;
+              // Auto-parse date per filtrare regole scadute
+              const parsed = _autoParseVincoloServer(r.testo);
+              const perm = r.permanente !== undefined ? r.permanente : parsed.permanente;
+              const dFine = r.data_fine || parsed.dataFine;
+              const dInizio = r.data_inizio || parsed.dataInizio;
+              if (perm) return true;
+              if (dFine && dFine < oggi) return false;
+              if (dInizio && dInizio > oggi) return false;
               return true;
             }).forEach(r => {
+              const parsed = _autoParseVincoloServer(r.testo);
+              // Merge: preferisci soggetti auto-parsati se quelli salvati sono vuoti
+              const soggetti = (r.soggetti?.length) ? r.soggetti : parsed.soggetti;
+              const tipoRegola = r.tipo_regola || parsed.tipo;
+              const priorita = r.priorita || parsed.priorita;
+              const dataInizio = r.data_inizio || parsed.dataInizio;
+              const dataFine = r.data_fine || parsed.dataFine;
+
               let line = `- ${r.testo}`;
-              if (r.soggetti?.length) line += ` (Soggetti: ${r.soggetti.map(getName).join(', ')})`;
-              if (!r.permanente && (r.data_inizio || r.data_fine)) line += ` (${r.data_inizio ? 'Dal ' + r.data_inizio : ''}${r.data_fine ? ' Al ' + r.data_fine : ''})`;
-              line += r.tipo_regola === 'vincolo' ? ' [VINCOLO OBBLIGATORIO]' : r.tipo_regola === 'preferenza' ? ' [PREFERENZA]' : ' [NOTA]';
-              if (r.priorita === 'alta') line += ' ⚠️PRIORITA ALTA';
+              if (soggetti.length) line += ` (Soggetti: ${soggetti.map(getName).join(', ')})`;
+              if (dataInizio || dataFine) line += ` (${dataInizio ? 'Dal ' + dataInizio : ''}${dataFine ? ' Al ' + dataFine : ''})`;
+              line += tipoRegola === 'vincolo' ? ' [VINCOLO OBBLIGATORIO]' : tipoRegola === 'preferenza' ? ' [PREFERENZA]' : ' [NOTA]';
+              if (priorita === 'alta') line += ' ⚠️PRIORITA ALTA';
               vincoliText += line + '\n';
             });
           }
@@ -2802,6 +2928,21 @@ async function handlePost(action, body, env) {
       // Also accept vincoli_override from frontend (new AI planner flow)
       if (vincoli.vincoli_override) {
         vincoliText = vincoli.vincoli_override;
+      }
+
+      // ─── Planner Rules: regole persistenti sempre iniettate nel prompt ───
+      if (plannerRulesCfg?.length && plannerRulesCfg[0]?.valore) {
+        try {
+          const pr = safeJSON(plannerRulesCfg[0].valore, { rules: [] });
+          const rules = pr.rules || (typeof pr === 'string' ? pr.split('\n') : []);
+          if (rules.length) {
+            vincoliText += '\n=== REGOLE PERSISTENTI (sempre attive) ===\n';
+            for (const rule of rules) {
+              const txt = typeof rule === 'string' ? rule : (rule.testo || '');
+              if (txt.trim()) vincoliText += `- ${txt.trim()} [VINCOLO OBBLIGATORIO]\n`;
+            }
+          }
+        } catch {}
       }
 
       // ═══════════════════════════════════════════════════════════════
@@ -3992,41 +4133,69 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
       // ─── Parse vincoli per estrarre regole programmatiche ───
       // assenti: array di {id, dataInizio?, dataFine?, permanente} per controllo date-aware
+      // Usa _autoParseVincoloServer per estrarre soggetti/date dal testo
       const vincoliRules = { assenti: [], affiancamenti: [] };
       if (vincoliCfg.length) {
         try {
           const vc = safeJSON(vincoliCfg[0].valore, {vincoli:[]});
           const oggi2 = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
+
+          // Processa manual_rules (v3 text-only + v2)
+          const manRules = vc.manual_rules || [];
+          for (const r of manRules) {
+            if (!r.testo) continue;
+            const parsed = _autoParseVincoloServer(r.testo);
+            // Merge: preferisci soggetti salvati se presenti, altrimenti auto-parsati
+            const soggetti = (r.soggetti?.length) ? r.soggetti : parsed.soggetti;
+            const perm = r.permanente !== undefined ? r.permanente : parsed.permanente;
+            const dFine = r.data_fine || parsed.dataFine;
+            const dInizio = r.data_inizio || parsed.dataInizio;
+            if (!perm && dFine && dFine < oggi2) continue;
+
+            const txt = (r.testo || '').toLowerCase();
+            if (txt.match(/assent|non disponibil|ferie|malattia|indisponibil/)) {
+              for (const id of soggetti) {
+                vincoliRules.assenti.push({ id, dataInizio: dInizio, dataFine: dFine, permanente: !!perm });
+              }
+            }
+            if (txt.match(/affianc|accompagn|coppia|deve lavorare con|junior.*senior/)) {
+              // Separa junior e senior dal testo se possibile
+              const juniorIds = soggetti.filter(id => {
+                const t = allTecnici.find(tt => tt.id === id);
+                return t && ['tecnico junior'].includes((t.ruolo||'').toLowerCase());
+              });
+              const seniorIds = soggetti.filter(id => {
+                const t = allTecnici.find(tt => tt.id === id);
+                return t && ['caposquadra','tecnico senior'].includes((t.ruolo||'').toLowerCase());
+              });
+              vincoliRules.affiancamenti.push({
+                junior: juniorIds.length ? juniorIds : soggetti,
+                senior: seniorIds.length ? seniorIds : [],
+                testo: r.testo
+              });
+            }
+          }
+
+          // LEGACY: old categories format
           for (const cat of (vc.categories || []).filter(c => c.attiva !== false)) {
             for (const r of (cat.regole || [])) {
               if (!r.testo) continue;
-              const attiva = r.permanente || !(r.data_fine && r.data_fine < oggi2);
-              if (!attiva) continue;
+              const parsed = _autoParseVincoloServer(r.testo);
+              const soggetti = (r.soggetti?.length) ? r.soggetti : parsed.soggetti;
+              const perm = r.permanente !== undefined ? r.permanente : parsed.permanente;
+              const dFine = r.data_fine || parsed.dataFine;
+              const dInizio = r.data_inizio || parsed.dataInizio;
+              if (!perm && dFine && dFine < oggi2) continue;
+
               const txt = (r.testo || '').toLowerCase();
-              // Regola assenza: "assente", "non disponibile", "ferie", "malattia"
               if (txt.match(/assent|non disponibil|ferie|malattia|indisponibil/)) {
-                let absentIds = r.soggetti || [];
-                // PROTEZIONE: se soggetti > 3, probabilmente errore di config.
-                // Estrai TEC_ID citati esplicitamente nel testo del vincolo.
-                if (absentIds.length > 3) {
-                  const txtIds = (r.testo || '').match(/TEC_[A-Z0-9_]+/gi) || [];
-                  if (txtIds.length > 0 && txtIds.length < absentIds.length) {
-                    absentIds = txtIds.map(id => id.toUpperCase());
-                  }
-                }
-                for (const id of absentIds) {
-                  vincoliRules.assenti.push({
-                    id,
-                    dataInizio: r.data_inizio || null,
-                    dataFine: r.data_fine || null,
-                    permanente: !!r.permanente
-                  });
+                for (const id of soggetti) {
+                  vincoliRules.assenti.push({ id, dataInizio: dInizio, dataFine: dFine, permanente: !!perm });
                 }
               }
-              // Regola affiancamento: "affianc", "accompagn", "coppia"
               if (txt.match(/affianc|accompagn|coppia|deve lavorare con|junior.*senior/)) {
                 vincoliRules.affiancamenti.push({
-                  junior: r.soggetti || [],
+                  junior: r.soggetti || soggetti,
                   senior: r.riferimenti || [],
                   testo: r.testo
                 });
@@ -5465,6 +5634,28 @@ Rispondi SOLO con JSON valido:
       } catch {
         return ok({ categories: [], meta: {}, raw: rows[0].valore });
       }
+    }
+
+    // ──────── PLANNER RULES (regole persistenti sempre attive) ──────
+    case 'savePlannerRules': {
+      const prAdmErr = requireRole(body, 'admin');
+      if (prAdmErr) return err(prAdmErr, 403);
+      const prRules = body.rules;
+      if (!prRules && prRules !== '') return err('rules richieste (array di stringhe o testo)');
+      const prVal = JSON.stringify({ rules: Array.isArray(prRules) ? prRules : prRules.split('\n').filter(l => l.trim()), updated_at: new Date().toISOString(), updated_by: body.userId || 'admin' });
+      await sb(env, 'config', 'POST', {
+        chiave: 'planner_rules',
+        valore: prVal,
+        tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
+      }).catch(async () => {
+        await sb(env, `config?chiave=eq.planner_rules`, 'PATCH', { valore: prVal });
+      });
+      return ok({ saved: true });
+    }
+    case 'getPlannerRules': {
+      const prRows = await sb(env, 'config', 'GET', null, '?chiave=eq.planner_rules&limit=1');
+      if (!prRows?.length) return ok({ rules: [] });
+      try { return ok(JSON.parse(prRows[0].valore)); } catch { return ok({ rules: [] }); }
     }
 
     // ──────── VINCOLI AUTO-DERIVATI (da dati esistenti) ─────────────
