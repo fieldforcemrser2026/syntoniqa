@@ -5092,12 +5092,10 @@ ${instructions}`;
             }
           }
 
-          // ═══ APPROCCIO DETERMINISTICO-FIRST ═══
-          // 1. Genera piano completo con motore deterministico (regole pure, zero AI)
-          // 2. Manda il piano deterministico all'AI per OTTIMIZZAZIONE (routing, zone, tempistiche)
-          // 3. Post-process per pulizia finale
+          // ═══ PIANO 100% DETERMINISTICO ═══
+          // Niente AI — regole pure, zero allucinazioni, zero UUID, zero giorni persi
 
-          sse({type:'progress', message:'📐 Fase 1: Piano deterministico (regole + backlog)...', chunk:0, total:chunks.length + 1});
+          sse({type:'progress', message:'📐 Generazione piano deterministico...', chunk:1, total:1});
 
           // Raccogli TUTTI i giorni lavorativi dal chunking
           const allChunkDays = chunks.flatMap(c => c.workDays.map(wd => wd.split('(')[0]));
@@ -5114,89 +5112,11 @@ ${instructions}`;
           };
 
           sse({type:'engine_debug', engine:'DETERMINISTIC', status:'done', ...detStats});
-          sse({type:'chunk', done:1, total:chunks.length + 1, count:detPlan.length, label:'Deterministico', ok:true});
-          allWarnings.add(`📐 Piano deterministico: ${detStats.righe} righe, ${detStats.giorni} giorni, ${detStats.tecnici} tecnici, ${detStats.tagUsed} tagliandi`);
-          chunksDone++;
+          sse({type:'chunk', done:1, total:1, count:detPlan.length, label:'Deterministico', ok:true});
+          allWarnings.add(`📐 Piano deterministico: ${detStats.righe} righe, ${detStats.giorni} giorni, ${detStats.tecnici} tecnici, ${detStats.tagUsed} tagliandi assegnati`);
 
-          // 2. AI OPTIMIZATION — manda il piano deterministico all'AI in chunk per migliorarlo
-          // L'AI può: riordinare per zona, ottimizzare percorsi, aggiustare tempistiche
-          const fastEngines = env.GEMINI_KEY || env.CEREBRAS_KEY || env.MISTRAL_KEY || env.DEEPSEEK_KEY || env.ANTHROPIC_KEY || env.OPENAI_KEY;
-          const chunkDelay = fastEngines ? 2000 : 65000;
-
-          for (let ci = 0; ci < chunks.length; ci++) {
-            if (!_sseOpen) { allWarnings.add('Stream chiuso dal client — interrompo'); break; }
-            sse({type:'progress', message:`🤖 Fase 2: AI ottimizza ${chunks[ci].label}...`, chunk:ci+2, total:chunks.length + 1});
-            if (ci > 0) await new Promise(r => setTimeout(r, chunkDelay));
-
-            // Estrai il piano deterministico per questo chunk
-            const chunkDays = chunks[ci].workDays.map(wd => wd.split('(')[0]);
-            const detChunk = detPlan.filter(p => chunkDays.includes(p.data));
-
-            // Formato leggibile del piano deterministico per questo chunk
-            const detPlanText = detChunk.map(p => {
-              const tecName = allTecnici.find(t => t.id === p.tecnicoId);
-              const tName = tecName ? `${tecName.nome} ${tecName.cognome}` : p.tecnicoId;
-              const cName = allClienti.find(c => c.codice_m3 === p.clienteId);
-              const cLabel = cName ? (cName.nome_interno || cName.nome_account || p.clienteId) : p.clienteId;
-              return `${p.data}|${p.tecnicoId}|${cLabel}|${p.tipo}|${p.oraInizio||'08:00'}|${p.durataOre||6}h|${p.furgone||''}|${(p.note||'').substring(0,60)}`;
-            }).join('\n');
-
-            const optimizePrompt = `SEI un OTTIMIZZATORE di piani di manutenzione. Ti viene dato un piano GIÀ GENERATO.
-Il tuo compito NON è rigenerarlo da zero, ma MIGLIORARLO:
-- Raggruppare interventi per ZONA GEOGRAFICA (stesso tecnico = stessi clienti vicini nello stesso giorno)
-- Verificare che i JUNIOR [${_juniorIds.join(',')}] siano SEMPRE affiancati a un SENIOR [${_seniorIds.join(',')}] (stessa data + stesso cliente)
-- Se trovi errori (tecnico assente, duplicati) puoi correggerli
-- NON aggiungere o rimuovere righe — solo RIORDINARE e MIGLIORARE le assegnazioni esistenti
-${anonEncode(vincoliText || '')}
-${indispContext ? indispContext.substring(0, 600) : ''}
-
-PIANO ATTUALE PER ${chunks[ci].label} (${detChunk.length} righe):
-${detPlanText}
-
-TECNICI: ${tecList}
-CLIENTI (con zona): ${cliListShort}
-
-Rispondi SOLO con JSON: {"piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|installazione|controllo","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"..."}],"improvements":["cosa hai migliorato"]}
-Se il piano è già ottimale, ritorna lo stesso piano.`;
-
-            let res;
-            try {
-              const rawText = await callAI(optimizePrompt, (ev) => sse({type:'engine', ...ev, chunk:chunks[ci].label}));
-              if (rawText) {
-                const parsed = parseAIResponse(rawText);
-                if (parsed?.piano?.length) {
-                  res = { piano: parsed.piano, warnings: parsed.warnings || parsed.improvements || [], ok: true };
-                } else {
-                  res = { piano: [], warnings: [`${chunks[ci].label}: AI non ha prodotto piano valido — uso deterministico`], ok: false };
-                }
-              } else {
-                res = { piano: [], warnings: [`${chunks[ci].label}: risposta AI vuota — uso deterministico`], ok: false };
-              }
-            } catch (chunkErr) {
-              sse({type:'engine_debug', engine:'CHUNK', status:'error', reason:`${chunks[ci].label}: ${chunkErr.message}`});
-              allWarnings.add(`${chunks[ci].label}: errore AI — ${chunkErr.message}`);
-              res = { piano: [], warnings: [], ok: false };
-            }
-
-            if (res.ok && res.piano.length) {
-              // AI ha ottimizzato → usa il piano AI per questo chunk
-              allPiano.push(...res.piano);
-              chunksDone++;
-            } else {
-              // AI fallita → usa il piano deterministico per questo chunk
-              allPiano.push(...detChunk);
-            }
-            sse({type:'chunk', done:ci+2, total:chunks.length + 1, count: res.ok ? res.piano.length : detChunk.length, label:chunks[ci].label, ok:res.ok});
-            res.warnings.forEach(w => allWarnings.add(w));
-          }
-
-          // Se AI non ha prodotto nulla per nessun chunk, usa tutto il deterministico
-          if (!allPiano.length) {
-            allPiano.push(...detPlan);
-            allWarnings.add('⚠️ AI non ha migliorato nessun chunk — piano interamente deterministico');
-          }
-
-          const processed = postProcess(allPiano);
+          // Post-process e validazione
+          const processed = postProcess(detPlan);
           const fixed = autoFixPlan(processed);
           postValidate(fixed);
 
@@ -5207,13 +5127,12 @@ Se il piano è già ottimale, ritorna lo stesso piano.`;
           // DECODE: rimetti nomi reali
           const decoded = decodePiano(fixed);
           const allWarnArr = [...allWarnings, ...postProcessWarnings].map(w => anonDecode(w));
-          const engineLabel = _usedEngine || lastWorking || 'deterministic';
           sse({type:'result', data:{
-            summary: anonDecode(`Piano ${meseTarget}: ${decoded.length} interventi su ${[...new Set(decoded.map(p=>p.data))].length} giorni (${chunksDone}/${chunks.length + 1} fasi) — deterministico + AI`),
+            summary: anonDecode(`Piano ${meseTarget}: ${decoded.length} interventi su ${detStats.giorni} giorni — ${detStats.tagUsed} tagliandi + ${detStats.instUsed} installazioni — 100% deterministico`),
             piano: decoded,
             warnings: allWarnArr,
-            chunks: chunksDone,
-            engine_used: engineLabel
+            chunks: 1,
+            engine_used: 'deterministic'
           }}); return;
 
         } else {
