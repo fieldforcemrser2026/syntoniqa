@@ -3173,11 +3173,24 @@ async function handlePost(action, body, env) {
       (allAutomezzi||[]).forEach(a => { if(a.id) autoMap[a.id] = a.targa || a.modello || a.id; });
       function _furgLabel(autoId) {
         if (!autoId) return '';
+        // 1. Exact match in autoMap (id → targa/modello)
         if (autoMap[autoId]) return autoMap[autoId];
-        // Se è un ID leggibile tipo FURG_x, usalo così
-        if (autoId.startsWith('FURG_') || autoId.startsWith('AUT_') && autoId.length < 10) return autoId;
-        // UUID lungo → cerca corrispondenza
-        return autoId.substring(0, 8) + '…';
+        // 2. Se è un ID leggibile tipo FURG_x, usalo così
+        if (/^FURG_\d+$/i.test(autoId)) return autoId;
+        // 3. Se è AUT_ corto (< 10 char), usalo
+        if (autoId.startsWith('AUT_') && autoId.length < 10) return autoId;
+        // 4. UUID lungo → cerca corrispondenza nella tabella automezzi per targa/nome
+        const match = (allAutomezzi||[]).find(a => a.id === autoId);
+        if (match) return match.targa || match.nome || match.modello || match.id;
+        // 5. Fallback: prova a mappare da tecnico → cerca quale FURG_x gli è assegnato
+        //    (il tecnico potrebbe avere un UUID nel campo automezzo_id ma il furgone
+        //     logico è FURG_8 nella tabella automezzi)
+        const byTec = (allAutomezzi||[]).find(a =>
+          a.tecnico_id === autoId || a.assegnato_a === autoId
+        );
+        if (byTec) return byTec.targa || byTec.id;
+        // Ultimo fallback: abbrevia UUID
+        return autoId.length > 12 ? autoId.substring(0, 8) + '…' : autoId;
       }
 
       const tagItems = [];
@@ -3304,8 +3317,7 @@ async function handlePost(action, body, env) {
 
       // Compact data — ANONIMIZZATO: solo codici ID, nessun nome reale
       const tecList = allTecnici.filter(t=>t.ruolo!=='admin').map(t => {
-        const furg = t.automezzo_id ? allAutomezzi.find(a=>a.id===t.automezzo_id) : null;
-        const furgLabel = furg ? furg.id : (t.automezzo_id || 'nessuno');
+        const furgLabel = t.automezzo_id ? _furgLabel(t.automezzo_id) : 'nessuno';
         const baseCode = t.base ? (cittaMap[t.base] || t.base) : '?';
         return `${t.id}(${t.ruolo},zona:${baseCode},furgone:${furgLabel})`;
       }).join('; ');
@@ -5217,11 +5229,16 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             } else {
               km = 80; // base nota ma cliente senza coordinate: stima conservativa
             }
+            // REGOLA 5: skip clients where another senior is already assigned today
+            if (_seniorIds.includes(tec.id) && !_canSeniorGoToClient(b.clienteId, tec.id)) continue;
+
             // Score: priorità urgenza + vicinanza km
             // giorniScadenza negativo = scaduto (più negativo = più urgente)
             const urgScore = b.giorniScadenza < 0 ? -b.giorniScadenza * 3 : (b.giorniScadenza < 7 ? 2 : (b.giorniScadenza < 30 ? 1 : 0));
             const kmScore = km < 20 ? 5 : (km < 40 ? 3 : (km < 70 ? 1 : 0));
-            available.push({ idx: i, b, km, score: urgScore + kmScore });
+            // REGOLA 6: bonus per continuità — stesso tecnico sullo stesso cliente nel mese
+            const continuityBonus = (clientTecHistory[b.clienteId] === tec.id) ? 4 : 0;
+            available.push({ idx: i, b, km, score: urgScore + kmScore + continuityBonus });
           }
 
           if (!available.length) return null;
@@ -5257,30 +5274,33 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         // ── REGOLA 6: Track client→tecnico across days for 2-day job continuity ──
         const clientTecHistory = {}; // clienteId → first tecnicoId assigned this month
 
+        // ── REGOLA 4-5: Track tecnici per client per giorno (reset each day) ──
+        let clientTecToday = {}; // clienteId → [tecnicoIds] — max 2, and only 1 senior
+
+        // Helper: track and validate assignment
+        function _trackAssignment(cid, tecId) {
+          if (!cid) return;
+          if (!clientTecToday[cid]) clientTecToday[cid] = [];
+          clientTecToday[cid].push(tecId);
+          // Track history for 2-day continuity (REGOLA 6)
+          if (!clientTecHistory[cid]) clientTecHistory[cid] = tecId;
+        }
+        // Check: can this senior be assigned to this client today? (REGOLA 5: no 2 seniors same client)
+        function _canSeniorGoToClient(cid, seniorId) {
+          if (!cid) return true;
+          const existing = clientTecToday[cid] || [];
+          // Already 2 tecnici? No more.
+          if (existing.length >= 2) return false;
+          // Another senior already on this client today?
+          const anotherSenior = existing.find(id => _seniorIds.includes(id) && id !== seniorId);
+          if (anotherSenior) return false;
+          return true;
+        }
+
         for (const giorno of workDays) {
           const usedToday = new Set();
           const pairedSeniorsToday = new Set(); // Track which seniors already have a junior
-          // ── REGOLA 4-5: Track tecnici per client per giorno ──
-          const clientTecToday = {}; // clienteId → [tecnicoIds] — max 2, and only 1 senior
-          // Helper: track and validate assignment
-          function _trackAssignment(cid, tecId) {
-            if (!cid) return;
-            if (!clientTecToday[cid]) clientTecToday[cid] = [];
-            clientTecToday[cid].push(tecId);
-            // Track history for 2-day continuity (REGOLA 6)
-            if (!clientTecHistory[cid]) clientTecHistory[cid] = tecId;
-          }
-          // Check: can this senior be assigned to this client today? (REGOLA 5: no 2 seniors same client)
-          function _canSeniorGoToClient(cid, seniorId) {
-            if (!cid) return true;
-            const existing = clientTecToday[cid] || [];
-            // Already 2 tecnici? No more.
-            if (existing.length >= 2) return false;
-            // Another senior already on this client today?
-            const anotherSenior = existing.find(id => _seniorIds.includes(id) && id !== seniorId);
-            if (anotherSenior) return false;
-            return true;
-          }
+          clientTecToday = {}; // Reset per giorno
 
           // A) Installazioni prioritarie
           while (instIdx < installBacklog.length) {
