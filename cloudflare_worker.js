@@ -3254,8 +3254,10 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       }
 
       // Engine registry: ogni engine ha key env, funzione try, flag disabled
-      // 9 motori totali: 6 originali + 3 nuovi (OpenRouter, Fireworks, SambaNova)
+      // 11 motori totali: 3 premium (anthropic, openai, gemini pro) + 6 free + workersai fallback
       const engines = {
+        anthropic: { envKey: 'ANTHROPIC_KEY',  tryFn: null, disabled: false },
+        openai:    { envKey: 'OPENAI_KEY',     tryFn: null, disabled: false },
         gemini:    { envKey: 'GEMINI_KEY',     tryFn: null, disabled: false },
         cerebras:  { envKey: 'CEREBRAS_KEY',   tryFn: null, disabled: false },
         groq:      { envKey: 'GROQ_KEY',       tryFn: null, disabled: false },
@@ -3267,6 +3269,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         workersai: { envKey: 'AI',             tryFn: null, disabled: false },
       };
       // Lazy-bind tryFn (definite sotto)
+      engines.anthropic.tryFn = tryAnthropic;
+      engines.openai.tryFn = tryOpenAI;
       engines.gemini.tryFn = tryGemini;
       engines.cerebras.tryFn = tryCerebras;
       engines.groq.tryFn = tryGroq;
@@ -3276,10 +3280,9 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       engines.fireworks.tryFn = tryFireworks;
       engines.sambanova.tryFn = trySambaNova;
 
-      // Ranking configurabile da DB config (chiave: ai_engine_ranking)
-      // Formato: "gemini,cerebras,groq,openrouter,fireworks,sambanova,mistral,deepseek,workersai"
-      // Ranking: tutti gratuiti (free tier), Workers AI è il fallback finale (prompt compatto)
-      const defaultRanking = ['gemini','cerebras','groq','openrouter','fireworks','sambanova','mistral','deepseek','workersai'];
+      // Ranking: premium PRIMA (qualità migliore), poi free, Workers AI fallback
+      // Configurabile da DB config (chiave: ai_engine_ranking)
+      const defaultRanking = ['anthropic','openai','gemini','cerebras','groq','openrouter','fireworks','sambanova','mistral','deepseek','workersai'];
       let engineRanking = defaultRanking;
       try {
         const cfgRank = await sb(env, 'config', 'GET', null,
@@ -3389,8 +3392,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           throw new Error(`AI non disponibile. Nessun motore configurato.`);
         }
 
-        // 2. MoA PARALLEL RACE — lancia i primi 5 disponibili in parallelo (più motori = più probabilità di successo)
-        const MoA_COUNT = Math.min(5, available.filter(n => n !== 'workersai').length);
+        // 2. MoA PARALLEL RACE — lancia i primi 7 disponibili in parallelo (3 premium + 4 free)
+        const MoA_COUNT = Math.min(7, available.filter(n => n !== 'workersai').length);
         const parallelEngines = available.filter(n => n !== 'workersai').slice(0, MoA_COUNT);
         const fallbackEngines = available.filter(n => !parallelEngines.includes(n));
 
@@ -3501,8 +3504,9 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
       async function tryGemini(promptText) {
         try {
+          // Gemini 2.5 Pro (upgrade da 2.0-flash per qualità migliore nel planning)
           const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${env.GEMINI_KEY}`,
             { method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 system_instruction: { parts: [{ text: sysPrompt }] },
@@ -3655,7 +3659,80 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         }
       }
 
-      // ── NUOVI ENGINE: OpenRouter, Fireworks AI, SambaNova ──
+      // ── ENGINE PREMIUM: Anthropic Claude, OpenAI GPT-4o, Gemini 2.5 Pro ──
+
+      async function tryAnthropic(promptText) {
+        try {
+          // Claude Sonnet 4.6 — Anthropic Messages API (formato diverso da OpenAI)
+          const res = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': env.ANTHROPIC_KEY,
+              'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+              model: 'claude-sonnet-4-5-20250929',
+              max_tokens: 16384,
+              temperature: 0.3,
+              system: sysPrompt,
+              messages: [{ role: 'user', content: promptText }]
+            })
+          });
+          if (res.status === 429 || res.status === 401 || res.status === 403) {
+            sse({type:'engine_debug', engine:'anthropic', status:res.status, reason:'rate_limit_or_auth'});
+            engines.anthropic.disabled = true; return null;
+          }
+          if (!res.ok) {
+            const errBody = await res.text().catch(()=>'');
+            sse({type:'engine_debug', engine:'anthropic', status:res.status, reason:errBody.substring(0,200)});
+            return null;
+          }
+          const d = await res.json();
+          // Anthropic: d.content[0].text (può essere tipo "text" o "tool_use")
+          const textBlock = (d.content || []).find(b => b.type === 'text');
+          const text = textBlock?.text || null;
+          if (!text) sse({type:'engine_debug', engine:'anthropic', status:200, reason:'empty_response'});
+          return text;
+        } catch(e) {
+          sse({type:'engine_debug', engine:'anthropic', status:'exception', reason:e.message||'unknown'});
+          return null;
+        }
+      }
+
+      async function tryOpenAI(promptText) {
+        try {
+          // GPT-4o — OpenAI Chat Completions (formato standard)
+          const res = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.OPENAI_KEY}` },
+            body: JSON.stringify({
+              model: 'gpt-4o',
+              messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
+              max_tokens: 16384, temperature: 0.3,
+              response_format: { type: 'json_object' }
+            })
+          });
+          if (res.status === 429 || res.status === 401 || res.status === 403) {
+            sse({type:'engine_debug', engine:'openai', status:res.status, reason:'rate_limit_or_auth'});
+            engines.openai.disabled = true; return null;
+          }
+          if (!res.ok) {
+            const errBody = await res.text().catch(()=>'');
+            sse({type:'engine_debug', engine:'openai', status:res.status, reason:errBody.substring(0,200)});
+            return null;
+          }
+          const d = await res.json();
+          const text = d.choices?.[0]?.message?.content || null;
+          if (!text) sse({type:'engine_debug', engine:'openai', status:200, reason:'empty_response'});
+          return text;
+        } catch(e) {
+          sse({type:'engine_debug', engine:'openai', status:'exception', reason:e.message||'unknown'});
+          return null;
+        }
+      }
+
+      // ── NUOVI ENGINE FREE: OpenRouter, Fireworks AI, SambaNova ──
 
       async function tryOpenRouter(promptText) {
         try {
@@ -4133,9 +4210,17 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         let backlogIdx = 0;
         let installIdx = 0;
 
-        // Funzione: check se tecnico è assente in un giorno
+        // Funzione: check se tecnico è assente in un giorno (da TUTTE le fonti)
         function _isAbsent(tecId, giorno) {
-          // Check indisponibilita (richieste approvate)
+          // 1. Check vincoli DB (assenti, ferie, malattia)
+          for (const a of (vincoliRules.assenti || [])) {
+            if (a.id !== tecId) continue;
+            if (a.permanente) return true;
+            if (a.dataFine && a.dataFine < giorno) continue;
+            if (a.dataInizio && a.dataInizio > giorno) continue;
+            return true;
+          }
+          // 2. Check richieste approvate (ferie, malattia, permesso)
           for (const req of (allRichieste || [])) {
             if (req.tecnico_id !== tecId) continue;
             if (req.data_inizio && req.data_inizio > giorno) continue;

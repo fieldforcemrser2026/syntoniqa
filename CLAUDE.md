@@ -133,18 +133,25 @@ Righe 5000-5500: Notification helpers (email Resend, TG, Web Push VAPID)
 Righe 5500-7296: Cron jobs (checkInterventoReminders, checkSLAUrgenze, checkPMExpiry)
 ```
 
-**AI Engine Cascade (6 motori, ranking configurabile da DB):**
-| Priorità | Engine | Modello | API Key |
-|----------|--------|---------|---------|
-| 1 | Gemini | gemini-2.0-flash | GEMINI_KEY |
-| 2 | Cerebras | llama-3.3-70b | CEREBRAS_KEY |
-| 3 | Groq | llama-3.3-70b-versatile | GROQ_KEY |
-| 4 | Mistral | mistral-small-latest | MISTRAL_KEY |
-| 5 | DeepSeek | deepseek-chat | DEEPSEEK_KEY |
-| 6 | Workers AI | llama-3.3-70b-fp8 + llava-1.5-7b | AI binding |
+**AI Engine MoA Race (11 motori, ranking configurabile da DB):**
+| Priorità | Engine | Modello | API Key | Tier |
+|----------|--------|---------|---------|------|
+| 1 | Anthropic | claude-sonnet-4.6 | ANTHROPIC_KEY | Premium |
+| 2 | OpenAI | gpt-4o | OPENAI_KEY | Premium |
+| 3 | Gemini | gemini-2.5-pro | GEMINI_KEY | Premium |
+| 4 | Cerebras | llama-3.3-70b | CEREBRAS_KEY | Free |
+| 5 | Groq | llama-3.3-70b-versatile | GROQ_KEY | Free |
+| 6 | OpenRouter | llama-3.3-70b-instruct:free | OPENROUTER_KEY | Free |
+| 7 | Fireworks | llama-v3p1-70b-instruct | FIREWORKS_KEY | Free |
+| 8 | SambaNova | llama-4-maverick-17b | SAMBANOVA_KEY | Free |
+| 9 | Mistral | mistral-small-latest | MISTRAL_KEY | Free |
+| 10 | DeepSeek | deepseek-chat | DEEPSEEK_KEY | Free |
+| 11 | Workers AI | llama-3.3-70b-fp8 + llava-1.5-7b | AI binding | Free |
 
-Ranking override DB: `config.ai_engine_ranking = "gemini,cerebras,groq,mistral,deepseek,workersai"`
-Disabilitazione: `config.ai_engine_disabled = "groq,mistral"` (in caso di rate limit)
+**MoA Best-Of Race**: lancia fino a 7 motori in parallelo, aspetta tutte le risposte (max 25s), scoring con penalità per duplicati/junior soli/shortfall, sceglie il punteggio più alto.
+
+Ranking override DB: `config.ai_engine_ranking = "anthropic,openai,gemini,cerebras,groq,..."`
+Disabilitazione: `config.ai_engine_disabled = "anthropic,openai"` (se vuoi solo motori free)
 
 ### `admin_v1.html` (10465 righe)
 SPA admin completa. 35+ sezioni, 17 modali.
