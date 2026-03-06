@@ -3389,10 +3389,13 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           throw new Error(`AI non disponibile. Nessun motore configurato.`);
         }
 
-        // 2. MoA PARALLEL RACE — lancia i primi 3 disponibili in parallelo
-        const MoA_COUNT = Math.min(3, available.filter(n => n !== 'workersai').length);
+        // 2. MoA PARALLEL RACE — lancia i primi 5 disponibili in parallelo (più motori = più probabilità di successo)
+        const MoA_COUNT = Math.min(5, available.filter(n => n !== 'workersai').length);
         const parallelEngines = available.filter(n => n !== 'workersai').slice(0, MoA_COUNT);
         const fallbackEngines = available.filter(n => !parallelEngines.includes(n));
+
+        // Log diagnostica per debug: quali motori disponibili, quali skippati
+        sse({type:'engine_debug', engine:'CASCADE', status:'init', available: available.join(','), skipped: skipped.join(','), parallel: parallelEngines.join(','), fallback: fallbackEngines.join(',')});
 
         if (parallelEngines.length >= 2) {
           sse({type:'moa_start', engines: parallelEngines, mode: 'best_of'});
@@ -3433,8 +3436,9 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
                 } else {
                   onEngine?.({engine:name, status:'failed'});
                 }
-              } catch {
-                onEngine?.({engine:name, status:'failed'});
+              } catch(e) {
+                onEngine?.({engine:name, status:'failed', error: e.message});
+                sse({type:'engine_debug', engine:name, status:'exception', reason:e.message||'unknown'});
               }
               checkAllDone();
             });
@@ -3498,7 +3502,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       async function tryGemini(promptText) {
         try {
           const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_KEY}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`,
             { method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 system_instruction: { parts: [{ text: sysPrompt }] },
@@ -3528,12 +3532,12 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
       async function tryCerebras(promptText) {
         try {
-          // Cerebras: gpt-oss-120b (120B production, stabile)
+          // Cerebras: llama-3.3-70b (free tier, veloce)
           const res = await fetch('https://api.cerebras.ai/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.CEREBRAS_KEY}` },
             body: JSON.stringify({
-              model: 'gpt-oss-120b',
+              model: 'llama-3.3-70b',
               messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
               max_tokens: 16384, temperature: 0.3,
               response_format: { type: 'json_object' }

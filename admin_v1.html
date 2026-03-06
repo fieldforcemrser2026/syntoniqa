@@ -7928,10 +7928,14 @@ async function runAI(promptOverride){
           else if(ev.type==='engine_debug'){
             const el=document.getElementById('aiInitText');
             if(el){
-              if(ev.engine==='CASCADE'){
+              if(ev.engine==='CASCADE'&&ev.status==='init'){
+                el.innerHTML=`🔧 Motori: <b>${ev.available||'?'}</b> | Skippati: <span style="color:var(--warn)">${ev.skipped||'nessuno'}</span> | Paralleli: <b>${ev.parallel||'?'}</b>`;
+              } else if(ev.engine==='CASCADE'){
                 el.innerHTML=`<span style="color:var(--err);font-weight:600">❌ TUTTI I MOTORI FALLITI</span> — ${(ev.reason||'').substring(0,200)}`;
               } else {
-                el.textContent=`⚠️ ${ev.engine}: HTTP ${ev.status} — ${(ev.reason||'').substring(0,120)}`;
+                // Mostra errore engine specifico in console E in UI
+                const msg=`⚠️ ${ev.engine}: ${ev.status==='exception'?'Exception':'HTTP '+ev.status} — ${(ev.reason||'').substring(0,120)}`;
+                el.textContent=msg;
               }
             }
             console.warn('AI Engine Debug:', ev);
@@ -9186,7 +9190,7 @@ function renderPMTree(){
     // Lookup macchina_id → seriale
     const macIdToSerial={};
     (DATA.macchine||[]).forEach(m=>{if(m.Seriale)macIdToSerial[m.ID]=m.Seriale;});
-    (DATA.piano||[]).filter(p=>!p.Obsoleto&&p.Stato==='pianificato'&&p.TecnicoID).forEach(p=>{
+    (DATA.piano||[]).filter(p=>!p.Obsoleto&&p.Stato!=='annullato').forEach(p=>{
       // Estrai S/N dalla nota [PM LSSA] ... S/N:xxx
       const snM=(p.Note||'').match(/S\/N:([^\s,]+)/);
       if(snM)plannedSerials.add(snM[1]);
