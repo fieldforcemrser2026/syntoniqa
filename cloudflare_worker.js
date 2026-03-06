@@ -2352,7 +2352,7 @@ async function handlePost(action, body, env) {
         sb(env, 'reperibilita', 'GET', null, `?obsoleto=eq.false${repFilter}&select=id,tecnico_id,data_inizio,data_fine,turno,tipo&order=data_inizio.asc&limit=100`).catch(()=>[]),
         sb(env, 'automezzi', 'GET', null, '?obsoleto=eq.false&select=id,targa,modello,stato&limit=20').catch(()=>[]),
         sb(env, 'macchine', 'GET', null, '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,seriale,note,modello,tipo,cliente_id,prossimo_tagliando&order=prossimo_tagliando.asc&limit=80').catch(()=>[]),
-        sb(env, 'anagrafica_assets', 'GET', null, '?prossimo_controllo=not.is.null&select=id,nome_asset,modello,gruppo_attrezzatura,codice_m3,nome_account,prossimo_controllo&order=prossimo_controllo.asc&limit=80').catch(()=>[]),
+        sb(env, 'anagrafica_assets', 'GET', null, '?prossimo_controllo=not.is.null&select=id,nome_asset,modello,gruppo_attrezzatura,codice_m3,nome_account,prossimo_controllo,numero_serie,ciclo_pm,giorni_da_pm,mungiture_da_pm&order=prossimo_controllo.asc&limit=200').catch(()=>[]),
         sb(env, 'piano', 'GET', null, `?data=gte.${meseTarget}-01&data=lte.${meseTarget}-31&stato=in.(pianificato,in_corso)&obsoleto=eq.false&select=id,data,tecnico_id,cliente_id&limit=500`).catch(()=>[])
       ]);
 
@@ -2841,7 +2841,7 @@ async function handlePost(action, body, env) {
         sb(env, 'anagrafica_assets', 'GET', null, `?prossimo_controllo=not.is.null${meseEnd?'&prossimo_controllo=lte.'+meseEnd:''}&select=id,nome_asset,numero_serie,modello,gruppo_attrezzatura,codice_m3,nome_account,prossimo_controllo&order=prossimo_controllo.asc&limit=200`),
         meseTarget ? sb(env, 'richieste', 'GET', null, `?stato=eq.approvata&obsoleto=eq.false&data_inizio=lte.${meseEnd}&data_fine=gte.${meseStart}&select=id,tecnico_id,tipo,data_inizio,data_fine,motivo&limit=100`) : Promise.resolve([]),
         meseTarget ? sb(env, 'trasferte', 'GET', null, `?obsoleto=eq.false&data_inizio=lte.${meseEnd}&data_fine=gte.${meseStart}&select=id,tecnico_id,tecnici_ids,cliente_id,data_inizio,data_fine&limit=50`) : Promise.resolve([]),
-        meseTarget ? sb(env, 'installazioni', 'GET', null, `?obsoleto=eq.false&stato=in.(pianificato,in_corso,pianificata)&data_inizio=lte.${meseEnd}&select=id,tecnici_ids,cliente_id,data_inizio,data_fine_prevista,stato&limit=50`) : Promise.resolve([]),
+        meseTarget ? sb(env, 'installazioni', 'GET', null, `?obsoleto=eq.false&stato=in.(pianificato,in_corso,pianificata)&data_inizio=lte.${meseEnd}&select=id,tecnici_ids,cliente_id,data_inizio,data_fine_prevista,stato,macchine_ids,note,tipo_macchina&limit=50`) : Promise.resolve([]),
         meseTarget ? sb(env, 'piano', 'GET', null, `?obsoleto=eq.false&stato=neq.annullato&data=gte.${meseStart}&data=lte.${meseEnd}&select=id,tecnico_id,tecnici_ids,cliente_id,data,ora_inizio,tipo_intervento_id,note,stato&limit=500`) : Promise.resolve([]),
         sb(env, 'config', 'GET', null, '?chiave=eq.planner_rules&limit=1').catch(()=>[])
       ]);
@@ -3206,7 +3206,9 @@ async function handlePost(action, body, env) {
           ultimoTagliando: m.ultimo_tagliando || '',
           giorniScadenza: ggDiff,
           urgenza: ggDiff < 0 ? 'SCADUTO' : ggDiff <= 7 ? 'URGENTE' : ggDiff <= 30 ? 'PROSSIMO' : 'PROGRAMMATO',
-          oreLavoro: m.ore_lavoro || null
+          oreLavoro: m.ore_lavoro || null,
+          // LSSA: macchine table doesn't have ciclo_pm, leave empty (assets table has it)
+          cicloPm: '', giorniDaPm: null, mungitureDaPm: null
         });
       }
       // From anagrafica_assets table (prossimo_controllo)
@@ -3230,7 +3232,11 @@ async function handlePost(action, body, env) {
           ultimoTagliando: '',
           giorniScadenza: ggDiff,
           urgenza: ggDiff < 0 ? 'SCADUTO' : ggDiff <= 7 ? 'URGENTE' : ggDiff <= 30 ? 'PROSSIMO' : 'PROGRAMMATO',
-          oreLavoro: null
+          oreLavoro: null,
+          // LSSA data enrichment (REGOLA 9)
+          cicloPm: a.ciclo_pm || '',
+          giorniDaPm: a.giorni_da_pm || null,
+          mungitureDaPm: a.mungiture_da_pm || null
         });
       }
       // Sort by urgenza: scaduti first, then by date ascending
@@ -3303,24 +3309,18 @@ async function handlePost(action, body, env) {
         const baseCode = t.base ? (cittaMap[t.base] || t.base) : '?';
         return `${t.id}(${t.ruolo},zona:${baseCode},furgone:${furgLabel})`;
       }).join('; ');
-      // Calcola senior/junior per regola distribuzione — match robusto + fallback nomi noti
-      // DB usa: "caposquadra", "tecnico senior", "tecnico junior", o anche solo "tecnico"
-      const _KNOWN_SENIOR_NAMES = ['jacopo','anton','giovanni'];
-      const _KNOWN_JUNIOR_NAMES = ['giuseppe','fabrizio','emanuele','gino'];
+      // Calcola senior/junior per regola distribuzione — 100% parametrico dal DB (campo ruolo)
+      // DB usa: "caposquadra", "tecnico senior", "tecnico junior", "tecnico"
+      // NESSUN hardcode di nomi specifici — tutto dal campo `ruolo` della tabella utenti
       function _isSenior(t) {
         const r = (t.ruolo||'').toLowerCase().replace(/_/g,' ').trim();
-        if (r === 'caposquadra' || r === 'senior' || r.includes('senior')) return true;
-        // Fallback: match per nome noto
-        const n = (t.nome||'').toLowerCase();
-        return _KNOWN_SENIOR_NAMES.includes(n);
+        return r === 'caposquadra' || r === 'senior' || r.includes('senior') || r.includes('capo');
       }
       function _isJunior(t) {
         const r = (t.ruolo||'').toLowerCase().replace(/_/g,' ').trim();
-        if (r === 'junior' || r.includes('junior')) return true;
-        // Fallback: match per nome noto
-        const n = (t.nome||'').toLowerCase();
-        return _KNOWN_JUNIOR_NAMES.includes(n);
+        return r === 'junior' || r.includes('junior');
       }
+      // "tecnico" senza qualifica = indipendente (né senior né junior)
       const allSeniors = allTecnici.filter(t => t.ruolo !== 'admin' && _isSenior(t));
       const allJuniors = allTecnici.filter(t => t.ruolo !== 'admin' && _isJunior(t) && !_isSenior(t));
       const seniorConstraint = allSeniors.length
@@ -4740,6 +4740,24 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           postProcessWarnings.push(`⚠️ Rimosse ${blanks.length} righe senza tecnico o cliente assegnato`);
         }
 
+        // 6. REGOLA 4-5: Check max 2 tecnici per client/giorno + no 2 senior same client
+        const dayClientTec = {};
+        piano.forEach(p => {
+          if (!p.clienteId || !p.data || !p.tecnicoId) return;
+          const key = `${p.data}|${p.clienteId}`;
+          if (!dayClientTec[key]) dayClientTec[key] = [];
+          dayClientTec[key].push(p.tecnicoId);
+        });
+        for (const [key, tecs] of Object.entries(dayClientTec)) {
+          if (tecs.length > 2) {
+            postProcessWarnings.push(`⚠️ REGOLA MAX-2: ${key} ha ${tecs.length} tecnici assegnati (max 2)`);
+          }
+          const seniors = tecs.filter(id => _seniorIds.includes(id));
+          if (seniors.length > 1) {
+            postProcessWarnings.push(`⚠️ REGOLA NO-2-SENIOR: ${key} ha ${seniors.length} senior (max 1)`);
+          }
+        }
+
         return piano.filter(p => p.tecnicoId && p.clienteId);
       }
 
@@ -5196,6 +5214,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               else if (adjProvs.includes(cli.prov)) km = 60;
             } else if (!base) {
               km = 50; // nessuna base: distanza neutra
+            } else {
+              km = 80; // base nota ma cliente senza coordinate: stima conservativa
             }
             // Score: priorità urgenza + vicinanza km
             // giorniScadenza negativo = scaduto (più negativo = più urgente)
@@ -5215,16 +5235,52 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           return spliced;
         }
 
+        // Resolve clienteNome from cliMap — ALWAYS returns a name, never empty
+        function _resolveClienteNome(clienteId) {
+          if (!clienteId) return '?';
+          const c = cliMap[clienteId];
+          return c?.nome || clienteId; // fallback: codice_m3 stesso
+        }
+
         function makeNote(item) {
-          const kmInfo = item._km != null && item._km < 900 ? ` | ~${item._km}km` : '';
-          return `${item.macchinaLabel || '?'} | scad:${item.data || '?'}${item.oreLavoro ? ' | ore:' + item.oreLavoro : ''}${kmInfo}`;
+          // REGOLA 7: km SEMPRE presente nella nota
+          const kmVal = item._km != null ? item._km : '?';
+          const kmInfo = ` | ~${kmVal}km`;
+          // REGOLA 9: LSSA data (ciclo PM, seriale/astronaut number)
+          const lssaInfo = item.cicloPm ? ` | ciclo:${item.cicloPm}` : '';
+          const snInfo = item.seriale ? ` | S/N:${item.seriale}` : '';
+          return `${item.macchinaLabel || '?'}${snInfo} | scad:${item.data || '?'}${item.oreLavoro ? ' | ore:' + item.oreLavoro : ''}${lssaInfo}${kmInfo}`;
         }
 
         let totalTagUsed = 0;
 
+        // ── REGOLA 6: Track client→tecnico across days for 2-day job continuity ──
+        const clientTecHistory = {}; // clienteId → first tecnicoId assigned this month
+
         for (const giorno of workDays) {
           const usedToday = new Set();
           const pairedSeniorsToday = new Set(); // Track which seniors already have a junior
+          // ── REGOLA 4-5: Track tecnici per client per giorno ──
+          const clientTecToday = {}; // clienteId → [tecnicoIds] — max 2, and only 1 senior
+          // Helper: track and validate assignment
+          function _trackAssignment(cid, tecId) {
+            if (!cid) return;
+            if (!clientTecToday[cid]) clientTecToday[cid] = [];
+            clientTecToday[cid].push(tecId);
+            // Track history for 2-day continuity (REGOLA 6)
+            if (!clientTecHistory[cid]) clientTecHistory[cid] = tecId;
+          }
+          // Check: can this senior be assigned to this client today? (REGOLA 5: no 2 seniors same client)
+          function _canSeniorGoToClient(cid, seniorId) {
+            if (!cid) return true;
+            const existing = clientTecToday[cid] || [];
+            // Already 2 tecnici? No more.
+            if (existing.length >= 2) return false;
+            // Another senior already on this client today?
+            const anotherSenior = existing.find(id => _seniorIds.includes(id) && id !== seniorId);
+            if (anotherSenior) return false;
+            return true;
+          }
 
           // A) Installazioni prioritarie
           while (instIdx < installBacklog.length) {
@@ -5242,16 +5298,22 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               if (usedToday.has(tid)) continue;
               const tec = tecAttivi2.find(t => t.id === tid);
               if (!tec || _isAbsent(tid, giorno) || _isTrasferta(tid, giorno)) continue;
-              const cNome = cliMap[inst.cliente_id]?.nome || inst.cliente_id || '?';
+              const cNome = _resolveClienteNome(inst.cliente_id);
+              // REGOLA 8: include machine/asset info from installation record
+              const instMacchine = inst.macchine_ids || '';
+              const instNote = inst.note || '';
+              const instTipo = inst.tipo_macchina || '';
+              const noteText = instNote ? `Installazione: ${instNote}` : `Installazione ${instTipo || ''} presso ${cNome}`.trim();
               plan.push({
                 id: null, data: giorno, tecnicoId: tid,
-                clienteId: inst.cliente_id || '', tipo: 'installazione',
+                clienteId: inst.cliente_id || '', cliente: cNome, tipo: 'installazione',
                 oraInizio: '08:00', durataOre: 8, furgone: _furgLabel(tec.automezzo_id),
-                note: `Installazione presso ${cNome}`,
-                macchinaLabel: '', macchinaModello: '', machinaTipo: '', seriale: '',
+                note: noteText,
+                macchinaLabel: instTipo || '', macchinaModello: '', machinaTipo: instTipo, seriale: '',
                 scadenza: '', statoScaduto: '', oreLavoro: '', ultimoTagliando: '', km: ''
               });
               usedToday.add(tid);
+              _trackAssignment(inst.cliente_id, tid);
               assigned = true;
             }
             if (assigned) instIdx++;
@@ -5272,7 +5334,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
             plan.push({
               id: null, data: giorno, tecnicoId: tec.id,
-              clienteId: item.clienteId || '', tipo: item.tipo || 'tagliando',
+              clienteId: item.clienteId || '', cliente: _resolveClienteNome(item.clienteId), tipo: item.tipo || 'tagliando',
               oraInizio: '08:00',
               durataOre: item.oreLavoro ? Math.min(8, Math.max(4, item.oreLavoro / 500)) : 6,
               furgone: _furgLabel(tec.automezzo_id),
@@ -5286,9 +5348,13 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               statoScaduto: item.urgenza || '',
               oreLavoro: item.oreLavoro || '',
               ultimoTagliando: item.ultimoTagliando || '',
-              km: item._km != null && item._km < 900 ? item._km : ''
+              km: item._km != null ? item._km : '?',
+              cicloPm: item.cicloPm || '',
+              giorniDaPm: item.giorniDaPm || null,
+              mungitureDaPm: item.mungitureDaPm || null
             });
             usedToday.add(tec.id);
+            _trackAssignment(item.clienteId, tec.id);
           }
 
           // C) JUNIOR → affiancati a un senior GIÀ assegnato oggi
@@ -5310,7 +5376,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               const srName = srTec ? `${srTec.nome} ${srTec.cognome}`.trim() : seniorEntry.tecnicoId;
               plan.push({
                 id: null, data: giorno, tecnicoId: jr.id,
-                clienteId: seniorEntry.clienteId || '', tipo: seniorEntry.tipo || 'tagliando',
+                clienteId: seniorEntry.clienteId || '', cliente: seniorEntry.cliente || _resolveClienteNome(seniorEntry.clienteId), tipo: seniorEntry.tipo || 'tagliando',
                 oraInizio: seniorEntry.oraInizio || '08:00', durataOre: seniorEntry.durataOre || 6,
                 furgone: _furgLabel(jr.automezzo_id || '') || seniorEntry.furgone || '',
                 note: `Affiancamento con ${srName} — ${(seniorEntry.note || '').substring(0, 80)}`,
@@ -5323,9 +5389,13 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
                 statoScaduto: seniorEntry.statoScaduto || '',
                 oreLavoro: seniorEntry.oreLavoro || '',
                 ultimoTagliando: seniorEntry.ultimoTagliando || '',
-                km: seniorEntry.km || ''
+                km: seniorEntry.km || '',
+                cicloPm: seniorEntry.cicloPm || '',
+                giorniDaPm: seniorEntry.giorniDaPm || null,
+                mungitureDaPm: seniorEntry.mungitureDaPm || null
               });
               usedToday.add(jr.id);
+              _trackAssignment(seniorEntry.clienteId, jr.id);
             }
             // Se non c'è un senior libero, il junior resta senza assegnamento oggi
           }
@@ -5344,7 +5414,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
             plan.push({
               id: null, data: giorno, tecnicoId: tec.id,
-              clienteId: item.clienteId || '', tipo: item.tipo || 'tagliando',
+              clienteId: item.clienteId || '', cliente: _resolveClienteNome(item.clienteId), tipo: item.tipo || 'tagliando',
               oraInizio: '08:00',
               durataOre: item.oreLavoro ? Math.min(8, Math.max(4, item.oreLavoro / 500)) : 6,
               furgone: _furgLabel(tec.automezzo_id),
@@ -5358,9 +5428,13 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               statoScaduto: item.urgenza || '',
               oreLavoro: item.oreLavoro || '',
               ultimoTagliando: item.ultimoTagliando || '',
-              km: item._km != null && item._km < 900 ? item._km : ''
+              km: item._km != null ? item._km : '?',
+              cicloPm: item.cicloPm || '',
+              giorniDaPm: item.giorniDaPm || null,
+              mungitureDaPm: item.mungitureDaPm || null
             });
             usedToday.add(tec.id);
+            _trackAssignment(item.clienteId, tec.id);
           }
         }
         return { plan, tagUsed: totalTagUsed, instUsed: instIdx };
@@ -5581,7 +5655,7 @@ ${instructions}`;
           const tecAttivi = allTecnici.filter(t => (t.ruolo || '').toLowerCase() !== 'admin');
           const tecniciCtx = tecAttivi.map(t => {
             const ruolo = (t.ruolo || 'tecnico').toLowerCase();
-            const isJunior = ruolo.includes('junior') || ['emanuele','gino','giuseppe'].some(n => (t.nome||'').toLowerCase().includes(n) || (t.cognome||'').toLowerCase().includes(n));
+            const isJunior = _isJunior(t);
             return `${t.id}|${t.nome} ${t.cognome}|${t.ruolo}|base:${t.base||'?'}|furgone:${t.automezzo_id||'?'}|${isJunior?'JUNIOR':'SENIOR/CAPO'}`;
           }).join('\n');
 
@@ -5651,7 +5725,7 @@ REGOLE DI ANALISI:
 - ⚠️ Un CLIENTE dovrebbe essere visitato preferibilmente dallo STESSO tecnico durante il mese per continuità di servizio
 
 NON segnalare come violazione:
-- Junior in reperibilità — I JUNIOR (Emanuele, Gino, Giuseppe, Fabrizio) NON FANNO MAI reperibilità, quindi NON è una violazione se appaiono nel piano durante periodi di reperibilità altrui
+- Junior in reperibilità — I tecnici con ruolo "junior" NON FANNO MAI reperibilità, quindi NON è una violazione se appaiono nel piano durante periodi di reperibilità altrui
 - Assenze/ferie non elencate nei vincoli sopra
 
 Per OGNI suggerimento fornisci:
@@ -5667,12 +5741,14 @@ Per OGNI suggerimento fornisci:
 TECNICI DISPONIBILI (con base e ruolo):
 ${tecniciCtx}
 
-REGOLE TEAM (IMPORTANTI):
-- JUNIOR (Emanuele Guerzoni, Gino, Giuseppe Falcone, Fabrizio): devono SEMPRE lavorare affiancati a un SENIOR
-- SENIOR (Jacopo Bonadé, Anton, Giovanni Fari): possono lavorare da soli
-- Fabio Modarelli: lavora SOLO, meglio non accoppiarlo
+REGOLE TEAM (IMPORTANTI — derivate dai ruoli DB, NON hardcoded):
+- Tecnici con ruolo "junior" (vedi lista sopra dove indicato JUNIOR): devono SEMPRE lavorare affiancati a un SENIOR
+- Tecnici con ruolo "senior" o "caposquadra": possono lavorare da soli
+- Tecnici con ruolo "tecnico" (senza qualifica): lavorano da soli, indipendenti
 - JUNIOR NON fanno reperibilità — MAI. Non segnalare violazioni di reperibilità per junior.
 - REPERIBILITÀ: il tecnico in reperibilità NON deve avere tagliandi/interventi programmati in quei giorni (vale solo per senior/caposquadra)
+- Max 2 tecnici per cliente per giorno (1 senior + 1 junior). MAI 2 senior sullo stesso cliente.
+- Se un tagliando dura 2 giorni, lo STESSO tecnico che lo inizia deve finirlo.
 
 REPERIBILITÀ ATTIVE NEL MESE:
 ${repCtx || '(Nessuna reperibilità nel periodo)'}
@@ -6079,19 +6155,20 @@ Rispondi SOLO con JSON valido:
       // 2. Create new interventions
       const created = [], applyErrors = [];
       const now = new Date().toISOString();
+      const tenantId = env.TENANT_ID || DEFAULT_TENANT;
       for (const item of toCreate) {
         try {
           const id = secureId('INT_AI');
-          const tid = item.tecnicoId || item.tecnico_id || item.TecnicoID;
+          const tecId = item.tecnicoId || item.tecnico_id || item.TecnicoID;
           const cid = item.clienteId || item.cliente_id || item.ClienteID || null;
           const itemData = item.data || item.Data;
-          if (!tid) { applyErrors.push({ item: `${itemData} ${item.tecnico||'?'}`, err: 'tecnico_id mancante' }); continue; }
-          if (!itemData) { applyErrors.push({ item: `${item.tecnico||tid}`, err: 'data mancante' }); continue; }
+          if (!tecId) { applyErrors.push({ item: `${itemData} ${item.tecnico||'?'}`, err: 'tecnico_id mancante' }); continue; }
+          if (!itemData) { applyErrors.push({ item: `${item.tecnico||tecId}`, err: 'data mancante' }); continue; }
           const durata = item.durataOre || item.durata_ore || '';
           const noteParts = [item.tipo || '', item.note || '', durata ? durata+'h' : ''].filter(Boolean);
           await sb(env, 'piano', 'POST', {
             id,
-            tecnico_id: tid,
+            tecnico_id: tecId,
             cliente_id: cid,
             data: itemData,
             ora_inizio: item.oraInizio || item.ora_inizio || null,
@@ -6100,12 +6177,12 @@ Rispondi SOLO con JSON valido:
             origine: 'ai',
             note: noteParts.join(' — '),
             obsoleto: false,
-            tenant_id: tid(env),
+            tenant_id: tenantId,
             created_at: now,
             updated_at: now
           });
           created.push(id);
-          await wlog('piano', id, 'ai_plan_applied', operatoreId, `${item.tecnico || tid} @ ${item.cliente || cid}`).catch(()=>{});
+          await wlog('piano', id, 'ai_plan_applied', operatoreId, `${item.tecnico || tecId} @ ${item.cliente || cid}`).catch(()=>{});
         } catch (e) {
           applyErrors.push({ item: `${item.data} ${item.tecnico}`, err: e.message });
         }
