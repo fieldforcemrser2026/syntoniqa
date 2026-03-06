@@ -3065,7 +3065,8 @@ async function handlePost(action, body, env) {
       const seniorConstraint = allSeniors.length
         ? `\nREGOLA SENIOR (INVIOLABILE): i ${allSeniors.length} senior [${allSeniors.map(t=>t.id).join(',')}] sono RISORSE SCARSE. (1) MAI due senior insieme allo stesso cliente/giorno — devono essere su squadre separate. (2) Tecnici junior [${allJuniors.map(t=>t.id).join(',')}] NON vanno MAI da soli — abbinali SEMPRE a un senior diverso (1 junior per senior al massimo per giorno).`
         : '';
-      const urgList = ctx.urgenze ? allUrgenze.slice(0,20).map(u => `${u.id}:${anonEncode((u.problema||'').substring(0,40))}|${u.cliente_id}|pri:${u.priorita_id}`).join('; ') : '';
+      // Urgenze: mostra TUTTE nel prompt (non troncare) — altrimenti l'AI non può pianificarle
+      const urgList = ctx.urgenze ? allUrgenze.map(u => `${u.id}:${anonEncode((u.problema||'').substring(0,40))}|${u.cliente_id}|pri:${u.priorita_id}`).join('; ') : '';
       const cliList = allClienti.slice(0,100).map(c => `${c.codice_m3}(${cittaMap[c.citta_fatturazione] || c.citta_fatturazione || '?'})`).join(', ');
 
       const nTecAttivi = allTecnici.filter(t=>t.ruolo!=='admin').length;
@@ -3675,8 +3676,16 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               const txt = (r.testo || '').toLowerCase();
               // Regola assenza: "assente", "non disponibile", "ferie", "malattia"
               if (txt.match(/assent|non disponibil|ferie|malattia|indisponibil/)) {
-                for (const id of (r.soggetti || [])) {
-                  // Mantieni data_inizio/data_fine per controllo per-giorno
+                let absentIds = r.soggetti || [];
+                // PROTEZIONE: se soggetti > 3, probabilmente errore di config.
+                // Estrai TEC_ID citati esplicitamente nel testo del vincolo.
+                if (absentIds.length > 3) {
+                  const txtIds = (r.testo || '').match(/TEC_[A-Z0-9_]+/gi) || [];
+                  if (txtIds.length > 0 && txtIds.length < absentIds.length) {
+                    absentIds = txtIds.map(id => id.toUpperCase());
+                  }
+                }
+                for (const id of absentIds) {
                   vincoliRules.assenti.push({
                     id,
                     dataInizio: r.data_inizio || null,
@@ -3743,6 +3752,9 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           return p;
         }).filter(p => {
           if (!p.tecnicoId || !validIds.has(p.tecnicoId)) return false;
+          // ── pData DEVE essere dichiarata PRIMA di essere usata ──
+          const pData = (p.data || '').substring(0, 10);
+
           // VINCOLO date-aware: rimuovi tecnico solo nei giorni coperti dalla regola assenza
           const isAbsent = vincoliRules.assenti.some(a => {
             if (a.id !== p.tecnicoId) return false;
@@ -3761,7 +3773,6 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           } catch {}
 
           // ── POST-PROCESSING DETERMINISTICO: verifica indisponibilità ──
-          const pData = (p.data || '').substring(0, 10);
           if (!pData) return true;
 
           // Check richieste approvate (ferie, malattia, permesso)
