@@ -3504,9 +3504,9 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
       async function tryGemini(promptText) {
         try {
-          // Gemini 2.5 Pro (upgrade da 2.0-flash per qualità migliore nel planning)
+          // Gemini 2.5 Flash (gratis, molto meglio del 2.0-flash nel planning)
           const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${env.GEMINI_KEY}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${env.GEMINI_KEY}`,
             { method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 system_instruction: { parts: [{ text: sysPrompt }] },
