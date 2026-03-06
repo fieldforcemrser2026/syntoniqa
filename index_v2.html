@@ -1768,7 +1768,9 @@ function renderOrd(){
 
 async function saveOrdine(){
   try{
-    const data={Codice:$('soCodice').value,Descrizione:$('soDesc').value||$('soCodice').value||'Ordine ricambio',Quantita:parseInt($('soQta').value)||1,ClienteID:$('soCliente').value,Note:$('soNote').value,TecnicoID:USER?.ID};
+    const qta=parseInt($('soQta').value)||1;
+    if(qta<1||qta>9999){toast('Quantità non valida (1-9999)','warn');return}
+    const data={Codice:$('soCodice').value.trim(),Descrizione:$('soDesc').value||$('soCodice').value||'Ordine ricambio',Quantita:qta,ClienteID:$('soCliente').value,Note:$('soNote').value,TecnicoID:USER?.ID};
     if(!data.Codice){toast('Inserisci codice ricambio','warn');return}
     await apiCall('createOrdine',{data},'POST');
     toast('Ordine creato!','ok');closeSheet('shOrdine');
@@ -1836,6 +1838,7 @@ async function saveRichiesta(){
   try{
     const data={TecnicoID:USER?.ID,Tipo:$('srTipo').value,DataInizio:$('srDal').value,DataFine:$('srAl').value,Motivo:$('srMotivo').value};
     if(!data.DataInizio){toast('Inserisci data inizio','warn');return}
+    if(data.DataFine&&data.DataFine<data.DataInizio){toast('Data fine deve essere dopo data inizio','warn');return}
     await apiCall('createRichiesta',{data},'POST');
     toast('Richiesta inviata!','ok');closeSheet('shRichiesta');
     $('srDal').value='';$('srAl').value='';$('srMotivo').value='';
@@ -1861,6 +1864,8 @@ async function saveTrasferta(){
   try{
     const data={TecnicoID:USER?.ID,ClienteID:$('stCliente').value,AutomezzoID:$('stAutomezzo').value,DataInizio:$('stDal').value,DataFine:$('stAl').value,Motivo:$('stMotivo').value};
     if(!data.DataInizio){toast('Inserisci data inizio','warn');return}
+    if(data.DataFine&&data.DataFine<data.DataInizio){toast('Data fine deve essere dopo data inizio','warn');return}
+    if(!data.ClienteID){toast('Seleziona un cliente','warn');return}
     await apiCall('createTrasferta',{data},'POST');
     toast('Trasferta inviata!','ok');closeSheet('shTrasferta');
     $('stDal').value='';$('stAl').value='';$('stMotivo').value='';
