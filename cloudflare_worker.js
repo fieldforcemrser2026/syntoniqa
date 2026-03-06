@@ -124,6 +124,54 @@ function isCapoSq(body) {
   return false;
 }
 
+// ──────────────────────────────────────────────────────────────
+// Structured Logger — colleziona log durante request, persiste su errore
+// Uso: const log = createLogger(requestId); ... log.info('msg', data); ... await log.flush(env, statusCode, action)
+// ──────────────────────────────────────────────────────────────
+function createLogger(requestId) {
+  const entries = [];
+  const start = Date.now();
+  return {
+    info: (msg, data) => entries.push({ level: 'info', msg, data, ts: Date.now() - start }),
+    warn: (msg, data) => entries.push({ level: 'warn', msg, data, ts: Date.now() - start }),
+    error: (msg, data) => entries.push({ level: 'error', msg, data, ts: Date.now() - start }),
+    entries,
+    async flush(env, statusCode, action) {
+      const duration = Date.now() - start;
+      const errorEntries = entries.filter(e => e.level === 'error');
+      // Sempre log a console (visible in wrangler tail)
+      if (errorEntries.length || statusCode >= 400) {
+        console.error(JSON.stringify({
+          requestId,
+          action: action || 'unknown',
+          statusCode,
+          duration,
+          errorCount: errorEntries.length,
+          errors: errorEntries.slice(0, 5).map(e => ({ level: e.level, msg: e.msg, ts: e.ts }))
+        }));
+      }
+      // Persist 5xx errors to DB if available
+      if (statusCode >= 500 && env.SUPABASE_URL && errorEntries.length) {
+        try {
+          const tid = env.TENANT_ID || DEFAULT_TENANT;
+          await sb(env, 'error_log', 'POST', {
+            id: secureId('ERR'),
+            tenant_id: tid,
+            request_id: requestId,
+            action: action || 'unknown',
+            status_code: statusCode,
+            duration_ms: duration,
+            error_summary: JSON.stringify(errorEntries.slice(0, 5)),
+            created_at: new Date().toISOString()
+          }).catch(e => console.error('Failed to log error to DB:', e.message));
+        } catch (e) {
+          // Don't fail the request due to logging
+        }
+      }
+    }
+  };
+}
+
 async function requireAdmin(env, body) {
   // PRIORITY: JWT claim (non spoofabile) — se presente, usa quello
   if (body._isJWT) {
@@ -585,6 +633,10 @@ export default {
   async fetch(request, env) {
     setCorsForRequest(request, env);
 
+    // Create request logger
+    const requestId = crypto.randomUUID();
+    const log = createLogger(requestId);
+
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
     }
@@ -629,10 +681,14 @@ export default {
     }
 
     try {
+      let response;
       if (request.method === 'GET') {
         const auth = await authenticateRequest(request, env);
-        if (!auth.ok) return err('Non autorizzato', 401);
-        return await handleGet(action, url, env, auth);
+        if (!auth.ok) {
+          response = err('Non autorizzato', 401);
+        } else {
+          response = await handleGet(action, url, env, auth);
+        }
       } else if (request.method === 'POST') {
         const rawBody = await request.json().catch(() => ({}));
         const postAction = action || rawBody.action || '';
@@ -640,23 +696,35 @@ export default {
         if (postAction === 'login') {
           const body = normalizeBody(rawBody);
           body._clientIP = clientIP;
-          return await handlePost('login', body, env);
+          response = await handlePost('login', body, env);
+        } else {
+          const auth = await authenticateRequest(request, env, rawBody.token);
+          if (!auth.ok) {
+            response = err('Non autorizzato', 401);
+          } else {
+            const body = normalizeBody(rawBody);
+            body._clientIP = clientIP; // per audit log
+            // Inject user context from JWT (non spoofabile dal client)
+            body._authUserId       = auth.sub;                      // user ID dal token (JWT o 'system')
+            body._authRole         = auth.role;                    // ruolo dal token
+            body._isJWT            = auth.jwt;                     // true se autenticato via JWT
+            body._ancheCaposquadra = auth.ancheCaposquadra || false; // admin che gestisce anche una squadra
+            body._squadraId        = auth.squadraId || null;       // squadra_id dal JWT
+            response = await handlePost(postAction, body, env);
+          }
         }
-        const auth = await authenticateRequest(request, env, rawBody.token);
-        if (!auth.ok) return err('Non autorizzato', 401);
-        const body = normalizeBody(rawBody);
-        body._clientIP = clientIP; // per audit log
-        // Inject user context from JWT (non spoofabile dal client)
-        body._authUserId       = auth.sub;                      // user ID dal token (JWT o 'system')
-        body._authRole         = auth.role;                    // ruolo dal token
-        body._isJWT            = auth.jwt;                     // true se autenticato via JWT
-        body._ancheCaposquadra = auth.ancheCaposquadra || false; // admin che gestisce anche una squadra
-        body._squadraId        = auth.squadraId || null;       // squadra_id dal JWT
-        return await handlePost(postAction, body, env);
+      } else {
+        response = err('Metodo non supportato', 405);
       }
-      return err('Metodo non supportato', 405);
+      // Flush logger on error responses
+      const statusCode = response?.status || 200;
+      if (statusCode >= 400) {
+        await log.flush(env, statusCode, action);
+      }
+      return response;
     } catch (e) {
-      console.error('Worker error:', e);
+      log.error('Unhandled worker exception', { message: e.message, stack: e.stack?.split('\n').slice(0, 3) });
+      await log.flush(env, 500, action);
       return err(`Errore interno: ${e.message}`, 500);
     }
   },
@@ -9642,17 +9710,18 @@ async function triggerKPISnapshot(env, interventoId, tecnicoId) {
 
 // ============ CRON: Check interventi e manda notifiche ============
 async function checkInterventoReminders(env) {
-  const now = new Date();
-  // Usa fuso orario italiano (CET/CEST)
-  const itFormatter = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' });
-  const itTimeFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hour12: false });
-  const oggi = itFormatter.format(now); // YYYY-MM-DD in Italian time
-  const oraCorrente = itTimeFormatter.format(now); // HH:MM in Italian time
+  try {
+    const now = new Date();
+    // Usa fuso orario italiano (CET/CEST)
+    const itFormatter = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' });
+    const itTimeFormatter = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hour12: false });
+    const oggi = itFormatter.format(now); // YYYY-MM-DD in Italian time
+    const oraCorrente = itTimeFormatter.format(now); // HH:MM in Italian time
 
-  // 1. Interventi PIANIFICATI oggi dove l'ora di inizio è passata da >1h → notifica "inizia intervento"
-  const pianificati = await sb(env, 'piano', 'GET', null,
-    `?data=eq.${oggi}&stato=eq.pianificato&obsoleto=eq.false&select=id,tecnico_id,cliente_id,ora_inizio,note`
-  ).catch(() => []);
+    // 1. Interventi PIANIFICATI oggi dove l'ora di inizio è passata da >1h → notifica "inizia intervento"
+    const pianificati = await sb(env, 'piano', 'GET', null,
+      `?data=eq.${oggi}&stato=eq.pianificato&obsoleto=eq.false&select=id,tecnico_id,cliente_id,ora_inizio,note`
+    ).catch(() => []);
 
   for (const p of (pianificati || [])) {
     if (!p.ora_inizio || !p.tecnico_id) continue;
@@ -9726,8 +9795,14 @@ async function checkInterventoReminders(env) {
         ).catch(() => {});
       }
     }
+    env.DEBUG_LOG && console.log(`[CRON] checkInterventoReminders: ${pianificati?.length || 0} pianificati, ${inCorso?.length || 0} in_corso checked`);
+  } catch (e) {
+    console.error(JSON.stringify({
+      context: 'checkInterventoReminders',
+      error: e.message,
+      stack: e.stack?.split('\n').slice(0, 3)
+    }));
   }
-  env.DEBUG_LOG && console.log(`[CRON] checkInterventoReminders: ${pianificati?.length || 0} pianificati, ${inCorso?.length || 0} in_corso checked`);
 }
 
 // ============ CRON: SLA MONITORING ============
@@ -9835,7 +9910,13 @@ async function checkSLAUrgenze(env) {
         }
       }
     }
-  } catch (e) { console.error('[CRON] checkSLAUrgenze error:', e.message); }
+  } catch (e) {
+    console.error(JSON.stringify({
+      context: 'checkSLAUrgenze',
+      error: e.message,
+      stack: e.stack?.split('\n').slice(0, 3)
+    }));
+  }
 }
 
 // ============ CRON: PM EXPIRY — Tagliandi scaduti/urgenti ============
@@ -9926,7 +10007,13 @@ async function checkPMExpiry(env) {
     }
 
     env.DEBUG_LOG && console.log(`[CRON] checkPMExpiry: ${scaduti} scaduti, ${urgenti} urgenti (<7gg), TG window: ${isMorningSummaryWindow}`);
-  } catch (e) { console.error('[CRON] checkPMExpiry error:', e.message); }
+  } catch (e) {
+    console.error(JSON.stringify({
+      context: 'checkPMExpiry',
+      error: e.message,
+      stack: e.stack?.split('\n').slice(0, 3)
+    }));
+  }
 }
 
 // Fix bulkGeneratePMCalendar: skip sabato/domenica nelle date generate

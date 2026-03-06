@@ -385,6 +385,7 @@ body{font-family:var(--font);background:var(--gray5);color:var(--dark);min-heigh
 <div style="display:flex;gap:6px;align-items:center">
 <span id="hdrDate" style="font-size:.6875rem;opacity:.7" aria-live="polite"></span>
 <button onclick="goPage('notifiche')" id="btnNotHdr" aria-label="Notifiche" style="position:relative">🔔</button>
+<span id="offlineBadge" style="display:none;background:#F59E0B;color:#fff;font-size:.6rem;font-weight:700;padding:2px 5px;border-radius:8px;min-width:16px;text-align:center;line-height:1.2" aria-live="polite" aria-label="Azioni offline in attesa"></span>
 </div>
 </header>
 
@@ -3086,7 +3087,7 @@ function showOfflineBanner(msg,btnText,btnAction){
   if(!banner){
     banner=document.createElement('div');
     banner.id='offlineBanner';
-    banner.style.cssText='position:fixed;top:0;left:0;right:0;background:#FEF3C7;color:#92400E;padding:8px 16px;font-size:.8rem;text-align:center;z-index:10000;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,.15)';
+    banner.style.cssText='position:fixed;top:0;left:0;right:0;background:#FEF3C7;color:#92400E;padding:calc(var(--safe-t,0px) + 6px) 16px 6px;font-size:.8rem;text-align:center;z-index:10000;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,.15)';
     document.body.prepend(banner);
   }
   banner.innerHTML=`<span>${msg}</span>`;
