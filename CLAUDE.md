@@ -136,13 +136,13 @@ Righe 5500-7296: Cron jobs (checkInterventoReminders, checkSLAUrgenze, checkPMEx
 **AI Engine MoA Race (11 motori, ranking configurabile da DB):**
 | Priorità | Engine | Modello | API Key | Tier |
 |----------|--------|---------|---------|------|
-| 1 | Anthropic | claude-sonnet-4.6 | ANTHROPIC_KEY | Premium |
-| 2 | OpenAI | gpt-4o | OPENAI_KEY | Premium |
-| 3 | Gemini | gemini-2.5-pro | GEMINI_KEY | Premium |
-| 4 | Cerebras | llama-3.3-70b | CEREBRAS_KEY | Free |
+| 1 | Anthropic | claude-haiku-3-5-20241022 | ANTHROPIC_KEY | Premium |
+| 2 | OpenAI | gpt-4o-mini | OPENAI_KEY | Premium |
+| 3 | Gemini | gemini-2.5-flash-preview-05-20 | GEMINI_KEY | Free |
+| 4 | Cerebras | llama3.1-8b | CEREBRAS_KEY | Free |
 | 5 | Groq | llama-3.3-70b-versatile | GROQ_KEY | Free |
 | 6 | OpenRouter | llama-3.3-70b-instruct:free | OPENROUTER_KEY | Free |
-| 7 | Fireworks | llama-v3p1-70b-instruct | FIREWORKS_KEY | Free |
+| 7 | Fireworks | llama-v3p3-70b-instruct | FIREWORKS_KEY | Free |
 | 8 | SambaNova | llama-4-maverick-17b | SAMBANOVA_KEY | Free |
 | 9 | Mistral | mistral-small-latest | MISTRAL_KEY | Free |
 | 10 | DeepSeek | deepseek-chat | DEEPSEEK_KEY | Free |
