@@ -2706,7 +2706,8 @@ async function handlePost(action, body, env) {
       const {readable: _sseR, writable: _sseW} = new TransformStream();
       const _sseWr = _sseW.getWriter();
       const _sseEnc = new TextEncoder();
-      const sse = (ev) => { try { _sseWr.write(_sseEnc.encode(`data: ${JSON.stringify(ev)}\n\n`)); } catch {} };
+      let _sseOpen = true;
+      const sse = (ev) => { if (!_sseOpen) return; try { _sseWr.write(_sseEnc.encode(`data: ${JSON.stringify(ev)}\n\n`)); } catch { _sseOpen = false; } };
 
       (async () => { try {
 
@@ -4571,10 +4572,19 @@ ${instructions}`;
           const chunkDelay = fastEngines ? 2000 : 65000; // 65s se solo Groq, 2s se altri disponibili
 
           for (let ci = 0; ci < chunks.length; ci++) {
+            if (!_sseOpen) { allWarnings.add('Stream chiuso dal client — interrompo'); break; }
             sse({type:'progress', message:`Elaboro ${chunks[ci].label}...`, chunk:ci+1, total:chunks.length});
             if (ci > 0) await new Promise(r => setTimeout(r, chunkDelay));
 
-            const res = await processChunk(chunks[ci], chunks[ci].label);
+            let res;
+            try {
+              res = await processChunk(chunks[ci], chunks[ci].label);
+            } catch (chunkErr) {
+              // Errore su questo chunk — logga e continua con i successivi
+              sse({type:'engine_debug', engine:'CHUNK', status:'error', reason:`${chunks[ci].label}: ${chunkErr.message}`});
+              allWarnings.add(`${chunks[ci].label}: errore AI — ${chunkErr.message}`);
+              res = { piano: [], warnings: [], ok: false };
+            }
             if (res.piano.length) { allPiano.push(...res.piano); chunksDone++; }
             sse({type:'chunk', done:ci+1, total:chunks.length, count:res.piano.length, label:chunks[ci].label, ok:res.ok});
             res.warnings.forEach(w => allWarnings.add(w));
@@ -4638,7 +4648,7 @@ ${instructions}`;
         sse({type:'error', message:`Errore AI: ${e.message || 'sconosciuto'}`});
       }
       } catch(e2) { sse({type:'error', message:e2.message||'Errore imprevisto'}); }
-      finally { try { _sseWr.close(); } catch {} }
+      finally { _sseOpen = false; try { _sseWr.close(); } catch {} }
       })(); // end async IIFE
 
       // Ritorna risposta SSE subito — il worker resta vivo finché lo stream viene consumato

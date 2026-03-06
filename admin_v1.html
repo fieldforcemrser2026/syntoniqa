@@ -7221,12 +7221,16 @@ async function readFileAsText(file){
           resolve(out||'[File vuoto]');
         }catch(e){resolve('[Errore parsing: '+e.message+']')}
       };
+      r.onerror=()=>resolve('[Errore lettura file: '+(r.error||'sconosciuto')+']');
       r.readAsArrayBuffer(file);
     });
   }
   if(file.name.match(/\.csv$/i)||file.name.match(/\.txt$/i)){
     return new Promise((resolve)=>{
-      const r=new FileReader();r.onload=()=>resolve((r.result||'').substring(0,4000));r.readAsText(file);
+      const r=new FileReader();
+      r.onload=()=>resolve((r.result||'').substring(0,4000));
+      r.onerror=()=>resolve('[Errore lettura: '+(r.error||'sconosciuto')+']');
+      r.readAsText(file);
     });
   }
   // Per PDF/immagini: non inclusi nel prompt testuale
@@ -7239,7 +7243,7 @@ async function importPlanFromExcel(file){
   toast('Parsing Excel...','info');
   // Load SheetJS if not loaded
   if(typeof XLSX==='undefined'){
-    await new Promise(r=>{const s=document.createElement('script');s.onload=r;s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';document.head.appendChild(s)});
+    await new Promise((r,j)=>{const s=document.createElement('script');s.onload=r;s.onerror=()=>j(new Error('Impossibile caricare libreria Excel'));s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';document.head.appendChild(s)});
   }
   const buf=await file.arrayBuffer();
   const wb=XLSX.read(buf,{type:'array',cellDates:true});
@@ -8131,6 +8135,11 @@ async function runAI(promptOverride){
     toast(`Piano generato: ${piano.length} interventi, ${nGiorni} giorni`,'ok');
   }catch(e){
     clearInterval(_timerInterval);
+    // Reset button states — impedisci uso del piano vecchio dopo errore
+    if($('btnApplyAI')) $('btnApplyAI').disabled=true;
+    if($('btnSubmitPlan')) $('btnSubmitPlan').disabled=true;
+    if($('btnDownloadPlan')) $('btnDownloadPlan').disabled=true;
+    if($('btnGoStep4')) $('btnGoStep4').disabled=true;
     $('aiResult').style.display='block';
     $('aiResult').innerHTML=`<div style="padding:16px;background:rgba(239,68,68,.1);border:1px solid var(--err);border-radius:var(--radius)">
       <strong>❌ Errore</strong><br>${escapeHtml(e.message)}<br><span style="font-size:.75rem;color:var(--gray)">Prova con un prompt più breve o riprova tra qualche secondo.</span>
