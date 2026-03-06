@@ -4064,9 +4064,20 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           }
         }
 
-        // === FIX 3: Riempi slot vuoti con macchine dal backlog non ancora pianificate ===
-        // Calcola giorni lavorativi e slot disponibili
-        const giorniInPiano = [...new Set(pianoNoDup.map(p => p.data).filter(Boolean))].sort();
+        // === FIX 3: DETERMINISTIC FILL — riempi TUTTI gli slot vuoti del mese ===
+        // Usa TUTTI i giorni lavorativi del mese, non solo quelli nel piano AI
+        let allWorkDaysISO = [];
+        if (meseTarget) {
+          const [_yy, _mm] = meseTarget.split('-').map(Number);
+          const _d = new Date(_yy, _mm - 1, 1);
+          while (_d.getMonth() === _mm - 1) {
+            if (_d.getDay() >= 1 && _d.getDay() <= 5) allWorkDaysISO.push(_d.toISOString().split('T')[0]);
+            _d.setDate(_d.getDate() + 1);
+          }
+        } else {
+          allWorkDaysISO = [...new Set(pianoNoDup.map(p => p.data).filter(Boolean))].sort();
+        }
+
         const tecPerGiorno = {};
         pianoNoDup.forEach(p => {
           const key = p.data;
@@ -4079,58 +4090,151 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         pianoNoDup.filter(p => (p.tipo || '') === 'tagliando').forEach(p => {
           const key = (p.note || '').split('|')[0].trim();
           if (key && key.length > 3) pianificateKeys.add(key);
+          // Also track by macchina_id or clienteId+note combo
+          if (p.macchina_id) pianificateKeys.add(p.macchina_id);
         });
         const backlogRimanente = (tagItems || []).filter(t => {
-          const mId = t.macchinaId || '';
-          const label = t.macchina || '';
+          const mId = t.macchinaId || t.macchina || '';
+          const label = t.macchinaLabel || '';
           return !pianificateKeys.has(mId) && !pianificateKeys.has(label);
         });
 
-        if (backlogRimanente.length > 0) {
-          // IDs tecnici non-junior attivi
-          const tecNonJunior = allTecnici.filter(t => t.ruolo !== 'admin' && !_juniorIds.includes(t.id)).map(t => t.id);
-          let backlogIdx = 0;
+        // Installazioni non ancora nel piano
+        const installInPiano = new Set(pianoNoDup.filter(p => p.tipo === 'installazione').map(p => (p.note || '').match(/INS_\w+/)?.[0]).filter(Boolean));
+        const installBacklog = (allInstallazioni || []).filter(inst => !installInPiano.has(inst.id));
 
-          for (const giorno of giorniInPiano) {
+        // Tecnici attivi (no admin)
+        const tecAttivi = allTecnici.filter(t => (t.ruolo || '').toLowerCase() !== 'admin');
+        const tecNonJunior = tecAttivi.filter(t => !_juniorIds.includes(t.id));
+        const tecJunior = tecAttivi.filter(t => _juniorIds.includes(t.id));
+        let backlogIdx = 0;
+        let installIdx = 0;
+
+        // Funzione: check se tecnico è assente in un giorno
+        function _isAbsent(tecId, giorno) {
+          // Check indisponibilita (richieste approvate)
+          for (const req of (allRichieste || [])) {
+            if (req.tecnico_id !== tecId) continue;
+            if (req.data_inizio && req.data_inizio > giorno) continue;
+            if (req.data_fine && req.data_fine < giorno) continue;
+            return true;
+          }
+          return false;
+        }
+
+        // Check se tecnico è in trasferta in un giorno
+        function _isTrasferta(tecId, giorno) {
+          for (const tr of (allTrasferte || [])) {
+            const tecIds = tr.tecnici_ids ? (Array.isArray(tr.tecnici_ids) ? tr.tecnici_ids : tr.tecnici_ids.split(',')) : [];
+            if (tr.tecnico_id === tecId || tecIds.includes(tecId)) {
+              if (tr.data_inizio && tr.data_inizio > giorno) continue;
+              if (tr.data_fine && tr.data_fine < giorno) continue;
+              return true;
+            }
+          }
+          return false;
+        }
+
+        for (const giorno of allWorkDaysISO) {
+          const tecGiorno = tecPerGiorno[giorno] || new Set();
+
+          // A) Assegna installazioni prioritarie (tecnici specificati o liberi)
+          while (installIdx < installBacklog.length) {
+            const inst = installBacklog[installIdx];
+            if (inst.data_inizio && inst.data_inizio > giorno) break;
+            if (inst.data_fine_prevista && inst.data_fine_prevista < giorno) { installIdx++; continue; }
+            const tecIds = inst.tecnici_ids ? (Array.isArray(inst.tecnici_ids) ? inst.tecnici_ids : inst.tecnici_ids.split(',').map(s=>s.trim())) : [];
+            let assigned = false;
+            if (tecIds.length > 0) {
+              for (const tid of tecIds) {
+                if (tecGiorno.has(tid)) continue;
+                const tec = tecAttivi.find(t => t.id === tid);
+                if (!tec) continue;
+                pianoNoDup.push({
+                  id: null, data: giorno, tecnicoId: tid,
+                  clienteId: inst.cliente_id || '', tipo: 'installazione',
+                  oraInizio: '08:00', durataOre: 8, furgone: tec.automezzo_id || '',
+                  note: `${inst.id} | Installazione`
+                });
+                tecGiorno.add(tid);
+                if (!tecPerGiorno[giorno]) tecPerGiorno[giorno] = new Set();
+                tecPerGiorno[giorno].add(tid);
+                assigned = true;
+                fixes++;
+              }
+            } else {
+              // Installazione senza tecnici assegnati — assegna un senior libero
+              const seniorLibero = tecNonJunior.find(t => !tecGiorno.has(t.id) && !_isAbsent(t.id, giorno) && !_isTrasferta(t.id, giorno));
+              if (seniorLibero) {
+                pianoNoDup.push({
+                  id: null, data: giorno, tecnicoId: seniorLibero.id,
+                  clienteId: inst.cliente_id || '', tipo: 'installazione',
+                  oraInizio: '08:00', durataOre: 8, furgone: seniorLibero.automezzo_id || '',
+                  note: `${inst.id} | Installazione (auto-assegnato)`
+                });
+                tecGiorno.add(seniorLibero.id);
+                if (!tecPerGiorno[giorno]) tecPerGiorno[giorno] = new Set();
+                tecPerGiorno[giorno].add(seniorLibero.id);
+                assigned = true;
+                fixes++;
+              }
+            }
+            if (assigned) installIdx++;
+            else break;
+          }
+
+          // B) Senior indipendenti — tagliandi dal backlog
+          for (const tec of tecNonJunior) {
+            if (tecGiorno.has(tec.id)) continue;
+            if (_isAbsent(tec.id, giorno)) continue;
+            if (_isTrasferta(tec.id, giorno)) continue;
             if (backlogIdx >= backlogRimanente.length) break;
-            const tecGiorno = tecPerGiorno[giorno] || new Set();
-            // Trova tecnici che NON hanno un intervento questo giorno
-            const tecLiberi = tecNonJunior.filter(id => !tecGiorno.has(id));
 
-            for (const tecId of tecLiberi) {
-              if (backlogIdx >= backlogRimanente.length) break;
-              // Controlla che il tecnico non sia assente
-              const isAbsent = vincoliRules.assenti.some(a => {
-                if (a.id !== tecId) return false;
-                if (a.permanente) return true;
-                if (a.dataFine && a.dataFine < giorno) return false;
-                if (a.dataInizio && a.dataInizio > giorno) return false;
-                return true;
-              });
-              if (isAbsent) continue;
+            const item = backlogRimanente[backlogIdx];
+            pianoNoDup.push({
+              id: null, data: giorno, tecnicoId: tec.id,
+              clienteId: item.clienteId || '', tipo: 'tagliando',
+              oraInizio: '08:00',
+              durataOre: item.oreLavoro ? Math.min(8, Math.max(4, item.oreLavoro / 500)) : 6,
+              furgone: tec.automezzo_id || '',
+              note: `${item.macchina || item.macchinaId} | scad:${item.data || '?'} | ${item.oreLavoro ? item.oreLavoro + 'h' : '?'}`,
+              macchina_id: item.macchinaId || null
+            });
+            pianificateKeys.add(item.macchinaId || item.macchina || '');
+            tecGiorno.add(tec.id);
+            if (!tecPerGiorno[giorno]) tecPerGiorno[giorno] = new Set();
+            tecPerGiorno[giorno].add(tec.id);
+            backlogIdx++;
+            fixes++;
+          }
 
-              const item = backlogRimanente[backlogIdx];
-              const tec = allTecnici.find(t => t.id === tecId);
-              const furgone = tec?.automezzo_id || '';
+          // C) Junior — affianca a un senior dello stesso giorno
+          for (const jr of tecJunior) {
+            if (tecGiorno.has(jr.id)) continue;
+            if (_isAbsent(jr.id, giorno)) continue;
+            // Trova un senior che è già assegnato questo giorno
+            const seniorToday = pianoNoDup.find(p =>
+              p.data === giorno && _seniorIds.includes(p.tecnicoId) && p.tipo !== 'reperibilita'
+            );
+            if (seniorToday) {
               pianoNoDup.push({
-                id: null,
-                data: giorno,
-                tecnicoId: tecId,
-                clienteId: item.clienteId || '',
-                tipo: 'tagliando',
-                oraInizio: '08:00',
-                durataOre: item.oreLavoro ? Math.min(8, Math.max(4, item.oreLavoro / 500)) : 6,
-                furgone: furgone,
-                note: `${item.macchina || item.macchinaId} | scad:${item.dataScadenza || '?'} | ${item.oreLavoro ? item.oreLavoro + 'h' : '?'}`
+                id: null, data: giorno, tecnicoId: jr.id,
+                clienteId: seniorToday.clienteId || '', tipo: seniorToday.tipo || 'tagliando',
+                oraInizio: seniorToday.oraInizio || '08:00', durataOre: seniorToday.durataOre || 6,
+                furgone: seniorToday.furgone || '',
+                note: `Affiancamento con ${seniorToday.tecnicoId} — ${(seniorToday.note || '').substring(0, 80)}`,
+                macchina_id: seniorToday.macchina_id || null
               });
-              pianificateKeys.add(item.macchinaId || item.macchina || '');
-              backlogIdx++;
+              tecGiorno.add(jr.id);
+              if (!tecPerGiorno[giorno]) tecPerGiorno[giorno] = new Set();
+              tecPerGiorno[giorno].add(jr.id);
               fixes++;
             }
           }
-          if (backlogIdx > 0) {
-            postProcessWarnings.push(`🔧 FIX: aggiunti ${backlogIdx} tagliandi da backlog (slot vuoti riempiti)`);
-          }
+        }
+
+        if (backlogIdx > 0 || installIdx > 0) {
+          postProcessWarnings.push(`🔧 FILL: aggiunti ${backlogIdx} tagliandi + ${installIdx} installazioni (slot vuoti riempiti deterministicamente)`);
         }
 
         if (fixes > 0) {
@@ -4297,20 +4401,31 @@ ${instructions}`;
             res.warnings.forEach(w => allWarnings.add(w));
           }
 
-          if (!allPiano.length) { sse({type:'error', message:'AI non ha generato nessun intervento. Verifica le API key nei Worker secrets.'}); return; }
+          // Se AI ha prodotto 0 interventi, NON errore — autoFixPlan riempirà deterministicamente
+          const aiFailed = !allPiano.length;
+          if (aiFailed) {
+            sse({type:'progress', message:'⚠️ AI non ha generato interventi — attivo pianificatore deterministico...', chunk:chunks.length, total:chunks.length});
+            allWarnings.add('⚠️ AI engines non hanno prodotto risultati — piano generato deterministicamente');
+          }
 
-          const processed = postProcess(allPiano);
-          const fixed = autoFixPlan(processed); // corregge duplicati, affiancamento, slot vuoti
+          const processed = postProcess(allPiano); // può essere []
+          const fixed = autoFixPlan(processed); // FILL deterministico riempie TUTTI gli slot vuoti
           postValidate(fixed); // aggiunge warnings per violazioni residue
+
+          if (!fixed.length) {
+            sse({type:'error', message:'Nessun intervento generato. Verifica che ci siano tagliandi/macchine da pianificare nel DB.'}); return;
+          }
+
           // DECODE: rimetti nomi reali nelle risposte per il frontend
           const decoded = decodePiano(fixed);
           const allWarnArr = [...allWarnings, ...postProcessWarnings].map(w => anonDecode(w));
+          const engineLabel = aiFailed ? 'deterministic (AI fallback)' : (_usedEngine || lastWorking || 'unknown');
           sse({type:'result', data:{
-            summary: anonDecode(`Piano ${meseTarget}: ${decoded.length} interventi su ${[...new Set(decoded.map(p=>p.data))].length} giorni (${chunksDone}/${chunks.length} parti)${postProcessWarnings.length ? ` — ${postProcessWarnings.length} conflitti rimossi` : ''}`),
+            summary: anonDecode(`Piano ${meseTarget}: ${decoded.length} interventi su ${[...new Set(decoded.map(p=>p.data))].length} giorni${aiFailed ? ' (deterministico)' : ` (${chunksDone}/${chunks.length} parti)`}${postProcessWarnings.length ? ` — ${postProcessWarnings.length} fix applicati` : ''}`),
             piano: decoded,
             warnings: allWarnArr,
             chunks: chunksDone,
-            engine_used: _usedEngine || lastWorking || 'unknown'
+            engine_used: engineLabel
           }}); return;
 
         } else {
