@@ -1409,6 +1409,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <select id="pmCliFilter" onchange="renderPMTree()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:.8rem">
 <option value="">Tutti i clienti</option>
 </select>
+<label style="font-size:.8rem;display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" id="pmHideAssigned" onchange="renderPMTree()" checked> Nascondi pianificati</label>
 </div>
 </div>
 <div class="card-body np" style="max-height:calc(100vh - 280px);overflow-y:auto" id="pmTreeScroll">
@@ -9177,6 +9178,19 @@ function renderPMTree(){
   const search=($('pmSearch')?.value||'').toLowerCase();
   const typeF=$('pmTypeFilter')?.value||'';
   const cliF=$('pmCliFilter')?.value||'';
+  const hideAssigned=$('pmHideAssigned')?.checked;
+
+  // Build set di macchine/seriali già pianificati con tecnico assegnato
+  const plannedMacIds=new Set();
+  const plannedSerials=new Set();
+  if(hideAssigned){
+    (DATA.piano||[]).filter(p=>!p.Obsoleto&&p.Stato==='pianificato'&&p.TecnicoID).forEach(p=>{
+      if(p.MacchinaID)plannedMacIds.add(p.MacchinaID);
+      // Estrai S/N dalla nota [PM LSSA] ... S/N:xxx
+      const snM=(p.Note||'').match(/S\/N:([^\s,]+)/);
+      if(snM)plannedSerials.add(snM[1]);
+    });
+  }
 
   // Copia e filtra
   let clienti=(PM_OVERVIEW.clienti||[]).map(c=>{
@@ -9184,6 +9198,13 @@ function renderPMTree(){
     if(typeF)assets=assets.filter(a=>{const t=assetType(a);return t===typeF||(typeF==='MFR'&&(a.gruppo_attrezzatura||'').toUpperCase().includes('MFR'))});
     if(search)assets=assets.filter(a=>{const h=((a.nome_asset||'')+(a.numero_serie||'')+(a.modello||'')+(c.nome||'')+(a.ciclo_pm||'')).toLowerCase();return h.includes(search);});
     if(PM_FILTER&&PM_FILTER!=='tutti')assets=assets.filter(a=>pmWindowFilter(getPMAssetStatus(a.prossimo_controllo).days,PM_FILTER));
+    // Nascondi asset già pianificati con tecnico assegnato
+    if(hideAssigned)assets=assets.filter(a=>{
+      const sn=(a.numero_serie||'').trim();
+      if(sn&&plannedSerials.has(sn))return false;
+      if(a._macchina_id&&plannedMacIds.has(a._macchina_id))return false;
+      return true;
+    });
     return{...c,assets};
   });
   if(cliF)clienti=clienti.filter(c=>c.codice_m3===cliF);

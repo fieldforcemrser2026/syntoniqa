@@ -2938,12 +2938,13 @@ async function handlePost(action, body, env) {
             lines.push(`- ${id}: TRASFERTA dal ${t.data_inizio} al ${t.data_fine || t.data_inizio} (${t.cliente_id || '?'}) [NON SCHEDULARE]`);
           });
         }
-        // Installazioni (tecnico/i occupati)
+        // Installazioni: i tecnici assegnati NON sono disponibili per tagliandi in quei giorni
+        // MA le installazioni stesse appaiono come interventi nel piano (vedi installContext sotto)
         for (const inst of allInstallazioni) {
           const tecIds = (inst.tecnici_ids || '').split(',').filter(Boolean);
           if (!tecIds.length) continue;
           tecIds.forEach(id => {
-            lines.push(`- ${id}: INSTALLAZIONE dal ${inst.data_inizio} al ${inst.data_fine_prevista || inst.data_inizio} (${inst.cliente_id || '?'}) [NON SCHEDULARE]`);
+            lines.push(`- ${id}: INSTALLAZIONE dal ${inst.data_inizio} al ${inst.data_fine_prevista || inst.data_inizio} (${inst.cliente_id || '?'}) [NON SCHEDULARE TAGLIANDI — già impegnato in installazione]`);
           });
         }
         if (lines.length) {
@@ -3083,6 +3084,29 @@ async function handlePost(action, body, env) {
       const urgList = ctx.urgenze ? allUrgenze.map(u => `${u.id}:${anonEncode((u.problema||'').substring(0,40))}|${u.cliente_id}|pri:${u.priorita_id}`).join('; ') : '';
       const cliList = allClienti.slice(0,100).map(c => `${c.codice_m3}(${cittaMap[c.citta_fatturazione] || c.citta_fatturazione || '?'})`).join(', ');
 
+      // Installazioni: vanno nel piano come interventi da assegnare/confermare
+      let installContext = '';
+      let nInstSlots = 0; // slot occupati da installazioni (per capacity math)
+      if (allInstallazioni.length > 0) {
+        const instLines = allInstallazioni.map(inst => {
+          const tecIds = (inst.tecnici_ids || '').split(',').filter(Boolean);
+          const d1 = inst.data_inizio || '?';
+          const d2 = inst.data_fine_prevista || d1;
+          // Calcola giorni lavorativi occupati
+          try {
+            const start = new Date(d1);
+            const end = new Date(d2);
+            let wd = 0;
+            const c = new Date(start);
+            while (c <= end) { const dow = c.getDay(); if (dow >= 1 && dow <= 5) wd++; c.setDate(c.getDate() + 1); }
+            nInstSlots += wd * tecIds.length;
+          } catch {}
+          const tecInfo = tecIds.length ? `tecnici:[${tecIds.join(',')}]` : 'DA ASSEGNARE';
+          return `${inst.id}|${inst.cliente_id||'?'}|dal ${d1} al ${d2}|${tecInfo}|stato:${inst.stato||'?'}`;
+        });
+        installContext = `\nINSTALLAZIONI DA PIANIFICARE (${allInstallazioni.length}): inserisci nel piano come tipo "installazione".\n` + instLines.join('\n');
+      }
+
       const nTecAttivi = allTecnici.filter(t=>t.ruolo!=='admin').length;
       // ─── CAPACITY MATH: calcola team effettivi e target tagliandi ───
       const _juniorIds = allJuniors.map(t => t.id);
@@ -3107,7 +3131,7 @@ async function handlePost(action, body, env) {
       const nGiorniLav = _countWorkDays(meseTarget);
       const capacitaMax = nTeamEffettivi * nGiorniLav;
       const nUrgenzePlan = allUrgenze.length;
-      const targetTagliandi = Math.max(0, capacitaMax - nUrgenzePlan);
+      const targetTagliandi = Math.max(0, capacitaMax - nUrgenzePlan - nInstSlots);
 
       const prompt = `PLANNER FSM — ${meseTarget || 'Piano interventi'}
 OGGI: ${oggiIt} (${isoOggi})
@@ -3121,6 +3145,7 @@ ${seniorConstraint}
 TECNICI DISPONIBILI (${nTecAttivi}): ${tecList}
 AUTOMEZZI: ${autoList || 'Nessuno'}
 ${urgList ? 'URGENZE APERTE: ' + urgList : ''}
+${installContext}
 CLIENTI: ${cliList}
 ${repContext}
 ${indispContext}
@@ -3137,6 +3162,7 @@ CAPACITÀ MENSILE (MATEMATICA — rispetta questi numeri):
 - ${nGiorniLav} giorni lavorativi nel periodo
 - Capacità max: ${nTeamEffettivi} × ${nGiorniLav} = ${capacitaMax} slot
 - Urgenze da pianificare: ${nUrgenzePlan} (occupano ${nUrgenzePlan} slot)
+- Installazioni: ${allInstallazioni.length} (occupano ~${nInstSlots} slot/giornate tecnico)
 - TARGET TAGLIANDI: almeno ${targetTagliandi} tagliandi su macchine DIVERSE
 - REGOLA CRITICA: ogni macchina/asset va pianificata UNA SOLA VOLTA (1 riga per macchina). NON ripetere la stessa macchina su più giorni o tecnici!
 
@@ -3157,8 +3183,8 @@ REGOLE INVIOLABILI:
 - Distribuisci clienti per zona: ottimizza percorsi, non mandare stesso tecnico a stesso cliente per giorni consecutivi senza motivo logistico.
 - Usa SOLO codici dalla lista (TEC_xxx, codice_m3, FURG_x). NON inventare ID.
 
-JSON: {"summary":"...","piano":[{"id":"INT_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}
-NOTA ID: se stai ASSEGNANDO un intervento esistente dalla lista INTERVENTI DA ASSEGNARE, usa il suo ID (es: INT_xxx). Se stai CREANDO un nuovo intervento, usa null.`;
+JSON: {"summary":"...","piano":[{"id":"INT_xxx o INS_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza|installazione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}
+NOTA ID: se stai ASSEGNANDO un intervento esistente dalla lista INTERVENTI DA ASSEGNARE, usa il suo ID (es: INT_xxx). Per INSTALLAZIONI usa l'ID dalla lista (es: INS_xxx). Se stai CREANDO un nuovo intervento, usa null.`;
 
       // ─── Debug SSE: emetti il prompt prima della chiamata AI ───
       const _senzaTec = interventiDaAssegnare ? (allPianoDb.filter(p => !p.tecnico_id || p.tecnico_id === 'null' || p.tecnico_id === '').length) : 0;
@@ -3192,7 +3218,7 @@ NOTA ID: se stai ASSEGNANDO un intervento esistente dalla lista INTERVENTI DA AS
 
       // ─── AI Call con ANONYMIZATION layer ───
       const validIds = new Set(allTecnici.map(t => t.id));
-      const sysPrompt = vincoli.sys_prompt_override || `Sei un pianificatore FSM (manutenzione robot Lely). Rispondi SOLO JSON valido. Regole INVIOLABILI: (1) Se ci sono INTERVENTI DA ASSEGNARE, il tuo compito è assegnare tecnico+data+furgone a ciascuno. Usa il campo "id" con l'ID esistente (es: INT_xxx). (2) UN tagliando = 1 solo tecnico = 1 sola riga. NON mettere due tecnici sullo stesso intervento salvo affiancamento ESPLICITO. (3) Usa SOLO codici ID dalla lista. NON inventare ID. (4) Nel campo note scrivi modello macchina + data scadenza (es: "Astronaut A5 | scad:2026-03-10 | 2800h"). Formato: {"summary":"...","piano":[{"id":"INT_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}`;
+      const sysPrompt = vincoli.sys_prompt_override || `Sei un pianificatore FSM (manutenzione robot Lely). Rispondi SOLO JSON valido. Regole INVIOLABILI: (1) Se ci sono INTERVENTI DA ASSEGNARE, il tuo compito è assegnare tecnico+data+furgone a ciascuno. Usa il campo "id" con l'ID esistente (es: INT_xxx). (2) UN tagliando = 1 solo tecnico = 1 sola riga. NON mettere due tecnici sullo stesso intervento salvo affiancamento ESPLICITO. (3) Usa SOLO codici ID dalla lista. NON inventare ID. (4) Nel campo note scrivi modello macchina + data scadenza (es: "Astronaut A5 | scad:2026-03-10 | 2800h"). Formato: {"summary":"...","piano":[{"id":"INT_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza|installazione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}`;
 
       // Helper: costruisce prompt compatto per Workers AI (rimuove file e comprime dati)
       function buildCompactPrompt() {
@@ -4145,7 +4171,7 @@ ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}`;
 - Urgenze → primi giorni. Tagliandi scaduti → massima priorita.
 - Usa SOLO codici dalla lista (tecnicoId, clienteId). NON inventare nomi.
 ${seniorConstraint}
-JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina (es: Astronaut A5)"}],"warnings":["..."]}`;
+JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza|installazione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello macchina (es: Astronaut A5)"}],"warnings":["..."]}`;
 
         // ── CHUNKING SETTIMANALE: max 5 giorni per chunk = output gestibile ──
         // Sempre chunking per meseTarget (mese/vuoti/settimana)
@@ -4223,6 +4249,7 @@ VINCOLI: ${anonEncode(vincoliText || '(Nessuno)')}
 ${testo ? 'UTENTE: ' + anonEncode(testo) : ''}
 TECNICI (${nTecAttivi}): ${tecList}
 ${urgList ? 'URGENZE: ' + urgList : ''}
+${installContext ? installContext.substring(0, 1200) : ''}
 CLIENTI: ${cliListShort}
 ${repContext ? repContext.substring(0, 500) : ''}
 ${indispContext ? indispContext.substring(0, 800) : ''}
@@ -4231,7 +4258,9 @@ ${chunkFileCtx ? 'FILE: ' + chunkFileCtx : ''}
 
 GENERA PIANO per ${targetDays.length} GIORNI: ${targetDays.join(', ')}
 ${modalita === 'vuoti' ? 'Giorni VUOTI — riempili tutti.' : ''}
-Servono ${targetDays.length * nTecAttivi} righe (${nTecAttivi} tecnici x ${targetDays.length} giorni).
+Servono ${targetDays.length * nTeamEffettivi} righe (${nTeamEffettivi} team effettivi x ${targetDays.length} giorni).
+TEAM EFFETTIVI: ${nTeamEffettivi} (junior affiancati: [${_juniorIds.join(',')}] con senior: [${_seniorIds.join(',')}])
+Ogni macchina/asset UNA SOLA VOLTA. Tipo: "tagliando"|"urgenza"|"installazione".
 
 ${instructions}`;
 
