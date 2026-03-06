@@ -3280,10 +3280,9 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       engines.fireworks.tryFn = tryFireworks;
       engines.sambanova.tryFn = trySambaNova;
 
-      // Ranking: motori funzionanti PRIMA, poi fallback
-      // Ordine: premium affidabili → free affidabili → free instabili → fallback
+      // Ranking: premium (Claude + OpenAI) PRIMA, poi free affidabili, poi instabili
       // Configurabile da DB config (chiave: ai_engine_ranking)
-      const defaultRanking = ['anthropic','fireworks','mistral','cerebras','openai','groq','sambanova','openrouter','gemini','deepseek','workersai'];
+      const defaultRanking = ['anthropic','openai','fireworks','mistral','cerebras','groq','sambanova','openrouter','gemini','deepseek','workersai'];
       let engineRanking = defaultRanking;
       try {
         const cfgRank = await sb(env, 'config', 'GET', null,
@@ -3461,7 +3460,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               checkAllDone();
             });
 
-            // Timeout: 30s max per chunk (5 chunks × 30s = 150s totale < 180s client timeout)
+            // Timeout: 45s max per chunk — aspetta tutti i motori
             setTimeout(() => {
               if (!resolved) {
                 resolved = true;
@@ -3472,7 +3471,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
                   resolve(null);
                 }
               }
-            }, 30000);
+            }, 45000);
           });
 
           if (raceResult) {
@@ -3546,7 +3545,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'gemini', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 25s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'gemini', status:'exception', reason});
           return null;
         }
@@ -3565,7 +3564,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 2048, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          }, 25000);
+          }, 40000);
           sse({type:'engine_debug', engine:'cerebras', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'cerebras', status:res.status, reason:'rate_limit_or_auth'});
@@ -3582,7 +3581,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'cerebras', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 25s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'cerebras', status:'exception', reason});
           return null;
         }
@@ -3600,7 +3599,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 16384, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          }, 25000);
+          }, 40000);
           sse({type:'engine_debug', engine:'groq', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'groq', status:res.status, reason:'rate_limit_or_auth'});
@@ -3617,7 +3616,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'groq', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 25s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'groq', status:'exception', reason});
           return null;
         }
@@ -3635,7 +3634,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 16384, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          }, 25000);
+          }, 40000);
           sse({type:'engine_debug', engine:'mistral', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'mistral', status:res.status, reason:'rate_limit_or_auth'});
@@ -3652,7 +3651,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'mistral', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 25s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'mistral', status:'exception', reason});
           return null;
         }
@@ -3670,7 +3669,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 16384, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          }, 25000);
+          }, 40000);
           sse({type:'engine_debug', engine:'deepseek', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'deepseek', status:res.status, reason:'rate_limit_or_auth'});
@@ -3691,7 +3690,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'deepseek', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 25s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'deepseek', status:'exception', reason});
           return null;
         }
@@ -3731,7 +3730,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               system: sysPrompt,
               messages: [{ role: 'user', content: promptText }]
             })
-          }, 25000);
+          }, 40000);
           sse({type:'engine_debug', engine:'anthropic', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'anthropic', status:res.status, reason:'rate_limit_or_auth'});
@@ -3749,7 +3748,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'anthropic', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 25s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'anthropic', status:'exception', reason});
           return null;
         }
@@ -3768,7 +3767,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 8192, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          }, 25000);
+          }, 40000);
           sse({type:'engine_debug', engine:'openai', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             const errBody = await res.text().catch(()=>'');
@@ -3786,7 +3785,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'openai', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 25s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'openai', status:'exception', reason});
           return null;
         }
@@ -3812,7 +3811,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 16384, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          }, 25000);
+          }, 40000);
           sse({type:'engine_debug', engine:'openrouter', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'openrouter', status:res.status, reason:'rate_limit_or_auth'});
@@ -3829,7 +3828,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'openrouter', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 25s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'openrouter', status:'exception', reason});
           return null;
         }
@@ -3848,7 +3847,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               max_tokens: 4096, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          }, 25000);
+          }, 40000);
           sse({type:'engine_debug', engine:'fireworks', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'fireworks', status:res.status, reason:'rate_limit_or_auth'});
@@ -3865,7 +3864,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'fireworks', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 25s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'fireworks', status:'exception', reason});
           return null;
         }
@@ -3884,7 +3883,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               messages: [{ role: 'system', content: sysPrompt + '\nIMPORTANTE: Rispondi ESCLUSIVAMENTE con JSON valido. Nessun testo prima o dopo.' }, { role: 'user', content: promptText }],
               max_tokens: 16384, temperature: 0.3
             })
-          }, 25000);
+          }, 40000);
           sse({type:'engine_debug', engine:'sambanova', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'sambanova', status:res.status, reason:'rate_limit_or_auth'});
@@ -3901,7 +3900,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           else sse({type:'engine_debug', engine:'sambanova', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          const reason = e.name === 'AbortError' ? 'TIMEOUT 25s' : (e.message||'unknown');
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 40s' : (e.message||'unknown');
           sse({type:'engine_debug', engine:'sambanova', status:'exception', reason});
           return null;
         }

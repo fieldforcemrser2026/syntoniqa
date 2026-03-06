@@ -7904,7 +7904,7 @@ async function runAI(promptOverride){
   try{
     const _vincoliPayload={testo:prompt,files:filesData,mese_target:meseTarget,modalita,settimana,ctx:ctxFlags,piano_esistente:pianoEsistente};
     if(promptOverride)_vincoliPayload.prompt_override=promptOverride;
-    const resp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(JWT_TOKEN||API_TOKEN)},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:_vincoliPayload}),signal:AbortSignal.timeout(180000)});
+    const resp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(JWT_TOKEN||API_TOKEN)},body:JSON.stringify({action:'generateAIPlan',userId:USER?.ID||'',vincoli:_vincoliPayload}),signal:AbortSignal.timeout(300000)});
     if(!resp.ok)throw new Error(`HTTP ${resp.status}`);
     if(!resp.body)throw new Error('Streaming non supportato dal browser');
     const reader=resp.body.getReader();const dec=new TextDecoder();let buf='';let result=null;
