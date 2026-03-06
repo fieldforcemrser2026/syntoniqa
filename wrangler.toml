@@ -2,8 +2,6 @@ name = "syntoniqa-mrs-api"
 main = "cloudflare_worker.js"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
-# Unbound: 30s CPU time (vs 50ms bundled) — necessario per race AI multi-engine
-usage_model = "unbound"
 
 [triggers]
 # Cron ogni 15 minuti: controlla interventi e manda notifiche reminder
