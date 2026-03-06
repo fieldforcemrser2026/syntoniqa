@@ -7646,12 +7646,44 @@ async function runAI(){
         try{
           const ev=JSON.parse(line.slice(6));
           if(ev.type==='init'){const el=document.getElementById('aiInitText');if(el)el.textContent=`${ev.n.tecnici} tecnici · ${ev.n.clienti} clienti · ${ev.n.urgenze} urgenze · ${ev.n.tagliandi} tagliandi caricati`;}
-          else if(ev.type==='debug_prompt'){window._lastAIPromptDebug=ev;const el=document.getElementById('aiInitText');if(el)el.textContent=`📊 Dati: ${ev.tecnici_count} tecnici · ${ev.macchine_loaded} macchine · ${ev.assets_loaded} assets · ${ev.tagliandi_count} tagliandi · ${ev.urgenze_count} urgenze · Prompt ${ev.prompt_length} chars`;}
+          else if(ev.type==='debug_prompt'){
+            window._lastAIPromptDebug=ev;
+            const el=document.getElementById('aiInitText');
+            if(el)el.textContent=`📊 Dati: ${ev.tecnici_count} tecnici · ${ev.macchine_loaded} macchine · ${ev.assets_loaded} assets · ${ev.tagliandi_count} tagliandi · ${ev.urgenze_count} urgenze · Prompt ${ev.prompt_length} chars`;
+            // Mostra pannello debug LIVE durante caricamento
+            let liveDbg=document.getElementById('aiLiveDebug');
+            if(!liveDbg){liveDbg=document.createElement('details');liveDbg.id='aiLiveDebug';liveDbg.style.cssText='margin-top:10px;border:1px solid rgba(99,102,241,.25);border-radius:8px';
+              const container=document.getElementById('aiProgress')||document.getElementById('aiInitText')?.parentElement;
+              if(container)container.parentElement.appendChild(liveDbg);
+            }
+            if(liveDbg){
+              liveDbg.innerHTML=`<summary style="cursor:pointer;font-size:.78rem;font-weight:600;color:rgba(99,102,241,.8);padding:8px 12px;background:rgba(99,102,241,.08);border-radius:8px">🔍 Debug Prompt AI LIVE (${ev.prompt_length} chars)</summary>
+              <div style="padding:10px 12px">
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+                  <span style="font-size:.72rem;padding:2px 8px;background:rgba(16,185,129,.15);border-radius:8px;color:var(--ok)">✅ ${ev.tecnici_count} tecnici</span>
+                  <span style="font-size:.72rem;padding:2px 8px;background:rgba(99,102,241,.15);border-radius:8px;color:#A5B4FC">🔧 ${ev.macchine_loaded} macchine</span>
+                  <span style="font-size:.72rem;padding:2px 8px;background:rgba(99,102,241,.15);border-radius:8px;color:#A5B4FC">📦 ${ev.assets_loaded} assets</span>
+                  <span style="font-size:.72rem;padding:2px 8px;background:rgba(249,115,22,.15);border-radius:8px;color:#FB923C">🏷️ ${ev.tagliandi_count} tagliandi</span>
+                  <span style="font-size:.72rem;padding:2px 8px;background:rgba(239,68,68,.15);border-radius:8px;color:var(--err)">🚨 ${ev.urgenze_count} urgenze</span>
+                  ${ev.interventi_da_assegnare?`<span style="font-size:.72rem;padding:2px 8px;background:rgba(16,185,129,.2);border:1px solid rgba(16,185,129,.4);border-radius:8px;color:var(--ok);font-weight:600">📋 ${ev.interventi_da_assegnare} DA ASSEGNARE</span>`:''}
+                  ${ev.piano_assegnato?`<span style="font-size:.72rem;padding:2px 8px;background:rgba(59,130,246,.1);border-radius:8px;color:var(--info)">✅ ${ev.piano_assegnato} già assegnati</span>`:''}
+                </div>
+                <div style="font-size:.72rem;color:rgba(255,255,255,.5);margin-bottom:6px">Prompt inviato (primi 3000 chars):</div>
+                <pre style="font-size:.68rem;overflow-x:auto;overflow-y:auto;max-height:250px;padding:10px;background:rgba(0,0,0,.4);border-radius:6px;color:rgba(255,255,255,.65);white-space:pre-wrap;word-break:break-word">${(ev.prompt_preview||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre>
+              </div>`;
+            }
+          }
           else if(ev.type==='anon'){_updAnon(ev);}
           else if(ev.type==='engine_debug'){
             // Debug: mostra perché un motore ha fallito
             const el=document.getElementById('aiInitText');
-            if(el)el.textContent=`⚠️ ${ev.engine}: HTTP ${ev.status} — ${(ev.reason||'').substring(0,120)}`;
+            if(el){
+              if(ev.engine==='CASCADE'){
+                el.innerHTML=`<span style="color:var(--err);font-weight:600">❌ TUTTI I MOTORI FALLITI</span> — ${(ev.reason||'').substring(0,200)}`;
+              } else {
+                el.textContent=`⚠️ ${ev.engine}: HTTP ${ev.status} — ${(ev.reason||'').substring(0,120)}`;
+              }
+            }
             console.warn('AI Engine Debug:', ev);
           }
           else if(ev.type==='engine'){

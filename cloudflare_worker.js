@@ -3195,15 +3195,19 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       async function callAI(promptText, onEngine) {
         // Cascade SEMPRE secondo ranking configurato — no lastWorking shortcut
         // (garantisce che Gemini/Cerebras vengano sempre provati per ogni chunk)
+        const skipped = [];
         for (const name of engineRanking) {
           const eng = engines[name];
-          if (!eng || eng.disabled || !env[eng.envKey]) continue;
+          if (!eng) continue;
+          if (eng.disabled) { skipped.push(`${name}:disabled`); continue; }
+          if (!env[eng.envKey]) { skipped.push(`${name}:no_key`); continue; }
           onEngine?.({engine:name, status:'trying'});
           const r = name === 'workersai' ? await tryWorkersAI(promptText) : await eng.tryFn(promptText);
           onEngine?.({engine:name, status: r ? 'ok' : 'failed'});
           if (r) { lastWorking = name; _usedEngine = name; return r; }
         }
-        throw new Error(`AI non disponibile. Configura almeno una chiave API: GEMINI_KEY, GROQ_KEY, CEREBRAS_KEY, MISTRAL_KEY, DEEPSEEK_KEY.`);
+        sse({type:'engine_debug', engine:'CASCADE', status:'all_failed', reason:`Tutti i motori hanno fallito. Skipped: ${skipped.join(', ')}`});
+        throw new Error(`AI non disponibile. Tutti i motori falliti. Chiavi mancanti: ${skipped.filter(s=>s.includes('no_key')).map(s=>s.split(':')[0]).join(', ')||'nessuna'}. Configura: GEMINI_KEY, GROQ_KEY, CEREBRAS_KEY, MISTRAL_KEY, DEEPSEEK_KEY.`);
       }
 
       async function tryWorkersAI(promptText) {
@@ -3224,7 +3228,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       async function tryGemini(promptText) {
         try {
           const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_KEY}`,
             { method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 system_instruction: { parts: [{ text: sysPrompt }] },
@@ -3254,11 +3258,12 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
       async function tryCerebras(promptText) {
         try {
+          // Cerebras: llama-3.3-70b rimosso → qwen-3-235b (235B, molto più potente)
           const res = await fetch('https://api.cerebras.ai/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.CEREBRAS_KEY}` },
             body: JSON.stringify({
-              model: 'llama-3.3-70b',
+              model: 'qwen-3-235b-a22b-instruct-2507',
               messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
               max_tokens: 16384, temperature: 0.3,
               response_format: { type: 'json_object' }
@@ -3295,11 +3300,23 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               response_format: { type: 'json_object' }
             })
           });
-          if (res.status === 429 || res.status === 401 || res.status === 403) { engines.groq.disabled = true; return null; }
-          if (!res.ok) return null;
+          if (res.status === 429 || res.status === 401 || res.status === 403) {
+            sse({type:'engine_debug', engine:'groq', status:res.status, reason:'rate_limit_or_auth'});
+            engines.groq.disabled = true; return null;
+          }
+          if (!res.ok) {
+            const errBody = await res.text().catch(()=>'');
+            sse({type:'engine_debug', engine:'groq', status:res.status, reason:errBody.substring(0,200)});
+            return null;
+          }
           const gd = await res.json();
-          return gd.choices?.[0]?.message?.content || null;
-        } catch { return null; }
+          const text = gd.choices?.[0]?.message?.content || null;
+          if (!text) sse({type:'engine_debug', engine:'groq', status:200, reason:'empty_response'});
+          return text;
+        } catch(e) {
+          sse({type:'engine_debug', engine:'groq', status:'exception', reason:e.message||'unknown'});
+          return null;
+        }
       }
 
       async function tryMistral(promptText) {
@@ -3314,11 +3331,23 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               response_format: { type: 'json_object' }
             })
           });
-          if (res.status === 429 || res.status === 401 || res.status === 403) { engines.mistral.disabled = true; return null; }
-          if (!res.ok) return null;
+          if (res.status === 429 || res.status === 401 || res.status === 403) {
+            sse({type:'engine_debug', engine:'mistral', status:res.status, reason:'rate_limit_or_auth'});
+            engines.mistral.disabled = true; return null;
+          }
+          if (!res.ok) {
+            const errBody = await res.text().catch(()=>'');
+            sse({type:'engine_debug', engine:'mistral', status:res.status, reason:errBody.substring(0,200)});
+            return null;
+          }
           const d = await res.json();
-          return d.choices?.[0]?.message?.content || null;
-        } catch { return null; }
+          const text = d.choices?.[0]?.message?.content || null;
+          if (!text) sse({type:'engine_debug', engine:'mistral', status:200, reason:'empty_response'});
+          return text;
+        } catch(e) {
+          sse({type:'engine_debug', engine:'mistral', status:'exception', reason:e.message||'unknown'});
+          return null;
+        }
       }
 
       async function tryDeepSeek(promptText) {
@@ -3333,11 +3362,23 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               response_format: { type: 'json_object' }
             })
           });
-          if (res.status === 429 || res.status === 401 || res.status === 403) { engines.deepseek.disabled = true; return null; }
-          if (!res.ok) return null;
+          if (res.status === 429 || res.status === 401 || res.status === 403) {
+            sse({type:'engine_debug', engine:'deepseek', status:res.status, reason:'rate_limit_or_auth'});
+            engines.deepseek.disabled = true; return null;
+          }
+          if (!res.ok) {
+            const errBody = await res.text().catch(()=>'');
+            sse({type:'engine_debug', engine:'deepseek', status:res.status, reason:errBody.substring(0,200)});
+            return null;
+          }
           const d = await res.json();
-          return d.choices?.[0]?.message?.content || null;
-        } catch { return null; }
+          const text = d.choices?.[0]?.message?.content || null;
+          if (!text) sse({type:'engine_debug', engine:'deepseek', status:200, reason:'empty_response'});
+          return text;
+        } catch(e) {
+          sse({type:'engine_debug', engine:'deepseek', status:'exception', reason:e.message||'unknown'});
+          return null;
+        }
       }
 
       // Parser robusto — gestisce JSON troncati (risposta tagliata a max_tokens)
