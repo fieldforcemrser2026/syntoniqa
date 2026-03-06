@@ -3,8 +3,8 @@
 // Cache-first app shell, network-first API, IndexedDB offline queue
 // ============================================================
 
-const CACHE_NAME = 'syntoniqa-v2.1';
-const API_CACHE = 'syntoniqa-api-v1';
+const CACHE_NAME = 'syntoniqa-v3.0';
+const API_CACHE = 'syntoniqa-api-v2';
 
 // App shell — cache-first (aggiornato in background)
 const APP_SHELL = [
@@ -140,7 +140,14 @@ async function getSnapshot(key) {
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(APP_SHELL))
+      .then(cache => {
+        // Cache each resource individually — skip failures instead of aborting all
+        return Promise.all(
+          APP_SHELL.map(url =>
+            cache.add(url).catch(err => console.warn('[SW] Cache skip:', url, err.message))
+          )
+        );
+      })
       .then(() => self.skipWaiting())
   );
 });

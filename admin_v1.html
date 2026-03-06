@@ -4575,8 +4575,8 @@ function renderTecnici(){
   $('tblTecnici').innerHTML=items.map(t=>{
     const sq=(DATA.squadre||[]).find(s=>s.ID===t.SquadraID);
     const ini=(t.Nome||'')[0]+''+(t.Cognome||'')[0];
-    const foto=t.FotoURL
-      ?`<img src="${t.FotoURL}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`
+    const foto=(t.FotoURL && t.FotoURL.startsWith('http'))
+      ?`<img src="${t.FotoURL}" style="width:36px;height:36px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">`
       :`<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--c2),var(--c1));display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:.7rem">${ini}</div>`;
     return `<tr id="row_tecnici_${t.ID}" data-id="${t.ID}">
     <td><input type="checkbox" class="sel-chk" onchange="toggleSelectRow('tecnici','${t.ID}',this.checked)"></td>
