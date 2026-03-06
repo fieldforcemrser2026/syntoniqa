@@ -3149,13 +3149,17 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       }
 
       // Engine registry: ogni engine ha key env, funzione try, flag disabled
+      // 9 motori totali: 6 originali + 3 nuovi (OpenRouter, Fireworks, SambaNova)
       const engines = {
-        gemini:   { envKey: 'GEMINI_KEY',   tryFn: null, disabled: false },
-        cerebras: { envKey: 'CEREBRAS_KEY', tryFn: null, disabled: false },
-        groq:     { envKey: 'GROQ_KEY',     tryFn: null, disabled: false },
-        mistral:  { envKey: 'MISTRAL_KEY',  tryFn: null, disabled: false },
-        deepseek: { envKey: 'DEEPSEEK_KEY', tryFn: null, disabled: false },
-        workersai:{ envKey: 'AI',           tryFn: null, disabled: false },
+        gemini:    { envKey: 'GEMINI_KEY',     tryFn: null, disabled: false },
+        cerebras:  { envKey: 'CEREBRAS_KEY',   tryFn: null, disabled: false },
+        groq:      { envKey: 'GROQ_KEY',       tryFn: null, disabled: false },
+        mistral:   { envKey: 'MISTRAL_KEY',    tryFn: null, disabled: false },
+        deepseek:  { envKey: 'DEEPSEEK_KEY',   tryFn: null, disabled: false },
+        openrouter:{ envKey: 'OPENROUTER_KEY', tryFn: null, disabled: false },
+        fireworks: { envKey: 'FIREWORKS_KEY',  tryFn: null, disabled: false },
+        sambanova: { envKey: 'SAMBANOVA_KEY',  tryFn: null, disabled: false },
+        workersai: { envKey: 'AI',             tryFn: null, disabled: false },
       };
       // Lazy-bind tryFn (definite sotto)
       engines.gemini.tryFn = tryGemini;
@@ -3163,11 +3167,14 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       engines.groq.tryFn = tryGroq;
       engines.mistral.tryFn = tryMistral;
       engines.deepseek.tryFn = tryDeepSeek;
+      engines.openrouter.tryFn = tryOpenRouter;
+      engines.fireworks.tryFn = tryFireworks;
+      engines.sambanova.tryFn = trySambaNova;
 
       // Ranking configurabile da DB config (chiave: ai_engine_ranking)
-      // Formato: "gemini,cerebras,groq,mistral,deepseek,workersai" (ordine = priorità)
+      // Formato: "gemini,cerebras,groq,openrouter,fireworks,sambanova,mistral,deepseek,workersai"
       // Ranking: tutti gratuiti (free tier), Workers AI è il fallback finale (prompt compatto)
-      const defaultRanking = ['gemini','cerebras','groq','mistral','deepseek','workersai'];
+      const defaultRanking = ['gemini','cerebras','groq','openrouter','fireworks','sambanova','mistral','deepseek','workersai'];
       let engineRanking = defaultRanking;
       try {
         const cfgRank = await sb(env, 'config', 'GET', null,
@@ -3192,22 +3199,115 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       let lastWorking = null;
       let _usedEngine = null; // traccia quale motore ha risposto per ultimo
 
+      // ── MoA (Mixture of Agents) — Parallel Race + Best Picker + Fallback ──
+      // Strategia: lancia top N motori IN PARALLELO, il primo JSON valido con più piano[] vince.
+      // Se parallelo fallisce, cascade sequenziale sui rimanenti.
+
+      // Valuta qualità di una risposta JSON AI
+      function _scoreAIResponse(text) {
+        try {
+          // Cerca il JSON nella risposta (potrebbe avere testo prima/dopo)
+          const jsonMatch = text.match(/\{[\s\S]*"piano"[\s\S]*\}/);
+          if (!jsonMatch) return { score: 0, parsed: null };
+          const obj = JSON.parse(jsonMatch[0]);
+          if (!obj.piano || !Array.isArray(obj.piano)) return { score: 1, parsed: obj };
+          let score = 10; // base: JSON valido con piano[]
+          score += obj.piano.length * 2; // +2 per ogni intervento pianificato
+          // Bonus per campi completi
+          obj.piano.forEach(p => {
+            if (p.tecnicoId && p.tecnicoId !== 'null') score += 1;
+            if (p.data) score += 0.5;
+            if (p.furgone) score += 0.5;
+            if (p.oraInizio) score += 0.3;
+          });
+          if (obj.summary) score += 3;
+          if (obj.warnings && obj.warnings.length) score += 2;
+          return { score, parsed: obj };
+        } catch { return { score: 0, parsed: null }; }
+      }
+
       async function callAI(promptText, onEngine) {
-        // Cascade SEMPRE secondo ranking configurato — no lastWorking shortcut
-        // (garantisce che Gemini/Cerebras vengano sempre provati per ogni chunk)
+        // 1. Identifica motori disponibili (non disabilitati, con chiave)
+        const available = [];
         const skipped = [];
         for (const name of engineRanking) {
           const eng = engines[name];
           if (!eng) continue;
           if (eng.disabled) { skipped.push(`${name}:disabled`); continue; }
           if (!env[eng.envKey]) { skipped.push(`${name}:no_key`); continue; }
+          available.push(name);
+        }
+
+        if (!available.length) {
+          sse({type:'engine_debug', engine:'CASCADE', status:'no_engines', reason:`Nessun motore disponibile. Skipped: ${skipped.join(', ')}`});
+          throw new Error(`AI non disponibile. Nessun motore configurato.`);
+        }
+
+        // 2. MoA PARALLEL RACE — lancia i primi 3 disponibili in parallelo
+        const MoA_COUNT = Math.min(3, available.filter(n => n !== 'workersai').length);
+        const parallelEngines = available.filter(n => n !== 'workersai').slice(0, MoA_COUNT);
+        const fallbackEngines = available.filter(n => !parallelEngines.includes(n));
+
+        if (parallelEngines.length >= 2) {
+          sse({type:'moa_start', engines: parallelEngines, mode: 'parallel'});
+          // Lancia tutti in parallelo
+          parallelEngines.forEach(n => onEngine?.({engine:n, status:'trying'}));
+
+          const results = await Promise.allSettled(
+            parallelEngines.map(async (name) => {
+              const eng = engines[name];
+              const text = await eng.tryFn(promptText);
+              return { name, text };
+            })
+          );
+
+          // Valuta e scegli il migliore
+          let bestName = null, bestText = null, bestScore = 0;
+          const scores = [];
+          for (const r of results) {
+            if (r.status === 'rejected' || !r.value?.text) {
+              const nm = r.value?.name || r.reason?.name || '?';
+              onEngine?.({engine:nm, status:'failed'});
+              scores.push({engine:nm, score:0, reason:'no_response'});
+              continue;
+            }
+            const { name, text } = r.value;
+            const { score } = _scoreAIResponse(text);
+            scores.push({engine:name, score});
+            if (score > bestScore) { bestScore = score; bestName = name; bestText = text; }
+          }
+
+          // Segnala risultati MoA
+          sse({type:'moa_result', scores, winner: bestName, bestScore});
+
+          if (bestText && bestScore >= 10) {
+            // Segna il vincitore ok, gli altri failed
+            for (const s of scores) {
+              onEngine?.({engine:s.engine, status: s.engine === bestName ? 'ok' : 'failed'});
+            }
+            _usedEngine = bestName; lastWorking = bestName;
+            return bestText;
+          }
+
+          // Tutti i paralleli hanno fallito — segna failed
+          parallelEngines.forEach(n => onEngine?.({engine:n, status:'failed'}));
+        } else if (parallelEngines.length === 1) {
+          // Solo 1 motore disponibile — cascade classico
+          fallbackEngines.unshift(parallelEngines[0]);
+        }
+
+        // 3. FALLBACK CASCADE sequenziale sui rimanenti
+        for (const name of fallbackEngines) {
+          const eng = engines[name];
+          if (!eng || eng.disabled || !env[eng.envKey]) continue;
           onEngine?.({engine:name, status:'trying'});
           const r = name === 'workersai' ? await tryWorkersAI(promptText) : await eng.tryFn(promptText);
           onEngine?.({engine:name, status: r ? 'ok' : 'failed'});
           if (r) { lastWorking = name; _usedEngine = name; return r; }
         }
+
         sse({type:'engine_debug', engine:'CASCADE', status:'all_failed', reason:`Tutti i motori hanno fallito. Skipped: ${skipped.join(', ')}`});
-        throw new Error(`AI non disponibile. Tutti i motori falliti. Chiavi mancanti: ${skipped.filter(s=>s.includes('no_key')).map(s=>s.split(':')[0]).join(', ')||'nessuna'}. Configura: GEMINI_KEY, GROQ_KEY, CEREBRAS_KEY, MISTRAL_KEY, DEEPSEEK_KEY.`);
+        throw new Error(`AI non disponibile. Tutti i ${available.length} motori falliti. Chiavi mancanti: ${skipped.filter(s=>s.includes('no_key')).map(s=>s.split(':')[0]).join(', ')||'nessuna'}.`);
       }
 
       async function tryWorkersAI(promptText) {
@@ -3377,6 +3477,109 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           return text;
         } catch(e) {
           sse({type:'engine_debug', engine:'deepseek', status:'exception', reason:e.message||'unknown'});
+          return null;
+        }
+      }
+
+      // ── NUOVI ENGINE: OpenRouter, Fireworks AI, SambaNova ──
+
+      async function tryOpenRouter(promptText) {
+        try {
+          // OpenRouter: API OpenAI-compatibile, modello free Llama 4 Maverick (400B MoE)
+          const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${env.OPENROUTER_KEY}`,
+              'HTTP-Referer': 'https://fieldforcemrser2026.github.io/syntoniqa/',
+              'X-Title': 'Syntoniqa AI Planner'
+            },
+            body: JSON.stringify({
+              model: 'meta-llama/llama-4-maverick:free',
+              messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
+              max_tokens: 16384, temperature: 0.3,
+              response_format: { type: 'json_object' }
+            })
+          });
+          if (res.status === 429 || res.status === 401 || res.status === 403) {
+            sse({type:'engine_debug', engine:'openrouter', status:res.status, reason:'rate_limit_or_auth'});
+            engines.openrouter.disabled = true; return null;
+          }
+          if (!res.ok) {
+            const errBody = await res.text().catch(()=>'');
+            sse({type:'engine_debug', engine:'openrouter', status:res.status, reason:errBody.substring(0,200)});
+            return null;
+          }
+          const d = await res.json();
+          const text = d.choices?.[0]?.message?.content || null;
+          if (!text) sse({type:'engine_debug', engine:'openrouter', status:200, reason:'empty_response'});
+          return text;
+        } catch(e) {
+          sse({type:'engine_debug', engine:'openrouter', status:'exception', reason:e.message||'unknown'});
+          return null;
+        }
+      }
+
+      async function tryFireworks(promptText) {
+        try {
+          // Fireworks AI: specializzato in structured JSON output, molto veloce
+          const res = await fetch('https://api.fireworks.ai/inference/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.FIREWORKS_KEY}` },
+            body: JSON.stringify({
+              model: 'accounts/fireworks/models/llama4-maverick-instruct-basic',
+              messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
+              max_tokens: 16384, temperature: 0.3,
+              response_format: { type: 'json_object' }
+            })
+          });
+          if (res.status === 429 || res.status === 401 || res.status === 403) {
+            sse({type:'engine_debug', engine:'fireworks', status:res.status, reason:'rate_limit_or_auth'});
+            engines.fireworks.disabled = true; return null;
+          }
+          if (!res.ok) {
+            const errBody = await res.text().catch(()=>'');
+            sse({type:'engine_debug', engine:'fireworks', status:res.status, reason:errBody.substring(0,200)});
+            return null;
+          }
+          const d = await res.json();
+          const text = d.choices?.[0]?.message?.content || null;
+          if (!text) sse({type:'engine_debug', engine:'fireworks', status:200, reason:'empty_response'});
+          return text;
+        } catch(e) {
+          sse({type:'engine_debug', engine:'fireworks', status:'exception', reason:e.message||'unknown'});
+          return null;
+        }
+      }
+
+      async function trySambaNova(promptText) {
+        try {
+          // SambaNova: Llama 3.3 70B velocissimo su chip custom, free tier 20 req/min
+          const res = await fetch('https://api.sambanova.ai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.SAMBANOVA_KEY}` },
+            body: JSON.stringify({
+              model: 'Meta-Llama-3.3-70B-Instruct',
+              messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
+              max_tokens: 16384, temperature: 0.3,
+              response_format: { type: 'json_object' }
+            })
+          });
+          if (res.status === 429 || res.status === 401 || res.status === 403) {
+            sse({type:'engine_debug', engine:'sambanova', status:res.status, reason:'rate_limit_or_auth'});
+            engines.sambanova.disabled = true; return null;
+          }
+          if (!res.ok) {
+            const errBody = await res.text().catch(()=>'');
+            sse({type:'engine_debug', engine:'sambanova', status:res.status, reason:errBody.substring(0,200)});
+            return null;
+          }
+          const d = await res.json();
+          const text = d.choices?.[0]?.message?.content || null;
+          if (!text) sse({type:'engine_debug', engine:'sambanova', status:200, reason:'empty_response'});
+          return text;
+        } catch(e) {
+          sse({type:'engine_debug', engine:'sambanova', status:'exception', reason:e.message||'unknown'});
           return null;
         }
       }

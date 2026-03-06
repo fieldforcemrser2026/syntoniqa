@@ -5511,12 +5511,15 @@ async function saveAllConfig(){
 
 // ============ AI ENGINE RANKING ============
 const AI_ENGINES = [
-  { id:'gemini',   name:'Google Gemini',       key:'GEMINI_KEY',   icon:'🔵', desc:'Tier gratis: 250 req/giorno, 1M token context' },
-  { id:'cerebras', name:'Cerebras',             key:'CEREBRAS_KEY', icon:'🟣', desc:'Beta gratis, inferenza veloce su wafer-scale chip' },
-  { id:'groq',     name:'Groq',                 key:'GROQ_KEY',     icon:'🟠', desc:'Tier gratis: 14.400 req/giorno, 300+ tok/sec' },
-  { id:'mistral',  name:'Mistral AI',           key:'MISTRAL_KEY',  icon:'🔴', desc:'Tier gratis: 1 miliardo token/mese' },
-  { id:'deepseek', name:'DeepSeek',             key:'DEEPSEEK_KEY', icon:'🟢', desc:'API economica, ottimo per coding e reasoning' },
-  { id:'workersai',name:'Cloudflare Workers AI', key:'(incluso)',    icon:'🟡', desc:'Incluso nel piano Workers, nessuna chiave extra' },
+  { id:'gemini',    name:'Google Gemini 2.5',    key:'GEMINI_KEY',    icon:'🔵', desc:'Gratis: 250 req/g, 1M context. Modello: gemini-2.5-flash' },
+  { id:'cerebras',  name:'Cerebras Qwen 235B',   key:'CEREBRAS_KEY',  icon:'🟠', desc:'Gratis beta, 235B parametri su wafer-scale chip' },
+  { id:'groq',      name:'Groq Llama 70B',       key:'GROQ_KEY',      icon:'🔴', desc:'Gratis: 14.400 req/g, 300+ tok/sec' },
+  { id:'openrouter',name:'OpenRouter Llama 4',    key:'OPENROUTER_KEY',icon:'🌐', desc:'Gratis: 20+ modelli free, Llama 4 Maverick 400B' },
+  { id:'fireworks', name:'Fireworks AI',          key:'FIREWORKS_KEY', icon:'🎆', desc:'Gratis: specializzato JSON output, molto veloce' },
+  { id:'sambanova', name:'SambaNova Llama 70B',   key:'SAMBANOVA_KEY', icon:'🟢', desc:'Gratis: 20 req/min, chip custom ultrafast' },
+  { id:'mistral',   name:'Mistral Small',         key:'MISTRAL_KEY',   icon:'🟣', desc:'Gratis: 1B token/mese' },
+  { id:'deepseek',  name:'DeepSeek Chat',         key:'DEEPSEEK_KEY',  icon:'🔷', desc:'Gratis: ottimo per reasoning e JSON' },
+  { id:'workersai', name:'Workers AI (fallback)',  key:'(incluso)',     icon:'⚡', desc:'Incluso nel piano CF Workers, nessuna chiave extra' },
 ];
 let currentEngineRanking = [];
 
@@ -7559,8 +7562,8 @@ async function runAI(){
   aiGoToStep(3);
 
   // ─── STREAMING LOADING UI ───
-  const _engLabels={gemini:{name:'Gemini',color:'#4285F4',ico:'🔵'},cerebras:{name:'Cerebras',color:'#FF6B35',ico:'🟠'},groq:{name:'Groq',color:'#F55036',ico:'🔴'},mistral:{name:'Mistral',color:'#7C3AED',ico:'🟣'},deepseek:{name:'DeepSeek',color:'#0EA5E9',ico:'🔷'},workersai:{name:'Workers AI',color:'#F38020',ico:'⚡'}};
-  const _allEng=['gemini','cerebras','groq','mistral','deepseek','workersai'];
+  const _engLabels={gemini:{name:'Gemini',color:'#4285F4',ico:'🔵'},cerebras:{name:'Cerebras',color:'#FF6B35',ico:'🟠'},groq:{name:'Groq',color:'#F55036',ico:'🔴'},mistral:{name:'Mistral',color:'#7C3AED',ico:'🟣'},deepseek:{name:'DeepSeek',color:'#0EA5E9',ico:'🔷'},openrouter:{name:'OpenRouter',color:'#6366F1',ico:'🌐'},fireworks:{name:'Fireworks',color:'#EF4444',ico:'🎆'},sambanova:{name:'SambaNova',color:'#10B981',ico:'🟢'},workersai:{name:'Workers AI',color:'#F38020',ico:'⚡'}};
+  const _allEng=['gemini','cerebras','groq','openrouter','fireworks','sambanova','mistral','deepseek','workersai'];
   $('aiResult').style.display='block';
   $('aiResult').innerHTML=`<div style="background:var(--card);border-radius:var(--radius-lg);overflow:hidden">
     <!-- Header -->
@@ -7583,7 +7586,7 @@ async function runAI(){
     </div>
     <!-- Engines Grid -->
     <div style="padding:14px 24px 18px">
-      <div style="font-size:.7rem;font-weight:600;color:rgba(255,255,255,.35);letter-spacing:.06em;margin-bottom:8px">MOTORI AI (cascata automatica)</div>
+      <div style="font-size:.7rem;font-weight:600;color:rgba(255,255,255,.35);letter-spacing:.06em;margin-bottom:8px">MOTORI AI (MoA parallel + fallback cascade)</div>
       <div id="aiEngineBar" style="display:flex;gap:6px;flex-wrap:wrap">
         ${_allEng.map(e=>{const i=_engLabels[e];return`<span id="aiEng_${e}" style="padding:4px 10px;border-radius:14px;font-size:.72rem;font-weight:600;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.3)">${i.ico} ${i.name}</span>`;}).join('')}
       </div>
@@ -7685,6 +7688,18 @@ async function runAI(){
               }
             }
             console.warn('AI Engine Debug:', ev);
+          }
+          else if(ev.type==='moa_start'){
+            const pt=document.getElementById('aiProgressText');
+            if(pt)pt.innerHTML=`🧠 <b>MoA Parallel</b> — ${ev.engines.map(e=>_engLabels[e]?.name||e).join(' + ')} in gara...`;
+          }
+          else if(ev.type==='moa_result'){
+            const pt=document.getElementById('aiProgressText');
+            if(pt&&ev.winner){
+              const scores=ev.scores||[];
+              pt.innerHTML=`🏆 <b>${_engLabels[ev.winner]?.name||ev.winner}</b> vince! (score: ${ev.bestScore}) — `
+                +scores.map(s=>`${_engLabels[s.engine]?.ico||''}${s.engine}:${s.score}`).join(' · ');
+            }
           }
           else if(ev.type==='engine'){
             _engStatus[ev.engine]=ev.status;
