@@ -89,12 +89,14 @@ function validateTransition(validMap, currentStato, newStato, entityType) {
 // level: 0-100. adminApp: può accedere ad admin_v1. canManageUsers: crea/elimina utenti.
 // Un admin con anche_caposquadra=true è trattato come caposquadra per la propria squadra.
 const ROLE_MATRIX = {
-  admin:        { level: 100, adminApp: true,  canApprove: true,  seeAll: true,  canManageUsers: true  },
-  caposquadra:  { level:  70, adminApp: true,  canApprove: true,  seeAll: false, canManageUsers: false },
-  tecnico:      { level:  30, adminApp: false, canApprove: false, seeAll: false, canManageUsers: false },
-  magazziniere: { level:  20, adminApp: false, canApprove: false, seeAll: false, canManageUsers: false },
-  commerciale:  { level:  20, adminApp: false, canApprove: false, seeAll: false, canManageUsers: false },
-  system:       { level: 100, adminApp: true,  canApprove: true,  seeAll: true,  canManageUsers: true  },
+  admin:           { level: 100, adminApp: true,  canApprove: true,  seeAll: true,  canManageUsers: true  },
+  caposquadra:     { level:  70, adminApp: true,  canApprove: true,  seeAll: false, canManageUsers: false },
+  tecnico_senior:  { level:  50, adminApp: false, canApprove: false, seeAll: false, canManageUsers: false },
+  tecnico:         { level:  30, adminApp: false, canApprove: false, seeAll: false, canManageUsers: false },
+  tecnico_junior:  { level:  20, adminApp: false, canApprove: false, seeAll: false, canManageUsers: false },
+  magazziniere:    { level:  20, adminApp: false, canApprove: false, seeAll: false, canManageUsers: false },
+  commerciale:     { level:  20, adminApp: false, canApprove: false, seeAll: false, canManageUsers: false },
+  system:          { level: 100, adminApp: true,  canApprove: true,  seeAll: true,  canManageUsers: true  },
 };
 
 // requireRole: ritorna null se l'utente ha uno dei ruoli richiesti, stringa errore altrimenti.
@@ -103,8 +105,10 @@ function requireRole(body, ...allowedRoles) {
   const role = body._authRole || 'tecnico';
   if (role === 'system') return null; // cron/Telegram sempre autorizzato
   if (!allowedRoles.length) return null;
-  const expanded = allowedRoles.includes('caposquadra') && !allowedRoles.includes('admin')
-    ? [...allowedRoles, 'admin'] : allowedRoles;
+  // Espandi ruoli: admin include caposquadra, tecnico include tecnico_senior/junior
+  let expanded = [...allowedRoles];
+  if (expanded.includes('caposquadra') && !expanded.includes('admin')) expanded.push('admin');
+  if (expanded.includes('tecnico')) expanded.push('tecnico_senior', 'tecnico_junior');
   if (!expanded.includes(role)) return `Azione riservata a: ${allowedRoles.join(', ')}`;
   return null;
 }
@@ -676,7 +680,7 @@ async function handleGet(action, url, env, auth = {}) {
         const reqUser = await sb(env, 'utenti', 'GET', null, `?id=eq.${reqUserId}&select=ruolo`).catch(()=>[]);
         userRole = reqUser?.[0]?.ruolo || 'tecnico';
       }
-      const isTecnico = userRole === 'tecnico';
+      const isTecnico = ['tecnico', 'tecnico_senior', 'tecnico_junior'].includes(userRole);
       const tecFilter = isTecnico ? `&tecnico_id=eq.${reqUserId}` : '';
       const tecFilterUrg = isTecnico ? `&or=(tecnico_assegnato.eq.${reqUserId},segnalato_da.eq.${reqUserId})` : '';
 

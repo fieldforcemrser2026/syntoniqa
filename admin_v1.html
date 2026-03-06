@@ -2275,7 +2275,7 @@ Workers AI è incluso in Cloudflare e non richiede chiavi aggiuntive.
 <div class="field"><label>Password</label><input type="password" id="nuPassword" placeholder="••••••••"></div>
 </div>
 <div class="field-row">
-<div class="field"><label>Ruolo</label><select id="nuRuolo" onchange="onRuoloChange(this.value)"><option value="">Seleziona ruolo</option><option value="admin">Admin</option><option value="caposquadra">Caposquadra</option><option value="tecnico">Tecnico</option><option value="magazziniere">Magazziniere</option><option value="commerciale">Commerciale</option></select></div>
+<div class="field"><label>Ruolo</label><select id="nuRuolo" onchange="onRuoloChange(this.value)"><option value="">Seleziona ruolo</option><option value="admin">Admin</option><option value="caposquadra">Caposquadra</option><option value="tecnico_senior">Tecnico Senior</option><option value="tecnico">Tecnico</option><option value="tecnico_junior">Tecnico Junior</option><option value="magazziniere">Magazziniere</option><option value="commerciale">Commerciale</option></select></div>
 <div class="field"><label>Squadra</label><select id="nuSquadra"><option value="">Seleziona squadra</option></select></div>
 </div>
 <div id="nuAncheCapoRow" style="display:none;margin:-4px 0 8px;padding:8px 12px;background:rgba(0,201,167,.06);border-radius:8px;border:1px dashed var(--c1)">
@@ -4690,7 +4690,7 @@ function showCalDay(ds){
 // Palette colori tecnici — indice stabile per tecnico (stesso colore in ogni periodo)
 const TECH_COLORS=['#3B7EF7','#EF4444','#10B981','#F59E0B','#8B5CF6','#EC4899','#06B6D4','#84CC16','#F97316','#6366F1'];
 function getTecColor(tecId){
-  const tecs=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'||u.Ruolo==='tecnico_senior'));
+  const tecs=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&['tecnico','caposquadra','tecnico_senior','tecnico_junior'].includes(u.Ruolo));
   const idx=tecs.findIndex(t=>t.ID===tecId);
   return TECH_COLORS[(idx>=0?idx:0)%TECH_COLORS.length];
 }
@@ -4742,7 +4742,7 @@ async function geocodeCity(city){
 
 function fillMapTecPanel(){
   const list=$('mapTecCbList');if(!list)return;
-  const tecs=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&(u.Ruolo==='tecnico'||u.Ruolo==='caposquadra'||u.Ruolo==='tecnico_senior'));
+  const tecs=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&['tecnico','caposquadra','tecnico_senior','tecnico_junior'].includes(u.Ruolo));
   const prevSelected=_getSelectedTecnici();
   list.innerHTML=tecs.map((t,i)=>{
     const col=TECH_COLORS[i%TECH_COLORS.length];
