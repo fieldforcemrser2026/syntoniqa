@@ -3298,8 +3298,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
                 if (failCount >= parallelEngines.length) resolve(null);
               }
             });
-            // Timeout di sicurezza: 25s max per il race parallelo
-            setTimeout(() => { if (!settled) resolve(null); }, 25000);
+            // Timeout di sicurezza: 20s max per il race parallelo (CF Worker ha 30s wall time)
+            setTimeout(() => { if (!settled) resolve(null); }, 20000);
           });
 
           if (raceResult) {
@@ -3504,7 +3504,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
       async function tryOpenRouter(promptText) {
         try {
-          // OpenRouter: API OpenAI-compatibile, modello free Llama 4 Maverick (400B MoE)
+          // OpenRouter: API OpenAI-compatibile, Llama 3.3 70B free (confermato attivo mar 2026)
           const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -3514,7 +3514,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               'X-Title': 'Syntoniqa AI Planner'
             },
             body: JSON.stringify({
-              model: 'meta-llama/llama-4-maverick:free',
+              model: 'meta-llama/llama-3.3-70b-instruct:free',
               messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
               max_tokens: 16384, temperature: 0.3,
               response_format: { type: 'json_object' }
@@ -3546,7 +3546,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.FIREWORKS_KEY}` },
             body: JSON.stringify({
-              model: 'accounts/fireworks/models/llama4-maverick-instruct-basic',
+              model: 'accounts/fireworks/models/llama-v3p1-70b-instruct',
               messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
               max_tokens: 16384, temperature: 0.3,
               response_format: { type: 'json_object' }
@@ -3573,15 +3573,15 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
       async function trySambaNova(promptText) {
         try {
-          // SambaNova: Llama 3.3 70B velocissimo su chip custom, free tier 20 req/min
+          // SambaNova: Llama 4 Maverick su chip custom, free tier 20 req/min
+          // NOTA: SambaNova NON supporta response_format json_object — usiamo solo il system prompt
           const res = await fetch('https://api.sambanova.ai/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.SAMBANOVA_KEY}` },
             body: JSON.stringify({
-              model: 'Meta-Llama-3.3-70B-Instruct',
-              messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
-              max_tokens: 16384, temperature: 0.3,
-              response_format: { type: 'json_object' }
+              model: 'Llama-4-Maverick-17B-128E-Instruct',
+              messages: [{ role: 'system', content: sysPrompt + '\nIMPORTANTE: Rispondi ESCLUSIVAMENTE con JSON valido. Nessun testo prima o dopo.' }, { role: 'user', content: promptText }],
+              max_tokens: 16384, temperature: 0.3
             })
           });
           if (res.status === 429 || res.status === 401 || res.status === 403) {
