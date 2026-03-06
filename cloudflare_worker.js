@@ -2115,12 +2115,8 @@ async function handlePost(action, body, env) {
       }
     }
 
-    // -------- PUSH NOTIFICATIONS (FIX F-30) --------
-
-    case 'getVapidPublicKey': {
-      if (!env.VAPID_PUBLIC_KEY) return err('VAPID non configurato');
-      return ok({ vapidPublicKey: env.VAPID_PUBLIC_KEY });
-    }
+    // -------- PUSH NOTIFICATIONS --------
+    // NOTE: getVapidPublicKey è in handleGet (GET-only, non serve POST)
 
     case 'savePushSubscription': {
       const userId = body.userId || body.operatoreId;

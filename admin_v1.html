@@ -270,10 +270,12 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 
 /* ===== SECTION ===== */
 .sec{display:none}
-.sec.active{display:block}
+.sec.active{display:block;animation:secIn .25s ease-out}
+@keyframes secIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
 /* ===== CARDS ===== */
-.card{background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.card{background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;transition:box-shadow .2s ease,transform .2s ease}
+.card:hover{box-shadow:var(--shadow-lg)}
 .card-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #F3F4F6}
 .card-head h3{font-size:0.875rem;font-weight:600;letter-spacing:-0.01em}
 .card-body{padding:16px 18px}
@@ -296,7 +298,9 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 .kpi.blue{border-left-color:var(--info)}
 .kpi.yellow{border-left-color:var(--warn)}
 .kpi.purple{border-left-color:var(--purple)}
-.kpi .kpi-val{font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;line-height:1.2}
+.kpi{transition:transform .2s ease,box-shadow .2s ease}
+.kpi:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
+.kpi .kpi-val{font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;line-height:1.2;transition:color .3s}
 .kpi .kpi-lbl{font-size:0.6875rem;color:var(--gray);text-transform:uppercase;letter-spacing:0.04em;margin-top:4px}
 .kpi .kpi-sub{font-size:0.75rem;color:var(--gray2);margin-top:4px}
 
@@ -304,6 +308,7 @@ body{font-family:var(--font);background:var(--gray4);color:var(--dark);line-heig
 .tbl{width:100%;border-collapse:collapse;font-size:0.8125rem}
 .tbl th{background:var(--gray5);font-weight:600;font-size:0.6875rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--gray);padding:8px 12px;text-align:left;border-bottom:1px solid #E5E7EB;position:sticky;top:0;z-index:2}
 .tbl td{padding:8px 12px;border-bottom:1px solid #F3F4F6;vertical-align:middle}
+.tbl tr{transition:background .15s}
 .tbl tr:hover td{background:var(--gray5)}
 .tbl .actions-cell{white-space:nowrap}
 
