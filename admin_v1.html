@@ -3642,7 +3642,7 @@ async function batchDeleteDocumenti(ids, tableKey) {
   let ok = 0, fail = 0;
   for (const id of ids) {
     try {
-      await apiCall('deleteDoc', {id}, 'POST');
+      await apiCall('deleteDocumento', {id}, 'POST');
       ok++;
     } catch(e) { fail++; }
   }
