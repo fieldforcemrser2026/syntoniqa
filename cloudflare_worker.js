@@ -5577,15 +5577,64 @@ ${instructions}`;
           // ── PHASE 2: AI REVIEW con OpenAI (primary) + Claude (secondary) ──
           sse({type:'phase_start', phase:2, message:'OpenAI e Claude stanno analizzando il piano...'});
 
-          // Build review context: piano compatto + tecnici + vincoli
+          // Build review context: piano compatto + tecnici + vincoli + reperibilità + geo
           const tecAttivi = allTecnici.filter(t => (t.ruolo || '').toLowerCase() !== 'admin');
-          const tecniciCtx = tecAttivi.map(t => `${t.id}|${t.nome} ${t.cognome}|${t.ruolo}|base:${t.base||'?'}|furgone:${t.automezzo_id||'?'}`).join('\n');
-          const pianoCompatto = decoded.slice(0, 150).map(p =>
-            `${p.data||p.Data}|${p.tecnico||p.TecnicoNome||p.tecnicoId}|${p.cliente||p.ClienteNome||p.clienteId}|${p.tipo||p.Tipo}|${(p.note||p.Note||'').substring(0,60)}`
-          ).join('\n');
+          const tecniciCtx = tecAttivi.map(t => {
+            const ruolo = (t.ruolo || 'tecnico').toLowerCase();
+            const isJunior = ruolo.includes('junior') || ['emanuele','gino','giuseppe'].some(n => (t.nome||'').toLowerCase().includes(n) || (t.cognome||'').toLowerCase().includes(n));
+            return `${t.id}|${t.nome} ${t.cognome}|${t.ruolo}|base:${t.base||'?'}|furgone:${t.automezzo_id||'?'}|${isJunior?'JUNIOR':'SENIOR/CAPO'}`;
+          }).join('\n');
+
+          // Contesto reperibilità attive nel mese
+          const repCtx = allRep.filter(r => {
+            const rStart = r.data_inizio || '';
+            const rEnd = r.data_fine || '';
+            return rStart <= meseEnd && rEnd >= meseStart;
+          }).map(r => {
+            const tec = allTecnici.find(t => t.id === r.tecnico_id);
+            return `${r.data_inizio} → ${r.data_fine}|${tec ? tec.nome + ' ' + tec.cognome : r.tecnico_id}|turno:${r.turno||'?'}`;
+          }).join('\n');
+
+          // Contesto geografico clienti (città per stima distanze)
+          const clientiGeo = {};
+          allClienti.forEach(c => {
+            const id = c.codice_m3 || c.id;
+            if (id && c.citta_fatturazione) clientiGeo[id] = c.citta_fatturazione;
+          });
+          const clientiGeoCtx = Object.entries(clientiGeo).map(([id, citta]) => `${id}|${citta}`).join('\n');
+
+          const pianoCompatto = decoded.slice(0, 150).map(p => {
+            const cid = p.clienteId || p.ClienteID || '';
+            const citta = clientiGeo[cid] || '';
+            return `${p.data||p.Data}|${p.tecnico||p.TecnicoNome||p.tecnicoId}|${p.cliente||p.ClienteNome||cid}|${citta?'('+citta+')':''}|${p.tipo||p.Tipo}|${(p.note||p.Note||'').substring(0,40)}`;
+          }).join('\n');
+
+          // Conta interventi per tecnico per verificare bilanciamento
+          const countPerTec = {};
+          decoded.forEach(p => {
+            const tid = p.tecnicoId || p.TecnicoID || '';
+            if (tid) countPerTec[tid] = (countPerTec[tid] || 0) + 1;
+          });
+          const workloadCtx = Object.entries(countPerTec).map(([tid, count]) => {
+            const tec = allTecnici.find(t => t.id === tid);
+            return `${tec ? tec.nome + ' ' + tec.cognome : tid}: ${count} interventi`;
+          }).join('\n');
+
+          // Conta visite per cliente per verificare che un cliente non sia su troppi tecnici diversi
+          const tecPerCli = {};
+          decoded.forEach(p => {
+            const cid = p.clienteId || p.ClienteID || '';
+            const tid = p.tecnicoId || p.TecnicoID || '';
+            if (cid && tid) {
+              if (!tecPerCli[cid]) tecPerCli[cid] = new Set();
+              tecPerCli[cid].add(tid);
+            }
+          });
 
           const reviewPrompt = `Sei un esperto di ottimizzazione field service per manutenzione robot Lely (mungitrici, alimentatori, etc.).
 Analizza questo piano deterministico e suggerisci 3-8 MIGLIORAMENTI CONCRETI.
+
+⚠️ ATTENZIONE: usa SOLO gli ID esatti dei tecnici e clienti forniti sotto. NON inventare nomi o ID.
 
 ########## VINCOLI E REGOLE ATTIVE (DEVI rispettare questi vincoli nell'analisi!) ##########
 ${vincoliText || '(Nessun vincolo configurato)'}
@@ -5593,30 +5642,46 @@ ${vincoliText || '(Nessun vincolo configurato)'}
 
 REGOLE DI ANALISI:
 - VERIFICA che il piano rispetti TUTTI i vincoli sopra elencati — se non li rispetta, segnala come "critical"
-- Cerca INEFFICIENZE GEOGRAFICHE: tecnico mandato lontano dalla base quando ce n'è uno più vicino libero
-- Cerca SQUILIBRI DI CARICO: un tecnico ha troppi interventi, un altro troppo pochi
+- Cerca INEFFICIENZE GEOGRAFICHE: tecnico mandato lontano dalla base quando ce n'è uno più vicino libero. INCLUDI sempre distanza stimata (es. "~60km dalla base") nella description.
+- Cerca SQUILIBRI DI CARICO: un tecnico ha troppi interventi, un altro troppo pochi. Vedi DISTRIBUZIONE CARICO sotto.
 - Cerca PRIORITÀ ERRATE: macchine SCADUTE pianificate tardi, macchine non urgenti pianificate prima
 - Cerca AFFIANCAMENTI MIGLIORABILI: junior abbinato a senior non ottimale
-- Cerca OTTIMIZZAZIONI TEMPORALI: raggruppare interventi nella stessa zona nello stesso giorno
-- Cerca VIOLAZIONI VINCOLI: clienti esclusi ancora nel piano, tecnici in reperibilità con tagliandi, etc.
+- Cerca OTTIMIZZAZIONI TEMPORALI: raggruppare interventi nella stessa zona (stessa CITTÀ) nello stesso giorno
+- Cerca VIOLAZIONI VINCOLI: clienti esclusi ancora nel piano, etc.
+- ⚠️ Un CLIENTE dovrebbe essere visitato preferibilmente dallo STESSO tecnico durante il mese per continuità di servizio
+
+NON segnalare come violazione:
+- Junior in reperibilità — I JUNIOR (Emanuele, Gino, Giuseppe, Fabrizio) NON FANNO MAI reperibilità, quindi NON è una violazione se appaiono nel piano durante periodi di reperibilità altrui
+- Assenze/ferie non elencate nei vincoli sopra
 
 Per OGNI suggerimento fornisci:
 - id: "SUG_001", "SUG_002", etc.
 - category: "geography" | "workload" | "pairing" | "priority" | "timing" | "constraint_violation"
 - severity: "info" | "warning" | "critical"
 - title: breve (max 10 parole italiano)
-- description: cosa non va e perché (italiano)
-- current: { "data": "YYYY-MM-DD", "tecnicoId": "TEC_xxx", "clienteId": "CLI_xxx" }
-- proposed: { "tecnicoId": "TEC_yyy" (opzionale), "data": "YYYY-MM-DD" (opzionale), "reasoning": "spiegazione" }
+- description: cosa non va e perché (italiano). Per geography INCLUDI distanza stimata km dalla base.
+- current: { "data": "YYYY-MM-DD", "tecnicoId": "TEC_xxx", "clienteId": "CLI_xxx" } — USA gli ID ESATTI dal piano sotto
+- proposed: { "tecnicoId": "TEC_yyy" (opzionale), "data": "YYYY-MM-DD" (opzionale), "reasoning": "spiegazione con km/distanza se rilevante" }
 - confidence: 0.0-1.0
 
-TECNICI DISPONIBILI:
+TECNICI DISPONIBILI (con base e ruolo):
 ${tecniciCtx}
 
-REGOLE TEAM:
-- Junior (Emanuele, Gino, Giuseppe) devono lavorare con un Senior (Jacopo, Anton, Giovanni)
-- Fabio lavora solo
-- I tecnici hanno basi geografiche — preferire interventi vicini alla base
+REGOLE TEAM (IMPORTANTI):
+- JUNIOR (Emanuele Guerzoni, Gino, Giuseppe Falcone, Fabrizio): devono SEMPRE lavorare affiancati a un SENIOR
+- SENIOR (Jacopo Bonadé, Anton, Giovanni Fari): possono lavorare da soli
+- Fabio Modarelli: lavora SOLO, meglio non accoppiarlo
+- JUNIOR NON fanno reperibilità — MAI. Non segnalare violazioni di reperibilità per junior.
+- REPERIBILITÀ: il tecnico in reperibilità NON deve avere tagliandi/interventi programmati in quei giorni (vale solo per senior/caposquadra)
+
+REPERIBILITÀ ATTIVE NEL MESE:
+${repCtx || '(Nessuna reperibilità nel periodo)'}
+
+DISTRIBUZIONE CARICO ATTUALE:
+${workloadCtx}
+
+CLIENTI E LOCALITÀ:
+${clientiGeoCtx.substring(0, 2000)}
 
 PIANO DETERMINISTICO (${decoded.length} interventi):
 ${pianoCompatto}
