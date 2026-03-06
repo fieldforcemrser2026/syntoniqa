@@ -176,6 +176,9 @@ function secureId(prefix) {
 
 // ============ PostgREST SANITIZER (CRIT-01: prevent filter injection) ============
 
+const DEFAULT_TENANT = '785d94d0-b947-4a00-9c4e-3b67833e7045';
+function tid(env) { return env.TENANT_ID || DEFAULT_TENANT; }
+
 function sanitizePgFilter(input) {
   if (!input || typeof input !== 'string') return '';
   // Remove PostgREST special chars that could break filter syntax
@@ -700,8 +703,8 @@ async function handleGet(action, url, env, auth = {}) {
         sb(env, 'reperibilita',       'GET', null, `?select=*&obsoleto=eq.false&order=data_inizio.desc&limit=200${tecFilter}`),
         sb(env, 'trasferte',          'GET', null, `?select=*&obsoleto=eq.false&order=data_inizio.desc&limit=100${tecFilter}`),
         sb(env, 'notifiche',          'GET', null, isTecnico ? `?select=*&obsoleto=eq.false&destinatario_id=eq.${reqUserId}&order=data_invio.desc&limit=100` : '?select=*&obsoleto=eq.false&order=data_invio.desc&limit=200'),
-        sb(env, 'richieste',          'GET', null, `?select=*&tenant_id=eq.${env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'}&order=data_richiesta.desc&limit=500`).catch(()=>[]),
-        sb(env, 'installazioni',      'GET', null, `?select=*&obsoleto=eq.false&tenant_id=eq.${env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'}`),
+        sb(env, 'richieste',          'GET', null, `?select=*&tenant_id=eq.${tid(env)}&order=data_richiesta.desc&limit=500`).catch(()=>[]),
+        sb(env, 'installazioni',      'GET', null, `?select=*&obsoleto=eq.false&tenant_id=eq.${tid(env)}`),
         sb(env, 'pagellini',          'GET', null, isTecnico ? `?select=*&obsoleto=eq.false&tecnico_id=eq.${reqUserId}&order=data_creazione.desc` : '?select=*&obsoleto=eq.false&order=data_creazione.desc'),
         sb(env, 'automezzi',          'GET', null, '?select=*&obsoleto=eq.false'),
         sb(env, 'tipi_intervento',    'GET', null, '?select=*&attivo=eq.true'),
@@ -814,12 +817,8 @@ async function handleGet(action, url, env, auth = {}) {
     }
 
     case 'exportPowerBI': {
-      // SECURITY: solo admin
-      const pbiUser = url.searchParams.get('userId') || '';
-      if (pbiUser) {
-        const pbiCaller = await sb(env, 'utenti', 'GET', null, `?id=eq.${pbiUser}&select=ruolo`).catch(()=>[]);
-        if (pbiCaller?.[0]?.ruolo !== 'admin') return err('Solo admin può esportare PowerBI', 403);
-      }
+      // SECURITY: solo admin — usa auth dal JWT, non dal query param
+      if (auth.role !== 'admin') return err('Solo admin può esportare PowerBI', 403);
       // FIX SCALA-05: Power BI usa sbPaginate() per export COMPLETO oltre 1000 record.
       // piano e urgenze possono crescere indefinitamente — sbPaginate() itera in batch da 1000.
       const _safeArrKPI = (r) => r.status === 'fulfilled' ? (Array.isArray(r.value) ? r.value : []) : [];
@@ -849,7 +848,7 @@ async function handleGet(action, url, env, auth = {}) {
 
 async function handlePost(action, body, env) {
   // Wrapper per log workflow automatico
-  const TENANT = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+  const TENANT = tid(env);  // cached per handlePost scope
   async function wlog(entityType, entityId, action, userId, note = '') {
     await sb(env, 'workflow_log', 'POST', {
       id: secureId('WL'),
@@ -995,7 +994,7 @@ async function handlePost(action, body, env) {
       // Writable: id,tenant_id,tecnico_id,cliente_id,macchina_id,automezzo_id,tipo_intervento_id,data,ora_inizio,ora_fine,stato,note,data_fine
       const row = {
         id,
-        tenant_id: fields.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
+        tenant_id: fields.tenant_id || tid(env),
         tecnico_id: fields.tecnico_id || null,
         cliente_id: fields.cliente_id || null,
         macchina_id: resolvedMacPiano || null,
@@ -1129,7 +1128,7 @@ async function handlePost(action, body, env) {
       const urgWritable = ['tenant_id','cliente_id','macchina_id','problema','priorita_id','stato','tecnico_assegnato','tecnici_ids','automezzo_id','data_segnalazione','data_assegnazione','data_prevista','ora_prevista','data_inizio','data_risoluzione','intervento_id','note','allegati_ids','sla_scadenza','sla_status'];
       const row = { id };
       for (const k of urgWritable) { if (fields[k] !== undefined) row[k] = fields[k]; }
-      row.tenant_id = row.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+      row.tenant_id = row.tenant_id || tid(env);
       row.stato = row.stato || 'aperta'; row.sla_scadenza = slaScadenza; row.sla_status = 'ok'; row.data_segnalazione = row.data_segnalazione || new Date().toISOString();
       const result = await sb(env, 'urgenze', 'POST', row);
       await wlog('urgenza', id, 'created', body.operatoreId || body.userId);
@@ -1226,7 +1225,7 @@ async function handlePost(action, body, env) {
           testo: `Urgenza ${id}: ${prob.substring(0,80)}${cliName?' · '+cliName:''}`,
           destinatario_id: tecId, stato: 'inviata', priorita: 'alta',
           riferimento_id: id, riferimento_tipo: 'urgenza',
-          tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
+          tenant_id: tid(env)
         }).catch(e=>console.error('[SYNC]',e.message));
         // Telegram privato al tecnico
         await notifyTecnicoTG(env, tecId, `🚨 <b>URGENZA ASSEGNATA A TE</b>\n📋 ${prob.substring(0,100)}\n🏢 ${cliName||'—'}\n📅 ${dataPrev||'ASAP'} ${oraPrev||''}\n\n<i>Apri l'app per iniziare</i>`);
@@ -1260,7 +1259,7 @@ async function handlePost(action, body, env) {
           testo: `${tecName} ha rifiutato urgenza ${id}: ${motivo}`,
           destinatario_id: a.id, stato: 'inviata', priorita: 'alta',
           riferimento_id: id, riferimento_tipo: 'urgenza',
-          tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
+          tenant_id: tid(env)
         }).catch(e=>console.error('[SYNC]',e.message));
       }
       // Chat + Telegram
@@ -1342,7 +1341,7 @@ async function handlePost(action, body, env) {
             testo: `Urgenza ${id} è stata risolta dal tecnico`,
             destinatario_id: a.id, stato: 'inviata', priorita: 'normale',
             riferimento_id: id, riferimento_tipo: 'urgenza',
-            tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
+            tenant_id: tid(env)
           }).catch(e=>console.error('[SYNC]',e.message));
         }
       } catch(e){}
@@ -1382,7 +1381,7 @@ async function handlePost(action, body, env) {
       // Only send writable columns: id,tenant_id,cliente_id,codice,descrizione,stato,quantita,data_ordine,data_richiesta,note,tecnico_id
       const row = {
         id,
-        tenant_id: fields.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
+        tenant_id: fields.tenant_id || tid(env),
         cliente_id: fields.cliente_id || null,
         codice: fields.codice || null,
         descrizione: fields.descrizione || fields.note || fields.codice || 'Ordine ricambio',
@@ -1423,7 +1422,7 @@ async function handlePost(action, body, env) {
             testo: `Il tuo ordine ${ord[0].codice || id} (${(ord[0].descrizione || '').substring(0, 50)}) è stato aggiornato: ${labels[stato] || stato}`,
             destinatario_id: ord[0].tecnico_id, stato: 'inviata', priorita: 'normale',
             riferimento_id: id, riferimento_tipo: 'ordine',
-            tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
+            tenant_id: tid(env)
           }).catch(e=>console.error('[SYNC]',e.message));
         }
       } catch(e){}
@@ -1692,7 +1691,7 @@ async function handlePost(action, body, env) {
       // Writable: id,tenant_id,cliente_id,macchina_id,stato,data_inizio,note,obsoleto
       const row = {
         id,
-        tenant_id: fields.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
+        tenant_id: fields.tenant_id || tid(env),
         cliente_id: fields.cliente_id || null,
         macchina_id: fields.macchina_id || null,
         stato: 'pianificata',
@@ -1770,7 +1769,7 @@ async function handlePost(action, body, env) {
       // Writable: id,tenant_id,cliente_id,tecnico_id,automezzo_id,motivo,stato,note,data_inizio,obsoleto
       const row = {
         id,
-        tenant_id: fields.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
+        tenant_id: fields.tenant_id || tid(env),
         cliente_id: fields.cliente_id || null,
         tecnico_id: fields.tecnico_id || fields.tecnici_ids?.[0] || null,
         automezzo_id: fields.automezzo_id || null,
@@ -1816,7 +1815,7 @@ async function handlePost(action, body, env) {
       const testo = fields.messaggio || fields.testo || fields.contenuto || '';
       const oggetto = fields.oggetto || fields.titolo || null;
       const priorita = fields.priorita || 'normale';
-      const row = { id, tenant_id: fields.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045', tipo: fields.tipo || 'info', oggetto, testo, priorita, stato: fields.stato || 'inviata', mittente_id: fields.mittente_id || null, destinatario_id: fields.destinatario_id || null, destinatari_ids: fields.destinatari_ids || null, riferimento_id: fields.riferimento_id || null, riferimento_tipo: fields.riferimento_tipo || null, data_invio: new Date().toISOString() };
+      const row = { id, tenant_id: fields.tenant_id || tid(env), tipo: fields.tipo || 'info', oggetto, testo, priorita, stato: fields.stato || 'inviata', mittente_id: fields.mittente_id || null, destinatario_id: fields.destinatario_id || null, destinatari_ids: fields.destinatari_ids || null, riferimento_id: fields.riferimento_id || null, riferimento_tipo: fields.riferimento_tipo || null, data_invio: new Date().toISOString() };
       const result = await sb(env, 'notifiche', 'POST', row);
       return ok({ notifica: result?.[0] ? pascalizeRecord(result[0]) : { id } });
     }
@@ -1857,7 +1856,7 @@ async function handlePost(action, body, env) {
       // Writable: id,tenant_id,tipo,stato,data_richiesta,data_risposta,tecnico_id,motivo,data_inizio,data_fine,note_admin,obsoleto
       const row = {
         id,
-        tenant_id: fields.tenant_id || env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
+        tenant_id: fields.tenant_id || tid(env),
         tipo: fields.tipo || 'generico',
         stato: 'in_attesa',
         motivo: fields.motivo || fields.testo || fields.messaggio || fields.descrizione || '',
@@ -1910,7 +1909,7 @@ async function handlePost(action, body, env) {
             const tipoLabel = { ferie:'Ferie', permesso:'Permesso', malattia:'Malattia', cambio_turno:'Cambio Turno', generico:'Generico' }[ric.tipo] || ric.tipo;
             const notId = secureId('NOT');
             await sb(env, 'notifiche', 'POST', {
-              id: notId, tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
+              id: notId, tenant_id: tid(env),
               tipo: 'richiesta_risposta',
               oggetto: `${esito}: ${tipoLabel} dal ${ric.data_inizio||'?'} al ${ric.data_fine||'?'}`,
               testo: `La tua richiesta di ${tipoLabel} è stata ${updates.stato}. ${updates.note_admin ? 'Note: ' + updates.note_admin : ''}`,
@@ -2621,7 +2620,7 @@ async function handlePost(action, body, env) {
       const pvMese = body.mese_target || '';
       if (!pvMese) return err('mese_target richiesto');
       const pvStart = `${pvMese}-01`, pvEnd = `${pvMese}-31`;
-      const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+      const tid = tid(env);
 
       const [pvTecnici, pvRichieste, pvRep, pvTrasf, pvInst, pvPiano, pvUrg, pvMacchine, pvClienti, pvAssets, pvVincoliCfg] = await Promise.all([
         sb(env, 'utenti', 'GET', null, '?attivo=eq.true&obsoleto=eq.false&select=id,nome,cognome,base,ruolo,automezzo_id').catch(()=>[]),
@@ -5968,7 +5967,7 @@ Rispondi SOLO con JSON valido:
             origine: 'ai',
             note: noteParts.join(' — '),
             obsoleto: false,
-            tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
+            tenant_id: tid(env),
             created_at: now,
             updated_at: now
           });
@@ -6018,7 +6017,7 @@ Rispondi SOLO con JSON valido:
             note: noteParts.join(' | ') || row.note_complete || '',
             automezzo_id: row.furgone ? 'FURG_' + row.furgone : null,
             obsoleto: false,
-            tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045',
+            tenant_id: tid(env),
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           });
@@ -6040,7 +6039,7 @@ Rispondi SOLO con JSON valido:
       const { rows } = body;
       if (!rows || !rows.length) return err('rows richiesto (array di oggetti)');
       if (rows.length > 500) return err('Massimo 500 righe');
-      const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+      const tid = tid(env);
       const now = new Date().toISOString();
 
       // Column name mapping (case-insensitive, flexible)
@@ -6105,7 +6104,7 @@ Rispondi SOLO con JSON valido:
       const { rows } = body;
       if (!rows || !rows.length) return err('rows richiesto');
       if (rows.length > 2000) return err('Massimo 2000 righe');
-      const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+      const tid = tid(env);
       const now = new Date().toISOString();
 
       const mapCol = (row, ...keys) => {
@@ -6199,7 +6198,7 @@ Rispondi SOLO con JSON valido:
         '?latitudine=is.null&obsoleto=eq.false&select=id,indirizzo,citta,prov,cap');
 
       // Legge config email per User-Agent (Nominatim ToS richiede contatto)
-      const cfgArr = await sb(env, 'config', 'GET', null, '?tenant_id=eq.' + (env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045') + '&chiave=eq.email_mittente');
+      const cfgArr = await sb(env, 'config', 'GET', null, '?tenant_id=eq.' + (tid(env)) + '&chiave=eq.email_mittente');
       const contactEmail = cfgArr?.[0]?.valore || 'admin@syntoniqa.app';
 
       // Helper: geocoda singolo indirizzo con retry + backoff
@@ -6486,7 +6485,7 @@ Rispondi SOLO con JSON valido:
       await sb(env, 'config', 'POST', {
         chiave: 'vincoli_categories',
         valore: valStr,
-        tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
+        tenant_id: tid(env)
       }).catch(async () => {
         await sb(env, `config?chiave=eq.vincoli_categories`, 'PATCH', { valore: valStr });
       });
@@ -6516,7 +6515,7 @@ Rispondi SOLO con JSON valido:
       await sb(env, 'config', 'POST', {
         chiave: 'planner_rules',
         valore: prVal,
-        tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
+        tenant_id: tid(env)
       }).catch(async () => {
         await sb(env, `config?chiave=eq.planner_rules`, 'PATCH', { valore: prVal });
       });
@@ -7417,7 +7416,7 @@ Rispondi SOLO con JSON valido:
             break;
           }
           const ordId = secureId('ORD_TG');
-          const ordTid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+          const ordTid = tid(env);
           await sb(env, 'ordini', 'POST', { id: ordId, tenant_id: ordTid, tecnico_id: utente?.id || null, codice, descrizione: `${codice} x${qt} - ${cliente}`, quantita: qt, stato: 'richiesto', data_richiesta: new Date().toISOString() });
           reply = `📦 Ordine *${ordId}* creato:\nCodice: \`${codice}\` x${qt}\nCliente: ${cliente}`;
           break;
@@ -7426,7 +7425,7 @@ Rispondi SOLO con JSON valido:
           const desc2 = parts.slice(1).join(' ');
           if (!desc2) { reply = 'Usa: /servepezz [descrizione ricambio]'; break; }
           const spId = secureId('ORD_TG');
-          const spTid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+          const spTid = tid(env);
           await sb(env, 'ordini', 'POST', { id: spId, tenant_id: spTid, tecnico_id: utente?.id || null, descrizione: desc2, stato: 'richiesto', data_richiesta: new Date().toISOString() });
           reply = `📦 Ordine ricambio *${spId}* creato:\n_${desc2}_`;
           break;
@@ -7467,7 +7466,7 @@ Rispondi SOLO con JSON valido:
           const allCli = await sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_interno,nome_account&limit=300').catch(()=>[]);
           const matchCli = allCli.find(c => (c.nome_interno||'').toLowerCase().includes(cliSearch) || (c.nome_account||'').toLowerCase().includes(cliSearch));
           const pId = secureId('INT_TG');
-          const pTid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+          const pTid = tid(env);
           await sb(env, 'piano', 'POST', {
             id: pId, tenant_id: pTid, tecnico_id: utente.id, cliente_id: matchCli?.codice_m3 || null,
             data: dataStr, stato: 'pianificato', tipo_intervento: tipoArg, origine: 'telegram',
@@ -7526,7 +7525,7 @@ Rispondi SOLO con JSON valido:
           const oggi2 = new Date().toISOString().split('T')[0];
           const dispTipo = (parts[1] || 'urgenze').toLowerCase();
           const dispId = secureId('INT_DISP');
-          const dispTid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+          const dispTid = tid(env);
           await sb(env, 'piano', 'POST', {
             id: dispId, tenant_id: dispTid, tecnico_id: utente.id,
             data: oggi2, stato: 'pianificato', tipo_intervento: 'varie',
@@ -7817,7 +7816,7 @@ Rispondi SOLO con JSON valido:
           const now = new Date().toISOString();
           let payload = {}, actionReply = '';
 
-          const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+          const tid = tid(env);
           if (aiResult.tipo === 'urgenza') {
             // Lookup reale macchina in anagrafica_assets (o macchine) per cliente + tipo
             let realMacchinaId = null;
@@ -8024,27 +8023,32 @@ Rispondi SOLO con JSON valido:
 
     case 'getChatCanali': {
       const userId = body.userId || body.user_id || '';
-      // Canali di cui l'utente è membro + canali pubblici
-      const canali = await sb(env, 'chat_canali', 'GET', null, '?attivo=eq.true&order=nome');
-      const membri = userId ? await sb(env, 'chat_membri', 'GET', null, `?utente_id=eq.${userId}&select=canale_id,ultimo_letto`) : [];
+      const tid = tid(env);
+      // Canali di cui l'utente è membro + canali pubblici (con tenant_id)
+      const [canali, membri] = await Promise.all([
+        sb(env, 'chat_canali', 'GET', null, `?attivo=eq.true&tenant_id=eq.${tid}&order=nome`),
+        userId ? sb(env, 'chat_membri', 'GET', null, `?utente_id=eq.${encodeURIComponent(userId)}&select=canale_id,ultimo_letto`) : Promise.resolve([])
+      ]);
       const membroMap = {};
       (membri || []).forEach(m => { membroMap[m.canale_id] = m; });
-      // Per ogni canale, conta messaggi non letti
-      const result = [];
-      for (const c of (canali || [])) {
+      // Batch: conta messaggi non letti per tutti i canali in una sola query
+      const canaleIds = (canali || []).map(c => c.id);
+      const allMsgs = canaleIds.length ? await sb(env, 'chat_messaggi', 'GET', null,
+        `?canale_id=in.(${canaleIds.join(',')})&eliminato=eq.false&select=id,canale_id,created_at`).catch(() => []) : [];
+      const result = (canali || []).map(c => {
         const ultimoLetto = membroMap[c.id]?.ultimo_letto || '1970-01-01';
-        const nonLetti = await sb(env, 'chat_messaggi', 'GET', null,
-          `?canale_id=eq.${c.id}&created_at=gt.${ultimoLetto}&eliminato=eq.false&select=id`).catch(() => []);
-        result.push({ ...pascalizeRecord(c), nonLetti: (nonLetti || []).length, isMembro: !!membroMap[c.id] });
-      }
+        const nonLetti = (allMsgs || []).filter(m => m.canale_id === c.id && m.created_at > ultimoLetto).length;
+        return { ...pascalizeRecord(c), nonLetti, isMembro: !!membroMap[c.id] };
+      });
       return ok({ canali: result });
     }
 
     case 'getChatMessaggi': {
       const { canale_id, limit: lim } = body;
       if (!canale_id) return err('canale_id richiesto');
+      const safeLim = Math.min(parseInt(lim) || 50, 200);
       const messaggi = await sb(env, 'chat_messaggi', 'GET', null,
-        `?canale_id=eq.${canale_id}&eliminato=eq.false&order=created_at.desc&limit=${lim || 50}`);
+        `?canale_id=eq.${encodeURIComponent(canale_id)}&eliminato=eq.false&order=created_at.desc&limit=${safeLim}`);
       // Segna come letto
       const userId = body.userId || body.user_id;
       if (userId) {
@@ -8056,8 +8060,9 @@ Rispondi SOLO con JSON valido:
 
     case 'sendChatMessage': {
       const { canale_id, testo, tipo, rispondi_a } = body;
-      const mittente = body.userId || body.user_id || body.mittente_id;
+      const mittente = body._authUserId || body.userId || body.user_id || body.mittente_id;
       if (!canale_id || !testo) return err('canale_id e testo richiesti');
+      if (!mittente) return err('Autenticazione richiesta per inviare messaggi');
       const id = secureId('MSG');
       const msg = { id, canale_id, mittente_id: mittente, testo, tipo: tipo || 'testo', rispondi_a: rispondi_a || null, created_at: new Date().toISOString() };
       const result = await sb(env, 'chat_messaggi', 'POST', msg);
@@ -8122,7 +8127,7 @@ Rispondi SOLO con JSON valido:
               const cliente = parts.slice(3).join(' ') || '';
               if (!codice) { botReply = '📦 Formato: /ordine [codice] [quantità] [cliente]'; break; }
               const ordId = secureId('ORD_APP');
-              const ordTid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+              const ordTid = tid(env);
               await sb(env, 'ordini', 'POST', { id: ordId, tenant_id: ordTid, tecnico_id: mittente, codice, descrizione: `${codice} x${qt}${cliente ? ' - ' + cliente : ''}`, quantita: qt, stato: 'richiesto', data_richiesta: new Date().toISOString() });
               botReply = `📦 Ordine ${ordId} creato: ${codice} x${qt}${cliente ? ' – ' + cliente : ''}`;
               break;
@@ -8556,7 +8561,7 @@ Rispondi SOLO con JSON valido:
 
       // Se non dry_run, crea gli interventi nel piano
       if (!dry_run && scheduled.length) {
-        const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+        const tid = tid(env);
         const now = new Date().toISOString();
         const tagId = await resolveTagliandoId(env); // risolve ID reale da tipi_intervento (o null se non trovato)
         let created = 0, errors = [];
@@ -8962,7 +8967,7 @@ Rispondi SOLO con JSON valido:
       }
 
       const val2 = JSON.stringify(cycleState2);
-      const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+      const tid = tid(env);
       try {
         await sb(env, 'config', 'POST', { chiave: 'pm_cycle_state', valore: val2, tenant_id: tid }, '');
       } catch {
@@ -8981,7 +8986,7 @@ Rispondi SOLO con JSON valido:
       if (!definitions || !Array.isArray(definitions)) return err('definitions array richiesto');
 
       const val3 = JSON.stringify(definitions);
-      const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+      const tid = tid(env);
       try {
         await sb(env, 'config', 'POST', { chiave: 'pm_cycle_definitions', valore: val3, tenant_id: tid }, '');
       } catch {
@@ -9072,7 +9077,7 @@ Rispondi SOLO con JSON valido:
 
       // 8. Salva stato ciclo
       const val4 = JSON.stringify(cs);
-      const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+      const tid = tid(env);
       try {
         await sb(env, 'config', 'POST', { chiave: 'pm_cycle_state', valore: val4, tenant_id: tid }, '');
       } catch {
@@ -9119,7 +9124,7 @@ Rispondi SOLO con JSON valido:
       if (adminErr) return err(adminErr, 403);
 
       const { mesi_avanti = 3 } = body;
-      const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+      const tid = tid(env);
       const now = new Date().toISOString();
       const today2 = now.split('T')[0];
       const endDate2 = addDays(today2, mesi_avanti * 30);
@@ -9778,7 +9783,7 @@ async function checkSLAUrgenze(env) {
                   testo: `Urgenza ${u.id} per ${cliNome}: ${label}! Intervieni subito.`,
                   destinatario_id: u.tecnico_assegnato, stato: 'inviata', priorita: 'urgente',
                   riferimento_id: u.id, riferimento_tipo: 'urgenza',
-                  tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
+                  tenant_id: tid(env)
                 }).catch(() => {});
               }
             }
@@ -9812,7 +9817,7 @@ async function checkSLAUrgenze(env) {
               testo: `Urgenza ${ua.id} assegnata a ${tecName} da ${Math.floor(oreAssegnata)}h, non ancora iniziata! Cliente: ${cliName}`,
               destinatario_id: a.id, stato: 'inviata', priorita: 'urgente',
               riferimento_id: ua.id, riferimento_tipo: 'urgenza',
-              tenant_id: env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045'
+              tenant_id: tid(env)
             }).catch(e=>console.error('[SYNC]',e.message));
           }
           // Sollecita il tecnico via Telegram privato
@@ -9852,7 +9857,7 @@ async function checkPMExpiry(env) {
 
     if (!macchine3.length) { env.DEBUG_LOG && console.log('[CRON] checkPMExpiry: 0 tagliandi critici'); return; }
 
-    const tid = env.TENANT_ID || '785d94d0-b947-4a00-9c4e-3b67833e7045';
+    const tid = tid(env);
     const group = env.TELEGRAM_CHAT_ID || '-5236723213';
     let scaduti = 0, urgenti = 0;
     const tgLines = []; // accumula per riepilogo TG
