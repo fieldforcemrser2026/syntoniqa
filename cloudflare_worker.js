@@ -4872,7 +4872,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         return pianoNoDup;
       }
 
-      // ─── DETERMINISTIC PLAN BUILDER (con matching ZONE GEOGRAFICHE) ───
+      // ─── DETERMINISTIC PLAN BUILDER v2 — zone matching + km minimization + junior pairing ───
       function _buildDeterministicPlan(workDays, tagBacklog, installBacklog) {
         const plan = [];
         let instIdx = 0;
@@ -4885,66 +4885,169 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         const tecAttivi2 = allTecnici.filter(t => (t.ruolo || '').toLowerCase() !== 'admin');
         const seniors2 = tecAttivi2.filter(t => _seniorIds.includes(t.id));
         const juniors2 = tecAttivi2.filter(t => _juniorIds.includes(t.id));
-        // Tecnici "indipendenti" = non junior, non senior (es: tecnico semplice senza affiancamento)
         const indipendenti2 = tecAttivi2.filter(t => !_juniorIds.includes(t.id) && !_seniorIds.includes(t.id));
 
-        // Clienti map per nome leggibile e zona
+        // ── GEOCODING: coordinate città per calcolo distanze km ──
+        const CITY_COORDS = {
+          'piacenza':[44.92,9.85],'fiorenzuola':[44.93,9.92],'cortemaggiore':[44.99,9.93],
+          'parma':[44.80,10.33],'fidenza':[44.87,10.06],'salsomaggiore':[44.82,9.98],
+          'reggio emilia':[44.70,10.63],'reggio nell\'emilia':[44.70,10.63],'correggio':[44.77,10.78],
+          'guastalla':[44.92,10.65],'scandiano':[44.60,10.69],'castelnovo ne\' monti':[44.43,10.40],
+          'modena':[44.65,10.93],'carpi':[44.78,10.88],'sassuolo':[44.54,10.78],
+          'pavullo':[44.34,10.84],'pavullo nel frignano':[44.34,10.84],'vignola':[44.48,11.01],
+          'mirandola':[44.89,11.07],'palagano':[44.32,10.63],'maranello':[44.53,10.86],
+          'bologna':[44.49,11.34],'imola':[44.35,11.71],'san giovanni in persiceto':[44.64,11.19],
+          'casalecchio':[44.47,11.28],'san lazzaro':[44.47,11.40],'zola predosa':[44.49,11.22],
+          'ferrara':[44.84,11.62],'cento':[44.73,11.29],'comacchio':[44.69,12.18],
+          'ravenna':[44.42,12.20],'faenza':[44.29,11.88],'lugo':[44.42,11.91],
+          'forli':[44.22,12.04],'forlì':[44.22,12.04],'cesena':[44.14,12.24],
+          'rimini':[44.06,12.57],'riccione':[44.00,12.66],'cattolica':[43.96,12.74],
+          'mantova':[45.16,10.79],'cremona':[45.13,10.02],'lodi':[45.31,9.50],
+          'brescia':[45.54,10.22],'verona':[45.44,10.99],'rovigo':[45.07,11.79]
+        };
+
+        // Coordinate provincia (centroide approssimativo)
+        const PROV_COORDS = {
+          'pc':[44.92,9.85],'pr':[44.80,10.33],'re':[44.70,10.63],
+          'mo':[44.65,10.93],'bo':[44.49,11.34],'fe':[44.84,11.62],
+          'ra':[44.42,12.20],'fc':[44.18,12.14],'rn':[44.06,12.57],
+          'mn':[45.16,10.79],'cr':[45.13,10.02],'lo':[45.31,9.50]
+        };
+
+        // Mappa città → provincia per Emilia-Romagna
+        const CITY_TO_PROV = {
+          'piacenza':'pc','fiorenzuola':'pc','cortemaggiore':'pc','castel san giovanni':'pc',
+          'parma':'pr','fidenza':'pr','salsomaggiore':'pr','collecchio':'pr','langhirano':'pr',
+          'reggio emilia':'re','correggio':'re','guastalla':'re','scandiano':'re','castelnovo ne\' monti':'re',
+          'modena':'mo','carpi':'mo','sassuolo':'mo','pavullo':'mo','pavullo nel frignano':'mo',
+          'vignola':'mo','mirandola':'mo','palagano':'mo','maranello':'mo',
+          'bologna':'bo','imola':'bo','san giovanni in persiceto':'bo','casalecchio':'bo','san lazzaro':'bo','zola predosa':'bo',
+          'ferrara':'fe','cento':'fe','comacchio':'fe',
+          'ravenna':'ra','faenza':'ra','lugo':'ra',
+          'forli':'fc','forlì':'fc','cesena':'fc','cesenatico':'fc',
+          'rimini':'rn','riccione':'rn','cattolica':'rn',
+          'mantova':'mn','cremona':'cr','lodi':'lo'
+        };
+
+        // Province adiacenti (per matching zona allargata)
+        const PROV_ADJACENT = {
+          'pc':['pr','lo','cr'],'pr':['pc','re','mo','mn','cr'],
+          're':['pr','mo','mn'],'mo':['re','pr','bo','fe','mn'],
+          'bo':['mo','fe','ra','fc'],'fe':['mo','bo','ra','ro','mn'],
+          'ra':['bo','fe','fc'],'fc':['bo','ra','rn'],'rn':['fc'],
+          'mn':['re','mo','fe','cr','vr'],'cr':['pc','pr','mn','lo','bs'],
+          'lo':['pc','cr','mi']
+        };
+
+        // Haversine distance (km)
+        function distKm(lat1, lon1, lat2, lon2) {
+          const R = 6371;
+          const dLat = (lat2 - lat1) * Math.PI / 180;
+          const dLon = (lon2 - lon1) * Math.PI / 180;
+          const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+          return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        }
+
+        // Clienti map per nome leggibile, zona E coordinate
         const cliMap = {};
         (allClienti || []).forEach(c => {
-          if (c.codice_m3) cliMap[c.codice_m3] = {
-            nome: c.nome_interno || c.nome_account || c.codice_m3,
-            citta: (c.citta_fatturazione || '').toLowerCase(),
-            prov: (c.provincia || c.prov || '').toLowerCase()
+          const key = c.codice_m3 || c.id;
+          if (!key) return;
+          const citta = (c.citta_fatturazione || c.citta || '').toLowerCase().trim();
+          const prov = (c.provincia || c.prov || '').toLowerCase().trim();
+          // Ricava provincia dalla città se mancante
+          const inferredProv = prov || CITY_TO_PROV[citta] || '';
+          // Coordinate: usa lat/lng del cliente, oppure inferisci dalla città o dalla provincia
+          let lat = c.latitudine ? parseFloat(c.latitudine) : null;
+          let lng = c.longitudine ? parseFloat(c.longitudine) : null;
+          if (!lat && citta && CITY_COORDS[citta]) { lat = CITY_COORDS[citta][0]; lng = CITY_COORDS[citta][1]; }
+          if (!lat && inferredProv && PROV_COORDS[inferredProv]) { lat = PROV_COORDS[inferredProv][0]; lng = PROV_COORDS[inferredProv][1]; }
+          const entry = {
+            nome: c.nome_interno || c.nome_account || key,
+            citta, prov: inferredProv, lat, lng
           };
+          cliMap[key] = entry;
+          // Doppia indicizzazione: codice_m3 E id (per casi dove clienteId != codice_m3)
+          if (c.id && c.id !== key) cliMap[c.id] = entry;
         });
 
-        // ── ZONA MATCHING: cerca nel backlog un tagliando vicino alla base del tecnico ──
-        // Strategia: cerca prima nella stessa città, poi stessa provincia, poi qualsiasi
-        function pickFromBacklog(tecBase) {
-          const base = (tecBase || '').toLowerCase();
-          if (!base) {
-            // Nessuna base: prendi il più urgente disponibile
-            const idx = backlog.findIndex(b => !usedMachines.has(b.macchina) && !usedMachines.has(b.macchinaLabel));
-            return idx >= 0 ? backlog.splice(idx, 1)[0] : null;
+        // Coordinate base tecnico
+        function getTecCoords(tec) {
+          const base = (tec.base || '').toLowerCase().trim();
+          if (!base) return null;
+          if (CITY_COORDS[base]) return CITY_COORDS[base];
+          // Prova match parziale
+          for (const [city, coords] of Object.entries(CITY_COORDS)) {
+            if (city.includes(base) || base.includes(city)) return coords;
+          }
+          return null;
+        }
+
+        // Provincia del tecnico dalla base
+        function getTecProv(tec) {
+          const base = (tec.base || '').toLowerCase().trim();
+          if (!base) return '';
+          if (CITY_TO_PROV[base]) return CITY_TO_PROV[base];
+          for (const [city, prov] of Object.entries(CITY_TO_PROV)) {
+            if (city.includes(base) || base.includes(city)) return prov;
+          }
+          return '';
+        }
+
+        // ── ZONA MATCHING con km minimization ──
+        // Ritorna il backlog item più vicino al tecnico, privilegiando urgenza + vicinanza
+        function pickFromBacklog(tec) {
+          const tecCoords = getTecCoords(tec);
+          const tecProv = getTecProv(tec);
+          const base = (tec.base || '').toLowerCase().trim();
+          const adjProvs = tecProv ? [tecProv, ...(PROV_ADJACENT[tecProv] || [])] : [];
+
+          // Filtra solo items disponibili
+          const available = [];
+          for (let i = 0; i < backlog.length; i++) {
+            const b = backlog[i];
+            if (usedMachines.has(b.macchina) || usedMachines.has(b.macchinaLabel)) continue;
+            // Calcola distanza
+            const cli = cliMap[b.clienteId];
+            let km = 999;
+            if (tecCoords && cli && cli.lat) {
+              km = distKm(tecCoords[0], tecCoords[1], cli.lat, cli.lng);
+            } else if (base && cli) {
+              // Fallback: match testuale città/provincia
+              if (cli.citta && (cli.citta.includes(base) || base.includes(cli.citta))) km = 5;
+              else if (tecProv && cli.prov === tecProv) km = 30;
+              else if (adjProvs.includes(cli.prov)) km = 60;
+            } else if (!base) {
+              km = 50; // nessuna base: distanza neutra
+            }
+            // Score: priorità urgenza + vicinanza km
+            // giorniScadenza negativo = scaduto (più negativo = più urgente)
+            const urgScore = b.giorniScadenza < 0 ? -b.giorniScadenza * 3 : (b.giorniScadenza < 7 ? 2 : (b.giorniScadenza < 30 ? 1 : 0));
+            const kmScore = km < 20 ? 5 : (km < 40 ? 3 : (km < 70 ? 1 : 0));
+            available.push({ idx: i, b, km, score: urgScore + kmScore });
           }
 
-          // 1. Stessa città (match esatto o contiene)
-          let idx = backlog.findIndex(b => {
-            if (usedMachines.has(b.macchina) || usedMachines.has(b.macchinaLabel)) return false;
-            const bCitta = (b.citta || '').toLowerCase();
-            return bCitta && (bCitta.includes(base) || base.includes(bCitta));
-          });
-          if (idx >= 0) return backlog.splice(idx, 1)[0];
+          if (!available.length) return null;
 
-          // 2. Stessa provincia (match sulla provincia del cliente)
-          idx = backlog.findIndex(b => {
-            if (usedMachines.has(b.macchina) || usedMachines.has(b.macchinaLabel)) return false;
-            const cli = cliMap[b.clienteId];
-            if (!cli) return false;
-            return cli.prov && cli.prov.includes(base.substring(0, 3));
-          });
-          if (idx >= 0) return backlog.splice(idx, 1)[0];
+          // Ordina: score decrescente, poi km crescente
+          available.sort((a, b) => b.score - a.score || a.km - b.km);
 
-          // 3. Cerca nelle prime 30 posizioni (look-ahead limitato per performance)
-          idx = backlog.findIndex((b, i) => {
-            if (i > 30) return false;
-            return !usedMachines.has(b.macchina) && !usedMachines.has(b.macchinaLabel);
-          });
-          if (idx >= 0) return backlog.splice(idx, 1)[0];
-
-          // 4. Fallback: qualsiasi
-          idx = backlog.findIndex(b => !usedMachines.has(b.macchina) && !usedMachines.has(b.macchinaLabel));
-          return idx >= 0 ? backlog.splice(idx, 1)[0] : null;
+          const best = available[0];
+          const spliced = backlog.splice(best.idx, 1)[0];
+          spliced._km = Math.round(best.km);
+          return spliced;
         }
 
         function makeNote(item) {
-          return `${item.macchinaLabel || '?'} | scad:${item.data || '?'}${item.oreLavoro ? ' | ore:' + item.oreLavoro : ''}`;
+          const kmInfo = item._km != null && item._km < 900 ? ` | ~${item._km}km` : '';
+          return `${item.macchinaLabel || '?'} | scad:${item.data || '?'}${item.oreLavoro ? ' | ore:' + item.oreLavoro : ''}${kmInfo}`;
         }
 
         let totalTagUsed = 0;
 
         for (const giorno of workDays) {
           const usedToday = new Set();
+          const pairedSeniorsToday = new Set(); // Track which seniors already have a junior
 
           // A) Installazioni prioritarie
           while (instIdx < installBacklog.length) {
@@ -4976,16 +5079,16 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             else break;
           }
 
-          // B) SENIOR → 1 tagliando nella propria ZONA dal backlog
+          // B) SENIOR → 1 tagliando nella propria ZONA dal backlog (nearest-neighbor)
           for (const tec of seniors2) {
             if (usedToday.has(tec.id)) continue;
             if (_isAbsent(tec.id, giorno) || _isTrasferta(tec.id, giorno) || _isReperibilita(tec.id, giorno)) continue;
 
-            const item = pickFromBacklog(tec.base);
+            const item = pickFromBacklog(tec);
             if (!item) continue;
 
             usedMachines.add(item.macchina);
-            usedMachines.add(item.macchinaLabel);
+            if (item.macchinaLabel) usedMachines.add(item.macchinaLabel);
             totalTagUsed++;
 
             plan.push({
@@ -5000,15 +5103,21 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             usedToday.add(tec.id);
           }
 
-          // C) JUNIOR → affiancati a un senior GIÀ assegnato oggi (STESSO giorno + cliente)
+          // C) JUNIOR → affiancati a un senior GIÀ assegnato oggi
+          //    OGNI junior deve avere un senior DIVERSO (1:1 pairing, no duplicati)
           for (const jr of juniors2) {
             if (usedToday.has(jr.id)) continue;
             if (_isAbsent(jr.id, giorno) || _isReperibilita(jr.id, giorno) || _isTrasferta(jr.id, giorno)) continue;
-            // Trova un senior che è già nel piano oggi
+
+            // Trova un senior assegnato oggi che NON ha già un junior
             const seniorEntry = plan.find(p =>
-              p.data === giorno && _seniorIds.includes(p.tecnicoId) && p.tipo !== 'reperibilita'
+              p.data === giorno &&
+              _seniorIds.includes(p.tecnicoId) &&
+              p.tipo !== 'reperibilita' &&
+              !pairedSeniorsToday.has(p.tecnicoId)
             );
             if (seniorEntry) {
+              pairedSeniorsToday.add(seniorEntry.tecnicoId);
               const srTec = allTecnici.find(t => t.id === seniorEntry.tecnicoId);
               const srName = srTec ? `${srTec.nome} ${srTec.cognome}`.trim() : seniorEntry.tecnicoId;
               plan.push({
@@ -5021,18 +5130,19 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               });
               usedToday.add(jr.id);
             }
+            // Se non c'è un senior libero, il junior resta senza assegnamento oggi
           }
 
-          // D) INDIPENDENTI → tagliando nella propria zona
+          // D) INDIPENDENTI → tagliando nella propria zona (nearest-neighbor)
           for (const tec of indipendenti2) {
             if (usedToday.has(tec.id)) continue;
             if (_isAbsent(tec.id, giorno) || _isTrasferta(tec.id, giorno) || _isReperibilita(tec.id, giorno)) continue;
 
-            const item = pickFromBacklog(tec.base);
+            const item = pickFromBacklog(tec);
             if (!item) continue;
 
             usedMachines.add(item.macchina);
-            usedMachines.add(item.macchinaLabel);
+            if (item.macchinaLabel) usedMachines.add(item.macchinaLabel);
             totalTagUsed++;
 
             plan.push({
@@ -5218,7 +5328,8 @@ ${instructions}`;
           // ═══════════════════════════════════════════════════════
           // ═══ AI REVIEW PHASE (opzionale): OpenAI + Claude ═══
           // ═══════════════════════════════════════════════════════
-          const withReview = vincoli.withReview === true || vincoli.withReview === 'true';
+          // normalizeBody() converte withReview → with_review, quindi check entrambi
+          const withReview = vincoli.withReview === true || vincoli.with_review === true || vincoli.withReview === 'true' || vincoli.with_review === 'true';
 
           if (!withReview) {
             // Senza review: restituisci piano deterministico direttamente
@@ -5246,7 +5357,7 @@ ${instructions}`;
           // Build review context: piano compatto + tecnici + vincoli
           const tecniciCtx = tecAttivi.map(t => `${t.id}|${t.nome} ${t.cognome}|${t.ruolo}|base:${t.base||'?'}|furgone:${t.automezzo_id||'?'}`).join('\n');
           const pianoCompatto = decoded.slice(0, 150).map(p =>
-            `${p.Data||p.data}|${p.TecnicoNome||p.tecnicoId}|${p.ClienteNome||p.clienteId}|${p.Tipo||p.tipo}|${(p.Note||p.note||'').substring(0,60)}`
+            `${p.data||p.Data}|${p.tecnico||p.TecnicoNome||p.tecnicoId}|${p.cliente||p.ClienteNome||p.clienteId}|${p.tipo||p.Tipo}|${(p.note||p.Note||'').substring(0,60)}`
           ).join('\n');
 
           const reviewPrompt = `Sei un esperto di ottimizzazione field service per manutenzione robot Lely (mungitrici, alimentatori, etc.).

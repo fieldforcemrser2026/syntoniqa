@@ -1189,6 +1189,8 @@ Ogni tagliando richiede 2 persone (senior + junior)" style="width:100%;min-heigh
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
 <button class="btn btn-lg btn-ghost-light" onclick="aiGoToStep(1)">← Riconfigura</button>
 <button class="btn btn-lg btn-success" onclick="downloadAIPlanXlsx()" id="btnDownloadPlan" disabled>📥 Scarica Excel</button>
+<label class="btn btn-lg btn-ghost-light" style="cursor:pointer">📤 Ricarica Excel <input type="file" accept=".xlsx,.xls" style="display:none" onchange="reimportEditedPlan(this.files[0]);this.value=''"></label>
+<button class="btn btn-lg btn-ok" id="btnGoApplyDirect" onclick="aiGoDirectToStep4()" disabled>✅ Applica Diretto →</button>
 <button class="btn btn-lg btn-ai" id="btnGoReview" onclick="aiGoToStep(3)" disabled>🤖 AI Review →</button>
 </div>
 </div>
@@ -7609,7 +7611,7 @@ async function aiGenerateWithReview(){
             $('aiDetResult').style.display='';
             _renderDetPlan(ev.data);
             $('btnDownloadPlan').disabled=false;
-            $('btnGoReview').disabled=false;
+            $('btnGoReview').disabled=false;if($('btnGoApplyDirect'))$('btnGoApplyDirect').disabled=false;
             // Auto-advance to Step 3 after 1s
             setTimeout(()=>aiGoToStep(3),800);
           }
@@ -7658,13 +7660,26 @@ async function aiGenerateWithReview(){
             if(AI_SUGGESTIONS.length) $('btnGoApply').disabled=false;
           }
           else if(ev.type==='result'){
-            // Risultato finale
+            // Risultato finale (o fallback se phase_complete non arriva)
             AI_PLAN=ev.data;
+            clearInterval(AI_REVIEW_TIMER);
+
+            // Se il piano non è ancora renderizzato (fallback: phase_complete non ricevuto)
+            if(!AI_DET_PLAN && ev.data?.piano?.length){
+              AI_DET_PLAN=ev.data;
+              $('aiDetProgress').style.display='none';
+              $('aiDetResult').style.display='';
+              _renderDetPlan(ev.data);
+              $('btnDownloadPlan').disabled=false;
+              $('btnGoReview').disabled=false;if($('btnGoApplyDirect'))$('btnGoApplyDirect').disabled=false;
+            }
+
+            // Suggerimenti (se presenti)
             if(ev.data?.suggestions?.length&&!AI_SUGGESTIONS.length){
               AI_SUGGESTIONS=ev.data.suggestions;
               _renderSuggestions(AI_SUGGESTIONS);
+              setTimeout(()=>aiGoToStep(3),500);
             }
-            clearInterval(AI_REVIEW_TIMER);
             $('btnGoApply').disabled=false;
           }
           else if(ev.type==='error'){throw new Error(ev.message);}
@@ -7729,8 +7744,8 @@ function _renderPlanTable(container, piano, compact){
       const tid=p.tecnicoId||p.TecnicoID||p.tecnico||'?';
       if(!tecColors[tid]){tecColors[tid]=palette[ci%palette.length];ci++;}
       const color=tecColors[tid];
-      const tNome=p.TecnicoNome||p.tecnicoNome||tid;
-      const cNome=p.ClienteNome||p.clienteNome||p.clienteId||p.ClienteID||'';
+      const tNome=p.tecnico||p.TecnicoNome||p.tecnicoNome||tid;
+      const cNome=p.cliente||p.ClienteNome||p.clienteNome||p.clienteId||p.ClienteID||'';
       const tipo=p.tipo||p.Tipo||p.TipoIntervento||'tagliando';
       const note=(p.note||p.Note||'').substring(0,compact?40:80);
       const tipoIcon=tipo.includes('install')?'🏗️':tipo.includes('urgenz')?'🚨':tipo.includes('controllo')?'🔍':'🔧';
@@ -7837,6 +7852,15 @@ function _updateSugCounter(){
   if(el)el.textContent=`${AI_ACCEPTED.size} / ${AI_SUGGESTIONS.length} accettati`;
 }
 
+// Applica direttamente senza passare da AI Review (skip Step 3)
+function aiGoDirectToStep4(){
+  const piano=JSON.parse(JSON.stringify(AI_DET_PLAN?.piano||AI_PLAN?.piano||[]));
+  if(!piano.length){toast('Nessun piano generato','warn');return}
+  AI_PLAN={...(AI_DET_PLAN||AI_PLAN), piano, _modified:new Set(), _accepted:[], _rejected:[]};
+  aiGoToStep(4);
+  _renderFinalStep(piano, [], [], new Set());
+}
+
 function aiApplyAndGoStep4(){
   // Apply accepted suggestions to plan
   const piano=JSON.parse(JSON.stringify(AI_DET_PLAN?.piano||AI_PLAN?.piano||[]));
@@ -7929,8 +7953,8 @@ function _renderFinalPlanTable(container, piano, modifiedRows){
       const tid=p.tecnicoId||p.TecnicoID||'?';
       if(!tecColors[tid]){tecColors[tid]=palette[ci%palette.length];ci++;}
       const color=tecColors[tid];
-      const tNome=p.TecnicoNome||p.tecnicoNome||tid;
-      const cNome=p.ClienteNome||p.clienteNome||p.clienteId||'';
+      const tNome=p.tecnico||p.TecnicoNome||p.tecnicoNome||tid;
+      const cNome=p.cliente||p.ClienteNome||p.clienteNome||p.clienteId||'';
       const note=(p.note||p.Note||'').substring(0,80);
       const isModified=modifiedRows.has(p._origIdx);
       const tipo=p.tipo||p.Tipo||'tagliando';
@@ -7948,11 +7972,24 @@ function _renderFinalPlanTable(container, piano, modifiedRows){
   container.innerHTML=html||'<p style="color:rgba(255,255,255,.4);text-align:center;padding:20px">Nessun intervento</p>';
 }
 
-function aiApplyToSystem(){
+async function aiApplyToSystem(){
   if(!AI_PLAN?.piano?.length){toast('Nessun piano da applicare','err');return;}
-  // Reuse existing apply logic
-  if(typeof applyAIPlanToSystem==='function'){applyAIPlanToSystem();return;}
-  toast('Piano pronto per il download. Usa "Scarica Excel" per esportarlo.','ok');
+  // Usa la funzione applyAI esistente che salva nel DB
+  try{
+    toast('Applicazione piano al sistema in corso...','warn');
+    const payload={action:'applyAIPlan',userId:USER?.ID||'',piano:AI_PLAN};
+    const resp=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(JWT_TOKEN||API_TOKEN)},
+      body:JSON.stringify(payload),signal:AbortSignal.timeout(120000)});
+    const j=await resp.json();
+    if(!j.success)throw new Error(j.error||'Errore applicazione');
+    const result=j.data||j;
+    toast(`✅ Piano applicato: ${result.created||result.inserted||AI_PLAN.piano.length} interventi salvati nel sistema!`,'ok');
+    // Refresh dati
+    if(typeof loadAll==='function')await loadAll();
+  }catch(e){
+    console.error('aiApplyToSystem error:',e);
+    toast('Errore: '+e.message,'err');
+  }
 }
 
 // ═══ STEP 3: BUILD PROMPT & EDITOR ═══
@@ -8855,6 +8892,124 @@ async function downloadAIPlanXlsx(){
 
   XLSX.writeFile(wb,'Piano_AI_'+new Date().toISOString().slice(0,10)+'.xlsx');
   toast('Piano Excel scaricato!','ok');
+}
+
+// ── RE-IMPORT: ricarica piano Excel modificato, auto-fill campi mancanti ──
+async function reimportEditedPlan(file){
+  if(!file)return;
+  toast('Parsing Excel modificato...','info');
+  // Load SheetJS
+  if(typeof XLSX==='undefined'){
+    await new Promise((r,j)=>{const s=document.createElement('script');s.onload=r;s.onerror=()=>j(new Error('Lib Excel'));s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';document.head.appendChild(s)});
+  }
+  if(!window.XLSX){toast('Errore caricamento libreria Excel','err');return}
+
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array',cellDates:false});
+    // Prendi il primo foglio (Piano Generato)
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rawRows=XLSX.utils.sheet_to_json(ws,{defval:''});
+
+    if(!rawRows.length){toast('Foglio vuoto','warn');return}
+
+    // Mappa tecnici: nome → oggetto {ID, AutomezzoID}
+    const tecByName={};
+    const tecById={};
+    (DATA.utenti||[]).forEach(u=>{
+      const full=`${u.Nome||''} ${u.Cognome||''}`.trim().toLowerCase();
+      const obj={id:u.ID,nome:`${u.Nome||''} ${u.Cognome||''}`.trim(),furgone:u.AutomezzoID||''};
+      if(full)tecByName[full]=obj;
+      if(u.Nome)tecByName[u.Nome.toLowerCase()]=obj;
+      if(u.Cognome)tecByName[u.Cognome.toLowerCase()]=obj;
+      if(u.ID)tecById[u.ID]=obj;
+    });
+
+    // Mappa clienti: nome → {codice_m3}
+    const cliByName={};
+    const cliById={};
+    (DATA.clienti||[]).forEach(c=>{
+      const nm=(c.NomeInterno||c.NomeAccount||'').toLowerCase().trim();
+      const obj={id:c.CodiceM3||c.ID,nome:c.NomeInterno||c.NomeAccount||c.CodiceM3||''};
+      if(nm)cliByName[nm]=obj;
+      if(c.CodiceM3)cliById[c.CodiceM3]=obj;
+      if(c.ID)cliById[c.ID]=obj;
+    });
+
+    // Risolvi nome→ID con fuzzy match
+    function matchTec(name){
+      if(!name)return null;
+      const n=String(name).toLowerCase().trim();
+      if(tecByName[n])return tecByName[n];
+      // Fuzzy: cerca cognome
+      for(const[k,v]of Object.entries(tecByName)){
+        if(k.includes(n)||n.includes(k))return v;
+      }
+      // Match per ID diretto
+      if(tecById[name])return tecById[name];
+      return null;
+    }
+    function matchCli(name){
+      if(!name)return null;
+      const n=String(name).toLowerCase().trim();
+      if(cliByName[n])return cliByName[n];
+      for(const[k,v]of Object.entries(cliByName)){
+        if(k.includes(n)||n.includes(k))return v;
+      }
+      if(cliById[name])return cliById[name];
+      return null;
+    }
+
+    // Parse righe Excel → piano[]
+    const piano=[];
+    let unmatched=0;
+    for(const row of rawRows){
+      const data=row['Data']||row['data']||'';
+      if(!data||typeof data!=='string'||!data.match(/^\d{4}-\d{2}/))continue; // skip empty/separator
+      const tecName=row['Tecnico']||row['tecnico']||'';
+      const cliName=row['Cliente']||row['cliente']||'';
+      const tec=matchTec(tecName);
+      const cli=matchCli(cliName);
+      if(!tec)unmatched++;
+
+      piano.push({
+        data:data.substring(0,10),
+        tecnicoId:tec?.id||'',
+        tecnico:tec?.nome||tecName,
+        clienteId:cli?.id||'',
+        cliente:cli?.nome||cliName,
+        tipo:row['Tipo Intervento']||row['tipo']||'tagliando',
+        oraInizio:row['Ora Inizio']||row['oraInizio']||'08:00',
+        durataOre:parseFloat(row['Durata (h)']||row['durataOre'])||6,
+        furgone:tec?.furgone||row['Furgone']||row['furgone']||'',
+        note:row['Note']||row['note']||''
+      });
+    }
+
+    if(!piano.length){toast('Nessuna riga valida trovata nel file','warn');return}
+
+    // Aggiorna AI_PLAN con il piano reimportato
+    AI_PLAN={
+      summary:`Piano reimportato da Excel: ${piano.length} interventi${unmatched?' ('+unmatched+' tecnici non riconosciuti)':''}`,
+      piano:piano,
+      warnings:unmatched?[`⚠️ ${unmatched} righe con tecnico non riconosciuto — verifica nomi`]:[],
+      engine_used:'excel_import'
+    };
+    AI_DET_PLAN=AI_PLAN;
+
+    // Rendi visibile Step 2 con il piano reimportato
+    $('aiDetProgress').style.display='none';
+    $('aiDetResult').style.display='';
+    _renderDetPlan(AI_PLAN);
+    $('btnDownloadPlan').disabled=false;
+    $('btnGoReview').disabled=false;if($('btnGoApplyDirect'))$('btnGoApplyDirect').disabled=false;
+    aiGoToStep(2);
+
+    toast(`✅ Piano reimportato: ${piano.length} righe${unmatched?', '+unmatched+' non matchati':''}. Puoi procedere con AI Review o applicare direttamente.`,'ok');
+  }catch(e){
+    console.error('reimportEditedPlan error:',e);
+    toast('Errore parsing Excel: '+e.message,'err');
+  }
 }
 
 async function applyAI(forceOverwrite){
