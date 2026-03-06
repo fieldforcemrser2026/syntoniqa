@@ -3661,10 +3661,25 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
       // ── ENGINE PREMIUM: Anthropic Claude, OpenAI GPT-4o, Gemini 2.5 Pro ──
 
+      // Helper: fetch con timeout individuale (evita che un engine lento blocchi tutta la race)
+      async function fetchWithTimeout(url, opts, timeoutMs = 20000) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const res = await fetch(url, { ...opts, signal: controller.signal });
+          clearTimeout(timer);
+          return res;
+        } catch(e) {
+          clearTimeout(timer);
+          throw e;
+        }
+      }
+
       async function tryAnthropic(promptText) {
         try {
-          // Claude Sonnet 4.6 — Anthropic Messages API (formato diverso da OpenAI)
-          const res = await fetch('https://api.anthropic.com/v1/messages', {
+          // Claude Sonnet 4.5 — Anthropic Messages API
+          sse({type:'engine_debug', engine:'anthropic', status:'calling', reason:'Calling Anthropic API...'});
+          const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -3673,61 +3688,68 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             },
             body: JSON.stringify({
               model: 'claude-sonnet-4-5-20250929',
-              max_tokens: 16384,
+              max_tokens: 8192,
               temperature: 0.3,
               system: sysPrompt,
               messages: [{ role: 'user', content: promptText }]
             })
-          });
+          }, 22000);
+          sse({type:'engine_debug', engine:'anthropic', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
             sse({type:'engine_debug', engine:'anthropic', status:res.status, reason:'rate_limit_or_auth'});
             engines.anthropic.disabled = true; return null;
           }
           if (!res.ok) {
             const errBody = await res.text().catch(()=>'');
-            sse({type:'engine_debug', engine:'anthropic', status:res.status, reason:errBody.substring(0,200)});
+            sse({type:'engine_debug', engine:'anthropic', status:res.status, reason:errBody.substring(0,300)});
             return null;
           }
           const d = await res.json();
-          // Anthropic: d.content[0].text (può essere tipo "text" o "tool_use")
           const textBlock = (d.content || []).find(b => b.type === 'text');
           const text = textBlock?.text || null;
-          if (!text) sse({type:'engine_debug', engine:'anthropic', status:200, reason:'empty_response'});
+          if (!text) sse({type:'engine_debug', engine:'anthropic', status:200, reason:'empty_response', raw:JSON.stringify(d).substring(0,200)});
+          else sse({type:'engine_debug', engine:'anthropic', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          sse({type:'engine_debug', engine:'anthropic', status:'exception', reason:e.message||'unknown'});
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 22s' : (e.message||'unknown');
+          sse({type:'engine_debug', engine:'anthropic', status:'exception', reason});
           return null;
         }
       }
 
       async function tryOpenAI(promptText) {
         try {
-          // GPT-4o — OpenAI Chat Completions (formato standard)
-          const res = await fetch('https://api.openai.com/v1/chat/completions', {
+          // GPT-4o — OpenAI Chat Completions
+          sse({type:'engine_debug', engine:'openai', status:'calling', reason:'Calling OpenAI API...'});
+          const res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.OPENAI_KEY}` },
             body: JSON.stringify({
               model: 'gpt-4o',
               messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: promptText }],
-              max_tokens: 16384, temperature: 0.3,
+              max_tokens: 8192, temperature: 0.3,
               response_format: { type: 'json_object' }
             })
-          });
+          }, 22000);
+          sse({type:'engine_debug', engine:'openai', status:'response', reason:`HTTP ${res.status}`});
           if (res.status === 429 || res.status === 401 || res.status === 403) {
-            sse({type:'engine_debug', engine:'openai', status:res.status, reason:'rate_limit_or_auth'});
+            const errBody = await res.text().catch(()=>'');
+            sse({type:'engine_debug', engine:'openai', status:res.status, reason:`rate_limit_or_auth: ${errBody.substring(0,200)}`});
             engines.openai.disabled = true; return null;
           }
           if (!res.ok) {
             const errBody = await res.text().catch(()=>'');
-            sse({type:'engine_debug', engine:'openai', status:res.status, reason:errBody.substring(0,200)});
+            sse({type:'engine_debug', engine:'openai', status:res.status, reason:errBody.substring(0,300)});
             return null;
           }
           const d = await res.json();
           const text = d.choices?.[0]?.message?.content || null;
           if (!text) sse({type:'engine_debug', engine:'openai', status:200, reason:'empty_response'});
+          else sse({type:'engine_debug', engine:'openai', status:'ok', reason:`${text.length} chars received`});
           return text;
         } catch(e) {
-          sse({type:'engine_debug', engine:'openai', status:'exception', reason:e.message||'unknown'});
+          const reason = e.name === 'AbortError' ? 'TIMEOUT 22s' : (e.message||'unknown');
+          sse({type:'engine_debug', engine:'openai', status:'exception', reason});
           return null;
         }
       }
