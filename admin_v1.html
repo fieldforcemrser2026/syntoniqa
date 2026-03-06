@@ -7910,8 +7910,9 @@ async function runAI(promptOverride){
       lane.classList.add('winner');lane.classList.remove('active','failed');
       if(track)track.style.width='100%';
       if(car)car.style.left='calc(100% - 140px)';
-      if(label){label.textContent='VINCITORE!';label.style.color='#4ade80';label.style.fontWeight='700';}
-      if(timeEl){timeEl.textContent=elapsed;timeEl.style.color='#4ade80';timeEl.style.fontWeight='700';timeEl.style.fontSize='.85rem';}
+      // In consensus mode: tutti i contributor sono "winner" → mostra "Contributore ✓"
+      if(label){label.textContent='✓ Contributore';label.style.color='#818CF8';label.style.fontWeight='700';}
+      if(timeEl){timeEl.textContent=elapsed;timeEl.style.color='#818CF8';timeEl.style.fontWeight='700';timeEl.style.fontSize='.85rem';}
     } else if(status==='failed'){
       const elapsed=_engTimes[engine]?((Date.now()-_engTimes[engine])/1000).toFixed(1)+'s':'?';
       lane.classList.add('failed');lane.classList.remove('active','winner');
@@ -7987,28 +7988,53 @@ async function runAI(promptOverride){
           }
           else if(ev.type==='moa_start'){
             const pt=document.getElementById('aiProgressText');
-            if(pt)pt.innerHTML=`🏎️ <b>Race Parallela</b> — ${ev.engines.map(e=>'<span style="color:'+(_engLabels[e]?.color||'#fff')+'">'+(_engLabels[e]?.name||e)+'</span>').join(' vs ')}`;
-            const rs=document.getElementById('raceStatus');if(rs){rs.textContent='GARA IN CORSO!';rs.style.color='#818CF8';rs.style.fontWeight='700';}
+            const modeLabel = ev.mode === 'consensus' ? '🧠 Brainstorming AI' : '🏎️ Race Parallela';
+            if(pt)pt.innerHTML=`${modeLabel} — ${ev.engines.map(e=>'<span style="color:'+(_engLabels[e]?.color||'#fff')+'">'+(_engLabels[e]?.name||e)+'</span>').join(' + ')}`;
+            const rs=document.getElementById('raceStatus');if(rs){rs.textContent=ev.mode==='consensus'?'BRAINSTORMING...':'GARA IN CORSO!';rs.style.color='#818CF8';rs.style.fontWeight='700';}
           }
           else if(ev.type==='moa_result'){
             const pt=document.getElementById('aiProgressText');
-            const i=_engLabels[ev.winner];
+            const isConsensus = ev.mode === 'consensus';
+            const ms = ev.mergeStats;
             if(pt&&ev.winner){
-              pt.innerHTML=`🏆 <span style="color:${i?.color||'#4ade80'};font-weight:700">${i?.name||ev.winner}</span> vince la gara! Score: ${Math.round(ev.bestScore*10)/10}`;
+              if(isConsensus && ev.winner.startsWith('consensus(')){
+                // Mostra nomi engine contribuenti
+                const engNames = ev.winner.replace('consensus(','').replace(')','').split('+');
+                const labels = engNames.map(e => `<span style="color:${_engLabels[e]?.color||'#4ade80'}">${_engLabels[e]?.name||e}</span>`).join(' + ');
+                pt.innerHTML=`🧠 <b>Merge completato</b> — ${labels} → Score: ${Math.round(ev.bestScore*10)/10}`;
+              } else {
+                const i=_engLabels[ev.winner];
+                pt.innerHTML=`🏆 <span style="color:${i?.color||'#4ade80'};font-weight:700">${i?.name||ev.winner}</span> — Score: ${Math.round(ev.bestScore*10)/10}`;
+              }
             }
-            // Show winner banner
+            // Show result banner
             const banner=document.getElementById('raceWinnerBanner');
-            if(banner&&ev.winner){
+            if(banner){
               banner.style.display='block';
-              const elapsed=_engTimes[ev.winner]?((Date.now()-_engTimes[ev.winner])/1000).toFixed(1)+'s':'?';
-              banner.innerHTML=`<div style="font-size:2rem;margin-bottom:4px">🏆</div>
-                <div style="font-size:1.1rem;font-weight:700;color:#4ade80">
-                  <img src="${i?.logo||''}" style="width:24px;height:24px;vertical-align:middle;margin-right:6px;border-radius:4px">
-                  ${i?.name||ev.winner} vince in ${elapsed}!
-                </div>
-                <div style="font-size:.78rem;color:rgba(255,255,255,.5);margin-top:4px">Score qualità: ${Math.round(ev.bestScore*10)/10} — Piano pronto per la revisione</div>`;
+              if(isConsensus && ms){
+                banner.innerHTML=`<div style="font-size:2rem;margin-bottom:4px">🧠</div>
+                  <div style="font-size:1.1rem;font-weight:700;color:#818CF8">
+                    Constraint Merge — ${ev.candidates} engine
+                  </div>
+                  <div style="display:flex;gap:12px;justify-content:center;margin-top:8px;flex-wrap:wrap">
+                    <div style="text-align:center"><div style="font-size:1.4rem;font-weight:700;color:#4ade80">${ms.constraintWins||0}</div><div style="font-size:.6rem;color:rgba(255,255,255,.4)">Vincoli OK</div></div>
+                    <div style="text-align:center"><div style="font-size:1.4rem;font-weight:700;color:#60a5fa">${ms.enrichedSlots||0}</div><div style="font-size:.6rem;color:rgba(255,255,255,.4)">Arricchiti</div></div>
+                    <div style="text-align:center"><div style="font-size:1.4rem;font-weight:700;color:#F59E0B">${ms.totalViolations||0}</div><div style="font-size:.6rem;color:rgba(255,255,255,.4)">Violazioni risolte</div></div>
+                    <div style="text-align:center"><div style="font-size:1.4rem;font-weight:700;color:#e879f9">${Math.round(ev.bestScore*10)/10}</div><div style="font-size:.6rem;color:rgba(255,255,255,.4)">Score finale</div></div>
+                  </div>
+                  <div style="font-size:.7rem;color:rgba(255,255,255,.4);margin-top:6px">Ogni assegnazione scelta per aderenza ai vincoli, non per voto democratico</div>`;
+              } else {
+                const i=_engLabels[ev.winner];
+                const elapsed=_engTimes[ev.winner]?((Date.now()-_engTimes[ev.winner])/1000).toFixed(1)+'s':'?';
+                banner.innerHTML=`<div style="font-size:2rem;margin-bottom:4px">🏆</div>
+                  <div style="font-size:1.1rem;font-weight:700;color:#4ade80">
+                    <img src="${i?.logo||''}" style="width:24px;height:24px;vertical-align:middle;margin-right:6px;border-radius:4px">
+                    ${i?.name||ev.winner} — ${elapsed}
+                  </div>
+                  <div style="font-size:.78rem;color:rgba(255,255,255,.5);margin-top:4px">Score: ${Math.round(ev.bestScore*10)/10}</div>`;
+              }
             }
-            const rs=document.getElementById('raceStatus');if(rs){rs.textContent='GARA COMPLETATA';rs.style.color='#4ade80';}
+            const rs=document.getElementById('raceStatus');if(rs){rs.textContent=isConsensus?'MERGE COMPLETATO':'COMPLETATO';rs.style.color='#4ade80';}
           }
           else if(ev.type==='engine'){
             _engStatus[ev.engine]=ev.status;

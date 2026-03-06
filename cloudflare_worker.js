@@ -3580,24 +3580,23 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         sse({type:'engine_debug', engine:'CASCADE', status:'init', available: available.join(','), skipped: skipped.join(','), parallel: parallelEngines.join(','), fallback: fallbackEngines.join(',')});
 
         if (parallelEngines.length >= 2) {
-          sse({type:'moa_start', engines: parallelEngines, mode: 'best_of'});
+          sse({type:'moa_start', engines: parallelEngines, mode: 'consensus'});
           parallelEngines.forEach(n => onEngine?.({engine:n, status:'trying'}));
 
-          // BEST-OF: lancia tutti in parallelo con Promise.allSettled + timeout
-          const raceResult = await (async () => {
-            const engineTimeout = 55000; // 55s per singolo engine (impostato nei try* functions)
-            const globalTimeout = 60000; // 60s max totale — aspetta tutte le risposte
+          // ═══ MoA CONSENSUS MERGE ═══
+          // Tutti gli engine rispondono → merge per voto di consenso
+          const mergeResult = await (async () => {
+            const globalTimeout = 60000;
 
-            // Crea una promise per ogni engine con timeout individuale
             const enginePromises = parallelEngines.map(async (name) => {
               try {
                 const eng = engines[name];
                 const text = await eng.tryFn(promptText);
                 if (text) {
-                  const { score } = _scoreAIResponse(text);
-                  if (score >= 10) {
-                    onEngine?.({engine:name, status:'ok', score});
-                    return { name, text, score };
+                  const { score, parsed } = _scoreAIResponse(text);
+                  if (score >= 10 && parsed?.piano?.length) {
+                    onEngine?.({engine:name, status:'ok', score, nRighe: parsed.piano.length});
+                    return { name, text, score, parsed };
                   } else {
                     onEngine?.({engine:name, status:'low_score', score});
                     return null;
@@ -3613,36 +3612,226 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               }
             });
 
-            // Race: allSettled vs timeout globale
             const timeoutPromise = new Promise(r => setTimeout(() => r('TIMEOUT'), globalTimeout));
             const settled = await Promise.race([
               Promise.allSettled(enginePromises).then(res => res.map(r => r.status === 'fulfilled' ? r.value : null).filter(Boolean)),
               timeoutPromise
             ]);
 
-            // Se timeout, raccogli i risultati parziali già completati
             let results;
             if (settled === 'TIMEOUT') {
-              sse({type:'engine_debug', engine:'MOA', status:'timeout', reason:`Global timeout ${globalTimeout}ms — checking partial results`});
-              // Attendi ancora 200ms per raccogliere le ultime risposte
+              sse({type:'engine_debug', engine:'MOA', status:'timeout', reason:`Global timeout ${globalTimeout}ms`});
               const partial = await Promise.allSettled(enginePromises.map(p => Promise.race([p, new Promise(r => setTimeout(() => r(null), 200))])));
               results = partial.map(r => r.status === 'fulfilled' ? r.value : null).filter(Boolean);
             } else {
               results = settled;
             }
 
-            if (results.length > 0) {
-              results.sort((a, b) => b.score - a.score);
-              return results[0];
+            if (!results.length) return null;
+            results.sort((a, b) => b.score - a.score);
+
+            // Se un solo engine ha risposto, usalo direttamente
+            if (results.length === 1) {
+              return { ...results[0], mode: 'single', mergeStats: null };
             }
-            return null;
+
+            // ═══ CONSTRAINT-BASED MERGE: vince chi rispetta TUTTI i vincoli ═══
+            // Non è democratico: per ogni slot il punteggio dipende da quanti vincoli soddisfa.
+            // L'assegnazione che viola meno vincoli vince, fino a soddisfarli tutti.
+
+            const leader = results[0];
+
+            // ─── Funzione: punteggio vincoli per una singola riga ───
+            function _constraintScore(entry) {
+              let score = 0;
+              let violations = [];
+              const tecId = entry.tecnicoId;
+              const pData = entry.data || '';
+              const tipo = (entry.tipo || '').toLowerCase();
+
+              // VINCOLO 1: tipo "reperibilità" → REJECT (-100)
+              if (tipo.includes('reperibilit')) { score -= 100; violations.push('tipo_reperibilita'); }
+
+              // VINCOLO 2: tecnico in reperibilità quel giorno → REJECT (-80)
+              if (tecId && pData && typeof _isReperibilita === 'function' && _isReperibilita(tecId, pData)) {
+                score -= 80; violations.push('tec_in_reperibilita');
+              }
+
+              // VINCOLO 3: tecnico assente (vincoli DB) → REJECT (-80)
+              if (tecId && vincoliRules?.assenti) {
+                const isAbsent = (Array.isArray(vincoliRules.assenti) ? vincoliRules.assenti : [...vincoliRules.assenti]).some(a => {
+                  const aid = typeof a === 'string' ? a : a.id;
+                  if (aid !== tecId) return false;
+                  if (a.permanente) return true;
+                  if (a.dataInizio && pData < a.dataInizio) return false;
+                  if (a.dataFine && pData > a.dataFine) return false;
+                  return true;
+                });
+                if (isAbsent) { score -= 80; violations.push('tec_assente'); }
+              }
+
+              // VINCOLO 4: junior solo (senza senior nello stesso slot) → -30
+              if (tecId && _juniorIds.includes(tecId)) {
+                score -= 30; // penalità base, verrà compensata se c'è un senior companion
+                violations.push('junior_solo_candidate');
+              }
+
+              // VINCOLO 5: note con UUID → -10
+              if (/^[0-9a-f]{8}-/.test(entry.note || '')) { score -= 10; violations.push('uuid_note'); }
+
+              // VINCOLO 6: tecnico valido (esiste nella lista) → +10
+              if (tecId && allTecnici.some(t => t.id === tecId)) { score += 10; }
+              else if (tecId) { score -= 20; violations.push('tec_sconosciuto'); }
+
+              // BONUS: installazione → +15
+              if (tipo === 'installazione') score += 15;
+
+              // BONUS: ha furgone → +5
+              if (entry.furgone) score += 5;
+
+              // BONUS: ha ora inizio → +3
+              if (entry.oraInizio) score += 3;
+
+              // BONUS: nota descrittiva (non vuota, non UUID) → +5
+              if (entry.note && entry.note.length > 3 && !/^[0-9a-f]{8}-/.test(entry.note)) score += 5;
+
+              return { score, violations };
+            }
+
+            // 1. Raccogli TUTTI gli interventi da tutti gli engine
+            const allSlots = new Map(); // key: "data|clienteId|tipo" → [{engine, entry, engineScore}]
+            for (const r of results) {
+              for (const p of (r.parsed.piano || [])) {
+                const key = `${p.data||'?'}|${p.clienteId||p.cliente_id||'?'}|${(p.tipo||'tagliando').toLowerCase()}`;
+                if (!allSlots.has(key)) allSlots.set(key, []);
+                allSlots.get(key).push({ engine: r.name, entry: p, engineScore: r.score });
+              }
+            }
+
+            // 2. Per ogni slot, scegli l'assegnazione che RISPETTA PIÙ VINCOLI
+            const mergedPiano = [];
+            const mergeStats = { totalSlots: allSlots.size, constraintWins: 0, leaderSlots: 0, enrichedSlots: 0, droppedSlots: 0, totalViolations: 0 };
+
+            for (const [key, proposals] of allSlots) {
+              if (!proposals.length) continue;
+
+              // Calcola punteggio vincoli per ogni proposta
+              const scored = proposals.map(p => {
+                const cs = _constraintScore(p.entry);
+                return { ...p, constraintScore: cs.score, violations: cs.violations };
+              });
+
+              // Ordina: constraint score DESC, poi engine score DESC (tiebreaker)
+              scored.sort((a, b) => {
+                if (b.constraintScore !== a.constraintScore) return b.constraintScore - a.constraintScore;
+                return b.engineScore - a.engineScore;
+              });
+
+              const best = scored[0];
+              const merged = { ...best.entry };
+
+              // Arricchisci campi mancanti da altre proposte (se il vincitore non ha tutto)
+              if (!merged.furgone) {
+                const withFurg = scored.find(s => s.entry.furgone && s.constraintScore >= 0);
+                if (withFurg) merged.furgone = withFurg.entry.furgone;
+              }
+              if (!merged.oraInizio) {
+                const withOra = scored.find(s => s.entry.oraInizio && s.constraintScore >= 0);
+                if (withOra) merged.oraInizio = withOra.entry.oraInizio;
+              }
+              // Note: preferisci la nota più lunga e non-UUID tra TUTTE le proposte valide
+              const bestNote = scored
+                .filter(s => s.constraintScore >= -10) // solo proposte decenti
+                .map(s => s.entry.note || '')
+                .filter(n => n && n.length > 3 && !/^[0-9a-f]{8}-/.test(n))
+                .sort((a, b) => b.length - a.length)[0];
+              if (bestNote && (!merged.note || /^[0-9a-f]{8}-/.test(merged.note))) merged.note = bestNote;
+
+              // Stats
+              mergeStats.totalViolations += best.violations.length;
+              if (best.violations.length === 0) mergeStats.constraintWins++;
+              else if (best.engine === leader.name) mergeStats.leaderSlots++;
+              else mergeStats.enrichedSlots++;
+
+              mergedPiano.push(merged);
+            }
+
+            // 2b. Check junior pairing nel piano merged: se un junior è solo, cerca se un altro engine aveva un senior
+            const mergedByDateClient = {};
+            mergedPiano.forEach((p, i) => {
+              const k = `${p.data}|${p.clienteId||p.cliente_id}`;
+              if (!mergedByDateClient[k]) mergedByDateClient[k] = [];
+              mergedByDateClient[k].push({ idx: i, tecId: p.tecnicoId });
+            });
+            for (const [k, entries] of Object.entries(mergedByDateClient)) {
+              const hasJunior = entries.some(e => _juniorIds.includes(e.tecId));
+              const hasSenior = entries.some(e => _seniorIds.includes(e.tecId));
+              if (hasJunior && !hasSenior) {
+                // Cerca nelle proposte originali: qualche engine aveva un senior per questo slot?
+                const [data, clienteId] = k.split('|');
+                for (const r of results) {
+                  const seniorEntry = (r.parsed.piano || []).find(p =>
+                    p.data === data && (p.clienteId || p.cliente_id) === clienteId &&
+                    _seniorIds.includes(p.tecnicoId)
+                  );
+                  if (seniorEntry) {
+                    // Aggiungi il senior al piano merged
+                    mergedPiano.push({ ...seniorEntry });
+                    mergeStats.enrichedSlots++;
+                    break;
+                  }
+                }
+              }
+            }
+
+            // 3. Dedup: rimuovi duplicati (stesso data+tecnico+cliente)
+            const seen = new Set();
+            const dedupPiano = mergedPiano.filter(p => {
+              const k = `${p.data}|${p.tecnicoId}|${p.clienteId||p.cliente_id}`;
+              if (seen.has(k)) { mergeStats.droppedSlots++; return false; }
+              seen.add(k);
+              return true;
+            });
+
+            // 4. Costruisci il risultato finale come JSON text
+            const mergedObj = {
+              summary: `Piano MoA Constraint-Merge — ${results.length} engine, ${dedupPiano.length} interventi (${mergeStats.constraintWins} vincoli OK, ${mergeStats.enrichedSlots} arricchiti, ${mergeStats.totalViolations} violazioni risolte)`,
+              piano: dedupPiano,
+              warnings: [
+                ...(leader.parsed.warnings || []),
+                `MoA Merge: ${results.map(r => `${r.name}(${Math.round(r.score)}pt, ${r.parsed.piano.length}righe)`).join(' + ')}`,
+                mergeStats.droppedSlots > 0 ? `${mergeStats.droppedSlots} duplicati rimossi` : null,
+                mergeStats.totalViolations > 0 ? `${mergeStats.totalViolations} violazioni vincoli corrette nel merge` : null
+              ].filter(Boolean)
+            };
+            const mergedText = JSON.stringify(mergedObj);
+            const { score: finalScore } = _scoreAIResponse(mergedText);
+
+            sse({type:'engine_debug', engine:'MOA_MERGE', status:'done',
+              engines: results.map(r=>r.name).join('+'),
+              scores: results.map(r=>`${r.name}:${Math.round(r.score)}`).join(','),
+              merged: dedupPiano.length,
+              constraintWins: mergeStats.constraintWins,
+              fromLeader: mergeStats.leaderSlots,
+              enriched: mergeStats.enrichedSlots,
+              dropped: mergeStats.droppedSlots,
+              violations: mergeStats.totalViolations,
+              finalScore: Math.round(finalScore)
+            });
+
+            return { name: `consensus(${results.map(r=>r.name).join('+')})`, text: mergedText, score: finalScore, mode: 'consensus', mergeStats };
           })();
 
-          if (raceResult) {
-            sse({type:'moa_result', winner: raceResult.name, bestScore: raceResult.score, mode: 'best_of', candidates: parallelEngines.length});
-            parallelEngines.forEach(n => onEngine?.({engine:n, status: n === raceResult.name ? 'winner' : 'done'}));
-            _usedEngine = raceResult.name; lastWorking = raceResult.name;
-            return raceResult.text;
+          if (mergeResult) {
+            const modeLbl = mergeResult.mode === 'consensus' ? 'consensus' : 'best_of';
+            sse({type:'moa_result', winner: mergeResult.name, bestScore: Math.round(mergeResult.score * 10) / 10, mode: modeLbl, candidates: parallelEngines.length,
+              mergeStats: mergeResult.mergeStats || null });
+            parallelEngines.forEach(n => {
+              const isContributor = mergeResult.name.includes(n);
+              onEngine?.({engine:n, status: isContributor ? 'winner' : 'done'});
+            });
+            _usedEngine = mergeResult.name; lastWorking = mergeResult.name;
+            return mergeResult.text;
           }
 
           // Tutti i paralleli hanno fallito
