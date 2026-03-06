@@ -828,6 +828,11 @@ async function handleGet(action, url, env, auth = {}) {
       return ok({ fact_interventi: piano, fact_urgenze: urgenze, fact_kpi: kpiLog, dim_tecnici: utenti, dim_clienti: clienti, dim_macchine: macchine });
     }
 
+    case 'getVapidPublicKey': {
+      if (!env.VAPID_PUBLIC_KEY) return err('VAPID non configurato');
+      return ok({ vapidPublicKey: env.VAPID_PUBLIC_KEY });
+    }
+
     default:
       return err(`Azione GET non trovata: ${action}`, 404);
   }
