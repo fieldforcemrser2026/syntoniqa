@@ -739,7 +739,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <div class="btn-group">
 <select id="filtOrdStato" onchange="renderOrdini()" class="inp-filter"><option value="">Tutti</option><option value="richiesto">Richiesto</option><option value="preso_in_carico">Preso in Carico</option><option value="ordinato">Ordinato</option><option value="in_arrivo">In Arrivo</option><option value="arrivato">Arrivato</option></select>
 <button class="btn btn-ghost btn-sm" onclick="exportOrdiniCSV()" title="Esporta CSV">📥</button>
-<button class="btn btn-info btn-sm" onclick="EDITING.ordine=null;document.querySelector('#modalOrdine .modal-head h2').textContent='📦 Nuovo Ordine';openModal('modalOrdine')">+ Nuovo Ordine</button>
+<button class="btn btn-info btn-sm" onclick="EDITING.ordine=null;setModalTitle('modalOrdine','📦 Nuovo Ordine');openModal('modalOrdine')">+ Nuovo Ordine</button>
 </div>
 </div>
 <div class="card-body">
@@ -761,7 +761,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <!-- ========== SEC: INSTALLAZIONI ========== -->
 <section class="sec" id="secInstallazioni">
 <div class="card">
-<div class="card-head"><h3>🏗️ Installazioni in Corso</h3><button class="btn btn-primary btn-sm" onclick="EDITING.installazione=null;document.querySelector('#modalInstall .modal-head h2').textContent='🏗️ Nuova Installazione';openModal('modalInstall')">+ Nuova Installazione</button></div>
+<div class="card-head"><h3>🏗️ Installazioni in Corso</h3><button class="btn btn-primary btn-sm" onclick="EDITING.installazione=null;setModalTitle('modalInstall','🏗️ Nuova Installazione');openModal('modalInstall')">+ Nuova Installazione</button></div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
 <table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('install','tblInstall',this.checked)"></th><th>Cliente</th><th>Macchina</th><th>Inizio</th><th>Fine Prev.</th><th>Fase</th><th>Tecnici</th><th>Stato</th><th></th></tr></thead><tbody id="tblInstall"></tbody></table>
 </div>
@@ -1328,7 +1328,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <option value="">Tutte le categorie</option>
 <option>Contratti</option><option>Manuali</option><option>Certificati</option><option>Report</option><option>Altro</option>
 </select>
-<button class="btn btn-primary btn-sm" onclick="EDITING.documento=null;document.querySelector('#modalDocumento .modal-head h2').textContent='📄 Nuovo Documento';openModal('modalDocumento')">+ Nuovo Documento</button>
+<button class="btn btn-primary btn-sm" onclick="EDITING.documento=null;setModalTitle('modalDocumento','📄 Nuovo Documento');openModal('modalDocumento')">+ Nuovo Documento</button>
 </div></div>
 <div class="card-body"><div id="tblDocumenti"></div></div>
 </div>
@@ -1339,7 +1339,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <div class="card">
 <div class="card-head"><h3>✅ Checklist Templates</h3>
 <div class="btn-group">
-<button class="btn btn-primary btn-sm" onclick="EDITING.checklist=null;document.querySelector('#modalChecklist .modal-head h2').textContent='✅ Nuovo Template Checklist';openModal('modalChecklist')">+ Template</button>
+<button class="btn btn-primary btn-sm" onclick="EDITING.checklist=null;setModalTitle('modalChecklist','✅ Nuovo Template Checklist');openModal('modalChecklist')">+ Template</button>
 </div></div>
 <div class="card-body"><div id="tblChecklist"></div></div>
 </div>
@@ -2533,8 +2533,9 @@ function openModal(id){
   const _mb=_m.querySelector('.modal-body');
   if(_mb)_mb.scrollTop=0;
 }
-function closeModal(id){$(id).classList.remove('show')}
-function toggleSidebar(){$('sidebar').classList.toggle('open');$('sideOverlay').classList.toggle('show')}
+function closeModal(id){const el=$(id);if(el)el.classList.remove('show')}
+function setModalTitle(modalId,title){const el=document.querySelector('#'+modalId+' .modal-head h2');if(el)el.textContent=title}
+function toggleSidebar(){$('sidebar')?.classList.toggle('open');$('sideOverlay')?.classList.toggle('show')}
 
 function showSec(id,btn){
   document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
@@ -2787,12 +2788,12 @@ function onRuoloChange(val){
 }
 
 function enterApp(){
-  $('loginScreen').classList.add('hidden');
-  $('appMain').style.display='block';
-  $('headerUser').textContent=(USER.Nome||'')+' '+(USER.Cognome||'');
-  $('headerDate').textContent=new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const ls=$('loginScreen');if(ls)ls.classList.add('hidden');
+  const am=$('appMain');if(am)am.style.display='block';
+  const hu=$('headerUser');if(hu)hu.textContent=(USER.Nome||'')+' '+(USER.Cognome||'');
+  const hd=$('headerDate');if(hd)hd.textContent=new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   const ruoloLabel=USER.AncheCaposquadra?`${USER.Ruolo} + caposquadra`:USER.Ruolo;
-  $('footUser').textContent=(USER.Nome||'')[0]+(USER.Cognome||'')[0]+' · '+ruoloLabel;
+  const fu=$('footUser');if(fu)fu.textContent=(USER.Nome||'')[0]+(USER.Cognome||'')[0]+' · '+ruoloLabel;
   applyRoleVisibility();
   populateSelects();
   renderAll();
@@ -4389,8 +4390,8 @@ function renderMacchine(){
   const esc=s=>(s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
 
   if(view==='tree'){
-    $('macchListTable').style.display='none';
-    const treeDiv=$('macchTreeView');treeDiv.style.display='block';
+    const mlt=$('macchListTable');if(mlt)mlt.style.display='none';
+    const treeDiv=$('macchTreeView');if(!treeDiv)return;treeDiv.style.display='block';
     if(!items.length){treeDiv.innerHTML='<div class="empty"><p>Nessuna macchina trovata. Importa l\'anagrafica Excel per popolare il parco macchine.</p></div>';return}
     // Group by normalized type
     const groups={};
@@ -4446,9 +4447,9 @@ function renderMacchine(){
     });
     treeDiv.innerHTML=html;
   }else{
-    $('macchTreeView').style.display='none';
-    $('macchListTable').style.display='';
-    $('tblMacchine').innerHTML=items.length?items.map(a=>{
+    const tv=$('macchTreeView');if(tv)tv.style.display='none';
+    const lt=$('macchListTable');if(lt)lt.style.display='';
+    const tb=$('tblMacchine');if(!tb)return;tb.innerHTML=items.length?items.map(a=>{
       const tipo=assetType(a);
       const cfg=PROD_CFG[tipo]||{};
       const stato=a.Stato||'';
@@ -6641,7 +6642,7 @@ function editUtente(id){
   const isAttivo=u.Attivo&&u.Attivo!=='false';
   $('nuAttivo').checked=isAttivo;
   const lbl=$('nuAttivoLabel');if(lbl){lbl.textContent=isAttivo?'✅ Attivo':'⬜ Inattivo';lbl.style.color=isAttivo?'var(--ok)':'var(--gray)'}
-  document.querySelector('#modalUtente .modal-head h2').textContent='✏️ Modifica Utente';
+  setModalTitle('modalUtente','✏️ Modifica Utente');
   $('resetPwdBox').style.display='block';$('nuResetPwd').value='';
   openModal('modalUtente');
 }
@@ -6652,7 +6653,7 @@ function editCliente(id){
   $('ncIndirizzo').value=c.Indirizzo||'';$('ncCap').value=c.CAP||'';
   $('ncTelefono').value=c.Telefono||'';$('ncEmail').value=c.Email||'';
   $('ncContratto').value=c.Contratto||'';$('ncNote').value=c.Note||'';
-  document.querySelector('#modalCliente .modal-head h2').textContent='✏️ Modifica Cliente';
+  setModalTitle('modalCliente','✏️ Modifica Cliente');
   openModal('modalCliente');
 }
 function editMacchina(id){
@@ -6666,7 +6667,7 @@ function editMacchina(id){
   $('nmFotoUrl').value=m.FotoUrl||'';
   const prev=$('nmFotoPreview');
   if(prev) prev.innerHTML=m.FotoUrl?`<img src="${m.FotoUrl}" style="max-width:120px;max-height:80px;border-radius:6px;border:1px solid var(--gray3)">`:''
-  document.querySelector('#modalMacchina .modal-head h2').textContent='✏️ Modifica Macchina';
+  setModalTitle('modalMacchina','✏️ Modifica Macchina');
   openModal('modalMacchina');
 }
 function editAutomezzo(id){
@@ -6677,20 +6678,20 @@ function editAutomezzo(id){
   $('naAllestimento').value=f.Allestimento||'';$('naStatus').value=f.Status||'disponibile';
   $('naControllo').value=f.ProssimoControllo||'';$('naAssegnatario').value=f.AssegnatarioID||'';
   $('naKm').value=f.KmAttuali||'';$('naNote').value=f.Note||'';
-  document.querySelector('#modalAutomezzo .modal-head h2').textContent='✏️ Modifica Automezzo';
+  setModalTitle('modalAutomezzo','✏️ Modifica Automezzo');
   openModal('modalAutomezzo');
 }
 
 // ============ RESET MODAL ON NEW ============
-function openNewUtente(){EDITING.utente=null;['nuNome','nuCognome','nuUsername','nuPassword','nuBase','nuTelefono','nuEmail'].forEach(id=>{if($(id))$(id).value=''});$('nuRuolo').value='tecnico';onRuoloChange('tecnico');if($('nuAncheCapo'))$('nuAncheCapo').checked=false;$('nuSquadra').value='';$('nuAutomezzo').value='';$('resetPwdBox').style.display='none';document.querySelector('#modalUtente .modal-head h2').textContent='👤 Nuovo Utente';openModal('modalUtente')}
-function openNewCliente(){EDITING.cliente=null;['ncNome','ncCitta','ncProv','ncIndirizzo','ncCap','ncTelefono','ncEmail','ncContratto','ncNote'].forEach(id=>{if($(id))$(id).value=''});document.querySelector('#modalCliente .modal-head h2').textContent='🏢 Nuovo Cliente';openModal('modalCliente')}
-function openNewMacchina(){EDITING.macchina=null;['nmTipo','nmModello','nmSeriale','nmAnno','nmOre','nmUltimoTag','nmProssTag','nmGaranzia','nmNote','nmFotoUrl'].forEach(id=>{if($(id))$(id).value=''});$('nmCliente').value='';const prev=$('nmFotoPreview');if(prev)prev.innerHTML='';document.querySelector('#modalMacchina .modal-head h2').textContent='⚙️ Nuova Macchina';openModal('modalMacchina')}
-function openNewAutomezzo(){EDITING.automezzo=null;['naCodice','naTarga','naDesc','naAllestimento','naKm','naControllo','naNote'].forEach(id=>{if($(id))$(id).value=''});$('naStatus').value='disponibile';$('naAssegnatario').value='';
+function openNewUtente(){EDITING.utente=null;['nuNome','nuCognome','nuUsername','nuPassword','nuBase','nuTelefono','nuEmail'].forEach(id=>{if($(id))$(id).value=''});const nr=$('nuRuolo');if(nr)nr.value='tecnico';onRuoloChange('tecnico');if($('nuAncheCapo'))$('nuAncheCapo').checked=false;const ns=$('nuSquadra');if(ns)ns.value='';const na=$('nuAutomezzo');if(na)na.value='';const rpb=$('resetPwdBox');if(rpb)rpb.style.display='none';setModalTitle('modalUtente','👤 Nuovo Utente');openModal('modalUtente')}
+function openNewCliente(){EDITING.cliente=null;['ncNome','ncCitta','ncProv','ncIndirizzo','ncCap','ncTelefono','ncEmail','ncContratto','ncNote'].forEach(id=>{if($(id))$(id).value=''});setModalTitle('modalCliente','🏢 Nuovo Cliente');openModal('modalCliente')}
+function openNewMacchina(){EDITING.macchina=null;['nmTipo','nmModello','nmSeriale','nmAnno','nmOre','nmUltimoTag','nmProssTag','nmGaranzia','nmNote','nmFotoUrl'].forEach(id=>{if($(id))$(id).value=''});$('nmCliente').value='';const prev=$('nmFotoPreview');if(prev)prev.innerHTML='';setModalTitle('modalMacchina','⚙️ Nuova Macchina');openModal('modalMacchina')}
+function openNewAutomezzo(){EDITING.automezzo=null;['naCodice','naTarga','naDesc','naAllestimento','naKm','naControllo','naNote'].forEach(id=>{if($(id))$(id).value=''});const naS=$('naStatus');if(naS)naS.value='disponibile';const naA=$('naAssegnatario');if(naA)naA.value='';
   // Auto-suggest prossimo codice F
   const existing=(DATA.automezzi||[]).filter(f=>!f.Obsoleto).map(f=>{const m=(f.Nome||'').match(/^F(\d+)$/i);return m?parseInt(m[1]):0});
   const next=existing.length?Math.max(...existing)+1:1;
-  $('naCodice').value='F'+next;
-  document.querySelector('#modalAutomezzo .modal-head h2').textContent='🚐 Nuovo Automezzo';openModal('modalAutomezzo')}
+  const naC=$('naCodice');if(naC)naC.value='F'+next;
+  setModalTitle('modalAutomezzo','🚐 Nuovo Automezzo');openModal('modalAutomezzo')}
 
 // ============ SAVE FUNCTIONS (CREATE + UPDATE) ============
 async function saveUtente(){
@@ -6855,7 +6856,7 @@ function openNewPiano(){
   // Reset multi-select
   if($('mpTecnici')){Array.from($('mpTecnici').options).forEach(o=>o.selected=false)}
   if($('mpMacchina')){$('mpMacchina').innerHTML='<option value="">— seleziona cliente prima —</option>'}
-  document.querySelector('#modalPiano .modal-head h2').textContent='📋 Nuovo Intervento';
+  setModalTitle('modalPiano','📋 Nuovo Intervento');
   openModal('modalPiano');
 }
 
@@ -6903,7 +6904,7 @@ function openNewUrgenza(){
   if($('muPriorita'))$('muPriorita').selectedIndex=0;
   if($('muMacchina'))$('muMacchina').innerHTML='<option value="">— seleziona cliente prima —</option>';
   if($('muDataHint'))$('muDataHint').textContent='';
-  document.querySelector('#modalUrgenza .modal-head h2').textContent='🚨 Nuova Urgenza';
+  setModalTitle('modalUrgenza','🚨 Nuova Urgenza');
   openModal('modalUrgenza');
 }
 
@@ -8247,18 +8248,18 @@ async function applyAI(forceOverwrite){
 // ============ WORKFLOW APPROVATIVO ============
 async function submitAIPlanForApproval(){
   if(!AI_PLAN){toast('Genera prima un piano','warn');return}
-  const currentUser=USER||{};
+  const cu=USER||{};
   try{
     const id='APR_'+Date.now();
     await apiCall('createApproval',{
       id, piano:AI_PLAN,
-      creato_da:currentUser.id||'admin',
-      ruolo_creatore:currentUser.ruolo||'admin',
+      creato_da:cu.ID||cu.id||'admin',
+      ruolo_creatore:cu.Ruolo||cu.ruolo||'admin',
       stato:'in_attesa',
       data_creazione:new Date().toISOString()
     },'POST');
     toast('Piano inviato per approvazione!','ok');
-    $('btnSubmitPlan').disabled=true;
+    const btn=$('btnSubmitPlan');if(btn)btn.disabled=true;
     renderApprovalQueue();
   }catch(e){toast(e.message,'err')}
 }
@@ -8273,8 +8274,8 @@ async function renderApprovalQueue(){
       return;
     }
     tbody.innerHTML=approvals.map(a=>{
-      const currentUser=USER||{};
-      const canApprove=(currentUser.ruolo==='admin'||currentUser.ruolo==='caposquadra')&&a.stato==='in_attesa';
+      const cuR=(USER||{}).Ruolo||(USER||{}).ruolo||'';
+      const canApprove=(cuR==='admin'||cuR==='caposquadra')&&a.stato==='in_attesa';
       return `<tr>
         <td><code>${a.id}</code></td>
         <td>${fmtDate(a.data_creazione)}</td>
@@ -8293,11 +8294,11 @@ async function renderApprovalQueue(){
 async function approveOrReject(id,stato){
   const note=stato==='rifiutato'?prompt('Motivo del rifiuto:'):null;
   if(stato==='rifiutato'&&note===null)return;
-  const currentUser=USER||{};
+  const cu=USER||{};
   try{
     await apiCall('updateApproval',{
       id, stato,
-      approvato_da:currentUser.id||'admin',
+      approvato_da:cu.ID||cu.id||'admin',
       note_approvazione:note||'',
       data_approvazione:new Date().toISOString()
     },'POST');
@@ -8328,7 +8329,7 @@ async function viewApprovalPlan(id){
       } else {
         $('aiResult').textContent=JSON.stringify(data.piano,null,2);
       }
-      $('btnApplyAI').disabled=data.stato!=='approvato';
+      const btnApply=$('btnApplyAI');if(btnApply)btnApply.disabled=data.stato!=='approvato';
     }
   }catch(e){toast(e.message,'err')}
 }
@@ -8342,7 +8343,7 @@ async function renderTecnicoPlan(){
   const utenti=DATA.utenti||[];
 
   if(view==='mio'){
-    const myPlan=piano.filter(p=>p.TecnicoID===currentUser.id);
+    const myPlan=piano.filter(p=>p.TecnicoID===(currentUser.ID||currentUser.id));
     if(!myPlan.length){grid.innerHTML='<p style="padding:24px;text-align:center;color:var(--gray)">Nessun intervento assegnato a te</p>';return}
     // Group by date
     const byDate={};
@@ -8378,7 +8379,7 @@ async function renderTecnicoPlan(){
     let html='';
     Object.entries(byTec).forEach(([tecId,items])=>{
       const tecName=getName(utenti,tecId)||tecId;
-      const isMine=tecId===currentUser.id;
+      const isMine=tecId===(currentUser.ID||currentUser.id);
       html+=`<div style="padding:10px 16px;background:${isMine?'rgba(99,102,241,.1)':'var(--gray1)'};font-weight:600;font-size:.875rem;border-bottom:1px solid var(--gray2)">${isMine?'⭐':'👷'} ${tecName} (${items.length}) ${isMine?'— Il tuo piano':''}</div>`;
       items.forEach(p=>{
         html+=`<div style="padding:8px 16px;border-bottom:1px solid var(--gray1);font-size:.8125rem;display:flex;justify-content:space-between;align-items:center">
@@ -8785,7 +8786,7 @@ function editOrdine(id){
   $('moCodice').value=o.Codice||'';$('moDesc').value=o.Descrizione||'';
   $('moQta').value=o.Quantita||1;$('moTecnico').value=o.TecnicoID||'';
   $('moCliente').value=o.ClienteID||'';$('moNote').value=o.Note||'';
-  document.querySelector('#modalOrdine .modal-head h2').textContent='✏️ Modifica Ordine';
+  setModalTitle('modalOrdine','✏️ Modifica Ordine');
   openModal('modalOrdine');
 }
 async function deleteOrdine(id){
@@ -8803,7 +8804,7 @@ function editInstallazione(id){
   // Seleziona tecnici
   const tecIds=(i.TecniciIDs||'').split(',').filter(Boolean);
   Array.from($('miTecnici').options).forEach(opt=>{opt.selected=tecIds.includes(opt.value)});
-  document.querySelector('#modalInstall .modal-head h2').textContent='✏️ Modifica Installazione';
+  setModalTitle('modalInstall','✏️ Modifica Installazione');
   openModal('modalInstall');
 }
 async function deleteInstallazione(id){
@@ -8857,7 +8858,7 @@ function editChecklistTpl(id){
       container.appendChild(row);
     });
   }
-  document.querySelector('#modalChecklist .modal-head h2').textContent='✏️ Modifica Template';
+  setModalTitle('modalChecklist','✏️ Modifica Template');
   openModal('modalChecklist');
 }
 
@@ -8869,7 +8870,7 @@ function editDoc(id){
   $('mdDescrizione').value=d.Descrizione||'';$('mdTags').value=d.Tags||'';
   if($('mdUrl'))$('mdUrl').value=d.FileURL||'';
   if($('mdPubblico'))$('mdPubblico').value=d.Pubblico||'no';
-  document.querySelector('#modalDocumento .modal-head h2').textContent='✏️ Modifica Documento';
+  setModalTitle('modalDocumento','✏️ Modifica Documento');
   openModal('modalDocumento');
 }
 async function deleteDoc(id){

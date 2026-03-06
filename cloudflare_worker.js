@@ -113,6 +113,9 @@ function requireRole(body, ...allowedRoles) {
   return null;
 }
 
+// safeJSON: JSON.parse sicuro con fallback
+function safeJSON(str, fallback = {}) { try { return JSON.parse(str); } catch { return fallback; } }
+
 // isCapoSq: true se l'utente agisce con poteri di caposquadra.
 // Condizioni: ruolo=caposquadra, OPPURE ruolo=admin con flag anche_caposquadra=true.
 function isCapoSq(body) {
@@ -1473,7 +1476,7 @@ async function handlePost(action, body, env) {
       const result = await sb(env, 'utenti', 'POST', row);
       if (_livello) {
         const lvRows = await sb(env, 'config', 'GET', null, `?chiave=eq.utenti_livello&limit=1`).catch(()=>[]);
-        const lvMap = lvRows?.[0]?.valore ? JSON.parse(lvRows[0].valore) : {};
+        const lvMap = lvRows?.[0]?.valore ? safeJSON(lvRows[0].valore) : {};
         lvMap[id] = _livello;
         const lvVal = JSON.stringify(lvMap);
         try { await sb(env, 'config', 'POST', { chiave: 'utenti_livello', valore: lvVal, tenant_id: TENANT }, ''); }
@@ -1525,7 +1528,7 @@ async function handlePost(action, body, env) {
       await sb(env, `utenti?id=eq.${id}`, 'PATCH', updates);
       if (_livello2 !== undefined) {
         const lvRows2 = await sb(env, 'config', 'GET', null, `?chiave=eq.utenti_livello&limit=1`).catch(()=>[]);
-        const lvMap2 = lvRows2?.[0]?.valore ? JSON.parse(lvRows2[0].valore) : {};
+        const lvMap2 = lvRows2?.[0]?.valore ? safeJSON(lvRows2[0].valore) : {};
         if (_livello2) lvMap2[id] = _livello2; else delete lvMap2[id];
         const lvVal2 = JSON.stringify(lvMap2);
         try { await sb(env, 'config', 'POST', { chiave: 'utenti_livello', valore: lvVal2, tenant_id: TENANT }, ''); }
@@ -2294,7 +2297,7 @@ async function handlePost(action, body, env) {
       const vincoliRules = { assenti: new Set(), affiancamenti: [], reperibilita: {}, custom: [] };
       if (vincoliCfg.length) {
         try {
-          const vc = JSON.parse(vincoliCfg[0].valore);
+          const vc = safeJSON(vincoliCfg[0].valore, {vincoli:[]});
           const oggiISO = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
           for (const cat of (vc.categories || []).filter(c => c.attiva !== false)) {
             for (const r of (cat.regole || [])) {
@@ -2344,9 +2347,9 @@ async function handlePost(action, body, env) {
       // Build service backlog: macchine + assets needing service, sorted by urgency
       // Enrich with PM cycle info if available
       const pmCycleRows = await sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_state&limit=1').catch(() => []);
-      const pmCycleState = pmCycleRows?.[0]?.valore ? JSON.parse(pmCycleRows[0].valore) : {};
+      const pmCycleState = pmCycleRows?.[0]?.valore ? safeJSON(pmCycleRows[0].valore) : {};
       const pmDefRows = await sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_definitions&limit=1').catch(() => []);
-      const pmDefs = pmDefRows?.[0]?.valore ? JSON.parse(pmDefRows[0].valore) : getDefaultCycleDefs();
+      const pmDefs = pmDefRows?.[0]?.valore ? safeJSON(pmDefRows[0].valore, getDefaultCycleDefs()) : getDefaultCycleDefs();
 
       const serviceBacklog = [];
       const oggiDate = new Date();
@@ -2627,7 +2630,7 @@ async function handlePost(action, body, env) {
       let manualRules = [];
       if (pvVincoliCfg.length) {
         try {
-          const vc = JSON.parse(pvVincoliCfg[0].valore);
+          const vc = safeJSON(pvVincoliCfg[0].valore, {vincoli:[]});
           manualRules = vc.manual_rules || [];
           // Fallback legacy
           if (!manualRules.length && vc.categories?.length) {
@@ -2746,7 +2749,7 @@ async function handlePost(action, body, env) {
       let vincoliText = '';
       if (ctx.vincoli && vincoliCfg.length) {
         try {
-          const vc = JSON.parse(vincoliCfg[0].valore);
+          const vc = safeJSON(vincoliCfg[0].valore, {vincoli:[]});
           const oggi = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
           const getName = (id) => { const u = allTecnici.find(t => t.id === id); return u ? `${u.nome} ${u.cognome}` : id; };
 
@@ -3677,7 +3680,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       const vincoliRules = { assenti: [], affiancamenti: [] };
       if (vincoliCfg.length) {
         try {
-          const vc = JSON.parse(vincoliCfg[0].valore);
+          const vc = safeJSON(vincoliCfg[0].valore, {vincoli:[]});
           const oggi2 = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
           for (const cat of (vc.categories || []).filter(c => c.attiva !== false)) {
             for (const r of (cat.regole || [])) {
@@ -4859,7 +4862,7 @@ Rispondi SOLO con JSON valido:
       let manual_rules = [];
       try {
         if (vdManual?.[0]?.valore) {
-          const vc = JSON.parse(vdManual[0].valore);
+          const vc = safeJSON(vdManual[0].valore, {vincoli:[]});
           const cats = (vc.categories || []).filter(c => c.attiva !== false);
           for (const cat of cats) {
             for (const r of (cat.regole || [])) {
@@ -4994,7 +4997,7 @@ Rispondi SOLO con JSON valido:
       let vincoliNoti = '';
       try {
         if (avVincoli?.[0]?.valore) {
-          const vc = JSON.parse(avVincoli[0].valore);
+          const vc = safeJSON(avVincoli[0].valore, {vincoli:[]});
           vincoliNoti = (vc.categories || []).filter(c => c.attiva !== false).map(c =>
             `[${c.icona || '📌'} ${c.nome}]\n` + (c.regole || []).filter(r => r.testo).map(r => `- ${r.testo}`).join('\n')
           ).join('\n\n');
@@ -6252,15 +6255,14 @@ Rispondi SOLO con JSON valido:
         } catch(e) { console.error('Bot mirror error:', e.message); }
       }
 
-      return ok();
       } catch (tgErr) {
         console.error('Telegram handler error:', tgErr.message, tgErr.stack);
         try {
           const errChatId = body?.message?.chat?.id;
           if (errChatId) await sendTelegram(env, errChatId, `⚠️ Errore bot: ${tgErr.message}`);
         } catch(e2) {}
-        return ok();
       }
+      return ok();
     }
 
     // -------- CHAT INTERNA --------
@@ -6833,11 +6835,11 @@ Rispondi SOLO con JSON valido:
 
       // 1. Carica stato cicli da config
       const cycleRows = await sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_state&limit=1').catch(() => []);
-      const cycleState = cycleRows?.[0]?.valore ? JSON.parse(cycleRows[0].valore) : {};
+      const cycleState = cycleRows?.[0]?.valore ? safeJSON(cycleRows[0].valore) : {};
 
       // 2. Carica definizioni cicli da config
       const defRows = await sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_definitions&limit=1').catch(() => []);
-      const cycleDefs = defRows?.[0]?.valore ? JSON.parse(defRows[0].valore) : getDefaultCycleDefs();
+      const cycleDefs = defRows?.[0]?.valore ? safeJSON(defRows[0].valore, getDefaultCycleDefs()) : getDefaultCycleDefs();
 
       // 3. Carica macchine (solo quelle con prossimo_tagliando)
       let mFilter = '?obsoleto=eq.false&prossimo_tagliando=not.is.null&select=id,seriale,note,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&limit=1000';
@@ -7194,7 +7196,7 @@ Rispondi SOLO con JSON valido:
       if (!updates || !Array.isArray(updates)) return err('updates array richiesto');
 
       const cycleRows2 = await sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_state&limit=1').catch(() => []);
-      const cycleState2 = cycleRows2?.[0]?.valore ? JSON.parse(cycleRows2[0].valore) : {};
+      const cycleState2 = cycleRows2?.[0]?.valore ? safeJSON(cycleRows2[0].valore) : {};
 
       for (const u of updates) {
         if (!u.macchina_id) continue;
@@ -7270,14 +7272,14 @@ Rispondi SOLO con JSON valido:
 
       // 2. Carica stato ciclo corrente
       const cr = await sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_state&limit=1').catch(() => []);
-      const cs = cr?.[0]?.valore ? JSON.parse(cr[0].valore) : {};
+      const cs = cr?.[0]?.valore ? safeJSON(cr[0].valore) : {};
       if (!cs[cmId]) cs[cmId] = { posizione: 0, completati: [] };
 
       // 3. Carica definizione ciclo per questa macchina
       const macRow = await sb(env, 'macchine', 'GET', null, `?id=eq.${cmId}&select=modello,tipo&limit=1`).catch(() => []);
       const modKey = ((macRow?.[0]?.modello || macRow?.[0]?.tipo || '').toUpperCase());
       const dr = await sb(env, 'config', 'GET', null, '?chiave=eq.pm_cycle_definitions&limit=1').catch(() => []);
-      const defs = dr?.[0]?.valore ? JSON.parse(dr[0].valore) : getDefaultCycleDefs();
+      const defs = dr?.[0]?.valore ? safeJSON(dr[0].valore, getDefaultCycleDefs()) : getDefaultCycleDefs();
       const def = findCycleDef(defs, modKey);
       const seq = def ? def.sequenza : ['A1', 'B2', 'A3', 'C4', 'A5', 'B6', 'A7', 'D8'];
       const intervallo = def ? def.intervallo_giorni : 112;
@@ -7381,8 +7383,8 @@ Rispondi SOLO con JSON valido:
         sb(env, 'piano', 'GET', null, pmExistingFilter).catch(() => [])
       ]);
 
-      const cs2 = cycleR?.[0]?.valore ? JSON.parse(cycleR[0].valore) : {};
-      const defs2 = defR?.[0]?.valore ? JSON.parse(defR[0].valore) : getDefaultCycleDefs();
+      const cs2 = cycleR?.[0]?.valore ? safeJSON(cycleR[0].valore) : {};
+      const defs2 = defR?.[0]?.valore ? safeJSON(defR[0].valore, getDefaultCycleDefs()) : getDefaultCycleDefs();
 
       // Set di chiavi esistenti per anti-duplicato
       // macchine: chiave = macchina_id_data

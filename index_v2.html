@@ -970,7 +970,7 @@ async function refreshData(silent){
     DATA=await apiCall('getAll',{userId:USER?.ID||''});
     if(USER&&USER.ID){const fresh=(DATA.utenti||[]).find(x=>x.ID===USER.ID);if(fresh)USER={...fresh}}
     renderAll();
-    loadChatUnread();
+    loadChatUnread().catch(()=>{});
   }catch(e){toast('Errore: '+e.message,'err')}
 }
 
@@ -1140,7 +1140,7 @@ function initPullToRefresh(){
       refreshData(true).then(()=>{
         ptr.classList.remove('active');
         toast('Aggiornato','ok');
-      }).catch(()=>ptr.classList.remove('active'));
+      }).catch(()=>{ptr.classList.remove('active');toast('Errore aggiornamento','err')});
     } else { ptr.classList.remove('active'); }
     pulling=false; triggered=false;
   },{passive:true});
@@ -2046,14 +2046,14 @@ function showCalMobDay(ds){
 let chatCanale='CH_GENERALE', chatMsgCache=[], chatPollTimer=null;
 
 function initChat(){
-  loadChatUnread();
+  loadChatUnread().catch(()=>{});
   renderChatChannels();
-  loadChatMessages();
+  loadChatMessages().catch(()=>{});
   // Polling ogni 15 sec (ridotto per risparmio API)
   if(chatPollTimer)clearInterval(chatPollTimer);
-  chatPollTimer=setInterval(()=>{
+  chatPollTimer=setInterval(async()=>{
     const pg=$('pgChat');
-    if(pg&&pg.classList.contains('active')){loadChatMessages(true);loadChatUnread()}
+    if(pg&&pg.classList.contains('active')){await loadChatMessages(true).catch(()=>{});await loadChatUnread().catch(()=>{})}
   },15000);
 }
 
@@ -2749,13 +2749,13 @@ function renderSquadra(){
   if(!isCapoSq()){el.innerHTML='<div class="card"><div class="card-body"><p style="color:var(--gray);text-align:center">Sezione riservata al caposquadra.</p></div></div>';return;}
   const teamIds=getMyTeam();
   const team=(DATA.utenti||[]).filter(u=>teamIds.includes(u.ID));
-  const today=new Date().toISOString().split('T')[0];
+  const todayStr=new Date().toISOString().split('T')[0];
   const richiestePending=(DATA.richieste||[]).filter(r=>!r.Obsoleto&&r.Stato==='in_attesa'&&teamIds.includes(r.TecnicoID));
   const urgenzeAperte=my(DATA.urgenze||[]).filter(u=>!u.Obsoleto&&(u.Stato==='aperta'||u.Stato==='assegnata'));
 
   // ─ KPI squadra ─
-  const intOggi=my(DATA.piano||[]).filter(p=>p.Data===today).length;
-  const intComp=my(DATA.piano||[]).filter(p=>p.Stato==='completato'&&p.Data===today).length;
+  const intOggi=my(DATA.piano||[]).filter(p=>p.Data===todayStr).length;
+  const intComp=my(DATA.piano||[]).filter(p=>p.Stato==='completato'&&p.Data===todayStr).length;
   el.innerHTML=`
   <div class="card" style="margin-bottom:12px">
     <div class="card-head"><h3>👥 Stato Squadra</h3><span style="font-size:.75rem;color:var(--gray)">${team.length} tecnici</span></div>
@@ -2767,7 +2767,7 @@ function renderSquadra(){
       </div>
       ${team.length===0?'<p style="color:var(--gray);text-align:center;font-size:.8125rem">Nessun tecnico nel tuo team. Assicurati che abbiano lo stesso squadra_id o caposquadra_id.</p>':''}
       ${team.map(t=>{
-        const intT=(DATA.piano||[]).filter(p=>!p.Obsoleto&&p.TecnicoID===t.ID&&p.Data===today);
+        const intT=(DATA.piano||[]).filter(p=>!p.Obsoleto&&p.TecnicoID===t.ID&&p.Data===todayStr);
         const compT=intT.filter(p=>p.Stato==='completato').length;
         const inCorsoT=intT.filter(p=>p.Stato==='in_corso').length;
         const urgT=(DATA.urgenze||[]).filter(u=>!u.Obsoleto&&(u.TecnicoAssegnato===t.ID)&&(u.Stato==='assegnata'||u.Stato==='in_corso'));
