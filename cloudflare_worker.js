@@ -354,7 +354,7 @@ async function sb(env, table, method = 'GET', body = null, params = '', extraHea
   }
   const text = await res.text();
   if (!text) return method === 'GET' ? [] : null;
-  try { return JSON.parse(text); } catch { return text; }
+  try { return JSON.parse(text); } catch { console.error(`[SB] non-JSON response from ${method} ${table}:`, text.substring(0, 200)); return method === 'GET' ? [] : null; }
 }
 
 // Password hashing — PBKDF2-SHA256 con salt (CF Workers Web Crypto)
@@ -1295,6 +1295,12 @@ async function handlePost(action, body, env) {
 
     case 'assignUrgenza': {
       const { id, operatoreId, userId } = body;
+      if (!id) return err('id urgenza richiesto');
+      // Verifica stato corrente e valida transizione
+      const urgCur = await sb(env, 'urgenze', 'GET', null, `?id=eq.${id}&select=stato`).catch(()=>[]);
+      if (!urgCur?.[0]) return err('Urgenza non trovata');
+      const transErr = validateTransition(VALID_URGENZA_TRANSITIONS, urgCur[0].stato, 'assegnata', 'urgenza');
+      if (transErr) return err(transErr);
       const tecId = body.tecnicoAssegnato || body.tecnico_assegnato || body.TecnicoID;
       const tecIds = body.tecniciIds || body.tecnici_ids || body.TecniciIDs;
       const autoId = body.automezzoId || body.automezzo_id || body.AutomezzoID || null;
@@ -6869,6 +6875,8 @@ Rispondi SOLO con JSON valido:
     }
 
     case 'importExcelPlan': {
+      const adminErr = requireRole(body, 'admin');
+      if (adminErr) return err(adminErr, 403);
       // Import plan rows from parsed Excel data
       const { rows, operatoreId } = body;
       if (!rows || !rows.length) return err('rows richiesto');
@@ -7073,6 +7081,8 @@ Rispondi SOLO con JSON valido:
     // -------- WORKFLOW APPROVATIVO → spostato sotto dopo getVincoliCategories --------
 
     case 'geocodeAll': {
+      const adminErr = requireRole(body, 'admin');
+      if (adminErr) return err(adminErr, 403);
       // FIX B-V2-5: Geocoding Nominatim con retry, backoff esponenziale, error log
       const batchSize = Math.min(parseInt(body?.limit) || 20, 50); // max 50
       const clientiSenzaGeo = await sb(env, 'clienti', 'GET', null,
@@ -7148,6 +7158,8 @@ Rispondi SOLO con JSON valido:
     }
 
     case 'generateReport': {
+      const adminErr = requireRole(body, 'admin', 'caposquadra');
+      if (adminErr) return err(adminErr, 403);
       const filtri = body.filtri || {};
       const tipo = body.tipo || 'kpi_mensile';
       const dateFrom = filtri.data_inizio || filtri.dataInizio || body.date_from || '';
@@ -7318,8 +7330,10 @@ Rispondi SOLO con JSON valido:
     }
 
     case 'logKPISnapshot': {
+      const adminErr = requireRole(body, 'admin');
+      if (adminErr) return err(adminErr, 403);
       const id = secureId('KSN');
-      await sb(env, 'kpi_snapshot', 'POST', { id, ...getFields(body), data: new Date().toISOString().split('T')[0], ora: new Date().toTimeString().split(' ')[0] });
+      await sb(env, 'kpi_snapshot', 'POST', { id, ...getFields(body), tenant_id: TENANT, data: new Date().toISOString().split('T')[0], ora: new Date().toTimeString().split(' ')[0] });
       return ok({ id });
     }
 
@@ -7768,13 +7782,18 @@ Rispondi SOLO con JSON valido:
     }
 
     case 'setupWebhook': {
+      const adminErr = requireRole(body, 'admin');
+      if (adminErr) return err(adminErr, 403);
       const { webhookUrl } = body;
+      if (!webhookUrl || !webhookUrl.startsWith('https://')) return err('webhookUrl deve essere un URL HTTPS valido');
       const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setWebhook?url=${encodeURIComponent(webhookUrl)}`);
       const data = await res.json();
       return ok({ telegram: data });
     }
 
     case 'removeWebhook': {
+      const adminErr = requireRole(body, 'admin');
+      if (adminErr) return err(adminErr, 403);
       const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/deleteWebhook`);
       const data = await res.json();
       return ok({ telegram: data });
@@ -8267,6 +8286,8 @@ Rispondi SOLO con JSON valido:
           }
           const picked = urgList[scelta - 1];
           const pickedCli = cliNames7[picked.cliente_id] || picked.cliente_id || '?';
+          // Verifica che sia ancora aperta (race condition)
+          if (picked.stato !== 'aperta') { reply = `⚠️ Urgenza ${picked.id} non più aperta (stato: ${picked.stato})`; break; }
           await sb(env, `urgenze?id=eq.${picked.id}`, 'PATCH', { stato: 'assegnata', tecnico_assegnato: utente.id, data_assegnazione: new Date().toISOString() });
           reply = `✅ Urgenza *${picked.id}* assegnata a te!\n🏠 Cliente: ${pickedCli}\n📋 Problema: ${picked.problema}`;
           await sendTelegramNotification(env, 'urgenza_assegnata', { id: picked.id, tecnicoAssegnato: utente.id });
@@ -8281,8 +8302,8 @@ Rispondi SOLO con JSON valido:
         }
         case '/risolto': {
           const note = parts.slice(1).join(' ');
-          const urg = await sb(env, 'urgenze', 'GET', null, `?tecnico_assegnato=eq.${utente.id}&stato=in.(assegnata,in_corso)&limit=1`);
-          if (!urg.length) { reply = 'Nessuna urgenza in corso'; break; }
+          const urg = await sb(env, 'urgenze', 'GET', null, `?tecnico_assegnato=eq.${utente.id}&stato=eq.in_corso&limit=1`);
+          if (!urg.length) { reply = 'Nessuna urgenza in corso. Usa /incorso prima di /risolto'; break; }
           await sb(env, `urgenze?id=eq.${urg[0].id}`, 'PATCH', { stato: 'risolta', data_risoluzione: new Date().toISOString(), note });
           reply = `✅ Urgenza *${urg[0].id}* RISOLTA${note ? '\nNote: ' + note : ''}`;
           break;
@@ -8983,8 +9004,12 @@ Rispondi SOLO con JSON valido:
                 break;
               }
               const picked = urgList[scelta - 1];
+              // Verifica che sia ancora aperta
+              if (picked.stato !== 'aperta') { botReply = `⚠️ Urgenza ${picked.id} non più aperta (stato: ${picked.stato})`; break; }
               await sb(env, `urgenze?id=eq.${picked.id}`, 'PATCH', { stato: 'assegnata', tecnico_assegnato: mittente, data_assegnazione: new Date().toISOString() });
-              botReply = `✅ Urgenza ${picked.id} assegnata a te!\n${picked.problema}`;
+              // Risolvi nome cliente
+              const pickedCliName = picked.cliente_id ? await getEntityName(env, 'clienti', picked.cliente_id).catch(()=>picked.cliente_id) : '?';
+              botReply = `✅ Urgenza ${picked.id} assegnata a te!\n🏠 ${pickedCliName}\n${picked.problema}`;
               break;
             }
             case '/incorso': {
@@ -8996,8 +9021,8 @@ Rispondi SOLO con JSON valido:
             }
             case '/risolto': {
               const note = parts.slice(1).join(' ');
-              const urg = await sb(env, 'urgenze', 'GET', null, `?tecnico_assegnato=eq.${mittente}&stato=in.(assegnata,in_corso)&limit=1`).catch(()=>[]);
-              if (!urg.length) { botReply = 'Nessuna urgenza in corso'; break; }
+              const urg = await sb(env, 'urgenze', 'GET', null, `?tecnico_assegnato=eq.${mittente}&stato=eq.in_corso&limit=1`).catch(()=>[]);
+              if (!urg.length) { botReply = 'Nessuna urgenza in corso. Usa /incorso prima di /risolto'; break; }
               await sb(env, `urgenze?id=eq.${urg[0].id}`, 'PATCH', { stato: 'risolta', data_risoluzione: new Date().toISOString(), note });
               botReply = `✅ Urgenza ${urg[0].id} RISOLTA${note ? '\nNote: ' + note : ''}`;
               break;
@@ -9006,7 +9031,7 @@ Rispondi SOLO con JSON valido:
               const codice = parts[1] || '';
               const qt = parseInt(parts[2]) || 1;
               const cliente = parts.slice(3).join(' ') || '';
-              if (!codice) { botReply = '📦 Formato: /ordine [codice] [quantità] [cliente]'; break; }
+              if (!codice || !/^\d\.\d{4}\.\d{4}\.\d$/.test(codice)) { botReply = '📦 Formato: /ordine [codice] [quantità] [cliente]\nEs: /ordine 9.1189.0283.0 2 Bondioli'; break; }
               const ordId = secureId('ORD_APP');
               const ordTid = getTid(env);
               await sb(env, 'ordini', 'POST', { id: ordId, tenant_id: ordTid, tecnico_id: mittente, codice, descrizione: `${codice} x${qt}${cliente ? ' - ' + cliente : ''}`, quantita: qt, stato: 'richiesto', data_richiesta: new Date().toISOString() });
@@ -9442,7 +9467,7 @@ Rispondi SOLO con JSON valido:
 
       // Se non dry_run, crea gli interventi nel piano
       if (!dry_run && scheduled.length) {
-        const pmTid = tenantId(env);
+        const pmTid = getTid(env);
         const now = new Date().toISOString();
         const tagId = await resolveTagliandoId(env);
         let created = 0, errors = [], skippedDup = 0;

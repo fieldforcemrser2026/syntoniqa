@@ -125,6 +125,8 @@ var PM_PROVIDER = (window.SYNTONIQA_CONFIG && window.SYNTONIQA_CONFIG.pmSync && 
 --shadow-lg:0 12px 32px rgba(0,0,0,.08),0 4px 8px rgba(0,0,0,.04);
 --shadow-card:0 1px 3px rgba(0,0,0,.04),0 0 0 1px rgba(0,0,0,.03);
 --radius:12px;--radius-sm:8px;--radius-lg:18px;
+--text:#1F2937;--border:#E5E7EB;--muted:#9CA3AF;--bg:#F9FAFB;
+--bg2:#F3F4F6;--text3:#6B7280;--primary:#6366F1;--card:#FFFFFF;
 }
 [data-theme="dark"]{
   --gray:#9CA3AF;--gray2:#6B7280;--gray3:#374151;--gray4:#111827;--gray5:#0F172A;
@@ -135,6 +137,8 @@ var PM_PROVIDER = (window.SYNTONIQA_CONFIG && window.SYNTONIQA_CONFIG.pmSync && 
   --err-light:#3B1111;--info-light:#172554;--ok-light:#052E16;--warn-light:#422006;--purple-light:#2E1065;
   --sla-warn-bg:#422006;--sla-warn-bd:#92400E;--sla-crit-bg:#3B1111;--sla-crit-bd:#991B1B;--sla-breach-bg:#2E1065;--sla-breach-bd:#6D28D9;
   --null-color:#4B5563;--badge-bg:#374151;--surface:#111827;--surface2:#1F2937;
+  --text:#F9FAFB;--border:#374151;--muted:#6B7280;--bg:#111827;
+  --bg2:#1F2937;--text3:#9CA3AF;--primary:#818CF8;--card:#1F2937;
 }
 [data-theme="dark"] .sidebar{background:#0F172A;border-color:#1E293B}
 [data-theme="dark"] .header{background:#1F2937;border-color:#374151}
@@ -2550,7 +2554,7 @@ Workers AI è incluso in Cloudflare e non richiede chiavi aggiuntive.
     </div>
   </div>
   <div style="margin-bottom:16px">
-    <label style="font-weight:600;font-size:.82rem;display:block;margin-bottom:6px">2. Vai sul portale PM <a id="pmSyncProviderLink" href="#" target="_blank" style="color:var(--c1)" id="pmProviderLink">apri portale →</a> (loggati se necessario)</label>
+    <label style="font-weight:600;font-size:.82rem;display:block;margin-bottom:6px">2. Vai sul portale PM <a id="pmSyncProviderLink" href="#" target="_blank" style="color:var(--c1)">apri portale →</a> (loggati se necessario)</label>
   </div>
   <div style="margin-bottom:16px">
     <label style="font-weight:600;font-size:.82rem;display:block;margin-bottom:6px">3. Clicca il preferito "🔄 Sync PM → Syntoniqa" dalla barra preferiti</label>
@@ -2936,6 +2940,7 @@ async function doLogin(e){
 }
 
 function logout(){
+  if(window._autoRefreshTimer) clearInterval(window._autoRefreshTimer);
   localStorage.removeItem('ff8_session');
   localStorage.removeItem('ff8_token');
   JWT_TOKEN=null;
@@ -4641,7 +4646,7 @@ function renderMacchine(){
   }
 
   // Helper: escape quotes for onclick attrs
-  const esc=s=>(s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+  const escAttr=s=>(s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
 
   if(view==='tree'){
     const mlt=$('macchListTable');if(mlt)mlt.style.display='none';
@@ -4679,21 +4684,21 @@ function renderMacchine(){
       assets.forEach(a=>{
         const stato=a.Stato||'';
         const statoTag=stato.toLowerCase().includes('attiv')?'<span class="tag tag-ok">Attivo</span>':stato.toLowerCase().includes('dismess')?'<span class="tag tag-err">Dismesso</span>':stato?`<span class="tag tag-gray">${stato}</span>`:'';
-        const assetInfo=esc(a.NomeAsset||tipo)+' — SN:'+esc(a.NumeroSerie||'-');
-        const cliName=esc(a.NomeAccount||'');
+        const assetInfo=escAttr(a.NomeAsset||tipo)+' — SN:'+escAttr(a.NumeroSerie||'-');
+        const cliName=escAttr(a.NomeAccount||'');
         html+=`<tr>
           <td>${prodIcon(tipo,20)}</td>
-          <td><strong style="color:${cfg.color||'#333'}">${a.Modello||'—'}</strong></td>
-          <td>${a.NomeAsset||'—'}</td>
-          <td style="font-family:var(--mono);font-size:.72rem">${a.NumeroSerie||'—'}</td>
-          <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${cliName}">${a.NomeAccount||'—'}</td>
+          <td><strong style="color:${cfg.color||'#333'}">${esc(a.Modello||'—')}</strong></td>
+          <td>${esc(a.NomeAsset||'—')}</td>
+          <td style="font-family:var(--mono);font-size:.72rem">${esc(a.NumeroSerie||'—')}</td>
+          <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${cliName}">${esc(a.NomeAccount||'—')}</td>
           <td>${statoTag}</td>
           <td style="white-space:nowrap">
-            <button class="btn btn-ghost btn-xs icon-action-err" onclick="openAssetAction('urgenza','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Crea Urgenza">🚨</button>
-            <button class="btn btn-ghost btn-xs icon-action-info" onclick="openAssetAction('piano','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Crea Intervento/Tagliando">📋</button>
-            <button class="btn btn-ghost btn-xs icon-action-purple" onclick="openAssetAction('ordine','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Ordine Ricambi">📦</button>
-            <button class="btn btn-ghost btn-xs icon-action-warn" onclick="openAssetAction('notifica','${esc(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Invia Notifica">🔔</button>
-            <button class="btn btn-ghost btn-xs" onclick="showAssetOnMap('${esc(a.CodiceM3)}','${esc(a.NomeAsset)}')" title="Mappa">📍</button>
+            <button class="btn btn-ghost btn-xs icon-action-err" onclick="openAssetAction('urgenza','${escAttr(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Crea Urgenza">🚨</button>
+            <button class="btn btn-ghost btn-xs icon-action-info" onclick="openAssetAction('piano','${escAttr(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Crea Intervento/Tagliando">📋</button>
+            <button class="btn btn-ghost btn-xs icon-action-purple" onclick="openAssetAction('ordine','${escAttr(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Ordine Ricambi">📦</button>
+            <button class="btn btn-ghost btn-xs icon-action-warn" onclick="openAssetAction('notifica','${escAttr(a.CodiceM3)}','${assetInfo}','${cliName}')" title="Invia Notifica">🔔</button>
+            <button class="btn btn-ghost btn-xs" onclick="showAssetOnMap('${escAttr(a.CodiceM3)}','${escAttr(a.NomeAsset)}')" title="Mappa">📍</button>
           </td>
         </tr>`;
       });
@@ -6876,8 +6881,6 @@ async function importAnagXlsx(file){
 }
 
 // Auto-load when section is shown
-var _origShowSec=typeof showSec==='function'?showSec:null;
-// We'll hook into showSec after page load
 
 // ============ EDIT STATE ============
 var EDITING={utente:null,cliente:null,macchina:null,automezzo:null,ordine:null,installazione:null,checklist:null,documento:null,piano:null,urgenza:null,reperibilita:null,trasferta:null};
@@ -10777,13 +10780,13 @@ function showPMSyncModal(){
   let providerHost = '';
   try { providerHost = new URL(providerPageUrl).hostname; } catch(e){}
   // Endpoint finale: se relativo, usa come path; se assoluto, usa direttamente
-  const endpointFull = apiEndpoint.startsWith('http') ? apiEndpoint : apiEndpoint;
+  const endpointFull = apiEndpoint.startsWith('http') ? apiEndpoint : (providerPageUrl ? new URL(apiEndpoint, providerPageUrl).href : apiEndpoint);
 
   // Genera bookmarklet compatto (limite Chrome ~2KB per javascript: URL)
-  const esc = s => (s+'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  const escJs = s => (s+'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   const bm = `javascript:(function(){
-var H='${esc(providerHost)}',EP='${esc(endpointFull)}',AK='${esc(authKey)}',AF='${esc(authField)}',CLR='${esc(providerColor)}';
-var FSN='${esc(fSN)}',FDU='${esc(fDU)}',FDS='${esc(fDS)}',FMK='${esc(fMK)}',FTP='${esc(fType)}';
+var H='${escJs(providerHost)}',EP='${escJs(endpointFull)}',AK='${escJs(authKey)}',AF='${escJs(authField)}',CLR='${escJs(providerColor)}';
+var FSN='${escJs(fSN)}',FDU='${escJs(fDU)}',FDS='${escJs(fDS)}',FMK='${escJs(fMK)}',FTP='${escJs(fType)}';
 if(H&&location.hostname!==H){alert('Apri '+H);return;}
 var a={};try{a=JSON.parse(localStorage.getItem(AK)||'{}');}catch(e){}
 var t=a[AF];if(!t){alert('Login scaduto');return;}

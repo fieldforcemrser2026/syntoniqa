@@ -345,6 +345,12 @@ body{font-family:var(--font);background:var(--bg);color:var(--dark);min-height:1
 [data-theme="dark"] .toast{box-shadow:0 8px 32px rgba(0,0,0,.5)}
 [data-theme="dark"] .sheet{background:var(--surface);box-shadow:0 -8px 40px rgba(0,0,0,.4)}
 
+/* Table styling */
+.tbl{width:100%;border-collapse:collapse;font-size:.8125rem}
+.tbl th,.tbl td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)}
+.tbl th{font-size:.6875rem;text-transform:uppercase;color:var(--gray);font-weight:600;letter-spacing:.04em}
+[data-theme="dark"] .tbl th,.tbl td{border-color:var(--border)}
+
 /* Urgenza card accent */
 .urg-card{position:relative;overflow:hidden}
 .urg-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:0 4px 4px 0}
@@ -395,7 +401,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--dark);min-height:1
 <div id="forgotPwdSection" style="display:none;text-align:center;margin-top:16px">
 <a href="#" onclick="showForgotPwd();return false" style="font-size:.8125rem;color:var(--c1);text-decoration:none">🔑 Password dimenticata?</a>
 </div>
-<div id="forgotPwdForm" style="display:none;margin-top:16px;padding:16px;background:#F3F4F6;border-radius:12px">
+<div id="forgotPwdForm" style="display:none;margin-top:16px;padding:16px;background:var(--gray5);border-radius:12px">
 <p style="font-size:.8125rem;color:var(--gray);margin-bottom:12px">Inserisci il tuo username. L'admin riceverà una notifica per resettare la tua password.</p>
 <div class="field"><label>Username</label><input type="text" id="forgotUsername" placeholder="nome.cognome"></div>
 <div id="forgotMsg" style="font-size:.8125rem;margin-bottom:8px;display:none"></div>
@@ -482,8 +488,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--dark);min-height:1
 <div class="chat-msgs" id="chatMsgs">
 <div class="empty"><div class="ico">💬</div><p>Seleziona un canale</p></div>
 </div>
-<div id="chatCmdBar" style="display:none;padding:6px 10px;background:#F0F9FF;border-top:1px solid #BAE6FD;font-size:.75rem;overflow-x:auto;white-space:nowrap">
-<span style="color:#0369A1;font-weight:600">Comandi Bot TG:</span>
+<div id="chatCmdBar" style="display:none;padding:6px 10px;background:var(--surface);border-top:1px solid var(--border);font-size:.75rem;overflow-x:auto;white-space:nowrap">
+<span style="color:var(--c3);font-weight:600">Comandi Bot TG:</span>
 <button class="btn btn-xs btn-outline" onclick="insertCmd('/stato')" style="margin:0 2px;font-size:.7rem">/stato</button>
 <button class="btn btn-xs btn-outline" onclick="insertCmd('/oggi')" style="margin:0 2px;font-size:.7rem">/oggi</button>
 <button class="btn btn-xs btn-outline" onclick="insertCmd('/settimana')" style="margin:0 2px;font-size:.7rem">/settimana</button>
@@ -512,6 +518,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--dark);min-height:1
 <div class="menu-item" onclick="goPage('installazioni')"><span class="ico">🔧</span><span class="lbl">Installazioni</span></div>
 <div class="menu-item" onclick="goPage('clienti')"><span class="ico">🏢</span><span class="lbl">Clienti</span></div>
 <div class="menu-item" onclick="goPage('macchine')"><span class="ico">⚙️</span><span class="lbl">Macchine</span></div>
+<div class="menu-item" onclick="goPage('ordini')"><span class="ico">📦</span><span class="lbl">Ordini</span></div>
 <div class="menu-item" onclick="goPage('documenti')"><span class="ico">📁</span><span class="lbl">Documenti</span></div>
 <div class="menu-item" onclick="goPage('mappa')"><span class="ico">🗺️</span><span class="lbl">Mappa Giro</span></div>
 <div class="menu-item" onclick="goPage('calendario')"><span class="ico">📅</span><span class="lbl">Calendario</span></div>
@@ -603,7 +610,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--dark);min-height:1
 <!-- PAGE: PROFILO -->
 <div class="page" id="pgProfilo">
 <div style="text-align:center;padding:24px 0 16px">
-<div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--dark),var(--c1));display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:1.5rem;font-weight:700;color:var(--white)" id="profAvatar">MC</div>
+<div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#2D3748,var(--c1));display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:1.5rem;font-weight:700;color:#fff" id="profAvatar">MC</div>
 <h2 style="font-size:1.125rem;font-weight:700" id="profName">—</h2>
 <p style="font-size:.8125rem;color:var(--gray)" id="profRole">—</p>
 </div>
@@ -1085,10 +1092,11 @@ async function refreshData(silent){
       const json=await r.json();
       if(json.success&&json.data){DATA=json.data;_lastRefresh=Date.now();if(USER&&USER.ID){const fresh=(DATA.utenti||[]).find(x=>x.ID===USER.ID);if(fresh)USER={...fresh}}renderAllForce()}
     }catch(e){console.warn('[SILENT-REFRESH]',e.message)}
-    return;
+    return Promise.resolve();
   }
   try{
     DATA=await apiCall('getAll',{userId:USER?.ID||''});
+    _lastRefresh=Date.now();
     if(USER&&USER.ID){const fresh=(DATA.utenti||[]).find(x=>x.ID===USER.ID);if(fresh)USER={...fresh}}
     renderAll();
     loadChatUnread().catch(()=>{});
@@ -1221,7 +1229,6 @@ function enterApp(){
     if(bnav&&!bnav.querySelector('[data-p="squadra"]')){
       const btn=document.createElement('button');
       btn.setAttribute('data-p','squadra');
-      btn.setAttribute('onclick',"goPage('squadra')");
       btn.innerHTML='<span class="ico">👥</span>Squadra';
       btn.addEventListener('click',()=>goPage('squadra'));
       bnav.appendChild(btn);
@@ -1455,7 +1462,7 @@ function renderInt(){
   if(dt)items=items.filter(p=>(p.Data||'')<=dt);
   items.sort((a,b)=>(b.Data||'').localeCompare(a.Data||'')||(a.OraInizio||'').localeCompare(b.OraInizio||''));
   const cnt=items.length;
-  $('intList').innerHTML=cnt?'<div style="padding:8px 16px;font-size:.75rem;color:var(--gray);border-bottom:1px solid var(--gray3)">'+cnt+' intervento'+(cnt>1?'i':'')+(df||dt?' nel periodo':'')+' trovato'+(cnt>1?'i':'')+'</div>'+items.map(p=>intItem(p)).join(''):'<div class="empty"><div class="ico">📋</div><p>Nessun intervento'+(df||dt?' nel periodo':'')+'</p></div>';
+  $('intList').innerHTML=cnt?'<div style="padding:8px 16px;font-size:.75rem;color:var(--gray);border-bottom:1px solid var(--gray3)">'+cnt+' '+(cnt>1?'interventi':'intervento')+(df||dt?' nel periodo':'')+' '+(cnt>1?'trovati':'trovato')+'</div>'+items.map(p=>intItem(p)).join(''):'<div class="empty"><div class="ico">📋</div><p>Nessun intervento'+(df||dt?' nel periodo':'')+'</p></div>';
 }
 function clearDateFilter(){$('intDateFrom').value='';$('intDateTo').value='';renderInt()}
 
@@ -1589,8 +1596,8 @@ async function completaInt(){
     for(const af of scAllegatiFiles){
       if(!af)continue;
       try{
-        const up=await apiCall('uploadFile',{base64:af.base64,mimeType:af.type,fileName:af.name,userId:USER?.ID},'POST');
-        if(up&&up.fileUrl) await apiCall('createAllegato',{Nome:af.name,FileURL:up.fileUrl,FileID:up.fileId,MimeType:af.type,DimensioneKB:af.sizeKB,RiferimentoTipo:'piano',RiferimentoID:interventoId},'POST');
+        const up=await apiCall('uploadFile',{base64Data:af.base64,mimeType:af.type,fileName:af.name,userId:USER?.ID},'POST');
+        if(up&&up.url) await apiCall('createAllegato',{Nome:af.name,FileURL:up.url,FileID:up.fileId,MimeType:af.type,DimensioneKB:af.sizeKB,RiferimentoTipo:'piano',RiferimentoID:interventoId},'POST');
       }catch(e){}
     }
     toast('Intervento completato!','ok');closeSheet('shCompleta');await refreshData();
@@ -1607,7 +1614,7 @@ function addAllegatoFile(input){
     scAllegatiFiles.push({base64,type:file.type,name:file.name,sizeKB:Math.round(file.size/1024)});
     const isImg=file.type.startsWith('image/');
     const prev=document.createElement('div');
-    prev.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 10px;background:#F9FAFB;border-radius:8px';
+    prev.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--gray5);border-radius:8px';
     prev.innerHTML=(isImg?'<img src="'+reader.result+'" style="width:40px;height:40px;border-radius:6px;object-fit:cover">':'<span>📄</span>')+
       '<div style="flex:1;min-width:0"><div style="font-size:.8rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+file.name+'</div><div style="font-size:.7rem;color:var(--gray)">'+Math.round(file.size/1024)+' KB</div></div>'+
       '<button onclick="rmAllegato('+idx+',this.parentElement)" style="background:none;border:none;color:var(--err);cursor:pointer">✕</button>';
@@ -2000,7 +2007,7 @@ function showMacDetail(id){
 function creaUrgMacchina(macId,cliId){
   const prob=prompt('Descrivi il problema:');
   if(!prob)return;
-  apiCall('createUrgenza',{MacchinaID:macId,ClienteID:cliId,Problema:prob,PrioritaID:2,Stato:'aperta',operatoreId:USER?.ID},'POST')
+  apiCall('createUrgenza',{MacchinaID:macId,ClienteID:cliId,Problema:prob,PrioritaID:'PRI_2',Stato:'aperta',operatoreId:USER?.ID},'POST')
     .then(()=>{toast('Urgenza creata!','ok');refreshData()})
     .catch(e=>toast(e.message,'err'));
 }
@@ -2145,7 +2152,7 @@ function renderCalMobile(){
     const ds=y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
     const dayItems=piano.filter(p=>p.Data===ds);
     const isToday=ds===todayStr;
-    const bg=isToday?'background:var(--c1);color:var(--white);font-weight:700':'';
+    const bg=isToday?'background:var(--c1);color:#fff;font-weight:700':'';
     html+='<div style="padding:6px 4px;border-radius:var(--radius-sm);cursor:pointer;text-align:center;font-size:.75rem;'+bg+'" onclick="showCalMobDay(\''+ds+'\')">'+d+(dayItems.length>0?'<span class="cal-dot"></span>':'')+'</div>';
   }
   const rem=7-((startDay+last.getDate())%7);
@@ -2860,7 +2867,7 @@ async function searchCatalogMob(){
       html+=`<div style="padding:12px;border-bottom:1px solid var(--gray2)">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <code style="background:#EEF2FF;color:#4338CA;padding:3px 8px;border-radius:6px;font-size:.75rem;font-weight:600">${p.Codice||'—'}</code>
-          <span style="font-size:.65rem;color:var(--gray);background:var(--gray1);padding:2px 6px;border-radius:8px">${p.ModelloMacchina||'—'}</span>
+          <span style="font-size:.65rem;color:var(--gray);background:var(--gray4);padding:2px 6px;border-radius:8px">${p.ModelloMacchina||'—'}</span>
         </div>
         <div style="font-weight:500;margin-top:4px;font-size:.85rem">${p.Nome||'—'}</div>
         ${p.Descrizione?'<div style="font-size:.75rem;color:var(--gray);margin-top:2px">'+p.Descrizione.substring(0,80)+'</div>':''}
@@ -2891,9 +2898,9 @@ function renderSquadra(){
     <div class="card-head"><h3>👥 Stato Squadra</h3><span style="font-size:.75rem;color:var(--gray)">${team.length} tecnici</span></div>
     <div class="card-body">
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin-bottom:12px">
-        <div style="background:var(--bg2);border-radius:8px;padding:8px"><div style="font-size:1.25rem;font-weight:700;color:var(--c1)">${intComp}/${intOggi}</div><div style="font-size:.6875rem;color:var(--gray)">Interventi oggi</div></div>
-        <div style="background:var(--bg2);border-radius:8px;padding:8px"><div style="font-size:1.25rem;font-weight:700;color:${urgenzeAperte.length>0?'var(--err)':'var(--ok)'}">${urgenzeAperte.length}</div><div style="font-size:.6875rem;color:var(--gray)">Urgenze aperte</div></div>
-        <div style="background:var(--bg2);border-radius:8px;padding:8px"><div style="font-size:1.25rem;font-weight:700;color:${richiestePending.length>0?'var(--warn)':'var(--gray)'}">${richiestePending.length}</div><div style="font-size:.6875rem;color:var(--gray)">Richieste</div></div>
+        <div style="background:var(--gray5);border-radius:8px;padding:8px"><div style="font-size:1.25rem;font-weight:700;color:var(--c1)">${intComp}/${intOggi}</div><div style="font-size:.6875rem;color:var(--gray)">Interventi oggi</div></div>
+        <div style="background:var(--gray5);border-radius:8px;padding:8px"><div style="font-size:1.25rem;font-weight:700;color:${urgenzeAperte.length>0?'var(--err)':'var(--ok)'}">${urgenzeAperte.length}</div><div style="font-size:.6875rem;color:var(--gray)">Urgenze aperte</div></div>
+        <div style="background:var(--gray5);border-radius:8px;padding:8px"><div style="font-size:1.25rem;font-weight:700;color:${richiestePending.length>0?'var(--warn)':'var(--gray)'}">${richiestePending.length}</div><div style="font-size:.6875rem;color:var(--gray)">Richieste</div></div>
       </div>
       ${team.length===0?'<p style="color:var(--gray);text-align:center;font-size:.8125rem">Nessun tecnico nel tuo team. Assicurati che abbiano lo stesso squadra_id o caposquadra_id.</p>':''}
       ${team.map(t=>{
@@ -2904,7 +2911,7 @@ function renderSquadra(){
         const ini=((t.Nome||'')[0]||'')+((t.Cognome||'')[0]||'');
         const statusColor=inCorsoT>0?'var(--ok)':intT.length>0?'var(--c1)':'var(--gray3)';
         return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--gray4)">
-          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--c2),var(--c1));display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:.7rem;flex-shrink:0">${ini}</div>
+          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--c3),var(--c1));display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:.7rem;flex-shrink:0">${ini}</div>
           <div style="flex:1;min-width:0">
             <div style="font-weight:600;font-size:.875rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${(t.Nome||'')+' '+(t.Cognome||'')}</div>
             <div style="font-size:.6875rem;color:var(--gray)">${t.Base||'—'} · ${t.Ruolo}</div>
@@ -2930,7 +2937,7 @@ function renderSquadra(){
             <div>
               <div style="font-weight:600;font-size:.875rem">${typeIcons[r.Tipo]||'📝'} ${r.Tipo||'Richiesta'} — ${tecNome}</div>
               <div style="font-size:.75rem;color:var(--gray)">${r.DataInizio||''}${r.DataFine&&r.DataFine!==r.DataInizio?' → '+r.DataFine:''}</div>
-              ${r.Motivo?`<div style="font-size:.75rem;color:var(--muted);margin-top:2px">${esc(r.Motivo)}</div>`:''}
+              ${r.Motivo?`<div style="font-size:.75rem;color:var(--gray);margin-top:2px">${esc(r.Motivo)}</div>`:''}
             </div>
           </div>
           <div style="display:flex;gap:6px">
