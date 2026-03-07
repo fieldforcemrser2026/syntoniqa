@@ -1671,7 +1671,12 @@ async function handlePost(action, body, env) {
       const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = secureId('CLI');
-      const row = { id, tenant_id: getTid(env), ...getFields(body), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      const cliWritable = ['nome','citta','prov','indirizzo','cap','latitudine','longitudine','email','telefono','contratto','note'];
+      const cliFields = getFields(body);
+      const row = { id, tenant_id: getTid(env), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      for (const k of cliWritable) { if (cliFields[k] !== undefined) row[k] = cliFields[k]; }
+      // Alias: ragione_sociale → nome (retrocompatibilità)
+      if (cliFields.ragione_sociale && !row.nome) row.nome = cliFields.ragione_sociale;
       const result = await sb(env, 'clienti', 'POST', row);
       await wlog('cliente', id, 'created', body.operatoreId);
       return ok({ cliente: pascalizeRecord(result[0]) });
@@ -1680,9 +1685,12 @@ async function handlePost(action, body, env) {
     case 'updateCliente': {
       const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
-      const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
-      updates.updated_at = new Date().toISOString();
-      for (const k of Object.keys(updates)) { if (updates[k] === null && k.endsWith('_id')) delete updates[k]; }
+      const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...rawUpdates } = body;
+      const cliUpdatable = ['nome','citta','prov','indirizzo','cap','latitudine','longitudine','email','telefono','contratto','note','obsoleto'];
+      const updates = { updated_at: new Date().toISOString() };
+      for (const k of cliUpdatable) { if (rawUpdates[k] !== undefined) updates[k] = rawUpdates[k]; }
+      // Alias: ragione_sociale → nome
+      if (rawUpdates.ragione_sociale !== undefined) updates.nome = rawUpdates.ragione_sociale;
       await sb(env, `clienti?id=eq.${id}`, 'PATCH', updates);
       await wlog('cliente', id, 'updated', body.operatoreId);
       return ok();
@@ -1704,7 +1712,13 @@ async function handlePost(action, body, env) {
       const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = secureId('MAC');
-      const result = await sb(env, 'macchine', 'POST', { id, tenant_id: getTid(env), ...getFields(body), created_at: new Date().toISOString() });
+      const macWritable = ['seriale','modello','tipo','cliente_id','anno_installazione','garanzia_fino','ore_lavoro','prossimo_tagliando','ultimo_tagliando','note'];
+      const macFields = getFields(body);
+      const macRow = { id, tenant_id: getTid(env), created_at: new Date().toISOString() };
+      for (const k of macWritable) { if (macFields[k] !== undefined) macRow[k] = macFields[k]; }
+      // Alias: serial_number → seriale (retrocompatibilità)
+      if (macFields.serial_number && !macRow.seriale) macRow.seriale = macFields.serial_number;
+      const result = await sb(env, 'macchine', 'POST', macRow);
       await wlog('macchina', id, 'created', body.operatoreId);
       return ok({ macchina: pascalizeRecord(result[0]) });
     }
@@ -1712,8 +1726,11 @@ async function handlePost(action, body, env) {
     case 'updateMacchina': {
       const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
-      const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
-      for (const k of Object.keys(updates)) { if (updates[k] === null && k.endsWith('_id')) delete updates[k]; }
+      const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...rawMacUpdates } = body;
+      const macUpdatable = ['seriale','modello','tipo','cliente_id','anno_installazione','garanzia_fino','ore_lavoro','prossimo_tagliando','ultimo_tagliando','note','obsoleto'];
+      const updates = {};
+      for (const k of macUpdatable) { if (rawMacUpdates[k] !== undefined) updates[k] = rawMacUpdates[k]; }
+      if (rawMacUpdates.serial_number !== undefined) updates.seriale = rawMacUpdates.serial_number;
       await sb(env, `macchine?id=eq.${id}`, 'PATCH', updates);
       await wlog('macchina', id, 'updated', body.operatoreId);
       return ok();
@@ -1742,7 +1759,11 @@ async function handlePost(action, body, env) {
         if (dup && dup.length) return err(`Automezzo con targa "${fields.targa}" già esistente`, 400);
       }
       const id = secureId('AUT');
-      const result = await sb(env, 'automezzi', 'POST', { id, ...fields });
+      const autWritable = ['targa','descrizione','assegnatario_id','km_attuali','status','prossimo_controllo','allestimento','note','tenant_id'];
+      const autRow = { id };
+      for (const k of autWritable) { if (fields[k] !== undefined) autRow[k] = fields[k]; }
+      autRow.tenant_id = autRow.tenant_id || getTid(env);
+      const result = await sb(env, 'automezzi', 'POST', autRow);
       // SYNC: se ha assegnatario_id, aggiorna automezzo_id nell'utente
       if (fields.assegnatario_id) {
         await sb(env, `utenti?id=eq.${fields.assegnatario_id}`, 'PATCH', { automezzo_id: id, updated_at: new Date().toISOString() }).catch(() => {});
@@ -1754,10 +1775,12 @@ async function handlePost(action, body, env) {
     case 'updateAutomezzo': {
       const adminErr2 = requireRole(body, 'admin');
       if (adminErr2) return err(adminErr2, 403);
-      const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
-      for (const k of Object.keys(updates)) { if (updates[k] === null && k.endsWith('_id')) delete updates[k]; }
+      const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...rawAutUpdates } = body;
+      const autUpdatable = ['targa','descrizione','assegnatario_id','km_attuali','status','prossimo_controllo','allestimento','note','obsoleto'];
+      const updates = { updated_at: new Date().toISOString() };
+      for (const k of autUpdatable) { if (rawAutUpdates[k] !== undefined) updates[k] = rawAutUpdates[k]; }
       // Fix: colonna 'nome' non esiste in automezzi → mappa a descrizione
-      if (updates.nome) { updates.descrizione = updates.descrizione || updates.nome; delete updates.nome; }
+      if (rawAutUpdates.nome) { updates.descrizione = updates.descrizione || rawAutUpdates.nome; }
       // SYNC BIDIREZIONALE: se cambia assegnatario_id, aggiorna anche l'utente
       const newAssId = updates.assegnatario_id;
       if (newAssId) {
@@ -2025,10 +2048,13 @@ async function handlePost(action, body, env) {
     }
 
     case 'updateRichiesta': {
-      const { id, userId: _u, operatoreId: _op, action: _a, ...updates } = body;
-      if (updates.stato && updates.stato !== 'in_attesa') updates.data_risposta = new Date().toISOString();
-      // NB: richieste potrebbe non avere updated_at/created_at — non includerli
-      delete updates.updated_at; delete updates.created_at; delete updates.tenant_id;
+      const { id, userId: _u, operatoreId: _op, action: _a, ...rawRicUpdates } = body;
+      const ricUpdatable = ['stato','motivo','tipo','data_inizio','data_fine','data_risposta','note_admin','tecnico_id','obsoleto'];
+      const updates = {};
+      for (const k of ricUpdatable) { if (rawRicUpdates[k] !== undefined) updates[k] = rawRicUpdates[k]; }
+      // Alias: risposta_admin → note_admin (retrocompatibilità)
+      if (rawRicUpdates.risposta_admin !== undefined && !updates.note_admin) updates.note_admin = rawRicUpdates.risposta_admin;
+      if (updates.stato && updates.stato !== 'in_attesa') updates.data_risposta = updates.data_risposta || new Date().toISOString();
       await sb(env, `richieste?id=eq.${id}`, 'PATCH', updates);
 
       // Notifica tecnico dell'esito
