@@ -642,8 +642,16 @@ export default {
     }
 
     const url = new URL(request.url);
-    const action = url.searchParams.get('action') || url.pathname.split('/').pop();
+    const urlAction = url.searchParams.get('action') || url.pathname.split('/').pop() || '';
     const clientIP = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+
+    // Per POST: leggi il body una volta sola e risolvi l'action dal body se non è nel URL
+    let _rawBody = null;
+    const isPOST = request.method === 'POST';
+    if (isPOST && !urlAction) {
+      _rawBody = await request.json().catch(() => ({}));
+    }
+    const action = urlAction || (_rawBody && _rawBody.action) || '';
 
     // Telegram webhook: bypassa token check ma RICHIEDE secret + rate limit
     if (action === 'telegramWebhook') {
@@ -659,7 +667,7 @@ export default {
       // Rate limit anche per webhook (100 req/min)
       const rlTg = rateLimit(clientIP, 'telegram');
       if (rlTg.limited) return new Response('Too Many Requests', { status: 429 });
-      const body = await request.json().catch(() => ({}));
+      const body = _rawBody || await request.json().catch(() => ({}));
       return await handlePost(action, body, env);
     }
 
@@ -689,11 +697,10 @@ export default {
         } else {
           response = await handleGet(action, url, env, auth);
         }
-      } else if (request.method === 'POST') {
-        const rawBody = await request.json().catch(() => ({}));
-        const postAction = action || rawBody.action || '';
+      } else if (isPOST) {
+        const rawBody = _rawBody || await request.json().catch(() => ({}));
         // Login bypassa auth check (utente non ha ancora un token)
-        if (postAction === 'login') {
+        if (action === 'login') {
           const body = normalizeBody(rawBody);
           body._clientIP = clientIP;
           response = await handlePost('login', body, env);
@@ -710,7 +717,7 @@ export default {
             body._isJWT            = auth.jwt;                     // true se autenticato via JWT
             body._ancheCaposquadra = auth.ancheCaposquadra || false; // admin che gestisce anche una squadra
             body._squadraId        = auth.squadraId || null;       // squadra_id dal JWT
-            response = await handlePost(postAction, body, env);
+            response = await handlePost(action, body, env);
           }
         }
       } else {
