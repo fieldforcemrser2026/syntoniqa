@@ -759,7 +759,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 </div>
 <div class="sec-stats" id="pianoStats"></div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
-<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('piano','tblPiano',this.checked)"></th><th>Data</th><th>Ora</th><th>Tecnico</th><th>🚐</th><th>Cliente</th><th>Macchina</th><th>Tipo</th><th>Stato</th><th style="text-align:right">Km</th><th style="text-align:right">Ore</th><th></th></tr></thead><tbody id="tblPiano"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('piano','tblPiano',this.checked)"></th><th style="cursor:pointer;user-select:none" onclick="tableSort('piano','Data')">Data <span class="sort-arrow" data-col="Data" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('piano','Ora')">Ora <span class="sort-arrow" data-col="Ora" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('piano','Tecnico')">Tecnico <span class="sort-arrow" data-col="Tecnico" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th>🚐</th><th style="cursor:pointer;user-select:none" onclick="tableSort('piano','Cliente')">Cliente <span class="sort-arrow" data-col="Cliente" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('piano','Macchina')">Macchina <span class="sort-arrow" data-col="Macchina" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('piano','Tipo')">Tipo <span class="sort-arrow" data-col="Tipo" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('piano','Stato')">Stato <span class="sort-arrow" data-col="Stato" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="text-align:right;cursor:pointer;user-select:none" onclick="tableSort('piano','Km')">Km <span class="sort-arrow" data-col="Km" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="text-align:right;cursor:pointer;user-select:none" onclick="tableSort('piano','Ore')">Ore <span class="sort-arrow" data-col="Ore" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th></th></tr></thead><tbody id="tblPiano"></tbody></table>
 </div>
 </div>
 </section>
@@ -779,7 +779,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 </div>
 <div class="sec-stats" id="urgenzeStats"></div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
-<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('urgenze','tblUrgenze',this.checked)"></th><th>Priorità</th><th>Cliente</th><th>Macchina</th><th>Problema</th><th>Tecnico</th><th>SLA</th><th>Stato</th><th>Data</th><th></th></tr></thead><tbody id="tblUrgenze"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('urgenze','tblUrgenze',this.checked)"></th><th style="cursor:pointer;user-select:none" onclick="tableSort('urgenze','Priorita')">Priorità <span class="sort-arrow" data-col="Priorita" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('urgenze','Cliente')">Cliente <span class="sort-arrow" data-col="Cliente" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('urgenze','Macchina')">Macchina <span class="sort-arrow" data-col="Macchina" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('urgenze','Problema')">Problema <span class="sort-arrow" data-col="Problema" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('urgenze','Tecnico')">Tecnico <span class="sort-arrow" data-col="Tecnico" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('urgenze','SLA')">SLA <span class="sort-arrow" data-col="SLA" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('urgenze','Stato')">Stato <span class="sort-arrow" data-col="Stato" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('urgenze','Data')">Data <span class="sort-arrow" data-col="Data" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th></th></tr></thead><tbody id="tblUrgenze"></tbody></table>
 </div>
 </div>
 </section>
@@ -790,7 +790,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <div class="card-head">
 <h3>📦 Gestione Ordini Ricambi</h3>
 <div class="btn-group">
-<select id="filtOrdStato" onchange="renderOrdini()" class="inp-filter"><option value="">Tutti</option><option value="richiesto">Richiesto</option><option value="preso_in_carico">Preso in Carico</option><option value="ordinato">Ordinato</option><option value="in_arrivo">In Arrivo</option><option value="arrivato">Arrivato</option></select>
+<input type="hidden" id="filtOrdStato" value=""><div class="btn-group" id="filtOrdChips" style="gap:3px;flex-wrap:wrap"><button class="btn btn-ghost btn-xs ord-chip" data-stato="richiesto" onclick="toggleOrdChip(this)" style="font-size:.7rem">📝 Richiesto</button><button class="btn btn-ghost btn-xs ord-chip" data-stato="preso_in_carico" onclick="toggleOrdChip(this)" style="font-size:.7rem">👋 In Carico</button><button class="btn btn-ghost btn-xs ord-chip" data-stato="ordinato" onclick="toggleOrdChip(this)" style="font-size:.7rem">📦 Ordinato</button><button class="btn btn-ghost btn-xs ord-chip" data-stato="in_arrivo" onclick="toggleOrdChip(this)" style="font-size:.7rem">🚚 In Arrivo</button><button class="btn btn-ghost btn-xs ord-chip" data-stato="arrivato" onclick="toggleOrdChip(this)" style="font-size:.7rem">✅ Arrivato</button></div>
 <button class="btn btn-ghost btn-sm" onclick="exportOrdiniCSV()" title="Esporta CSV">📥</button>
 <button class="btn btn-info btn-sm" onclick="EDITING.ordine=null;setModalTitle('modalOrdine','📦 Nuovo Ordine');openModal('modalOrdine')">+ Nuovo Ordine</button>
 </div>
@@ -806,7 +806,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 </div>
 </div>
 <div class="card-body np" style="max-height:500px;overflow-y:auto">
-<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('ordini','tblOrdini',this.checked)"></th><th>Codice</th><th>Descrizione</th><th>Qtà</th><th>Tecnico</th><th>Cliente</th><th>Stato</th><th>Richiesto</th><th>ETA</th><th></th></tr></thead><tbody id="tblOrdini"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('ordini','tblOrdini',this.checked)"></th><th style="cursor:pointer;user-select:none" onclick="tableSort('ordini','Codice')">Codice <span class="sort-arrow" data-col="Codice" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('ordini','Descrizione')">Descrizione <span class="sort-arrow" data-col="Descrizione" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('ordini','Qta')">Qtà <span class="sort-arrow" data-col="Qta" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('ordini','Tecnico')">Tecnico <span class="sort-arrow" data-col="Tecnico" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('ordini','Cliente')">Cliente <span class="sort-arrow" data-col="Cliente" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('ordini','Stato')">Stato <span class="sort-arrow" data-col="Stato" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('ordini','Richiesto')">Richiesto <span class="sort-arrow" data-col="Richiesto" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('ordini','ETA')">ETA <span class="sort-arrow" data-col="ETA" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th></th></tr></thead><tbody id="tblOrdini"></tbody></table>
 </div>
 </div>
 </section>
@@ -816,7 +816,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <div class="card">
 <div class="card-head"><h3>🏗️ Installazioni in Corso</h3><button class="btn btn-primary btn-sm" onclick="EDITING.installazione=null;setModalTitle('modalInstall','🏗️ Nuova Installazione');openModal('modalInstall')">+ Nuova Installazione</button></div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
-<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('install','tblInstall',this.checked)"></th><th>Cliente</th><th>Macchina</th><th>Inizio</th><th>Fine Prev.</th><th>Fase</th><th>Tecnici</th><th>Stato</th><th></th></tr></thead><tbody id="tblInstall"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('install','tblInstall',this.checked)"></th><th style="cursor:pointer;user-select:none" onclick="tableSort('installazioni','Cliente')">Cliente <span class="sort-arrow" data-col="Cliente" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('installazioni','Macchina')">Macchina <span class="sort-arrow" data-col="Macchina" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('installazioni','Inizio')">Inizio <span class="sort-arrow" data-col="Inizio" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('installazioni','Fine')">Fine Prev. <span class="sort-arrow" data-col="Fine" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('installazioni','Fase')">Fase <span class="sort-arrow" data-col="Fase" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('installazioni','Tecnici')">Tecnici <span class="sort-arrow" data-col="Tecnici" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('installazioni','Stato')">Stato <span class="sort-arrow" data-col="Stato" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th></th></tr></thead><tbody id="tblInstall"></tbody></table>
 </div>
 </div>
 </section>
@@ -833,7 +833,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 </div>
 </div>
 <div class="card-body np" style="max-height:500px;overflow-y:auto">
-<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('rep','tblRep',this.checked)"></th><th>Tecnico</th><th>Dal</th><th>Al</th><th>Turno</th><th>Tipo</th><th>Stato</th><th>Note</th><th></th></tr></thead><tbody id="tblRep"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('rep','tblRep',this.checked)"></th><th style="cursor:pointer;user-select:none" onclick="tableSort('reperibilita','Tecnico')">Tecnico <span class="sort-arrow" data-col="Tecnico" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('reperibilita','Dal')">Dal <span class="sort-arrow" data-col="Dal" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('reperibilita','Al')">Al <span class="sort-arrow" data-col="Al" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('reperibilita','Turno')">Turno <span class="sort-arrow" data-col="Turno" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('reperibilita','Tipo')">Tipo <span class="sort-arrow" data-col="Tipo" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('reperibilita','Stato')">Stato <span class="sort-arrow" data-col="Stato" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('reperibilita','Note')">Note <span class="sort-arrow" data-col="Note" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th></th></tr></thead><tbody id="tblRep"></tbody></table>
 </div>
 </div>
 </section>
@@ -843,7 +843,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <div class="card">
 <div class="card-head"><h3>🧳 Trasferte</h3><button class="btn btn-primary btn-sm" onclick="openModal('modalTrasf')">+ Nuova Trasferta</button></div>
 <div class="card-body np" style="max-height:500px;overflow-y:auto">
-<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('trasf','tblTrasf',this.checked)"></th><th>Tecnici</th><th>Cliente</th><th>Dal</th><th>Al</th><th>Automezzo</th><th>Motivo</th><th>Stato</th><th></th></tr></thead><tbody id="tblTrasf"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('trasf','tblTrasf',this.checked)"></th><th style="cursor:pointer;user-select:none" onclick="tableSort('trasferte','Tecnici')">Tecnici <span class="sort-arrow" data-col="Tecnici" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('trasferte','Cliente')">Cliente <span class="sort-arrow" data-col="Cliente" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('trasferte','Dal')">Dal <span class="sort-arrow" data-col="Dal" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('trasferte','Al')">Al <span class="sort-arrow" data-col="Al" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('trasferte','Automezzo')">Automezzo <span class="sort-arrow" data-col="Automezzo" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('trasferte','Motivo')">Motivo <span class="sort-arrow" data-col="Motivo" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('trasferte','Stato')">Stato <span class="sort-arrow" data-col="Stato" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th></th></tr></thead><tbody id="tblTrasf"></tbody></table>
 </div>
 </div>
 </section>
@@ -858,7 +858,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 </div>
 </div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
-<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('notifiche','tblNotifiche',this.checked)"></th><th>Da</th><th>Tipo</th><th>Oggetto</th><th>Destinatario</th><th>Stato</th><th>Data</th><th></th></tr></thead><tbody id="tblNotifiche"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('notifiche','tblNotifiche',this.checked)"></th><th style="cursor:pointer;user-select:none" onclick="tableSort('notifiche','Da')">Da <span class="sort-arrow" data-col="Da" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('notifiche','Tipo')">Tipo <span class="sort-arrow" data-col="Tipo" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('notifiche','Oggetto')">Oggetto <span class="sort-arrow" data-col="Oggetto" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('notifiche','Destinatario')">Destinatario <span class="sort-arrow" data-col="Destinatario" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('notifiche','Stato')">Stato <span class="sort-arrow" data-col="Stato" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('notifiche','Data')">Data <span class="sort-arrow" data-col="Data" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th></th></tr></thead><tbody id="tblNotifiche"></tbody></table>
 </div>
 </div>
 </section>
@@ -874,7 +874,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 </div>
 <div class="sec-stats" id="richStats"></div>
 <div class="card-body np" style="max-height:500px;overflow-y:auto">
-<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('richieste','tblRich',this.checked)"></th><th>Tecnico</th><th>Tipo</th><th>Periodo</th><th>Motivo</th><th>Stato</th><th></th></tr></thead><tbody id="tblRich"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('richieste','tblRich',this.checked)"></th><th style="cursor:pointer;user-select:none" onclick="tableSort('richieste','Tecnico')">Tecnico <span class="sort-arrow" data-col="Tecnico" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('richieste','Tipo')">Tipo <span class="sort-arrow" data-col="Tipo" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('richieste','Periodo')">Periodo <span class="sort-arrow" data-col="Periodo" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('richieste','Motivo')">Motivo <span class="sort-arrow" data-col="Motivo" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th style="cursor:pointer;user-select:none" onclick="tableSort('richieste','Stato')">Stato <span class="sort-arrow" data-col="Stato" style="font-size:.7rem;color:var(--gray)">⇅</span></th><th></th></tr></thead><tbody id="tblRich"></tbody></table>
 </div>
 </div>
 </section>
@@ -2425,7 +2425,7 @@ Workers AI è incluso in Cloudflare e non richiede chiavi aggiuntive.
 <div class="modal-body">
 <div class="field-row">
 <div class="field"><label>Cliente</label><select id="miCliente" onchange="loadMacchineCliente('mi')"></select></div>
-<div class="field"><label>Macchina</label><select id="miMacchina"></select></div>
+<div class="field"><label>Macchina</label><input type="text" id="miMacchina" list="miMacchinaList" class="inp" placeholder="🔍 Cerca o digita macchina..." autocomplete="off"><datalist id="miMacchinaList"></datalist></div>
 </div>
 <div class="field-row">
 <div class="field"><label>Data Inizio</label><input type="date" id="miDal"></div>
@@ -2525,7 +2525,7 @@ Workers AI è incluso in Cloudflare e non richiede chiavi aggiuntive.
 <div class="field"><label>Password</label><input type="password" id="nuPassword" placeholder="••••••••"></div>
 </div>
 <div class="field-row">
-<div class="field"><label>Ruolo</label><select id="nuRuolo" onchange="onRuoloChange(this.value)"><option value="">Seleziona ruolo</option><option value="admin">Admin</option><option value="caposquadra">Caposquadra</option><option value="tecnico_senior">Tecnico Senior</option><option value="tecnico">Tecnico</option><option value="tecnico_junior">Tecnico Junior</option><option value="magazziniere">Magazziniere</option><option value="commerciale">Commerciale</option></select></div>
+<div class="field"><label>Ruolo</label><select id="nuRuolo" onchange="onRuoloChange(this.value)"><option value="">Seleziona ruolo</option><option value="admin">Admin</option><option value="caposquadra">Caposquadra</option><option value="tecnico_senior">Tecnico Senior</option><option value="tecnico">Tecnico</option><option value="tecnico_junior">Tecnico Junior</option><option value="magazziniere">Magazziniere</option><option value="commerciale">Commerciale</option><option value="fms">FMS</option></select></div>
 <div class="field"><label>Squadra</label><select id="nuSquadra"><option value="">Seleziona squadra</option></select></div>
 </div>
 <div id="nuAncheCapoRow" style="display:none;margin:-4px 0 8px;padding:8px 12px;background:rgba(0,201,167,.06);border-radius:8px;border:1px dashed var(--c1)">
@@ -3022,7 +3022,15 @@ function quickSearchHandler(q){
   (DATA.urgenze||[]).filter(u=>(u.Problema||'').toLowerCase().includes(ql)).slice(0,3).forEach(u=>items.push({type:'urgenza',label:'🚨 '+(u.Problema||u.ID).substring(0,50),id:u.ID}));
   if(!items.length){res.style.display='none';return}
   res.style.display='block';
-  res.innerHTML=items.map(it=>`<div style="padding:10px 14px;cursor:pointer;font-size:.8125rem;border-bottom:1px solid var(--border);transition:background .1s" onmousedown="${it.type==='nav'?"showSec('"+it.sec+"')":"showSec('"+(it.type==='urgenza'?'urgenze':'anagrafica')+"')"};$('quickSearchResults').style.display='none';$('quickSearch').value=''" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">${escapeHtml(it.label)}</div>`).join('');
+  res.innerHTML=items.map(it=>{
+    let clickAction;
+    if(it.type==='nav') clickAction=`showSec('${it.sec}')`;
+    else if(it.type==='urgenza') clickAction=`showSec('urgenze');setTimeout(()=>showDetail('urgenza','${it.id}'),300)`;
+    else if(it.type==='cliente') clickAction=`showSec('anagrafica');setTimeout(()=>{const s=$('anagSearch');if(s){s.value='${(it.label||'').replace(/^🏢\s*/,'').replace(/'/g,"\\'")}';filterAnagClients()}},200)`;
+    else if(it.type==='tecnico') clickAction=`showSec('tecnici')`;
+    else clickAction=`showSec('anagrafica')`;
+    return `<div style="padding:10px 14px;cursor:pointer;font-size:.8125rem;border-bottom:1px solid var(--border);transition:background .1s" onmousedown="${clickAction};$('quickSearchResults').style.display='none';$('quickSearch').value=''" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">${escapeHtml(it.label)}</div>`;
+  }).join('');
 }
 document.addEventListener('click',e=>{const qr=$('quickSearchResults');const qw=$('quickSearchWrap');if(qr&&qw&&!qw.contains(e.target))qr.style.display='none'});
 
@@ -3171,27 +3179,26 @@ function loadMacchineCliente(prefix){
   const s=$(prefix+'Macchina');if(!s)return;
   s.innerHTML='<option value="">— Seleziona Macchina —</option>';
 
-  // Per installazioni usa SEMPRE DATA.macchine (FK richiede MAC_xxx, non serial number)
-  // Mostra tutte le macchine non obsolete: se cliente selezionato, priorità a quelle del cliente,
-  // ma include anche macchine senza ClienteID (nuove, non ancora assegnate) e quelle del cliente
+  // Per installazioni usa datalist searchable (FK richiede MAC_xxx)
   if(prefix==='mi'){
+    const dl=$('miMacchinaList');if(!dl)return;
+    dl.innerHTML='';
     const maccs=(DATA.macchine||[]).filter(m=>!m.Obsoleto&&(!cliId||!m.ClienteID||m.ClienteID===cliId));
     maccs.sort((a,b)=>{
-      // Prima le macchine del cliente selezionato, poi quelle senza cliente
       const aMatch=!cliId||a.ClienteID===cliId?0:1;
       const bMatch=!cliId||b.ClienteID===cliId?0:1;
       return aMatch-bMatch;
     });
-    const defOpt=s.querySelector('option[value=""]');
-    if(defOpt)defOpt.textContent='— Nessuna (opzionale) —';
     maccs.forEach(m=>{
       const o=document.createElement('option');
-      o.value=m.ID;
       const sn=m.Seriale?' (SN: '+m.Seriale+')':'';
       const altCliente=(cliId&&m.ClienteID&&m.ClienteID!==cliId)?' [altro cliente]':'';
-      o.textContent=(m.Tipo||'Macchina')+' '+(m.Modello||'')+sn+altCliente;
-      s.appendChild(o);
+      o.value=m.ID+' — '+(m.Tipo||'Macchina')+' '+(m.Modello||'')+sn+altCliente;
+      o.dataset.id=m.ID;
+      dl.appendChild(o);
     });
+    // Clear input if not editing
+    if(!s.value) s.value='';
     return;
   }
 
@@ -4019,6 +4026,40 @@ function renderPaginationBar(tableKey, containerId, total, page, totalPages) {
     </div>`;
 }
 
+// ============ GENERIC TABLE SORTING ============
+const TABLE_SORT = {};
+function tableSort(section, col) {
+  if (!TABLE_SORT[section]) TABLE_SORT[section] = { col: '', dir: 'asc' };
+  const s = TABLE_SORT[section];
+  if (s.col === col) s.dir = s.dir === 'asc' ? 'desc' : 'asc';
+  else { s.col = col; s.dir = 'asc'; }
+  // Update arrows in the section's table headers
+  const secEl = document.getElementById('sec' + section.charAt(0).toUpperCase() + section.slice(1));
+  if (secEl) secEl.querySelectorAll('.sort-arrow').forEach(el => el.textContent = '⇅');
+  const arrow = secEl?.querySelector(`.sort-arrow[data-col="${col}"]`);
+  if (arrow) arrow.textContent = s.dir === 'asc' ? '↑' : '↓';
+  // Call appropriate render function
+  const renderMap = { piano: renderPiano, urgenze: renderUrgenze, ordini: renderOrdini,
+    installazioni: renderInstallazioni, reperibilita: renderReperibilita,
+    trasferte: renderTrasferte, notifiche: renderNotifiche, richieste: renderRichieste };
+  if (renderMap[section]) renderMap[section]();
+}
+function applySortToItems(items, section, fieldMap) {
+  const s = TABLE_SORT[section];
+  if (!s || !s.col || !fieldMap[s.col]) return items;
+  const field = fieldMap[s.col];
+  const dir = s.dir === 'asc' ? 1 : -1;
+  return [...items].sort((a, b) => {
+    let va = typeof field === 'function' ? field(a) : (a[field] ?? '');
+    let vb = typeof field === 'function' ? field(b) : (b[field] ?? '');
+    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+    return String(va).localeCompare(String(vb), 'it', {numeric:true}) * dir;
+  });
+}
+function sortTh(label, section, col) {
+  return `<th style="cursor:pointer;user-select:none" onclick="tableSort('${section}','${col}')">${label} <span class="sort-arrow" data-col="${col}" style="font-size:.7rem;color:var(--gray)">⇅</span></th>`;
+}
+
 // ============ PIANO (INTERVENTI) ============
 let _lastPianoItems=[]; // per export CSV
 function renderPiano(){
@@ -4033,6 +4074,15 @@ function renderPiano(){
   if(dataDa)items=items.filter(p=>(p.Data||'')>=dataDa);
   if(dataA)items=items.filter(p=>(p.Data||'')<=dataA);
   items.sort((a,b)=>(b.Data||'').localeCompare(a.Data||''));
+  // Apply custom column sort
+  items = applySortToItems(items, 'piano', {
+    Data: 'Data', Ora: 'OraInizio',
+    Tecnico: a => getName(DATA.utenti||[],a.TecnicoID),
+    Cliente: a => getName(DATA.clienti||[],a.ClienteID),
+    Macchina: a => getName(DATA.macchine||[],a.MacchinaID,'Tipo'),
+    Tipo: a => getName(DATA.tipiIntervento||[],a.TipoInterventoID),
+    Stato: 'Stato', Km: a => parseFloat(a.KmPercorsi)||0, Ore: a => parseFloat(a.OreLavorate)||0
+  });
   _lastPianoItems=items;
   // Stats bar
   const pianoSt=$('pianoStats');
@@ -4090,6 +4140,13 @@ function renderUrgenze(){
   if(dataDa)items=items.filter(u=>(u.DataSegnalazione||'').substring(0,10)>=dataDa);
   if(dataA)items=items.filter(u=>(u.DataSegnalazione||'').substring(0,10)<=dataA);
   items.sort((a,b)=>(b.DataSegnalazione||'').localeCompare(a.DataSegnalazione||''));
+  items = applySortToItems(items, 'urgenze', {
+    Priorita: a => getName(DATA.priorita||[],a.PrioritaID),
+    Cliente: a => getName(DATA.clienti||[],a.ClienteID),
+    Macchina: a => getName(DATA.macchine||[],a.MacchinaID,'Tipo'),
+    Problema: 'Problema', Tecnico: a => getName(DATA.utenti||[],a.TecnicoAssegnato),
+    SLA: 'SLAStatus', Stato: 'Stato', Data: 'DataSegnalazione'
+  });
   _lastUrgItems=items;
   // Stats bar
   const urgSt=$('urgenzeStats');
@@ -4335,10 +4392,15 @@ async function rifiutaInt(id){
 
 // ============ ORDINI ============
 function renderOrdini(){
-  const stato=$('filtOrdStato')?.value||'';
   let items=(DATA.ordini||[]).filter(o=>!o.Obsoleto);
-  if(stato)items=items.filter(o=>o.Stato===stato);
+  if(_ordFilterStati.size>0)items=items.filter(o=>_ordFilterStati.has(o.Stato));
   items.sort((a,b)=>(b.DataRichiesta||'').localeCompare(a.DataRichiesta||''));
+  items = applySortToItems(items, 'ordini', {
+    Codice: 'Codice', Descrizione: 'Descrizione', Qta: a => parseFloat(a.Quantita)||0,
+    Tecnico: a => getName(DATA.utenti||[],a.TecnicoID),
+    Cliente: a => getName(DATA.clienti||[],a.ClienteID),
+    Stato: 'Stato', Richiesto: 'DataRichiesta', ETA: 'DataArrivoPrevista'
+  });
 
   // Workflow counters
   const stati=['richiesto','preso_in_carico','ordinato','in_arrivo','arrivato'];
@@ -4365,8 +4427,31 @@ function renderOrdini(){
   if(totalOrd>PAGE_SIZE)renderPaginationBar('ordini','tblOrdini',totalOrd,pageOrd,totalPagesOrd);
 }
 
-// Filtro ordini cliccando sulle icone di stato (toggle)
-function filterOrdByStato(s){const el=$('filtOrdStato');if(!el)return;el.value=(el.value===s)?'':s;renderOrdini()}
+// Filtro ordini multi-stato: chip toggle + workflow step click
+let _ordFilterStati = new Set();
+function toggleOrdChip(btn) {
+  const s = btn.dataset.stato;
+  if (_ordFilterStati.has(s)) _ordFilterStati.delete(s); else _ordFilterStati.add(s);
+  syncOrdChips();
+  renderOrdini();
+}
+function filterOrdByStato(s) {
+  if (_ordFilterStati.has(s)) _ordFilterStati.delete(s); else _ordFilterStati.add(s);
+  syncOrdChips();
+  renderOrdini();
+}
+function syncOrdChips() {
+  document.querySelectorAll('.ord-chip').forEach(btn => {
+    const active = _ordFilterStati.has(btn.dataset.stato);
+    btn.style.background = active ? 'var(--primary)' : '';
+    btn.style.color = active ? 'white' : '';
+  });
+  // Highlight workflow steps too
+  ['richiesto','preso_in_carico','ordinato','in_arrivo','arrivato'].forEach((s,i) => {
+    const el = $('wfOrd'+(i+1));
+    if (el) el.style.outline = _ordFilterStati.has(s) ? '2px solid var(--primary)' : '';
+  });
+}
 
 function nextOrdAction(o){
   const next={'richiesto':'preso_in_carico','preso_in_carico':'ordinato','ordinato':'in_arrivo','in_arrivo':'arrivato'};
@@ -4383,7 +4468,15 @@ async function advanceOrdine(id,stato){
 
 // ============ INSTALLAZIONI ============
 function renderInstallazioni(){
-  const items=(DATA.installazioni||[]).filter(i=>!i.Obsoleto);
+  let items=(DATA.installazioni||[]).filter(i=>!i.Obsoleto);
+  items = applySortToItems(items, 'installazioni', {
+    Cliente: a => getName(DATA.clienti||[],a.ClienteID),
+    Macchina: a => getName(DATA.macchine||[],a.MacchinaID,'Tipo'),
+    Inizio: 'DataInizio', Fine: 'DataFinePrevista',
+    Fase: a => { const f=(DATA.fasiInstallazione||[]).find(x=>x.ID===a.FaseCorrenteID); return f?f.Nome:''; },
+    Tecnici: a => (a.TecniciIDs||'').split(',').filter(Boolean).map(id=>getName(DATA.utenti||[],id)).join(', '),
+    Stato: 'Stato'
+  });
   initBatchBar('install','tblInstall',[
     {label:'Elimina',action:'deleteInstall',cls:'err',icon:'🗑️'}
   ]);
@@ -4412,6 +4505,12 @@ function renderReperibilita(){
   else if(repFilter==='tutti')items=items.filter(r=>(r.DataFine||'').substring(0,10)<d);
   items.sort((a,b)=>(a.DataInizio||'').localeCompare(b.DataInizio||''));// ordina cronologico per attivi
   if(repFilter==='tutti')items.sort((a,b)=>(b.DataInizio||'').localeCompare(a.DataInizio||''));// storico: più recenti prima
+  items = applySortToItems(items, 'reperibilita', {
+    Tecnico: a => getName(DATA.utenti||[],a.TecnicoID),
+    Dal: 'DataInizio', Al: 'DataFine', Turno: 'Turno', Tipo: 'Tipo',
+    Stato: a => { const df=(a.DataFine||'').substring(0,10);const di=(a.DataInizio||'').substring(0,10);const d2=today();return df<d2?'Completato':di<=d2&&df>=d2?'In corso':'Futuro'; },
+    Note: 'Note'
+  });
   // Etichetta stato dinamica basata su date
   const repStatusLabel=(r)=>{
     const df=(r.DataFine||'').substring(0,10);const di=(r.DataInizio||'').substring(0,10);
@@ -4438,7 +4537,12 @@ function repTab(f,btn){repFilter=f;document.querySelectorAll('#secReperibilita .
 
 // ============ TRASFERTE ============
 function renderTrasferte(){
-  const items=(DATA.trasferte||[]).filter(t=>!t.Obsoleto).sort((a,b)=>(b.DataInizio||'').localeCompare(a.DataInizio||''));
+  let items=(DATA.trasferte||[]).filter(t=>!t.Obsoleto).sort((a,b)=>(b.DataInizio||'').localeCompare(a.DataInizio||''));
+  items = applySortToItems(items, 'trasferte', {
+    Tecnici: a => (a.TecniciIDs||a.TecnicoID||'').split(',').filter(Boolean).map(id=>getName(DATA.utenti||[],id)).join(', '),
+    Cliente: a => getName(DATA.clienti||[],a.ClienteID),
+    Dal: 'DataInizio', Al: 'DataFine', Automezzo: 'AutomezzoID', Motivo: 'Motivo', Stato: 'Stato'
+  });
   initBatchBar('trasf','tblTrasf',[
     {label:'Elimina',action:'deleteTrasf',cls:'err',icon:'🗑️'}
   ]);
@@ -4459,7 +4563,13 @@ function renderTrasferte(){
 
 // ============ NOTIFICHE ============
 function renderNotifiche(){
-  const items=(DATA.notifiche||[]).filter(n=>!n.Obsoleto).sort((a,b)=>(b.DataInvio||'').localeCompare(a.DataInvio||''));
+  let items=(DATA.notifiche||[]).filter(n=>!n.Obsoleto).sort((a,b)=>(b.DataInvio||'').localeCompare(a.DataInvio||''));
+  items = applySortToItems(items, 'notifiche', {
+    Da: a => getName(DATA.utenti||[],a.MittenteID),
+    Tipo: 'Tipo', Oggetto: 'Oggetto',
+    Destinatario: a => getName(DATA.utenti||[],a.DestinatarioID),
+    Stato: 'Stato', Data: 'DataInvio'
+  });
   initBatchBar('notifiche','tblNotifiche',[
     {label:'Elimina',action:'deleteNotifiche',cls:'err',icon:'🗑️'}
   ]);
@@ -4505,6 +4615,10 @@ function renderRichieste(){
   const filtStato=$('filtRichStato')?.value||'';
   let items=(DATA.richieste||[]).filter(r=>!r.Obsoleto).sort((a,b)=>(b.DataRichiesta||'').localeCompare(a.DataRichiesta||''));
   if(filtStato) items=items.filter(r=>r.Stato===filtStato);
+  items = applySortToItems(items, 'richieste', {
+    Tecnico: a => getName(DATA.utenti||[],a.TecnicoID),
+    Tipo: 'Tipo', Periodo: 'DataInizio', Motivo: 'Motivo', Stato: 'Stato'
+  });
 
   // Stats badge
   const pend=items.filter(r=>r.Stato==='in_attesa').length;
@@ -6694,7 +6808,7 @@ function buildAnagMap(clients){
     });
     marker.bindPopup(`<b>${c.NomeAccount}</b><br>${c.NomeInterno||''}<br>${c.CittaFatturazione||''} (${c.ProvinciaFatturazione||''})<br><span style="font-size:.85em">${prodHtml||'Nessun asset'}</span><br><a href="#" onclick="anagView='list';renderAnagClients(ANAG_FILTERED);setTimeout(()=>toggleAnagTree('${c.CodiceM3}'),200);return false">Apri dettaglio →</a>`);
   });
-  if(bounds.length)anagMapInstance.fitBounds(bounds,{padding:[30,30]});
+  if(bounds.length)anagMapInstance.fitBounds(bounds,{padding:[30,30],maxZoom:13});
   setTimeout(()=>anagMapInstance.invalidateSize(),200);
 }
 
@@ -7488,7 +7602,10 @@ async function savePagellino(){
 async function saveInstall(){
   try{
     const tecniciSel=Array.from($('miTecnici').selectedOptions).map(o=>o.value);
-    const data={ClienteID:$('miCliente').value,MacchinaID:$('miMacchina').value,
+    // Extract machine ID from datalist value (format: "MAC_xxx — Tipo Modello")
+    const miMacVal=($('miMacchina').value||'').trim();
+    const miMacId=miMacVal.includes(' — ')?miMacVal.split(' — ')[0]:miMacVal;
+    const data={ClienteID:$('miCliente').value,MacchinaID:miMacId,
       DataInizio:$('miDal').value,DataFinePrevista:$('miAl').value,
       TecniciIDs:tecniciSel,Note:$('miNote').value};
     if(!data.ClienteID||!data.DataInizio){toast('Compila Cliente e Data Inizio','warn');return}
@@ -9519,10 +9636,21 @@ async function applyAI(forceOverwrite){
     }
 
     toast(`✅ Piano applicato: ${result.created||0} interventi creati`+(result.overwritten?`, ${result.overwritten} sovrascritti`:''),'ok');
+    // Navigate monthly/planner views to the plan's target month BEFORE nulling AI_PLAN
+    if(AI_PLAN?.piano?.length){
+      const firstDate=AI_PLAN.piano[0].data;
+      if(firstDate){
+        const pts=firstDate.split('-');
+        MONTH_DATE=new Date(parseInt(pts[0]),parseInt(pts[1])-1,1);
+      }
+    }
     AI_PLAN=null;$('btnApplyAI').disabled=true;$('btnSubmitPlan').disabled=true;$('btnDownloadPlan').disabled=true;
+    // Also clear AI preview items
+    window._AI_PREVIEW_ITEMS=[];
     await refreshData(true);
-    // Refresh monthly view if visible
+    // Refresh monthly + planner views
     if(typeof renderMonthPlan==='function')setTimeout(()=>renderMonthPlan(),500);
+    if(typeof renderPlanner==='function')setTimeout(()=>renderPlanner(),600);
   }catch(e){toast(e.message,'err')}
 }
 
@@ -10112,7 +10240,10 @@ async function deleteOrdine(id){
 function editInstallazione(id){
   const i=(DATA.installazioni||[]).find(x=>x.ID===id);if(!i)return;
   EDITING.installazione=id;
-  $('miCliente').value=i.ClienteID||'';$('miMacchina').value=i.MacchinaID||'';
+  $('miCliente').value=i.ClienteID||'';
+  // Set machine datalist: find machine label for display
+  const macObj=(DATA.macchine||[]).find(m=>m.ID===i.MacchinaID);
+  $('miMacchina').value=macObj?(i.MacchinaID+' — '+(macObj.Tipo||'Macchina')+' '+(macObj.Modello||'')+(macObj.Seriale?' (SN: '+macObj.Seriale+')':'')):i.MacchinaID||'';
   $('miDal').value=i.DataInizio||'';$('miAl').value=i.DataFinePrevista||'';
   $('miNote').value=i.Note||'';
   // Seleziona tecnici
@@ -12110,7 +12241,8 @@ function renderMonthPlan(){
   }
 
   // Tecnici
-  let tecnici = (DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Ruolo!=='admin');
+  const NON_PLAN_ROLES_FE=new Set(['admin','fms','magazziniere','commerciale']);
+  let tecnici = (DATA.utenti||[]).filter(u=>!u.Obsoleto&&!NON_PLAN_ROLES_FE.has(u.Ruolo));
   if(filtTec) tecnici = tecnici.filter(t=>t.ID===filtTec);
   tecnici.sort((a,b)=>(a.Ruolo==='caposquadra'?0:a.Ruolo?.includes('senior')?1:2)-(b.Ruolo==='caposquadra'?0:b.Ruolo?.includes('senior')?1:2));
 
@@ -12398,7 +12530,7 @@ function renderPlanner(){
   const titleEl = document.getElementById('plannerTitle');
   if(titleEl) titleEl.textContent = fmt(week[0]) + ' - ' + fmt(week[6]) + ' ' + week[0].getFullYear();
 
-  let tecnici = (DATA.utenti||[]).filter(u => !u.Obsoleto && isTecRole(u.Ruolo));
+  let tecnici = (DATA.utenti||[]).filter(u => !u.Obsoleto && isTecRole(u.Ruolo) && u.Ruolo!=='fms');
   if(filtTec) tecnici = tecnici.filter(u => u.ID === filtTec);
 
   const weekStrs = week.map(d => d.toISOString().split('T')[0]);

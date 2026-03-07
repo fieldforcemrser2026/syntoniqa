@@ -96,6 +96,7 @@ const ROLE_MATRIX = {
   tecnico_junior:  { level:  20, adminApp: false, canApprove: false, seeAll: false, canManageUsers: false },
   magazziniere:    { level:  20, adminApp: false, canApprove: false, seeAll: false, canManageUsers: false },
   commerciale:     { level:  20, adminApp: false, canApprove: false, seeAll: false, canManageUsers: false },
+  fms:             { level:  25, adminApp: false, canApprove: false, seeAll: false, canManageUsers: false },
   system:          { level: 100, adminApp: true,  canApprove: true,  seeAll: true,  canManageUsers: true  },
 };
 
@@ -2528,7 +2529,8 @@ async function handlePost(action, body, env) {
       }
 
       // ─── 3. PREPARE ENTITIES ─────────────────────────────────────
-      const tecnici = allTecnici.filter(t => (t.ruolo||'').toLowerCase() !== 'admin' && !vincoliRules.assenti.has(t.id));
+      const NON_PLAN_ROLES = new Set(['admin','fms','magazziniere','commerciale']);
+      const tecnici = allTecnici.filter(t => !NON_PLAN_ROLES.has((t.ruolo||'').toLowerCase()) && !vincoliRules.assenti.has(t.id));
 
       // Approccio semplice: TUTTI i tecnici lavorano ogni giorno
       // Le coppie vengono SOLO dai vincoli affiancamento (soggetti+riferimenti)
@@ -3765,8 +3767,10 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       // Valuta qualità di una risposta JSON AI — con penalità per violazioni
       function _scoreAIResponse(text) {
         try {
+          // Strip markdown code fences (```json ... ```) che Claude Haiku/altri aggiungono
+          let cleaned = (text || '').replace(/```(?:json)?\s*\n?/g, '').trim();
           // Cerca il JSON nella risposta (potrebbe avere testo prima/dopo)
-          const jsonMatch = text.match(/\{[\s\S]*"piano"[\s\S]*\}/);
+          const jsonMatch = cleaned.match(/\{[\s\S]*"piano"[\s\S]*\}/);
           if (!jsonMatch) return { score: 0, parsed: null };
           const obj = JSON.parse(jsonMatch[0]);
           if (!obj.piano || !Array.isArray(obj.piano)) return { score: 1, parsed: obj };
