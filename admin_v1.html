@@ -7651,7 +7651,7 @@ async function aiGenerateWithReview(){
   $('aiDetResult').style.display='none';
   $('btnGoReview').disabled=true;
   $('btnDownloadPlan').disabled=true;
-  $('btnGoApply').disabled=true;
+  if($('btnGoApply'))$('btnGoApply').disabled=true;
 
   const prompt=$('aiPrompt').value.trim();
   const modalita=$('aiModalita')?.value||'mese';
@@ -7890,20 +7890,24 @@ function _renderPlanTable(container, piano, compact){
       const tipoIcon=tipo.includes('install')?'🏗️':tipo.includes('urgenz')?'🚨':tipo==='reperibilita'?'📞':tipo==='assenza'?'🏖️':tipo==='trasferta'?'🚗':tipo==='arretrato'?'⚠️':tipo.includes('controllo')?'🔍':'🔧';
 
       const cicloBadge=p.cicloPm?`<span style="background:#818CF822;color:#818CF8;padding:1px 5px;border-radius:3px;font-size:.65rem;font-weight:600">PM ${p.cicloPm}</span>`:'';
-      const tipoFoglioBadge=p.tipoFoglio?`<span style="background:#F59E0B22;color:#F59E0B;padding:1px 5px;border-radius:3px;font-size:.65rem;font-weight:600">${p.tipoFoglio}</span>`:'';
+      const macTipo=p.machinaTipo||p.macchina_tipo||'';
+      const foglio=p.tipoFoglio||'';
+      const ser=p.seriale||'';
+      const tipoFoglioBadge=macTipo?`<span style="background:#F59E0B22;color:#F59E0B;padding:1px 5px;border-radius:3px;font-size:.65rem;font-weight:600">${macTipo}</span>`:foglio?`<span style="background:#F59E0B22;color:#F59E0B;padding:1px 5px;border-radius:3px;font-size:.65rem;font-weight:600">${foglio}</span>`:'';
+      const serialeBadge=ser?`<span style="background:rgba(255,255,255,.08);color:rgba(255,255,255,.45);padding:1px 4px;border-radius:3px;font-size:.6rem;font-family:'JetBrains Mono',monospace">${ser.length>12?ser.substring(ser.length-8):ser}</span>`:'';
 
       if(compact){
         html+=`<div style="display:flex;gap:6px;align-items:center;padding:3px 6px;border-left:3px solid ${color};margin-bottom:2px;font-size:.68rem">
           <span>${tipoIcon}</span>
           <span style="color:${color};font-weight:600;min-width:60px">${tNome.split(' ')[0]||tid}</span>
-          <span style="color:rgba(255,255,255,.5);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cNome} ${tipoFoglioBadge} ${cicloBadge} ${note?'— '+note:''}</span>
+          <span style="color:rgba(255,255,255,.5);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cNome} ${tipoFoglioBadge}${cicloBadge}${serialeBadge} ${note?'— '+note:''}</span>
         </div>`;
       } else {
         html+=`<div style="display:flex;gap:8px;align-items:center;padding:6px 10px;border-left:3px solid ${color};margin-bottom:3px;background:rgba(255,255,255,.03);border-radius:0 6px 6px 0;font-size:.75rem">
           <span style="font-size:.9rem">${tipoIcon}</span>
           <span style="color:${color};font-weight:600;min-width:100px">${tNome}</span>
           <span style="color:rgba(255,255,255,.6);min-width:120px">${cNome}</span>
-          <span style="display:flex;gap:3px">${tipoFoglioBadge}${cicloBadge}</span>
+          <span style="display:flex;gap:3px">${tipoFoglioBadge}${cicloBadge}${serialeBadge}</span>
           <span style="color:rgba(255,255,255,.4);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${note}</span>
         </div>`;
       }
@@ -8650,7 +8654,7 @@ async function runAI(promptOverride){
   const _LOGO='https://unpkg.com/@lobehub/icons-static-svg@latest/icons/';
   const _engLabels={
     anthropic:{name:'Claude',    color:'#D97706', logo:_LOGO+'anthropic.svg'},
-    openai:   {name:'GPT-4o-mini',color:'#10B981', logo:_LOGO+'openai.svg'},
+    openai:   {name:'GPT-4o',color:'#10B981', logo:_LOGO+'openai.svg'},
     gemini:   {name:'Gemini',    color:'#4285F4', logo:_LOGO+'gemini.svg'},
     cerebras: {name:'Cerebras',  color:'#FF6B35', logo:_LOGO+'cerebras.svg'},
     groq:     {name:'Groq',      color:'#F55036', logo:_LOGO+'groq.svg'},

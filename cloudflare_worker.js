@@ -225,7 +225,7 @@ function secureId(prefix) {
 // ============ PostgREST SANITIZER (CRIT-01: prevent filter injection) ============
 
 const DEFAULT_TENANT = '785d94d0-b947-4a00-9c4e-3b67833e7045';
-function tid(env) { return env.TENANT_ID || DEFAULT_TENANT; }
+function getTid(env) { return env.TENANT_ID || DEFAULT_TENANT; }
 
 function sanitizePgFilter(input) {
   if (!input || typeof input !== 'string') return '';
@@ -771,8 +771,8 @@ async function handleGet(action, url, env, auth = {}) {
         sb(env, 'reperibilita',       'GET', null, `?select=*&obsoleto=eq.false&order=data_inizio.desc&limit=200${tecFilter}`),
         sb(env, 'trasferte',          'GET', null, `?select=*&obsoleto=eq.false&order=data_inizio.desc&limit=100${tecFilter}`),
         sb(env, 'notifiche',          'GET', null, isTecnico ? `?select=*&obsoleto=eq.false&destinatario_id=eq.${reqUserId}&order=data_invio.desc&limit=100` : '?select=*&obsoleto=eq.false&order=data_invio.desc&limit=200'),
-        sb(env, 'richieste',          'GET', null, `?select=*&tenant_id=eq.${tid(env)}&order=data_richiesta.desc&limit=500`).catch(()=>[]),
-        sb(env, 'installazioni',      'GET', null, `?select=*&obsoleto=eq.false&tenant_id=eq.${tid(env)}`),
+        sb(env, 'richieste',          'GET', null, `?select=*&tenant_id=eq.${getTid(env)}&order=data_richiesta.desc&limit=500`).catch(()=>[]),
+        sb(env, 'installazioni',      'GET', null, `?select=*&obsoleto=eq.false&tenant_id=eq.${getTid(env)}`),
         sb(env, 'pagellini',          'GET', null, isTecnico ? `?select=*&obsoleto=eq.false&tecnico_id=eq.${reqUserId}&order=data_creazione.desc` : '?select=*&obsoleto=eq.false&order=data_creazione.desc'),
         sb(env, 'automezzi',          'GET', null, '?select=*&obsoleto=eq.false'),
         sb(env, 'tipi_intervento',    'GET', null, '?select=*&attivo=eq.true'),
@@ -916,7 +916,7 @@ async function handleGet(action, url, env, auth = {}) {
 
 async function handlePost(action, body, env) {
   // Wrapper per log workflow automatico
-  const TENANT = tid(env);  // cached per handlePost scope
+  const TENANT = getTid(env);  // cached per handlePost scope
   async function wlog(entityType, entityId, action, userId, note = '') {
     await sb(env, 'workflow_log', 'POST', {
       id: secureId('WL'),
@@ -1062,7 +1062,7 @@ async function handlePost(action, body, env) {
       // Writable: id,tenant_id,tecnico_id,cliente_id,macchina_id,automezzo_id,tipo_intervento_id,data,ora_inizio,ora_fine,stato,note,data_fine
       const row = {
         id,
-        tenant_id: fields.tenant_id || tid(env),
+        tenant_id: fields.tenant_id || getTid(env),
         tecnico_id: fields.tecnico_id || null,
         cliente_id: fields.cliente_id || null,
         macchina_id: resolvedMacPiano || null,
@@ -1227,7 +1227,7 @@ async function handlePost(action, body, env) {
       const urgWritable = ['tenant_id','cliente_id','macchina_id','problema','priorita_id','stato','tecnico_assegnato','tecnici_ids','automezzo_id','data_segnalazione','data_assegnazione','data_prevista','ora_prevista','data_inizio','data_risoluzione','intervento_id','note','allegati_ids','sla_scadenza','sla_status'];
       const row = { id };
       for (const k of urgWritable) { if (fields[k] !== undefined) row[k] = fields[k]; }
-      row.tenant_id = row.tenant_id || tid(env);
+      row.tenant_id = row.tenant_id || getTid(env);
       row.stato = row.stato || 'aperta'; row.sla_scadenza = slaScadenza; row.sla_status = 'ok'; row.data_segnalazione = row.data_segnalazione || new Date().toISOString();
       const result = await sb(env, 'urgenze', 'POST', row);
       await wlog('urgenza', id, 'created', body.operatoreId || body.userId);
@@ -1324,7 +1324,7 @@ async function handlePost(action, body, env) {
           testo: `Urgenza ${id}: ${prob.substring(0,80)}${cliName?' · '+cliName:''}`,
           destinatario_id: tecId, stato: 'inviata', priorita: 'alta',
           riferimento_id: id, riferimento_tipo: 'urgenza',
-          tenant_id: tid(env)
+          tenant_id: getTid(env)
         }).catch(e=>console.error('[SYNC]',e.message));
         // Telegram privato al tecnico
         await notifyTecnicoTG(env, tecId, `🚨 <b>URGENZA ASSEGNATA A TE</b>\n📋 ${prob.substring(0,100)}\n🏢 ${cliName||'—'}\n📅 ${dataPrev||'ASAP'} ${oraPrev||''}\n\n<i>Apri l'app per iniziare</i>`);
@@ -1358,7 +1358,7 @@ async function handlePost(action, body, env) {
           testo: `${tecName} ha rifiutato urgenza ${id}: ${motivo}`,
           destinatario_id: a.id, stato: 'inviata', priorita: 'alta',
           riferimento_id: id, riferimento_tipo: 'urgenza',
-          tenant_id: tid(env)
+          tenant_id: getTid(env)
         }).catch(e=>console.error('[SYNC]',e.message));
       }
       // Chat + Telegram
@@ -1440,7 +1440,7 @@ async function handlePost(action, body, env) {
             testo: `Urgenza ${id} è stata risolta dal tecnico`,
             destinatario_id: a.id, stato: 'inviata', priorita: 'normale',
             riferimento_id: id, riferimento_tipo: 'urgenza',
-            tenant_id: tid(env)
+            tenant_id: getTid(env)
           }).catch(e=>console.error('[SYNC]',e.message));
         }
       } catch(e){}
@@ -1480,7 +1480,7 @@ async function handlePost(action, body, env) {
       // Only send writable columns: id,tenant_id,cliente_id,codice,descrizione,stato,quantita,data_ordine,data_richiesta,note,tecnico_id
       const row = {
         id,
-        tenant_id: fields.tenant_id || tid(env),
+        tenant_id: fields.tenant_id || getTid(env),
         cliente_id: fields.cliente_id || null,
         codice: fields.codice || null,
         descrizione: fields.descrizione || fields.note || fields.codice || 'Ordine ricambio',
@@ -1521,7 +1521,7 @@ async function handlePost(action, body, env) {
             testo: `Il tuo ordine ${ord[0].codice || id} (${(ord[0].descrizione || '').substring(0, 50)}) è stato aggiornato: ${labels[stato] || stato}`,
             destinatario_id: ord[0].tecnico_id, stato: 'inviata', priorita: 'normale',
             riferimento_id: id, riferimento_tipo: 'ordine',
-            tenant_id: tid(env)
+            tenant_id: getTid(env)
           }).catch(e=>console.error('[SYNC]',e.message));
         }
       } catch(e){}
@@ -1790,7 +1790,7 @@ async function handlePost(action, body, env) {
       // Writable: id,tenant_id,cliente_id,macchina_id,stato,data_inizio,note,obsoleto
       const row = {
         id,
-        tenant_id: fields.tenant_id || tid(env),
+        tenant_id: fields.tenant_id || getTid(env),
         cliente_id: fields.cliente_id || null,
         macchina_id: fields.macchina_id || null,
         stato: 'pianificata',
@@ -1868,7 +1868,7 @@ async function handlePost(action, body, env) {
       // Writable: id,tenant_id,cliente_id,tecnico_id,automezzo_id,motivo,stato,note,data_inizio,obsoleto
       const row = {
         id,
-        tenant_id: fields.tenant_id || tid(env),
+        tenant_id: fields.tenant_id || getTid(env),
         cliente_id: fields.cliente_id || null,
         tecnico_id: fields.tecnico_id || fields.tecnici_ids?.[0] || null,
         automezzo_id: fields.automezzo_id || null,
@@ -1914,7 +1914,7 @@ async function handlePost(action, body, env) {
       const testo = fields.messaggio || fields.testo || fields.contenuto || '';
       const oggetto = fields.oggetto || fields.titolo || null;
       const priorita = fields.priorita || 'normale';
-      const row = { id, tenant_id: fields.tenant_id || tid(env), tipo: fields.tipo || 'info', oggetto, testo, priorita, stato: fields.stato || 'inviata', mittente_id: fields.mittente_id || null, destinatario_id: fields.destinatario_id || null, destinatari_ids: fields.destinatari_ids || null, riferimento_id: fields.riferimento_id || null, riferimento_tipo: fields.riferimento_tipo || null, data_invio: new Date().toISOString() };
+      const row = { id, tenant_id: fields.tenant_id || getTid(env), tipo: fields.tipo || 'info', oggetto, testo, priorita, stato: fields.stato || 'inviata', mittente_id: fields.mittente_id || null, destinatario_id: fields.destinatario_id || null, destinatari_ids: fields.destinatari_ids || null, riferimento_id: fields.riferimento_id || null, riferimento_tipo: fields.riferimento_tipo || null, data_invio: new Date().toISOString() };
       const result = await sb(env, 'notifiche', 'POST', row);
       return ok({ notifica: result?.[0] ? pascalizeRecord(result[0]) : { id } });
     }
@@ -1955,7 +1955,7 @@ async function handlePost(action, body, env) {
       // Writable: id,tenant_id,tipo,stato,data_richiesta,data_risposta,tecnico_id,motivo,data_inizio,data_fine,note_admin,obsoleto
       const row = {
         id,
-        tenant_id: fields.tenant_id || tid(env),
+        tenant_id: fields.tenant_id || getTid(env),
         tipo: fields.tipo || 'generico',
         stato: 'in_attesa',
         motivo: fields.motivo || fields.testo || fields.messaggio || fields.descrizione || '',
@@ -2008,7 +2008,7 @@ async function handlePost(action, body, env) {
             const tipoLabel = { ferie:'Ferie', permesso:'Permesso', malattia:'Malattia', cambio_turno:'Cambio Turno', generico:'Generico' }[ric.tipo] || ric.tipo;
             const notId = secureId('NOT');
             await sb(env, 'notifiche', 'POST', {
-              id: notId, tenant_id: tid(env),
+              id: notId, tenant_id: getTid(env),
               tipo: 'richiesta_risposta',
               oggetto: `${esito}: ${tipoLabel} dal ${ric.data_inizio||'?'} al ${ric.data_fine||'?'}`,
               testo: `La tua richiesta di ${tipoLabel} è stata ${updates.stato}. ${updates.note_admin ? 'Note: ' + updates.note_admin : ''}`,
@@ -2224,7 +2224,7 @@ async function handlePost(action, body, env) {
       const id = secureId('PUSH');
       
       // Upsert: remove old subscription for same endpoint
-      await sb(env, `push_subscriptions?user_id=eq.${encodeURIComponent(userId)}&endpoint=eq.${encodeURIComponent(sub.endpoint)}`, 'DELETE');
+      await sb(env, 'push_subscriptions', 'DELETE', null, `?user_id=eq.${encodeURIComponent(userId)}&endpoint=eq.${encodeURIComponent(sub.endpoint)}`);
       
       await sb(env, 'push_subscriptions', 'POST', {
         id,
@@ -2245,9 +2245,9 @@ async function handlePost(action, body, env) {
       const userId = body.userId || body.operatoreId;
       const endpoint = body.endpoint;
       if (endpoint) {
-        await sb(env, `push_subscriptions?user_id=eq.${encodeURIComponent(userId)}&endpoint=eq.${encodeURIComponent(endpoint)}`, 'DELETE');
+        await sb(env, 'push_subscriptions', 'DELETE', null, `?user_id=eq.${encodeURIComponent(userId)}&endpoint=eq.${encodeURIComponent(endpoint)}`);
       } else {
-        await sb(env, `push_subscriptions?user_id=eq.${encodeURIComponent(userId)}`, 'PATCH', { active: false, updated_at: new Date().toISOString() });
+        await sb(env, 'push_subscriptions', 'PATCH', { active: false, updated_at: new Date().toISOString() }, `?user_id=eq.${encodeURIComponent(userId)}`);
       }
       return ok();
     }
@@ -2719,7 +2719,7 @@ async function handlePost(action, body, env) {
       const pvMese = body.mese_target || '';
       if (!pvMese) return err('mese_target richiesto');
       const pvStart = `${pvMese}-01`, pvEnd = `${pvMese}-31`;
-      const tid = tid(env);
+      const tid = getTid(env);
 
       const [pvTecnici, pvRichieste, pvRep, pvTrasf, pvInst, pvPiano, pvUrg, pvMacchine, pvClienti, pvAssets, pvVincoliCfg] = await Promise.all([
         sb(env, 'utenti', 'GET', null, '?attivo=eq.true&obsoleto=eq.false&select=id,nome,cognome,base,ruolo,automezzo_id').catch(()=>[]),
@@ -3237,6 +3237,25 @@ async function handlePost(action, body, env) {
         return autoId.length > 12 ? (autoId.substring(0, 10) + '…') : autoId;
       }
 
+      // Mapping gruppo_attrezzatura → nome leggibile
+      const GRUPPO_LABELS = {
+        'ROBOT': 'Astronaut', 'ASTRONAUT': 'Astronaut',
+        'VECTOR': 'Vector', 'MFR': 'Vector', 'MIXING FEEDING ROBOT': 'Vector',
+        'COLLECTOR': 'Collector', 'JUNO': 'Juno',
+        'GRAZEWAY': 'Grazeway', 'DISCOVERY': 'Discovery',
+        'COSMIX': 'Cosmix', 'CALM': 'Calm', 'LUNA': 'Luna',
+        'HORIZON': 'Horizon', 'SHUTTLE': 'Shuttle',
+        'WALKWAY': 'Walkway', 'T4C': 'T4C InHerd', 'ATTIS': 'Attis'
+      };
+      // Mapping tipo_foglio → nome leggibile (codici foglio PM Lely)
+      // MFR = Mixing Feeding Robot = Vector
+      const FOGLIO_LABELS = {
+        'MFR': 'Vector', '101': 'A5 Astronaut', '102': 'A4 Astronaut', '103': 'A3 Next',
+        '104': 'Vector', '105': 'Juno', '106': 'Discovery', '107': 'Collector', '108': 'Grazeway',
+        '109': 'Cosmix', '110': 'Calm', '111': 'Luna', '112': 'Horizon',
+        '201': 'Cooling', '202': 'Shuttle'
+      };
+
       const tagItems = [];
       if (ctx.tagliandi) {
       // From macchine table (prossimo_tagliando)
@@ -3254,7 +3273,7 @@ async function handlePost(action, body, env) {
           macchinaModello: m.modello || '',
           machinaTipo: m.tipo || '',
           seriale: m.seriale || '',
-          cliente: m.cliente_id || '?',
+          cliente: cli?.nome_interno || cli?.nome_account || m.cliente_id || '?',
           clienteId: m.cliente_id || '',
           clienteNome: cli?.nome_interno || cli?.nome_account || m.cliente_id || '?',
           citta: cli?.citta_fatturazione || '',
@@ -3276,14 +3295,14 @@ async function handlePost(action, body, env) {
         tagItems.push({
           tipo: 'tagliando',
           macchina: a.id || `ASSET_${a.numero_serie||'?'}`,
-          macchinaLabel: `${a.nome_asset||a.modello||a.gruppo_attrezzatura||'?'}`,
+          macchinaLabel: `${a.nome_asset||a.modello||GRUPPO_LABELS[(a.gruppo_attrezzatura||'').toUpperCase()]||a.gruppo_attrezzatura||'?'}`,
           macchinaModello: a.modello || '',
-          machinaTipo: a.gruppo_attrezzatura || '',
-          tipoFoglio: a.tipo_foglio || '',
+          machinaTipo: GRUPPO_LABELS[(a.gruppo_attrezzatura||'').toUpperCase()] || a.gruppo_attrezzatura || '',
+          tipoFoglio: FOGLIO_LABELS[a.tipo_foglio] || a.tipo_foglio || '',
           seriale: a.numero_serie || '',
-          cliente: a.codice_m3 || '?',
+          cliente: aCli?.nome_interno || aCli?.nome_account || a.nome_account || a.codice_m3 || '?',
           clienteId: a.codice_m3 || '',
-          clienteNome: aCli?.nome_interno || aCli?.nome_account || a.codice_m3 || '?',
+          clienteNome: aCli?.nome_interno || aCli?.nome_account || a.nome_account || a.codice_m3 || '?',
           citta: aCli?.citta_fatturazione || '',
           provincia: aCli?.provincia || aCli?.prov || '',
           data: a.prossimo_controllo,
@@ -4657,9 +4676,9 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             const tec = allTecnici.find(t => t.id === p.tecnicoId);
             if (tec) p.tecnico = `${tec.nome} ${tec.cognome}`.trim();
           }
-          // Cliente: da codice_m3 a nome
-          if (p.clienteId) {
-            const cli = allClienti.find(c => c.codice_m3 === p.clienteId);
+          // Cliente: da codice_m3 o id a nome leggibile
+          if (p.clienteId && (!p.cliente || p.cliente === p.clienteId || /^\d{5,}$/.test(p.cliente) || /^CLI_/.test(p.cliente))) {
+            const cli = allClienti.find(c => c.codice_m3 === p.clienteId || c.id === p.clienteId);
             if (cli) p.cliente = cli.nome_interno || cli.nome_account || p.clienteId;
           }
           // Furgone: da ID raw a label leggibile (targa/modello)
@@ -5461,8 +5480,13 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         // Resolve clienteNome from cliMap — ALWAYS returns a name, never empty
         function _resolveClienteNome(clienteId) {
           if (!clienteId) return '?';
+          // 1) Check cliMap (indexed by codice_m3 AND id)
           const c = cliMap[clienteId];
-          return c?.nome || clienteId; // fallback: codice_m3 stesso
+          if (c?.nome && !/^\d{5,}$/.test(c.nome)) return c.nome;
+          // 2) Fallback: search allClienti by codice_m3, id, or nome_account
+          const cli = allClienti.find(x => x.codice_m3 === clienteId || x.id === clienteId);
+          if (cli) return cli.nome_interno || cli.nome_account || clienteId;
+          return clienteId; // fallback: codice raw
         }
 
         function makeNote(item) {
@@ -6349,7 +6373,7 @@ Rispondi SOLO JSON valido:
                   'anthropic-version': '2023-06-01'
                 },
                 body: JSON.stringify({
-                  model: 'claude-sonnet-4-5-20250514',
+                  model: 'claude-sonnet-4-5-20250929',
                   max_tokens: 8192, temperature: 0.2,
                   system: 'Sei un esperto field service optimizer per manutenzione robot da mungitura Lely. Analizza in profondità il piano, verificando OGNI riga per violazioni vincoli, inefficienze geografiche, squilibri carico, conformità PM, urgenze non coperte. Rispondi SOLO JSON valido, senza testo extra.',
                   messages: [{ role: 'user', content: reviewPrompt }]
@@ -6747,7 +6771,7 @@ Rispondi SOLO con JSON valido:
       const pmMap = {}; // macchina_id|data → existing PM row
       for (const e of pmExisting) {
         // Load macchina_id for PM rows
-        const fullRow = await sb(env, `piano?id=eq.${e.id}&select=id,macchina_id,data,tecnico_id`, 'GET').catch(() => []);
+        const fullRow = await sb(env, 'piano', 'GET', null, `?id=eq.${e.id}&select=id,macchina_id,data,tecnico_id`).catch(() => []);
         if (fullRow?.[0]?.macchina_id) {
           pmMap[`${fullRow[0].macchina_id}|${fullRow[0].data}`] = fullRow[0];
         }
@@ -6871,7 +6895,7 @@ Rispondi SOLO con JSON valido:
             note: noteParts.join(' | ') || row.note_complete || '',
             automezzo_id: row.furgone ? 'FURG_' + row.furgone : null,
             obsoleto: false,
-            tenant_id: tid(env),
+            tenant_id: getTid(env),
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           });
@@ -6893,7 +6917,7 @@ Rispondi SOLO con JSON valido:
       const { rows } = body;
       if (!rows || !rows.length) return err('rows richiesto (array di oggetti)');
       if (rows.length > 500) return err('Massimo 500 righe');
-      const tid = tid(env);
+      const tid = getTid(env);
       const now = new Date().toISOString();
 
       // Column name mapping (case-insensitive, flexible)
@@ -6958,7 +6982,7 @@ Rispondi SOLO con JSON valido:
       const { rows } = body;
       if (!rows || !rows.length) return err('rows richiesto');
       if (rows.length > 2000) return err('Massimo 2000 righe');
-      const tid = tid(env);
+      const tid = getTid(env);
       const now = new Date().toISOString();
 
       const mapCol = (row, ...keys) => {
@@ -7052,7 +7076,7 @@ Rispondi SOLO con JSON valido:
         '?latitudine=is.null&obsoleto=eq.false&select=id,indirizzo,citta,prov,cap');
 
       // Legge config email per User-Agent (Nominatim ToS richiede contatto)
-      const cfgArr = await sb(env, 'config', 'GET', null, '?tenant_id=eq.' + (tid(env)) + '&chiave=eq.email_mittente');
+      const cfgArr = await sb(env, 'config', 'GET', null, '?tenant_id=eq.' + (getTid(env)) + '&chiave=eq.email_mittente');
       const contactEmail = cfgArr?.[0]?.valore || 'admin@syntoniqa.app';
 
       // Helper: geocoda singolo indirizzo con retry + backoff
@@ -7339,7 +7363,7 @@ Rispondi SOLO con JSON valido:
       await sb(env, 'config', 'POST', {
         chiave: 'vincoli_categories',
         valore: valStr,
-        tenant_id: tid(env)
+        tenant_id: getTid(env)
       }).catch(async () => {
         await sb(env, `config?chiave=eq.vincoli_categories`, 'PATCH', { valore: valStr });
       });
@@ -7369,7 +7393,7 @@ Rispondi SOLO con JSON valido:
       await sb(env, 'config', 'POST', {
         chiave: 'planner_rules',
         valore: prVal,
-        tenant_id: tid(env)
+        tenant_id: getTid(env)
       }).catch(async () => {
         await sb(env, `config?chiave=eq.planner_rules`, 'PATCH', { valore: prVal });
       });
@@ -8270,7 +8294,7 @@ Rispondi SOLO con JSON valido:
             break;
           }
           const ordId = secureId('ORD_TG');
-          const ordTid = tid(env);
+          const ordTid = getTid(env);
           await sb(env, 'ordini', 'POST', { id: ordId, tenant_id: ordTid, tecnico_id: utente?.id || null, codice, descrizione: `${codice} x${qt} - ${cliente}`, quantita: qt, stato: 'richiesto', data_richiesta: new Date().toISOString() });
           reply = `📦 Ordine *${ordId}* creato:\nCodice: \`${codice}\` x${qt}\nCliente: ${cliente}`;
           break;
@@ -8279,7 +8303,7 @@ Rispondi SOLO con JSON valido:
           const desc2 = parts.slice(1).join(' ');
           if (!desc2) { reply = 'Usa: /servepezz [descrizione ricambio]'; break; }
           const spId = secureId('ORD_TG');
-          const spTid = tid(env);
+          const spTid = getTid(env);
           await sb(env, 'ordini', 'POST', { id: spId, tenant_id: spTid, tecnico_id: utente?.id || null, descrizione: desc2, stato: 'richiesto', data_richiesta: new Date().toISOString() });
           reply = `📦 Ordine ricambio *${spId}* creato:\n_${desc2}_`;
           break;
@@ -8320,7 +8344,7 @@ Rispondi SOLO con JSON valido:
           const allCli = await sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_interno,nome_account&limit=300').catch(()=>[]);
           const matchCli = allCli.find(c => (c.nome_interno||'').toLowerCase().includes(cliSearch) || (c.nome_account||'').toLowerCase().includes(cliSearch));
           const pId = secureId('INT_TG');
-          const pTid = tid(env);
+          const pTid = getTid(env);
           await sb(env, 'piano', 'POST', {
             id: pId, tenant_id: pTid, tecnico_id: utente.id, cliente_id: matchCli?.codice_m3 || null,
             data: dataStr, stato: 'pianificato', tipo_intervento: tipoArg, origine: 'telegram',
@@ -8379,7 +8403,7 @@ Rispondi SOLO con JSON valido:
           const oggi2 = new Date().toISOString().split('T')[0];
           const dispTipo = (parts[1] || 'urgenze').toLowerCase();
           const dispId = secureId('INT_DISP');
-          const dispTid = tid(env);
+          const dispTid = getTid(env);
           await sb(env, 'piano', 'POST', {
             id: dispId, tenant_id: dispTid, tecnico_id: utente.id,
             data: oggi2, stato: 'pianificato', tipo_intervento: 'varie',
@@ -8670,7 +8694,7 @@ Rispondi SOLO con JSON valido:
           const now = new Date().toISOString();
           let payload = {}, actionReply = '';
 
-          const tid = tid(env);
+          const tid = getTid(env);
           if (aiResult.tipo === 'urgenza') {
             // Lookup reale macchina in anagrafica_assets (o macchine) per cliente + tipo
             let realMacchinaId = null;
@@ -8877,7 +8901,7 @@ Rispondi SOLO con JSON valido:
 
     case 'getChatCanali': {
       const userId = body.userId || body.user_id || '';
-      const tid = tid(env);
+      const tid = getTid(env);
       // Canali di cui l'utente è membro + canali pubblici (con tenant_id)
       const [canali, membri] = await Promise.all([
         sb(env, 'chat_canali', 'GET', null, `?attivo=eq.true&tenant_id=eq.${tid}&order=nome`),
@@ -8981,7 +9005,7 @@ Rispondi SOLO con JSON valido:
               const cliente = parts.slice(3).join(' ') || '';
               if (!codice) { botReply = '📦 Formato: /ordine [codice] [quantità] [cliente]'; break; }
               const ordId = secureId('ORD_APP');
-              const ordTid = tid(env);
+              const ordTid = getTid(env);
               await sb(env, 'ordini', 'POST', { id: ordId, tenant_id: ordTid, tecnico_id: mittente, codice, descrizione: `${codice} x${qt}${cliente ? ' - ' + cliente : ''}`, quantita: qt, stato: 'richiesto', data_richiesta: new Date().toISOString() });
               botReply = `📦 Ordine ${ordId} creato: ${codice} x${qt}${cliente ? ' – ' + cliente : ''}`;
               break;
@@ -9833,7 +9857,7 @@ Rispondi SOLO con JSON valido:
       }
 
       const val2 = JSON.stringify(cycleState2);
-      const tid = tid(env);
+      const tid = getTid(env);
       try {
         await sb(env, 'config', 'POST', { chiave: 'pm_cycle_state', valore: val2, tenant_id: tid }, '');
       } catch {
@@ -9852,7 +9876,7 @@ Rispondi SOLO con JSON valido:
       if (!definitions || !Array.isArray(definitions)) return err('definitions array richiesto');
 
       const val3 = JSON.stringify(definitions);
-      const tid = tid(env);
+      const tid = getTid(env);
       try {
         await sb(env, 'config', 'POST', { chiave: 'pm_cycle_definitions', valore: val3, tenant_id: tid }, '');
       } catch {
@@ -9943,7 +9967,7 @@ Rispondi SOLO con JSON valido:
 
       // 8. Salva stato ciclo
       const val4 = JSON.stringify(cs);
-      const tid = tid(env);
+      const tid = getTid(env);
       try {
         await sb(env, 'config', 'POST', { chiave: 'pm_cycle_state', valore: val4, tenant_id: tid }, '');
       } catch {
@@ -9990,7 +10014,7 @@ Rispondi SOLO con JSON valido:
       if (adminErr) return err(adminErr, 403);
 
       const { mesi_avanti = 3 } = body;
-      const tid = tid(env);
+      const tid = getTid(env);
       const now = new Date().toISOString();
       const today2 = now.split('T')[0];
       const endDate2 = addDays(today2, mesi_avanti * 30);
@@ -10657,7 +10681,7 @@ async function checkSLAUrgenze(env) {
                   testo: `Urgenza ${u.id} per ${cliNome}: ${label}! Intervieni subito.`,
                   destinatario_id: u.tecnico_assegnato, stato: 'inviata', priorita: 'urgente',
                   riferimento_id: u.id, riferimento_tipo: 'urgenza',
-                  tenant_id: tid(env)
+                  tenant_id: getTid(env)
                 }).catch(() => {});
               }
             }
@@ -10691,7 +10715,7 @@ async function checkSLAUrgenze(env) {
               testo: `Urgenza ${ua.id} assegnata a ${tecName} da ${Math.floor(oreAssegnata)}h, non ancora iniziata! Cliente: ${cliName}`,
               destinatario_id: a.id, stato: 'inviata', priorita: 'urgente',
               riferimento_id: ua.id, riferimento_tipo: 'urgenza',
-              tenant_id: tid(env)
+              tenant_id: getTid(env)
             }).catch(e=>console.error('[SYNC]',e.message));
           }
           // Sollecita il tecnico via Telegram privato
@@ -10737,7 +10761,7 @@ async function checkPMExpiry(env) {
 
     if (!macchine3.length) { env.DEBUG_LOG && console.log('[CRON] checkPMExpiry: 0 tagliandi critici'); return; }
 
-    const tid = tid(env);
+    const tid = getTid(env);
     const group = env.TELEGRAM_CHAT_ID || '-5236723213';
     let scaduti = 0, urgenti = 0;
     const tgLines = []; // accumula per riepilogo TG
