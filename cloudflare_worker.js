@@ -6799,78 +6799,30 @@ Rispondi SOLO con JSON valido:
         return err(`Piano vuoto (${typeof body.piano}, keys: ${body.piano ? Object.keys(body.piano).join(',') : 'null'}). Genera prima un piano.`);
       }
 
-      // 1. Check for conflicts (existing interventions same tecnico+data)
+      // 1. Load existing entries for the date range (include macchina_id to avoid individual queries)
       const dates = [...new Set(pianoAI.map(p => p.data || p.Data).filter(Boolean))];
       const tecIds = [...new Set(pianoAI.map(p => p.tecnicoId || p.tecnico_id || p.TecnicoID).filter(Boolean))];
       let existing = [];
-      if (dates.length && tecIds.length) {
+      if (dates.length) {
         const dateMin = dates.sort()[0];
-        const dateMax = dates.sort().reverse()[0];
+        const dateMax = [...dates].sort().reverse()[0];
         existing = await sb(env, 'piano', 'GET', null,
-          `?data=gte.${dateMin}&data=lte.${dateMax}&stato=neq.annullato&obsoleto=eq.false&select=id,tecnico_id,data,cliente_id,note&limit=1000`
+          `?data=gte.${dateMin}&data=lte.${dateMax}&stato=neq.annullato&obsoleto=eq.false&select=id,tecnico_id,data,cliente_id,macchina_id,note&limit=1000`
         ).catch(() => []);
       }
 
-      // Build conflict map: tecnico+data → existing items
-      const conflictMap = {};
-      for (const ex of existing) {
-        const key = `${ex.tecnico_id}|${ex.data}`;
-        if (!conflictMap[key]) conflictMap[key] = [];
-        conflictMap[key].push(ex);
-      }
-
-      const conflicts = [];
-      const toCreate = [];
-      for (const item of pianoAI) {
-        const tid = item.tecnicoId || item.tecnico_id || item.TecnicoID;
-        const key = `${tid}|${item.data || item.Data}`;
-        if (conflictMap[key] && conflictMap[key].length > 0) {
-          conflicts.push({
-            nuovo: { data: item.data, tecnico: item.tecnico, cliente: item.cliente, tipo: item.tipo },
-            esistenti: conflictMap[key].map(e => ({ id: e.id, cliente_id: e.cliente_id, note: (e.note || '').substring(0, 50) }))
-          });
-          if (!forceOverwrite) continue; // Skip conflicts unless forced
-          // Overwrite: annulla existing
-          for (const e of conflictMap[key]) {
-            await sb(env, `piano?id=eq.${e.id}`, 'PATCH', {
-              stato: 'annullato', note: (e.note || '') + ' [Sovrascritto da AI]', updated_at: new Date().toISOString()
-            }).catch(() => {});
-          }
-        }
-        toCreate.push(item);
-      }
-
-      // If there are conflicts and not forcing, return them for user confirmation
-      if (conflicts.length && !forceOverwrite) {
-        return ok({
-          has_conflicts: true,
-          conflicts_count: conflicts.length,
-          conflicts: conflicts.slice(0, 20),
-          skipped: conflicts.length,
-          message: `${conflicts.length} conflitti trovati (stesso tecnico+data). Invia force_overwrite:true per sovrascrivere.`
-        });
-      }
-
-      // 2. Create/Update interventions (skip info rows: reperibilita, assenza, trasferta)
-      const INFO_TYPES = new Set(['reperibilita','assenza','trasferta']);
-      const created = [], updated = [], applyErrors = [];
-      const now = new Date().toISOString();
-      const tenantId = env.TENANT_ID || DEFAULT_TENANT;
-
       // ── PRE-LOAD: build maps for matching existing entries ──
-      // Strategy 1: by ID (most reliable — AI preserves PM_xxx/INT_xxx IDs)
       const existingById = {};
       for (const e of existing) { existingById[e.id] = e; }
-      // Strategy 2: by macchina_id|data (for PM entries)
-      const pmExisting = existing.filter(e => e.note && e.note.includes('[PM'));
-      const pmMap = {}; // macchina_id|data → existing PM row
-      for (const e of pmExisting) {
-        const fullRow = await sb(env, 'piano', 'GET', null, `?id=eq.${e.id}&select=id,macchina_id,data,tecnico_id`).catch(() => []);
-        if (fullRow?.[0]?.macchina_id) {
-          pmMap[`${fullRow[0].macchina_id}|${fullRow[0].data}`] = fullRow[0];
+      // Map macchina_id|data → existing PM rows (no individual queries needed)
+      const pmMap = {};
+      for (const e of existing) {
+        if (e.macchina_id && e.note && e.note.includes('[PM')) {
+          const k = `${e.macchina_id}|${e.data}`;
+          if (!pmMap[k]) pmMap[k] = e;
         }
       }
-      // Strategy 3: unassigned entries by cliente_id|data (fallback for PM without macchina match)
+      // Map cliente_id|data → unassigned entries (fallback)
       const unassignedByCliDate = {};
       for (const e of existing) {
         if (!e.tecnico_id || e.tecnico_id === 'null' || e.tecnico_id === '') {
@@ -6879,13 +6831,82 @@ Rispondi SOLO con JSON valido:
           unassignedByCliDate[key].push(e);
         }
       }
-      const usedIds = new Set(); // track already-updated IDs to avoid double-update
+      const usedIds = new Set();
 
-      for (const item of toCreate) {
+      // Build conflict map from ASSIGNED entries only (entries with real tecnico_id)
+      const conflictMap = {};
+      for (const ex of existing) {
+        if (ex.tecnico_id && ex.tecnico_id !== 'null' && ex.tecnico_id !== '') {
+          const key = `${ex.tecnico_id}|${ex.data}`;
+          if (!conflictMap[key]) conflictMap[key] = [];
+          conflictMap[key].push(ex);
+        }
+      }
+
+      // 2. Separate items into: toProcess (non-conflicting or force) and conflicts
+      const INFO_TYPES = new Set(['reperibilita','assenza','trasferta']);
+      const conflicts = [];
+      const toProcess = [];
+      const conflictItems = [];
+      for (const item of pianoAI) {
+        const tipo = (item.tipo || '').toLowerCase();
+        if (INFO_TYPES.has(tipo)) continue; // skip info rows
+
+        const tid = item.tecnicoId || item.tecnico_id || item.TecnicoID;
+        const itemData = item.data || item.Data;
+        const itemId = item.id || '';
+        if (!tid || !itemData) { toProcess.push(item); continue; } // will fail later with proper error
+
+        // Check if this item matches an EXISTING UNASSIGNED entry → always process (it's an UPDATE, not a conflict)
+        let isUpdateOfUnassigned = false;
+        if (itemId && existingById[itemId] && !existingById[itemId].tecnico_id) isUpdateOfUnassigned = true;
+        if (!isUpdateOfUnassigned && item.macchina_id && pmMap[`${item.macchina_id}|${itemData}`]) {
+          const pm = pmMap[`${item.macchina_id}|${itemData}`];
+          if (!pm.tecnico_id || pm.tecnico_id === 'null' || pm.tecnico_id === '') isUpdateOfUnassigned = true;
+        }
+        if (!isUpdateOfUnassigned) {
+          const cid = item.clienteId || item.cliente_id || item.ClienteID || null;
+          if (cid) {
+            const candidates = unassignedByCliDate[`${cid}|${itemData}`] || [];
+            if (candidates.some(c => !usedIds.has(c.id))) isUpdateOfUnassigned = true;
+          }
+        }
+
+        if (isUpdateOfUnassigned) {
+          toProcess.push(item); // It's an update of an unassigned PM entry → no conflict
+          continue;
+        }
+
+        // Check real conflicts (same tecnico+date already assigned)
+        const key = `${tid}|${itemData}`;
+        if (conflictMap[key] && conflictMap[key].length > 0) {
+          conflicts.push({
+            nuovo: { data: itemData, tecnico: item.tecnico, cliente: item.cliente, tipo: item.tipo },
+            esistenti: conflictMap[key].map(e => ({ id: e.id, cliente_id: e.cliente_id, note: (e.note || '').substring(0, 50) }))
+          });
+          if (forceOverwrite) {
+            // Overwrite: annulla existing then process
+            for (const e of conflictMap[key]) {
+              await sb(env, `piano?id=eq.${e.id}`, 'PATCH', {
+                stato: 'annullato', note: (e.note || '') + ' [Sovrascritto da AI]', updated_at: new Date().toISOString()
+              }).catch(() => {});
+            }
+            toProcess.push(item);
+          } else {
+            conflictItems.push(item); // Will be skipped but reported
+          }
+        } else {
+          toProcess.push(item); // No conflict → create new
+        }
+      }
+
+      // 3. ALWAYS process non-conflicting items, even if some conflicts exist
+      const created = [], updated = [], applyErrors = [];
+      const now = new Date().toISOString();
+      const tenantId = env.TENANT_ID || DEFAULT_TENANT;
+
+      for (const item of toProcess) {
         try {
-          const tipo = (item.tipo || '').toLowerCase();
-          if (INFO_TYPES.has(tipo)) continue;
-
           const tecId = item.tecnicoId || item.tecnico_id || item.TecnicoID;
           const cid = item.clienteId || item.cliente_id || item.ClienteID || null;
           const itemData = item.data || item.Data;
@@ -6910,7 +6931,7 @@ Rispondi SOLO con JSON valido:
           if (!matchedRow && macId) {
             const pmKey = `${macId}|${itemData}`;
             const pm = pmMap[pmKey];
-            if (pm && !pm.tecnico_id && !usedIds.has(pm.id)) {
+            if (pm && (!pm.tecnico_id || pm.tecnico_id === 'null' || pm.tecnico_id === '') && !usedIds.has(pm.id)) {
               matchedRow = pm;
             }
           }
@@ -6927,18 +6948,19 @@ Rispondi SOLO con JSON valido:
           if (matchedRow) {
             // UPDATE existing row: assegna tecnico, furgone, ora
             usedIds.add(matchedRow.id);
-            await sb(env, `piano?id=eq.${matchedRow.id}`, 'PATCH', {
+            const patchData = {
               tecnico_id: tecId,
               cliente_id: cid || matchedRow.cliente_id,
-              macchina_id: macId || undefined,
               ora_inizio: item.oraInizio || item.ora_inizio || null,
               automezzo_id: item.furgone || item.automezzo_id || null,
               note: noteParts.join(' — '),
               origine: 'ai',
               updated_at: now
-            });
+            };
+            if (macId) patchData.macchina_id = macId;
+            await sb(env, `piano?id=eq.${matchedRow.id}`, 'PATCH', patchData);
             updated.push(matchedRow.id);
-            await wlog('piano', matchedRow.id, 'ai_plan_assigned', operatoreId, `PM aggiornato: ${item.tecnico || tecId} @ ${item.cliente || cid}`).catch(()=>{});
+            await wlog('piano', matchedRow.id, 'ai_plan_assigned', operatoreId, `PM aggiornato: ${tecId} @ ${cid || matchedRow.cliente_id}`).catch(()=>{});
           } else {
             // CREATE new row (no existing match found)
             const id = (itemId && !itemId.startsWith('null') && !existingById[itemId]) ? itemId : secureId('INT_AI');
@@ -6959,16 +6981,16 @@ Rispondi SOLO con JSON valido:
               updated_at: now
             });
             created.push(id);
-            await wlog('piano', id, 'ai_plan_applied', operatoreId, `${item.tecnico || tecId} @ ${item.cliente || cid}`).catch(()=>{});
+            await wlog('piano', id, 'ai_plan_applied', operatoreId, `${tecId} @ ${cid}`).catch(()=>{});
           }
         } catch (e) {
-          applyErrors.push({ item: `${item.data} ${item.tecnico}`, err: e.message });
+          applyErrors.push({ item: `${item.data||'?'} ${item.tecnico||'?'}`, err: e.message });
         }
       }
 
-      // 3. Auto-update urgenze status when scheduled in plan
+      // 4. Auto-update urgenze status when scheduled in plan
       let urgScheduled = 0;
-      for (const item of toCreate) {
+      for (const item of toProcess) {
         const tipo = (item.tipo || '').toLowerCase();
         if (tipo !== 'urgenza') continue;
         const urgId = item.id;
@@ -6981,18 +7003,29 @@ Rispondi SOLO con JSON valido:
             updated_at: now
           });
           urgScheduled++;
-        } catch (e) { /* ignore — urgenza might not exist or constraint violation */ }
+        } catch (e) { /* ignore */ }
       }
 
-      return ok({
+      // 5. Return results — include conflicts if any exist (but items were still processed)
+      const result = {
         created: created.length,
         updated_pm: updated.length,
         urg_scheduled: urgScheduled,
         overwritten: forceOverwrite ? conflicts.length : 0,
-        errors: applyErrors.length ? applyErrors : undefined,
+        errors: applyErrors.length ? applyErrors.slice(0, 20) : undefined,
+        error_count: applyErrors.length,
         ids: [...created, ...updated],
-        total_received: pianoAI.length
-      });
+        total_received: pianoAI.length,
+        total_processed: toProcess.length
+      };
+      if (conflicts.length && !forceOverwrite) {
+        result.has_conflicts = true;
+        result.conflicts_count = conflicts.length;
+        result.conflicts = conflicts.slice(0, 20);
+        result.skipped = conflictItems.length;
+        result.message = `${created.length + updated.length} interventi applicati. ${conflicts.length} conflitti (stesso tecnico+data) — invia force_overwrite per sovrascriverli.`;
+      }
+      return ok(result);
     }
 
     case 'importExcelPlan': {
