@@ -8840,7 +8840,7 @@ function updateAIVincoliStatus(){
 
   const meseTarget=$('aiMeseTarget')?.value||'';
   const d=today();
-  const tecnici=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Ruolo!=='admin');
+  const tecnici=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&isTecRole(u.Ruolo));
   const nTec=tecnici.length;
 
   const mFilter = meseTarget || d.substring(0,7);

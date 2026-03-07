@@ -783,7 +783,7 @@ async function handleGet(action, url, env, auth = {}) {
         sb(env, 'utenti',             'GET', null, '?select=*&obsoleto=eq.false&order=cognome'),
         sb(env, 'clienti',            'GET', null, '?select=*&obsoleto=eq.false&order=nome'),
         sb(env, 'macchine',           'GET', null, '?select=*&obsoleto=eq.false&limit=1000'),
-        sb(env, 'piano',              'GET', null, `?select=*&obsoleto=eq.false&order=data.desc&limit=500${tecFilter}`),
+        sb(env, 'piano',              'GET', null, `?select=*&obsoleto=eq.false&order=data.desc&limit=1000${tecFilter}`),
         sb(env, 'urgenze',            'GET', null, `?select=*&obsoleto=eq.false&order=data_segnalazione.desc&limit=200${tecFilterUrg}`),
         sb(env, 'ordini',             'GET', null, `?select=*&obsoleto=eq.false&order=data_richiesta.desc&limit=300${tecFilter}`),
         sb(env, 'reperibilita',       'GET', null, `?select=*&obsoleto=eq.false&order=data_inizio.desc&limit=200${tecFilter}`),
@@ -1672,12 +1672,7 @@ async function handlePost(action, body, env) {
       const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = secureId('CLI');
-      const cliWritable = ['nome','citta','prov','indirizzo','cap','latitudine','longitudine','email','telefono','contratto','note'];
-      const cliFields = getFields(body);
-      const row = { id, tenant_id: getTid(env), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-      for (const k of cliWritable) { if (cliFields[k] !== undefined) row[k] = cliFields[k]; }
-      // Alias: ragione_sociale → nome (retrocompatibilità)
-      if (cliFields.ragione_sociale && !row.nome) row.nome = cliFields.ragione_sociale;
+      const row = { id, tenant_id: getTid(env), ...getFields(body), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       const result = await sb(env, 'clienti', 'POST', row);
       await wlog('cliente', id, 'created', body.operatoreId);
       return ok({ cliente: pascalizeRecord(result[0]) });
@@ -1686,12 +1681,9 @@ async function handlePost(action, body, env) {
     case 'updateCliente': {
       const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
-      const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...rawUpdates } = body;
-      const cliUpdatable = ['nome','citta','prov','indirizzo','cap','latitudine','longitudine','email','telefono','contratto','note','obsoleto'];
-      const updates = { updated_at: new Date().toISOString() };
-      for (const k of cliUpdatable) { if (rawUpdates[k] !== undefined) updates[k] = rawUpdates[k]; }
-      // Alias: ragione_sociale → nome
-      if (rawUpdates.ragione_sociale !== undefined) updates.nome = rawUpdates.ragione_sociale;
+      const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
+      updates.updated_at = new Date().toISOString();
+      for (const k of Object.keys(updates)) { if (updates[k] === null && k.endsWith('_id')) delete updates[k]; }
       await sb(env, `clienti?id=eq.${id}`, 'PATCH', updates);
       await wlog('cliente', id, 'updated', body.operatoreId);
       return ok();
@@ -1713,13 +1705,7 @@ async function handlePost(action, body, env) {
       const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = secureId('MAC');
-      const macWritable = ['seriale','modello','tipo','cliente_id','anno_installazione','garanzia_fino','ore_lavoro','prossimo_tagliando','ultimo_tagliando','note'];
-      const macFields = getFields(body);
-      const macRow = { id, tenant_id: getTid(env), created_at: new Date().toISOString() };
-      for (const k of macWritable) { if (macFields[k] !== undefined) macRow[k] = macFields[k]; }
-      // Alias: serial_number → seriale (retrocompatibilità)
-      if (macFields.serial_number && !macRow.seriale) macRow.seriale = macFields.serial_number;
-      const result = await sb(env, 'macchine', 'POST', macRow);
+      const result = await sb(env, 'macchine', 'POST', { id, tenant_id: getTid(env), ...getFields(body), created_at: new Date().toISOString() });
       await wlog('macchina', id, 'created', body.operatoreId);
       return ok({ macchina: pascalizeRecord(result[0]) });
     }
@@ -1727,11 +1713,8 @@ async function handlePost(action, body, env) {
     case 'updateMacchina': {
       const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
-      const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...rawMacUpdates } = body;
-      const macUpdatable = ['seriale','modello','tipo','cliente_id','anno_installazione','garanzia_fino','ore_lavoro','prossimo_tagliando','ultimo_tagliando','note','obsoleto'];
-      const updates = {};
-      for (const k of macUpdatable) { if (rawMacUpdates[k] !== undefined) updates[k] = rawMacUpdates[k]; }
-      if (rawMacUpdates.serial_number !== undefined) updates.seriale = rawMacUpdates.serial_number;
+      const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
+      for (const k of Object.keys(updates)) { if (updates[k] === null && k.endsWith('_id')) delete updates[k]; }
       await sb(env, `macchine?id=eq.${id}`, 'PATCH', updates);
       await wlog('macchina', id, 'updated', body.operatoreId);
       return ok();
@@ -1760,11 +1743,7 @@ async function handlePost(action, body, env) {
         if (dup && dup.length) return err(`Automezzo con targa "${fields.targa}" già esistente`, 400);
       }
       const id = secureId('AUT');
-      const autWritable = ['targa','descrizione','assegnatario_id','km_attuali','status','prossimo_controllo','allestimento','note','tenant_id'];
-      const autRow = { id };
-      for (const k of autWritable) { if (fields[k] !== undefined) autRow[k] = fields[k]; }
-      autRow.tenant_id = autRow.tenant_id || getTid(env);
-      const result = await sb(env, 'automezzi', 'POST', autRow);
+      const result = await sb(env, 'automezzi', 'POST', { id, ...fields });
       // SYNC: se ha assegnatario_id, aggiorna automezzo_id nell'utente
       if (fields.assegnatario_id) {
         await sb(env, `utenti?id=eq.${fields.assegnatario_id}`, 'PATCH', { automezzo_id: id, updated_at: new Date().toISOString() }).catch(() => {});
@@ -1776,12 +1755,10 @@ async function handlePost(action, body, env) {
     case 'updateAutomezzo': {
       const adminErr2 = requireRole(body, 'admin');
       if (adminErr2) return err(adminErr2, 403);
-      const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...rawAutUpdates } = body;
-      const autUpdatable = ['targa','descrizione','assegnatario_id','km_attuali','status','prossimo_controllo','allestimento','note','obsoleto'];
-      const updates = { updated_at: new Date().toISOString() };
-      for (const k of autUpdatable) { if (rawAutUpdates[k] !== undefined) updates[k] = rawAutUpdates[k]; }
+      const { id, userId: _u, operatoreId: _op, tenant_id: _t, ...updates } = body;
+      for (const k of Object.keys(updates)) { if (updates[k] === null && k.endsWith('_id')) delete updates[k]; }
       // Fix: colonna 'nome' non esiste in automezzi → mappa a descrizione
-      if (rawAutUpdates.nome) { updates.descrizione = updates.descrizione || rawAutUpdates.nome; }
+      if (updates.nome) { updates.descrizione = updates.descrizione || updates.nome; delete updates.nome; }
       // SYNC BIDIREZIONALE: se cambia assegnatario_id, aggiorna anche l'utente
       const newAssId = updates.assegnatario_id;
       if (newAssId) {
@@ -2049,13 +2026,10 @@ async function handlePost(action, body, env) {
     }
 
     case 'updateRichiesta': {
-      const { id, userId: _u, operatoreId: _op, action: _a, ...rawRicUpdates } = body;
-      const ricUpdatable = ['stato','motivo','tipo','data_inizio','data_fine','data_risposta','note_admin','tecnico_id','obsoleto'];
-      const updates = {};
-      for (const k of ricUpdatable) { if (rawRicUpdates[k] !== undefined) updates[k] = rawRicUpdates[k]; }
-      // Alias: risposta_admin → note_admin (retrocompatibilità)
-      if (rawRicUpdates.risposta_admin !== undefined && !updates.note_admin) updates.note_admin = rawRicUpdates.risposta_admin;
-      if (updates.stato && updates.stato !== 'in_attesa') updates.data_risposta = updates.data_risposta || new Date().toISOString();
+      const { id, userId: _u, operatoreId: _op, action: _a, ...updates } = body;
+      if (updates.stato && updates.stato !== 'in_attesa') updates.data_risposta = new Date().toISOString();
+      // NB: richieste potrebbe non avere updated_at/created_at — non includerli
+      delete updates.updated_at; delete updates.created_at; delete updates.tenant_id;
       await sb(env, `richieste?id=eq.${id}`, 'PATCH', updates);
 
       // Notifica tecnico dell'esito
@@ -2841,7 +2815,8 @@ async function handlePost(action, body, env) {
       // Tecnici con vincoli
       const tecVincolati = new Set();
       vincAuto.forEach(v => (v.soggetti_ids||[]).forEach(id => tecVincolati.add(id)));
-      const totTec = pvTecnici.filter(u=>u.ruolo!=='admin').length;
+      const _pvNonPlan = new Set(['admin','fms','magazziniere','commerciale']);
+      const totTec = pvTecnici.filter(u=>!_pvNonPlan.has((u.ruolo||'').toLowerCase())).length;
 
       // Tagliandi in scadenza — build full list with details
       const pvOggi = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
@@ -2947,7 +2922,8 @@ async function handlePost(action, body, env) {
         sb(env, 'config', 'GET', null, '?chiave=eq.force_senior_ids&limit=1').catch(()=>[])
       ]);
       const [allTecnici, allUrgenze, allClienti, vincoliCfg, allRep, allAutomezzi, allMacchine, allAssets, allRichieste, allTrasferte, allInstallazioni, allPianoDb, plannerRulesCfg, forceJuniorCfg, forceSeniorCfg] = _psResults.map(_safePS);
-      sse({type:'init', message:'Dati caricati', n:{tecnici:allTecnici.filter(t=>t.ruolo!=='admin').length, clienti:allClienti.length, urgenze:allUrgenze.length, tagliandi:allMacchine.length+allAssets.length}});
+      const _aiNonPlan = new Set(['admin','fms','magazziniere','commerciale']);
+      sse({type:'init', message:'Dati caricati', n:{tecnici:allTecnici.filter(t=>!_aiNonPlan.has((t.ruolo||'').toLowerCase())).length, clienti:allClienti.length, urgenze:allUrgenze.length, tagliandi:allMacchine.length+allAssets.length}});
 
       // Parse vincoli: v3 text-only + v2 + legacy
       let vincoliText = '';
@@ -3450,7 +3426,8 @@ async function handlePost(action, body, env) {
       const oggiIt = new Intl.DateTimeFormat('it-IT', { weekday:'long', year:'numeric', month:'long', day:'numeric', timeZone:'Europe/Rome' }).format(new Date());
 
       // Compact data — ANONIMIZZATO: solo codici ID, nessun nome reale
-      const tecList = allTecnici.filter(t=>t.ruolo!=='admin').map(t => {
+      const _NON_PLAN = new Set(['admin','fms','magazziniere','commerciale']);
+      const tecList = allTecnici.filter(t=>!_NON_PLAN.has((t.ruolo||'').toLowerCase())).map(t => {
         const furgLabel = t.automezzo_id ? _furgLabel(t.automezzo_id) : 'nessuno';
         const baseCode = t.base ? (cittaMap[t.base] || t.base) : '?';
         return `${t.id}(${t.ruolo},zona:${baseCode},furgone:${furgLabel})`;
@@ -3479,13 +3456,13 @@ async function handlePost(action, body, env) {
         const r = (t.ruolo||'').toLowerCase().replace(/_/g,' ').trim();
         return r === 'junior' || r.includes('junior');
       }
-      let allSeniors = allTecnici.filter(t => t.ruolo !== 'admin' && _isSenior(t));
-      let allJuniors = allTecnici.filter(t => t.ruolo !== 'admin' && _isJunior(t) && !_isSenior(t));
+      let allSeniors = allTecnici.filter(t => !_NON_PLAN.has((t.ruolo||'').toLowerCase()) && _isSenior(t));
+      let allJuniors = allTecnici.filter(t => !_NON_PLAN.has((t.ruolo||'').toLowerCase()) && _isJunior(t) && !_isSenior(t));
 
       // ── SMART FALLBACK v3: se ruoli DB insufficienti, classifica per base+furgone ──
       // Condizione: <=1 senior dal DB E 0 junior E nessun override config
       const tecPuri = allTecnici.filter(t => {
-        if (t.ruolo === 'admin' || _isSenior(t) || _isJunior(t)) return false;
+        if (_NON_PLAN.has((t.ruolo||'').toLowerCase()) || _isSenior(t) || _isJunior(t)) return false;
         const r = (t.ruolo||'').toLowerCase().trim();
         return r === 'tecnico' || r === '' || !r;
       });
@@ -3518,7 +3495,7 @@ async function handlePost(action, body, env) {
         seniors: allSeniors.map(t => `${t.id}:${t.nome} ${t.cognome}(${t.ruolo})`),
         juniors: allJuniors.map(t => `${t.id}:${t.nome} ${t.cognome}(${t.ruolo})`),
         forceJuniorIds: [..._forceJuniorIds], forceSeniorIds: [..._forceSeniorIds],
-        indipendenti: allTecnici.filter(t => t.ruolo !== 'admin' && !allSeniors.some(s=>s.id===t.id) && !allJuniors.some(j=>j.id===t.id)).map(t => `${t.id}:${t.nome} ${t.cognome}(${t.ruolo})`)});
+        indipendenti: allTecnici.filter(t => !_NON_PLAN.has((t.ruolo||'').toLowerCase()) && !allSeniors.some(s=>s.id===t.id) && !allJuniors.some(j=>j.id===t.id)).map(t => `${t.id}:${t.nome} ${t.cognome}(${t.ruolo})`)});
       const seniorConstraint = allSeniors.length
         ? `\nREGOLA SENIOR (INVIOLABILE): i ${allSeniors.length} senior [${allSeniors.map(t=>t.id).join(',')}] sono RISORSE SCARSE. (1) MAI due senior insieme allo stesso cliente/giorno — devono essere su squadre separate. (2) Tecnici junior [${allJuniors.map(t=>t.id).join(',')}] NON vanno MAI da soli — abbinali SEMPRE a un senior diverso (1 junior per senior al massimo per giorno).`
         : '';
@@ -3549,11 +3526,11 @@ async function handlePost(action, body, env) {
         installContext = `\nINSTALLAZIONI DA PIANIFICARE (${allInstallazioni.length}): inserisci nel piano come tipo "installazione".\n` + instLines.join('\n');
       }
 
-      const nTecAttivi = allTecnici.filter(t=>t.ruolo!=='admin').length;
+      const nTecAttivi = allTecnici.filter(t=>!_NON_PLAN.has((t.ruolo||'').toLowerCase())).length;
       // ─── CAPACITY MATH: calcola team effettivi e target tagliandi ───
       const _juniorIds = allJuniors.map(t => t.id);
       const _seniorIds = allSeniors.map(t => t.id);
-      const _nonJuniorTecs = allTecnici.filter(t => t.ruolo !== 'admin' && !_juniorIds.includes(t.id));
+      const _nonJuniorTecs = allTecnici.filter(t => !_NON_PLAN.has((t.ruolo||'').toLowerCase()) && !_juniorIds.includes(t.id));
       const _nCoppie = Math.min(_juniorIds.length, _seniorIds.length);
       // Team effettivi = tecnici non-junior (ognuno indipendente) perché i junior si "appoggiano" ai senior
       const nTeamEffettivi = _nonJuniorTecs.length;
@@ -3632,7 +3609,7 @@ NOTA ID: se stai ASSEGNANDO un intervento esistente dalla lista INTERVENTI DA AS
       const _senzaTec = interventiDaAssegnare ? (allPianoDb.filter(p => !p.tecnico_id || p.tecnico_id === 'null' || p.tecnico_id === '').length) : 0;
       sse({type:'debug_prompt', prompt_full: prompt, prompt_length: prompt.length,
            tagliandi_count: tagItems.length, urgenze_count: allUrgenze.length,
-           tecnici_count: allTecnici.filter(t=>t.ruolo!=='admin').length,
+           tecnici_count: allTecnici.filter(t=>!_NON_PLAN.has((t.ruolo||'').toLowerCase())).length,
            macchine_loaded: allMacchine.length, assets_loaded: allAssets.length,
            interventi_da_assegnare: _senzaTec,
            piano_assegnato: allPianoDb.length - _senzaTec,
@@ -3643,7 +3620,7 @@ NOTA ID: se stai ASSEGNANDO un intervento esistente dalla lista INTERVENTI DA AS
       if (vincoli.build_prompt_only) {
         sse({type:'prompt_ready', prompt: prompt, sys_prompt: _defaultSysPrompt,
              stats: {
-               tecnici: allTecnici.filter(t=>t.ruolo!=='admin').length,
+               tecnici: allTecnici.filter(t=>!_NON_PLAN.has((t.ruolo||'').toLowerCase())).length,
                macchine: allMacchine.length, assets: allAssets.length,
                tagliandi: tagItems.length, urgenze: allUrgenze.length,
                interventi_da_assegnare: _senzaTec,
@@ -3676,7 +3653,7 @@ Formato JSON: {"summary":"...","piano":[{"id":"INT_xxx o null","data":"YYYY-MM-D
 
       // Helper: costruisce prompt compatto per Workers AI (rimuove file e comprime dati)
       function buildCompactPrompt() {
-        const cTec = allTecnici.filter(t=>t.ruolo!=='admin').map(t=>{
+        const cTec = allTecnici.filter(t=>!_NON_PLAN.has((t.ruolo||'').toLowerCase())).map(t=>{
           const f = t.automezzo_id ? allAutomezzi.find(a=>a.id===t.automezzo_id) : null;
           const baseCode = t.base ? (cittaMap[t.base] || t.base) : '?';
           return `${t.id}(${t.ruolo},zona:${baseCode},furgone:${f?f.id:(t.automezzo_id||'?')})`;
@@ -4756,13 +4733,21 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           // Tecnico: da ID a nome completo
           if (p.tecnicoId) {
             const tec = allTecnici.find(t => t.id === p.tecnicoId);
-            if (tec) p.tecnico = `${tec.nome} ${tec.cognome}`.trim();
+            if (tec) {
+              const fullName = `${tec.nome} ${tec.cognome}`.trim();
+              p.tecnico = fullName;
+              p.tecnicoNome = fullName;
+            }
           }
           // Cliente: da codice_m3 o id a nome leggibile (strip CLI_ prefix per match)
-          if (p.clienteId && (!p.cliente || p.cliente === p.clienteId || /^\d{5,}$/.test(p.cliente) || /^CLI_/.test(p.cliente))) {
+          if (p.clienteId) {
             const rawCid = String(p.clienteId).replace(/^CLI_/i, '');
             const cli = allClienti.find(c => c.codice_m3 === p.clienteId || c.codice_m3 === rawCid || c.id === p.clienteId || c.id === rawCid);
-            if (cli) p.cliente = cli.nome_interno || cli.nome_account || p.clienteId;
+            if (cli) {
+              const cliName = cli.nome_interno || cli.nome_account || p.clienteId;
+              p.cliente = cliName;
+              p.clienteNome = cliName;
+            }
           }
           // Furgone: da ID raw a label leggibile (targa/modello)
           if (p.furgone && p.furgone.length > 12) {
@@ -5144,8 +5129,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         const installInPiano = new Set(pianoNoDup.filter(p => p.tipo === 'installazione').map(p => (p.note || '').match(/INS_\w+/)?.[0]).filter(Boolean));
         const installBacklog = (allInstallazioni || []).filter(inst => !installInPiano.has(inst.id));
 
-        // Tecnici attivi (no admin)
-        const tecAttivi = allTecnici.filter(t => (t.ruolo || '').toLowerCase() !== 'admin');
+        // Tecnici attivi (escludi admin/fms/magazziniere/commerciale)
+        const tecAttivi = allTecnici.filter(t => !_NON_PLAN.has((t.ruolo || '').toLowerCase()));
         const tecNonJunior = tecAttivi.filter(t => !_juniorIds.includes(t.id));
         const tecJunior = tecAttivi.filter(t => _juniorIds.includes(t.id));
         let backlogIdx = 0;
@@ -5371,8 +5356,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         // ── INSTALLATION TRACKING: anti-double-booking ──
         const instAssigned = new Set(); // 'instId|tecId|giorno' già assegnati
 
-        // Tecnici attivi (no admin)
-        const tecAttivi2 = allTecnici.filter(t => (t.ruolo || '').toLowerCase() !== 'admin');
+        // Tecnici attivi (escludi admin/fms/magazziniere/commerciale)
+        const tecAttivi2 = allTecnici.filter(t => !_NON_PLAN.has((t.ruolo || '').toLowerCase()));
         const seniors2 = tecAttivi2.filter(t => _seniorIds.includes(t.id));
         const juniors2 = tecAttivi2.filter(t => _juniorIds.includes(t.id));
         const indipendenti2 = tecAttivi2.filter(t => !_juniorIds.includes(t.id) && !_seniorIds.includes(t.id));
@@ -6149,7 +6134,7 @@ ${instructions}`;
           sse({type:'phase_start', phase:2, message:'OpenAI e Claude stanno analizzando il piano...'});
 
           // Build review context: piano compatto + tecnici + vincoli + reperibilità + geo
-          const tecAttivi = allTecnici.filter(t => (t.ruolo || '').toLowerCase() !== 'admin');
+          const tecAttivi = allTecnici.filter(t => !_NON_PLAN.has((t.ruolo || '').toLowerCase()));
           const tecniciCtx = tecAttivi.map(t => {
             const ruolo = (t.ruolo || 'tecnico').toLowerCase();
             const isJunior = _isJunior(t);
@@ -6471,9 +6456,27 @@ Rispondi SOLO JSON valido:
               const d = await res.json().catch(()=>null);
               if (!d) { sse({type:'reviewer_status', engine:'claude', status:'error', reason:'invalid_json_response'}); return null; }
               const textBlock = (d.content || []).find(b => b.type === 'text');
-              const text = textBlock?.text || '';
+              let text = (textBlock?.text || '').replace(/```json\n?|\n?```/g, '').trim();
               if (!text) { sse({type:'reviewer_status', engine:'claude', status:'error', reason:'empty response'}); return null; }
-              const parsed = JSON.parse(text);
+              // Robust JSON repair: fix common LLM JSON issues
+              let parsed;
+              try { parsed = JSON.parse(text); } catch(jsonErr) {
+                // Try repair: extract JSON object, fix trailing commas, single quotes, unquoted keys
+                let repaired = text;
+                // Extract the outermost JSON object if surrounded by text
+                const jsonMatch = repaired.match(/\{[\s\S]*\}/);
+                if (jsonMatch) repaired = jsonMatch[0];
+                // Fix trailing commas before } or ]
+                repaired = repaired.replace(/,\s*([}\]])/g, '$1');
+                // Fix single-quoted strings → double quotes (careful with apostrophes)
+                repaired = repaired.replace(/(?<=[{,\[]\s*)'([^']+?)'\s*:/g, '"$1":');
+                // Fix unquoted property names
+                repaired = repaired.replace(/(?<=[{,]\s*)([a-zA-Z_]\w*)\s*:/g, '"$1":');
+                try { parsed = JSON.parse(repaired); } catch(e2) {
+                  sse({type:'reviewer_status', engine:'claude', status:'error', reason:'JSON malformato: ' + (jsonErr.message||'').substring(0,80)});
+                  return null;
+                }
+              }
               const sugs = (parsed.suggestions || []).map(s => ({ ...s, engine: 'claude' }));
               sse({type:'reviewer_status', engine:'claude', status:'complete', count:sugs.length, elapsed, assessment: parsed.overall_assessment || ''});
               return { suggestions: sugs, assessment: parsed.overall_assessment || '', score: parsed.score, strengths: parsed.strengths, weaknesses: parsed.weaknesses };
@@ -7355,7 +7358,8 @@ Rispondi SOLO con JSON valido:
           ].filter(Boolean))];
 
           // Include all active technicians even without interventions
-          const allActiveTec = utenti.filter(u => u.ruolo && u.ruolo !== 'admin');
+          const _pvNonPlanRoles = new Set(['admin','fms','magazziniere','commerciale']);
+          const allActiveTec = utenti.filter(u => u.ruolo && !_pvNonPlanRoles.has(u.ruolo.toLowerCase()));
           const finalTecIds = [...new Set([...tecActiveTday, ...allActiveTec.map(u => u.id)])];
 
           result.righe = finalTecIds.map(tid => {
@@ -7621,7 +7625,8 @@ Rispondi SOLO con JSON valido:
       // --- SUMMARY ---
       const assentiIds = new Set();
       auto_derived.filter(v => v.impatto === 'NON schedulare').forEach(v => (v.soggetti||[]).forEach(s => assentiIds.add(s)));
-      const tecniciNonAdmin = vdTecnici.filter(t => t.ruolo !== 'admin');
+      const _vdNonPlan = new Set(['admin','fms','magazziniere','commerciale']);
+      const tecniciNonAdmin = vdTecnici.filter(t => !_vdNonPlan.has((t.ruolo||'').toLowerCase()));
 
       return ok({
         mese: vdMese,
