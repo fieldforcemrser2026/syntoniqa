@@ -7732,6 +7732,38 @@ async function aiGenerateWithReview(){
             clearInterval(AI_REVIEW_TIMER);
             if(AI_SUGGESTIONS.length) $('btnGoApply').disabled=false;
           }
+          // ── TEAM CLASSIFICATION DIAGNOSTIC ──
+          else if(ev.type==='team_classification'){
+            const box=$('aiDetProgress')?.parentElement;
+            if(box){
+              const info=document.createElement('div');
+              info.style.cssText='margin:8px 0;padding:10px 14px;border-radius:8px;background:#f0f9ff;border:1px solid #bae6fd;font-size:13px;line-height:1.6';
+              const sn=(ev.seniors||[]).map(s=>s.split(':').slice(1).join(':')).join(', ')||'nessuno';
+              const jn=(ev.juniors||[]).map(s=>s.split(':').slice(1).join(':')).join(', ')||'nessuno';
+              const ind=(ev.indipendenti||[]).map(s=>s.split(':').slice(1).join(':')).join(', ')||'nessuno';
+              info.innerHTML=`<b>👥 Classificazione Team:</b><br>
+                <span style="color:#16a34a">🟢 Senior:</span> ${sn}<br>
+                <span style="color:#f59e0b">🟡 Junior (affiancati):</span> ${jn}<br>
+                <span style="color:#6366f1">🔵 Indipendenti:</span> ${ind}`;
+              if(ev.forceJuniorIds?.length) info.innerHTML+=`<br><span style="color:#9333ea">⚙️ Force Junior IDs:</span> ${ev.forceJuniorIds.join(', ')}`;
+              box.insertBefore(info, box.querySelector('.ai-review-lanes')||box.lastChild);
+            }
+          }
+          // ── SAFETY NET WARNING ──
+          else if(ev.type==='warning'){
+            const box=$('aiDetProgress')?.parentElement;
+            if(box){
+              const warn=document.createElement('div');
+              warn.style.cssText='margin:8px 0;padding:12px 14px;border-radius:8px;background:#fef3c7;border:1px solid #f59e0b;font-size:13px;line-height:1.6';
+              warn.innerHTML=`<b>⚠️ Attenzione:</b> ${ev.message||''}<br>
+                <small>👉 Per risolvere: apri la sezione <b>Utenti</b>, clicca ✏️ su ogni tecnico junior, e cambia il ruolo da "Tecnico" a "<b>Tecnico Junior</b>"</small>`;
+              box.insertBefore(warn, box.querySelector('.ai-review-lanes')||box.lastChild);
+            }
+          }
+          // ── FILL DEBUG (solo console) ──
+          else if(ev.type==='fill_debug'){
+            console.log('[FILL DEBUG]',ev);
+          }
           else if(ev.type==='result'){
             // Risultato finale (o fallback se phase_complete non arriva)
             AI_PLAN=ev.data;
