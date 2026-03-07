@@ -325,6 +325,16 @@ function normalizeBody(raw) {
   return result;
 }
 
+// Normalize tecnici_ids to PG text[] format: "{TEC_A,TEC_B}"
+function normalizeTecniciIds(val) {
+  if (!val) return null;
+  if (Array.isArray(val)) return `{${val.join(',')}}`;
+  const s = String(val).trim();
+  if (s.startsWith('{')) return s; // Already PG format
+  if (s.startsWith('[')) { try { return `{${JSON.parse(s).join(',')}}`; } catch {} }
+  return `{${s}}`; // CSV → PG array
+}
+
 // Supabase REST helper
 async function sb(env, table, method = 'GET', body = null, params = '', extraHeaders = {}) {
   // Strip internal keys injected by auth middleware — never send to Supabase
@@ -1077,7 +1087,7 @@ async function handlePost(action, body, env) {
         tipo_intervento_id: fields.tipo_intervento_id || null,
         priorita_id: fields.priorita_id || null,
         durata_ore: fields.durata_ore || null,
-        tecnici_ids: fields.tecnici_ids || null,
+        tecnici_ids: normalizeTecniciIds(fields.tecnici_ids),
         data: fields.data || null,
         ora_inizio: fields.ora_inizio || null,
         ora_fine: fields.ora_fine || null,
@@ -1096,9 +1106,10 @@ async function handlePost(action, body, env) {
       if (!id) return err('id piano richiesto');
       const allFields = getFields(body);
       // Only writable piano columns
-      const pianoWritable = ['tecnico_id','cliente_id','macchina_id','automezzo_id','tipo_intervento_id','priorita_id','tecnici_ids','data','ora_inizio','ora_fine','durata_ore','stato','note','data_fine','km_percorsi','ore_lavorate','note_completamento','valutazione_cliente','obsoleto'];
+      const pianoWritable = ['tecnico_id','cliente_id','macchina_id','automezzo_id','tipo_intervento_id','priorita_id','tecnici_ids','data','ora_inizio','ora_fine','durata_ore','stato','note','data_fine','km_percorsi','ore_lavorate','note_completamento','obsoleto'];
       const updates = {};
       for (const k of pianoWritable) { if (allFields[k] !== undefined) updates[k] = allFields[k]; }
+      if (updates.tecnici_ids) updates.tecnici_ids = normalizeTecniciIds(updates.tecnici_ids);
       // Validazione numerici
       for (const [field, min] of [['durata_ore', 0], ['ore_lavorate', 0], ['km_percorsi', 0]]) {
         const numErr = validateNumeric(updates[field], field, min);
@@ -1237,6 +1248,7 @@ async function handlePost(action, body, env) {
       const urgWritable = ['tenant_id','cliente_id','macchina_id','problema','priorita_id','stato','tecnico_assegnato','tecnici_ids','automezzo_id','data_segnalazione','data_assegnazione','data_prevista','ora_prevista','data_inizio','data_risoluzione','intervento_id','note','allegati_ids','sla_scadenza','sla_status'];
       const row = { id };
       for (const k of urgWritable) { if (fields[k] !== undefined) row[k] = fields[k]; }
+      if (row.tecnici_ids) row.tecnici_ids = normalizeTecniciIds(row.tecnici_ids);
       row.tenant_id = row.tenant_id || getTid(env);
       row.stato = row.stato || 'aperta'; row.sla_scadenza = slaScadenza; row.sla_status = 'ok'; row.data_segnalazione = row.data_segnalazione || new Date().toISOString();
       const result = await sb(env, 'urgenze', 'POST', row);
@@ -1318,7 +1330,7 @@ async function handlePost(action, body, env) {
       const oraPrev = body.oraPrevista || body.ora_prevista || null;
       const patch = {
         tecnico_assegnato: tecId,
-        tecnici_ids: tecIds,
+        tecnici_ids: normalizeTecniciIds(tecIds),
         automezzo_id: autoId,
         stato: 'assegnata',
         data_assegnazione: new Date().toISOString(),
@@ -1470,6 +1482,7 @@ async function handlePost(action, body, env) {
       const urgWritable = ['cliente_id','macchina_id','problema','priorita_id','stato','tecnico_assegnato','tecnici_ids','automezzo_id','data_prevista','ora_prevista','data_inizio','data_risoluzione','intervento_id','note','allegati_ids','sla_scadenza','sla_status','obsoleto'];
       const updates = {};
       for (const k of urgWritable) { if (allFields[k] !== undefined) updates[k] = allFields[k]; }
+      if (updates.tecnici_ids) updates.tecnici_ids = normalizeTecniciIds(updates.tecnici_ids);
       // Validazione transizione stato
       if (updates.stato) {
         const current = await sb(env, 'urgenze', 'GET', null, `?id=eq.${id}&select=stato`).catch(()=>[]);
@@ -1823,6 +1836,7 @@ async function handlePost(action, body, env) {
       const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const { id, userId: _u, operatoreId: _op, ...updates } = body;
+      if (updates.tecnici_ids) updates.tecnici_ids = normalizeTecniciIds(updates.tecnici_ids);
       updates.updated_at = new Date().toISOString();
       await sb(env, `installazioni?id=eq.${id}`, 'PATCH', updates);
       await wlog('installazione', id, 'updated', body.operatoreId);
@@ -1908,6 +1922,7 @@ async function handlePost(action, body, env) {
       if (!id) return err('ID trasferta mancante');
       const fields = getFields(body);
       delete fields.id; delete fields.created_at;
+      if (fields.tecnici_ids) fields.tecnici_ids = normalizeTecniciIds(fields.tecnici_ids);
       const result = await sb(env, 'trasferte', 'PATCH', fields, `?id=eq.${id}&select=*`);
       await wlog('trasferta', id, 'updated', body.operatoreId);
       return ok({ trasferta: pascalizeRecord(result[0]) });
