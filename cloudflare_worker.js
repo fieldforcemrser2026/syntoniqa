@@ -354,7 +354,7 @@ async function sb(env, table, method = 'GET', body = null, params = '', extraHea
   }
   const text = await res.text();
   if (!text) return method === 'GET' ? [] : null;
-  try { return JSON.parse(text); } catch { return text; }
+  try { return JSON.parse(text); } catch { console.error(`[SB] non-JSON response from ${method} ${table}:`, text.substring(0, 200)); return method === 'GET' ? [] : null; }
 }
 
 // Password hashing — PBKDF2-SHA256 con salt (CF Workers Web Crypto)
@@ -642,8 +642,16 @@ export default {
     }
 
     const url = new URL(request.url);
-    const action = url.searchParams.get('action') || url.pathname.split('/').pop();
+    const urlAction = url.searchParams.get('action') || url.pathname.split('/').pop() || '';
     const clientIP = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+
+    // Per POST: leggi il body una volta sola e risolvi l'action dal body se non è nel URL
+    let _rawBody = null;
+    const isPOST = request.method === 'POST';
+    if (isPOST && !urlAction) {
+      _rawBody = await request.json().catch(() => ({}));
+    }
+    const action = urlAction || (_rawBody && _rawBody.action) || '';
 
     // Telegram webhook: bypassa token check ma RICHIEDE secret + rate limit
     if (action === 'telegramWebhook') {
@@ -659,7 +667,7 @@ export default {
       // Rate limit anche per webhook (100 req/min)
       const rlTg = rateLimit(clientIP, 'telegram');
       if (rlTg.limited) return new Response('Too Many Requests', { status: 429 });
-      const body = await request.json().catch(() => ({}));
+      const body = _rawBody || await request.json().catch(() => ({}));
       return await handlePost(action, body, env);
     }
 
@@ -689,11 +697,10 @@ export default {
         } else {
           response = await handleGet(action, url, env, auth);
         }
-      } else if (request.method === 'POST') {
-        const rawBody = await request.json().catch(() => ({}));
-        const postAction = action || rawBody.action || '';
+      } else if (isPOST) {
+        const rawBody = _rawBody || await request.json().catch(() => ({}));
         // Login bypassa auth check (utente non ha ancora un token)
-        if (postAction === 'login') {
+        if (action === 'login') {
           const body = normalizeBody(rawBody);
           body._clientIP = clientIP;
           response = await handlePost('login', body, env);
@@ -710,7 +717,7 @@ export default {
             body._isJWT            = auth.jwt;                     // true se autenticato via JWT
             body._ancheCaposquadra = auth.ancheCaposquadra || false; // admin che gestisce anche una squadra
             body._squadraId        = auth.squadraId || null;       // squadra_id dal JWT
-            response = await handlePost(postAction, body, env);
+            response = await handlePost(action, body, env);
           }
         }
       } else {
@@ -1059,7 +1066,7 @@ async function handlePost(action, body, env) {
       if (!fields.cliente_id) return err('Campo cliente_id obbligatorio per createPiano');
       // Risolvi macchina_id: se è un seriale cerca il MAC_xxx corrispondente
       const resolvedMacPiano = await resolveSerialToMacId(env, fields.macchina_id);
-      // Writable: id,tenant_id,tecnico_id,cliente_id,macchina_id,automezzo_id,tipo_intervento_id,data,ora_inizio,ora_fine,stato,note,data_fine
+      // Writable: id,tenant_id,tecnico_id,cliente_id,macchina_id,automezzo_id,tipo_intervento_id,priorita_id,durata_ore,tecnici_ids,data,ora_inizio,ora_fine,stato,note,data_fine
       const row = {
         id,
         tenant_id: fields.tenant_id || getTid(env),
@@ -1068,6 +1075,9 @@ async function handlePost(action, body, env) {
         macchina_id: resolvedMacPiano || null,
         automezzo_id: fields.automezzo_id || null,
         tipo_intervento_id: fields.tipo_intervento_id || null,
+        priorita_id: fields.priorita_id || null,
+        durata_ore: fields.durata_ore || null,
+        tecnici_ids: fields.tecnici_ids || null,
         data: fields.data || null,
         ora_inizio: fields.ora_inizio || null,
         ora_fine: fields.ora_fine || null,
@@ -1086,7 +1096,7 @@ async function handlePost(action, body, env) {
       if (!id) return err('id piano richiesto');
       const allFields = getFields(body);
       // Only writable piano columns
-      const pianoWritable = ['tecnico_id','cliente_id','macchina_id','automezzo_id','tipo_intervento_id','priorita_id','data','ora_inizio','ora_fine','durata_ore','stato','note','data_fine','obsoleto'];
+      const pianoWritable = ['tecnico_id','cliente_id','macchina_id','automezzo_id','tipo_intervento_id','priorita_id','tecnici_ids','data','ora_inizio','ora_fine','durata_ore','stato','note','data_fine','km_percorsi','ore_lavorate','note_completamento','valutazione_cliente','obsoleto'];
       const updates = {};
       for (const k of pianoWritable) { if (allFields[k] !== undefined) updates[k] = allFields[k]; }
       // Validazione numerici
@@ -1295,6 +1305,12 @@ async function handlePost(action, body, env) {
 
     case 'assignUrgenza': {
       const { id, operatoreId, userId } = body;
+      if (!id) return err('id urgenza richiesto');
+      // Verifica stato corrente e valida transizione
+      const urgCur = await sb(env, 'urgenze', 'GET', null, `?id=eq.${id}&select=stato`).catch(()=>[]);
+      if (!urgCur?.[0]) return err('Urgenza non trovata');
+      const transErr = validateTransition(VALID_URGENZA_TRANSITIONS, urgCur[0].stato, 'assegnata', 'urgenza');
+      if (transErr) return err(transErr);
       const tecId = body.tecnicoAssegnato || body.tecnico_assegnato || body.TecnicoID;
       const tecIds = body.tecniciIds || body.tecnici_ids || body.TecniciIDs;
       const autoId = body.automezzoId || body.automezzo_id || body.AutomezzoID || null;
@@ -1567,7 +1583,7 @@ async function handlePost(action, body, env) {
       if (!pwd || pwd.length < 8) return err('Password richiesta (min 8 caratteri)');
       const id = secureId('TEC');
       const hashed = await hashPassword(pwd);
-      const row = { id, ...getFields(body), password_hash: hashed, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      const row = { id, tenant_id: getTid(env), ...getFields(body), password_hash: hashed, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       delete row.password;
       // Livello: salva in config (non colonna DB)
       const _livello = row.livello; delete row.livello;
@@ -1642,7 +1658,7 @@ async function handlePost(action, body, env) {
       const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = secureId('CLI');
-      const row = { id, ...getFields(body), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      const row = { id, tenant_id: getTid(env), ...getFields(body), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       const result = await sb(env, 'clienti', 'POST', row);
       await wlog('cliente', id, 'created', body.operatoreId);
       return ok({ cliente: pascalizeRecord(result[0]) });
@@ -1675,7 +1691,7 @@ async function handlePost(action, body, env) {
       const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = secureId('MAC');
-      const result = await sb(env, 'macchine', 'POST', { id, ...getFields(body), created_at: new Date().toISOString() });
+      const result = await sb(env, 'macchine', 'POST', { id, tenant_id: getTid(env), ...getFields(body), created_at: new Date().toISOString() });
       await wlog('macchina', id, 'created', body.operatoreId);
       return ok({ macchina: pascalizeRecord(result[0]) });
     }
@@ -1831,6 +1847,7 @@ async function handlePost(action, body, env) {
       const id = secureId('REP');
       const fields_rep = getFields(body);
       delete fields_rep.created_at; delete fields_rep.updated_at;
+      if (!fields_rep.tenant_id) fields_rep.tenant_id = getTid(env);
       const result = await sb(env, 'reperibilita', 'POST', { id, ...fields_rep });
       await wlog('reperibilita', id, 'created', body.operatoreId);
       return ok({ reperibilita: pascalizeRecord(result[0]) });
@@ -2026,7 +2043,7 @@ async function handlePost(action, body, env) {
 
     case 'createPagellino': {
       const id = secureId('PAG');
-      const result = await sb(env, 'pagellini', 'POST', { id, ...getFields(body), stato: 'bozza', data_creazione: new Date().toISOString() });
+      const result = await sb(env, 'pagellini', 'POST', { id, tenant_id: getTid(env), ...getFields(body), stato: 'bozza', data_creazione: new Date().toISOString() });
       return ok({ pagellino: pascalizeRecord(result[0]) });
     }
 
@@ -2040,7 +2057,7 @@ async function handlePost(action, body, env) {
 
     case 'createChecklistTemplate': {
       const id = secureId('CHK');
-      const result = await sb(env, 'checklist_template', 'POST', { id, ...getFields(body), created_at: new Date().toISOString() });
+      const result = await sb(env, 'checklist_template', 'POST', { id, tenant_id: getTid(env), ...getFields(body), created_at: new Date().toISOString() });
       return ok({ template: result[0] });
     }
 
@@ -2058,7 +2075,7 @@ async function handlePost(action, body, env) {
 
     case 'compileChecklist': {
       const id = secureId('CKC');
-      const result = await sb(env, 'checklist_compilata', 'POST', { id, ...getFields(body), data_compilazione: new Date().toISOString() });
+      const result = await sb(env, 'checklist_compilata', 'POST', { id, tenant_id: getTid(env), ...getFields(body), data_compilazione: new Date().toISOString() });
       // Aggiorna intervento con checklist_id
       if (body.intervento_id) {
         await sb(env, `piano?id=eq.${body.intervento_id}`, 'PATCH', { checklist_id: id });
@@ -2070,7 +2087,7 @@ async function handlePost(action, body, env) {
 
     case 'createDocumento': {
       const id = secureId('DOC');
-      const result = await sb(env, 'documenti', 'POST', { id, ...getFields(body), data_caricamento: new Date().toISOString() });
+      const result = await sb(env, 'documenti', 'POST', { id, tenant_id: getTid(env), ...getFields(body), data_caricamento: new Date().toISOString() });
       return ok({ documento: pascalizeRecord(result[0]) });
     }
 
@@ -2089,7 +2106,7 @@ async function handlePost(action, body, env) {
 
     case 'createAllegato': {
       const id = secureId('ALL');
-      const result = await sb(env, 'allegati', 'POST', { id, ...getFields(body), data_upload: new Date().toISOString() });
+      const result = await sb(env, 'allegati', 'POST', { id, tenant_id: getTid(env), ...getFields(body), data_upload: new Date().toISOString() });
       return ok({ allegato: pascalizeRecord(result[0]) });
     }
 
@@ -6869,6 +6886,8 @@ Rispondi SOLO con JSON valido:
     }
 
     case 'importExcelPlan': {
+      const adminErr = requireRole(body, 'admin');
+      if (adminErr) return err(adminErr, 403);
       // Import plan rows from parsed Excel data
       const { rows, operatoreId } = body;
       if (!rows || !rows.length) return err('rows richiesto');
@@ -7073,6 +7092,8 @@ Rispondi SOLO con JSON valido:
     // -------- WORKFLOW APPROVATIVO → spostato sotto dopo getVincoliCategories --------
 
     case 'geocodeAll': {
+      const adminErr = requireRole(body, 'admin');
+      if (adminErr) return err(adminErr, 403);
       // FIX B-V2-5: Geocoding Nominatim con retry, backoff esponenziale, error log
       const batchSize = Math.min(parseInt(body?.limit) || 20, 50); // max 50
       const clientiSenzaGeo = await sb(env, 'clienti', 'GET', null,
@@ -7148,6 +7169,8 @@ Rispondi SOLO con JSON valido:
     }
 
     case 'generateReport': {
+      const adminErr = requireRole(body, 'admin', 'caposquadra');
+      if (adminErr) return err(adminErr, 403);
       const filtri = body.filtri || {};
       const tipo = body.tipo || 'kpi_mensile';
       const dateFrom = filtri.data_inizio || filtri.dataInizio || body.date_from || '';
@@ -7318,8 +7341,10 @@ Rispondi SOLO con JSON valido:
     }
 
     case 'logKPISnapshot': {
+      const adminErr = requireRole(body, 'admin');
+      if (adminErr) return err(adminErr, 403);
       const id = secureId('KSN');
-      await sb(env, 'kpi_snapshot', 'POST', { id, ...getFields(body), data: new Date().toISOString().split('T')[0], ora: new Date().toTimeString().split(' ')[0] });
+      await sb(env, 'kpi_snapshot', 'POST', { id, ...getFields(body), tenant_id: TENANT, data: new Date().toISOString().split('T')[0], ora: new Date().toTimeString().split(' ')[0] });
       return ok({ id });
     }
 
@@ -7768,13 +7793,18 @@ Rispondi SOLO con JSON valido:
     }
 
     case 'setupWebhook': {
+      const adminErr = requireRole(body, 'admin');
+      if (adminErr) return err(adminErr, 403);
       const { webhookUrl } = body;
+      if (!webhookUrl || !webhookUrl.startsWith('https://')) return err('webhookUrl deve essere un URL HTTPS valido');
       const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setWebhook?url=${encodeURIComponent(webhookUrl)}`);
       const data = await res.json();
       return ok({ telegram: data });
     }
 
     case 'removeWebhook': {
+      const adminErr = requireRole(body, 'admin');
+      if (adminErr) return err(adminErr, 403);
       const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/deleteWebhook`);
       const data = await res.json();
       return ok({ telegram: data });
@@ -8267,6 +8297,8 @@ Rispondi SOLO con JSON valido:
           }
           const picked = urgList[scelta - 1];
           const pickedCli = cliNames7[picked.cliente_id] || picked.cliente_id || '?';
+          // Verifica che sia ancora aperta (race condition)
+          if (picked.stato !== 'aperta') { reply = `⚠️ Urgenza ${picked.id} non più aperta (stato: ${picked.stato})`; break; }
           await sb(env, `urgenze?id=eq.${picked.id}`, 'PATCH', { stato: 'assegnata', tecnico_assegnato: utente.id, data_assegnazione: new Date().toISOString() });
           reply = `✅ Urgenza *${picked.id}* assegnata a te!\n🏠 Cliente: ${pickedCli}\n📋 Problema: ${picked.problema}`;
           await sendTelegramNotification(env, 'urgenza_assegnata', { id: picked.id, tecnicoAssegnato: utente.id });
@@ -8281,8 +8313,8 @@ Rispondi SOLO con JSON valido:
         }
         case '/risolto': {
           const note = parts.slice(1).join(' ');
-          const urg = await sb(env, 'urgenze', 'GET', null, `?tecnico_assegnato=eq.${utente.id}&stato=in.(assegnata,in_corso)&limit=1`);
-          if (!urg.length) { reply = 'Nessuna urgenza in corso'; break; }
+          const urg = await sb(env, 'urgenze', 'GET', null, `?tecnico_assegnato=eq.${utente.id}&stato=eq.in_corso&limit=1`);
+          if (!urg.length) { reply = 'Nessuna urgenza in corso. Usa /incorso prima di /risolto'; break; }
           await sb(env, `urgenze?id=eq.${urg[0].id}`, 'PATCH', { stato: 'risolta', data_risoluzione: new Date().toISOString(), note });
           reply = `✅ Urgenza *${urg[0].id}* RISOLTA${note ? '\nNote: ' + note : ''}`;
           break;
@@ -8983,8 +9015,12 @@ Rispondi SOLO con JSON valido:
                 break;
               }
               const picked = urgList[scelta - 1];
+              // Verifica che sia ancora aperta
+              if (picked.stato !== 'aperta') { botReply = `⚠️ Urgenza ${picked.id} non più aperta (stato: ${picked.stato})`; break; }
               await sb(env, `urgenze?id=eq.${picked.id}`, 'PATCH', { stato: 'assegnata', tecnico_assegnato: mittente, data_assegnazione: new Date().toISOString() });
-              botReply = `✅ Urgenza ${picked.id} assegnata a te!\n${picked.problema}`;
+              // Risolvi nome cliente
+              const pickedCliName = picked.cliente_id ? await getEntityName(env, 'clienti', picked.cliente_id).catch(()=>picked.cliente_id) : '?';
+              botReply = `✅ Urgenza ${picked.id} assegnata a te!\n🏠 ${pickedCliName}\n${picked.problema}`;
               break;
             }
             case '/incorso': {
@@ -8996,8 +9032,8 @@ Rispondi SOLO con JSON valido:
             }
             case '/risolto': {
               const note = parts.slice(1).join(' ');
-              const urg = await sb(env, 'urgenze', 'GET', null, `?tecnico_assegnato=eq.${mittente}&stato=in.(assegnata,in_corso)&limit=1`).catch(()=>[]);
-              if (!urg.length) { botReply = 'Nessuna urgenza in corso'; break; }
+              const urg = await sb(env, 'urgenze', 'GET', null, `?tecnico_assegnato=eq.${mittente}&stato=eq.in_corso&limit=1`).catch(()=>[]);
+              if (!urg.length) { botReply = 'Nessuna urgenza in corso. Usa /incorso prima di /risolto'; break; }
               await sb(env, `urgenze?id=eq.${urg[0].id}`, 'PATCH', { stato: 'risolta', data_risoluzione: new Date().toISOString(), note });
               botReply = `✅ Urgenza ${urg[0].id} RISOLTA${note ? '\nNote: ' + note : ''}`;
               break;
@@ -9006,7 +9042,7 @@ Rispondi SOLO con JSON valido:
               const codice = parts[1] || '';
               const qt = parseInt(parts[2]) || 1;
               const cliente = parts.slice(3).join(' ') || '';
-              if (!codice) { botReply = '📦 Formato: /ordine [codice] [quantità] [cliente]'; break; }
+              if (!codice || !/^\d\.\d{4}\.\d{4}\.\d$/.test(codice)) { botReply = '📦 Formato: /ordine [codice] [quantità] [cliente]\nEs: /ordine 9.1189.0283.0 2 Bondioli'; break; }
               const ordId = secureId('ORD_APP');
               const ordTid = getTid(env);
               await sb(env, 'ordini', 'POST', { id: ordId, tenant_id: ordTid, tecnico_id: mittente, codice, descrizione: `${codice} x${qt}${cliente ? ' - ' + cliente : ''}`, quantita: qt, stato: 'richiesto', data_richiesta: new Date().toISOString() });
@@ -9442,7 +9478,7 @@ Rispondi SOLO con JSON valido:
 
       // Se non dry_run, crea gli interventi nel piano
       if (!dry_run && scheduled.length) {
-        const pmTid = tenantId(env);
+        const pmTid = getTid(env);
         const now = new Date().toISOString();
         const tagId = await resolveTagliandoId(env);
         let created = 0, errors = [], skippedDup = 0;
