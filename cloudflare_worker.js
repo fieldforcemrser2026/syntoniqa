@@ -4164,7 +4164,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             sse({type:'engine_debug', engine:'gemini', status:res.status, reason:errBody.substring(0,200)});
             return null;
           }
-          const gd = await res.json();
+          const gd = await res.json().catch(()=>null);
+          if (!gd) { sse({type:'engine_debug', engine:'gemini', status:200, reason:'invalid_json_response'}); return null; }
           const text = gd.candidates?.[0]?.content?.parts?.[0]?.text || null;
           if (!text) sse({type:'engine_debug', engine:'gemini', status:200, reason:'empty_response', candidates:JSON.stringify(gd.candidates||[]).substring(0,200)});
           else sse({type:'engine_debug', engine:'gemini', status:'ok', reason:`${text.length} chars received`});
@@ -4200,7 +4201,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             sse({type:'engine_debug', engine:'cerebras', status:res.status, reason:errBody.substring(0,200)});
             return null;
           }
-          const cd = await res.json();
+          const cd = await res.json().catch(()=>null);
+          if (!cd) { sse({type:'engine_debug', engine:'cerebras', status:200, reason:'invalid_json_response'}); return null; }
           const text = cd.choices?.[0]?.message?.content || null;
           if (!text) sse({type:'engine_debug', engine:'cerebras', status:200, reason:'empty_response'});
           else sse({type:'engine_debug', engine:'cerebras', status:'ok', reason:`${text.length} chars received`});
@@ -4235,7 +4237,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             sse({type:'engine_debug', engine:'groq', status:res.status, reason:errBody.substring(0,200)});
             return null;
           }
-          const gd = await res.json();
+          const gd = await res.json().catch(()=>null);
+          if (!gd) { sse({type:'engine_debug', engine:'groq', status:200, reason:'invalid_json_response'}); return null; }
           const text = gd.choices?.[0]?.message?.content || null;
           if (!text) sse({type:'engine_debug', engine:'groq', status:200, reason:'empty_response'});
           else sse({type:'engine_debug', engine:'groq', status:'ok', reason:`${text.length} chars received`});
@@ -4270,7 +4273,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             sse({type:'engine_debug', engine:'mistral', status:res.status, reason:errBody.substring(0,200)});
             return null;
           }
-          const d = await res.json();
+          const d = await res.json().catch(()=>null);
+          if (!d) { sse({type:'engine_debug', engine:'mistral', status:200, reason:'invalid_json_response'}); return null; }
           const text = d.choices?.[0]?.message?.content || null;
           if (!text) sse({type:'engine_debug', engine:'mistral', status:200, reason:'empty_response'});
           else sse({type:'engine_debug', engine:'mistral', status:'ok', reason:`${text.length} chars received`});
@@ -4309,7 +4313,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             sse({type:'engine_debug', engine:'deepseek', status:res.status, reason:errBody.substring(0,200)});
             return null;
           }
-          const d = await res.json();
+          const d = await res.json().catch(()=>null);
+          if (!d) { sse({type:'engine_debug', engine:'deepseek', status:200, reason:'invalid_json_response'}); return null; }
           const text = d.choices?.[0]?.message?.content || null;
           if (!text) sse({type:'engine_debug', engine:'deepseek', status:200, reason:'empty_response'});
           else sse({type:'engine_debug', engine:'deepseek', status:'ok', reason:`${text.length} chars received`});
@@ -4370,7 +4375,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             sse({type:'engine_debug', engine:'anthropic', status:res.status, reason:errBody.substring(0,300)});
             return null;
           }
-          const d = await res.json();
+          const d = await res.json().catch(()=>null);
+          if (!d) { sse({type:'engine_debug', engine:'anthropic', status:200, reason:'invalid_json_response'}); return null; }
           const textBlock = (d.content || []).find(b => b.type === 'text');
           const text = textBlock?.text || null;
           if (!text) {
@@ -4415,7 +4421,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             sse({type:'engine_debug', engine:'openai', status:res.status, reason:errBody.substring(0,300)});
             return null;
           }
-          const d = await res.json();
+          const d = await res.json().catch(()=>null);
+          if (!d) { sse({type:'engine_debug', engine:'openai', status:200, reason:'invalid_json_response'}); return null; }
           const text = d.choices?.[0]?.message?.content || null;
           if (!text) {
             sse({type:'engine_debug', engine:'openai', status:200, reason:`empty_response — finish_reason: ${d.choices?.[0]?.finish_reason||'?'}, usage: ${JSON.stringify(d.usage||{})}`});
@@ -4461,7 +4468,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             sse({type:'engine_debug', engine:'openrouter', status:res.status, reason:errBody.substring(0,200)});
             return null;
           }
-          const d = await res.json();
+          const d = await res.json().catch(()=>null);
+          if (!d) { sse({type:'engine_debug', engine:'openrouter', status:200, reason:'invalid_json_response'}); return null; }
           const text = d.choices?.[0]?.message?.content || null;
           if (!text) sse({type:'engine_debug', engine:'openrouter', status:200, reason:'empty_response'});
           else sse({type:'engine_debug', engine:'openrouter', status:'ok', reason:`${text.length} chars received`});
@@ -4497,7 +4505,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             sse({type:'engine_debug', engine:'fireworks', status:res.status, reason:errBody.substring(0,200)});
             return null;
           }
-          const d = await res.json();
+          const d = await res.json().catch(()=>null);
+          if (!d) { sse({type:'engine_debug', engine:'fireworks', status:200, reason:'invalid_json_response'}); return null; }
           const text = d.choices?.[0]?.message?.content || null;
           if (!text) sse({type:'engine_debug', engine:'fireworks', status:200, reason:'empty_response'});
           else sse({type:'engine_debug', engine:'fireworks', status:'ok', reason:`${text.length} chars received`});
@@ -4533,7 +4542,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             sse({type:'engine_debug', engine:'sambanova', status:res.status, reason:errBody.substring(0,200)});
             return null;
           }
-          const d = await res.json();
+          const d = await res.json().catch(()=>null);
+          if (!d) { sse({type:'engine_debug', engine:'sambanova', status:200, reason:'invalid_json_response'}); return null; }
           const text = d.choices?.[0]?.message?.content || null;
           if (!text) sse({type:'engine_debug', engine:'sambanova', status:200, reason:'empty_response'});
           else sse({type:'engine_debug', engine:'sambanova', status:'ok', reason:`${text.length} chars received`});
@@ -6392,7 +6402,8 @@ Rispondi SOLO JSON valido:
               const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
               sse({type:'reviewer_status', engine:'openai', status:'parsing', progress_pct:80, elapsed});
               if (!res.ok) { sse({type:'reviewer_status', engine:'openai', status:'error', reason:`HTTP ${res.status}`}); return null; }
-              const d = await res.json();
+              const d = await res.json().catch(()=>null);
+              if (!d) { sse({type:'reviewer_status', engine:'openai', status:'error', reason:'invalid_json_response'}); return null; }
               const text = d.choices?.[0]?.message?.content || '';
               if (!text) { sse({type:'reviewer_status', engine:'openai', status:'error', reason:'empty response'}); return null; }
               const parsed = JSON.parse(text);
@@ -6427,7 +6438,8 @@ Rispondi SOLO JSON valido:
               const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
               sse({type:'reviewer_status', engine:'claude', status:'parsing', progress_pct:80, elapsed});
               if (!res.ok) { sse({type:'reviewer_status', engine:'claude', status:'error', reason:`HTTP ${res.status}`}); return null; }
-              const d = await res.json();
+              const d = await res.json().catch(()=>null);
+              if (!d) { sse({type:'reviewer_status', engine:'claude', status:'error', reason:'invalid_json_response'}); return null; }
               const textBlock = (d.content || []).find(b => b.type === 'text');
               const text = textBlock?.text || '';
               if (!text) { sse({type:'reviewer_status', engine:'claude', status:'error', reason:'empty response'}); return null; }
