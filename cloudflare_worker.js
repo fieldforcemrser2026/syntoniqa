@@ -1115,6 +1115,37 @@ async function handlePost(action, body, env) {
             await wlog('urgenza', u.id, 'auto_resolved_from_piano', body.operatoreId || body.userId, `piano ${id} completato`);
           }
         } catch(e){ console.error('Auto-resolve urgenza error:', e.message); }
+        // Auto-update PM cycle: aggiorna prossimo_controllo della macchina
+        try {
+          const pianoRow = await sb(env, 'piano', 'GET', null, `?id=eq.${id}&select=macchina_id,note`).catch(()=>[]);
+          const macId = pianoRow?.[0]?.macchina_id;
+          if (macId) {
+            // Leggi asset per calcolare prossimo controllo
+            const asset = await sb(env, 'anagrafica_assets', 'GET', null, `?id=eq.${macId}&select=id,ciclo_pm,intervallo_settimane,prossimo_controllo`).catch(()=>[]);
+            if (asset?.[0]) {
+              const intervSett = asset[0].intervallo_settimane || 15; // default 15 settimane
+              const oggi = new Date().toISOString().split('T')[0];
+              const prossimo = new Date(Date.now() + intervSett * 7 * 86400000).toISOString().split('T')[0];
+              await sb(env, `anagrafica_assets?id=eq.${macId}`, 'PATCH', {
+                ultimo_controllo: oggi,
+                prossimo_controllo: prossimo,
+                updated_at: new Date().toISOString()
+              });
+              await wlog('pm_cycle', macId, 'auto_updated', body.operatoreId || body.userId, `completato → prossimo: ${prossimo} (+${intervSett}sett)`);
+            }
+            // Anche per tabella macchine (prossimo_tagliando)
+            const mac = await sb(env, 'macchine', 'GET', null, `?id=eq.${macId}&select=id,prossimo_tagliando`).catch(()=>[]);
+            if (mac?.[0]) {
+              const oggi = new Date().toISOString().split('T')[0];
+              const prossimo = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0]; // default 90gg
+              await sb(env, `macchine?id=eq.${macId}`, 'PATCH', {
+                ultimo_tagliando: oggi,
+                prossimo_tagliando: prossimo,
+                updated_at: new Date().toISOString()
+              });
+            }
+          }
+        } catch(e){ console.error('PM cycle auto-update error:', e.message); }
       }
       if (updates.stato === 'in_corso') {
         // Auto-start urgenza collegata se è in stato assegnata
@@ -5206,13 +5237,37 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
       }
 
       // ─── DETERMINISTIC PLAN BUILDER v2 — zone matching + km minimization + junior pairing ───
-      function _buildDeterministicPlan(workDays, tagBacklog, installBacklog) {
+      function _buildDeterministicPlan(workDays, tagBacklog, installBacklog, urgenzeBacklog, pianoDbRows) {
         const plan = [];
         let instIdx = 0;
 
         // Copia backlog per gestire splice/assegnamento senza modificare l'originale
         const backlog = tagBacklog.map((t, i) => ({ ...t, _idx: i }));
         const usedMachines = new Set(); // macchina_id o macchinaLabel già assegnate
+
+        // ── EXISTING PIANO: mappa capacità occupata per tecnico/giorno ──
+        const pianoCapacity = {}; // { 'TEC_xxx|2026-03-10': totalHours }
+        const pianoExistingIds = new Set(); // piano IDs already in DB
+        for (const p of (pianoDbRows || [])) {
+          const tid = p.tecnico_id || '';
+          const d = p.data || '';
+          const key = `${tid}|${d}`;
+          const ore = parseFloat(p.durata_ore || p.durataOre) || 0;
+          pianoCapacity[key] = (pianoCapacity[key] || 0) + ore;
+          if (p.id) pianoExistingIds.add(p.id);
+        }
+        function _hasCap(tecId, giorno, neededHours) {
+          const key = `${tecId}|${giorno}`;
+          const used = pianoCapacity[key] || 0;
+          return (used + neededHours) <= 10; // max 10h/giorno
+        }
+        function _addCap(tecId, giorno, hours) {
+          const key = `${tecId}|${giorno}`;
+          pianoCapacity[key] = (pianoCapacity[key] || 0) + hours;
+        }
+
+        // ── INSTALLATION TRACKING: anti-double-booking ──
+        const instAssigned = new Set(); // 'instId|tecId|giorno' già assegnati
 
         // Tecnici attivi (no admin)
         const tecAttivi2 = allTecnici.filter(t => (t.ruolo || '').toLowerCase() !== 'admin');
@@ -5454,6 +5509,35 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           const pairedSeniorsToday = new Set(); // Track which seniors already have a junior
           clientTecToday = {}; // Reset per giorno
 
+          // A0) URGENZE APERTE — priorità massima, assegna a tecnico più vicino
+          for (const urg of (urgenzeBacklog || [])) {
+            if (urg._assigned) continue;
+            const cliId = urg.cliente_id || '';
+            const cNome = _resolveClienteNome(cliId);
+            // Trova tecnico libero più adatto (non occupato, non assente, con capacità)
+            const candidates = [...seniors2, ...indipendenti2].filter(t =>
+              !usedToday.has(t.id) && !_isAbsent(t.id, giorno) && !_isTrasferta(t.id, giorno) && !_isReperibilita(t.id, giorno) && _hasCap(t.id, giorno, 4)
+            );
+            if (!candidates.length) continue;
+            // Preferisci chi è già assegnato allo stesso cliente, poi chi è stato assegnato all'urgenza
+            const urgTecId = urg.tecnico_id || '';
+            let best = urgTecId ? candidates.find(t => t.id === urgTecId) : null;
+            if (!best) best = candidates[0]; // primo disponibile
+            const priLabel = urg.priorita_id === 1 ? 'CRITICA' : urg.priorita_id === 2 ? 'ALTA' : 'MEDIA';
+            plan.push({
+              id: urg.id || null, data: giorno, tecnicoId: best.id,
+              clienteId: cliId, cliente: cNome, tipo: 'urgenza',
+              oraInizio: '08:00', durataOre: 4, furgone: _furgLabel(best.automezzo_id),
+              note: `🚨 URGENZA ${priLabel}: ${(urg.problema||'').substring(0,60)} | ${cNome}`,
+              macchinaLabel: '', macchinaModello: '', machinaTipo: '', tipoFoglio: '', seriale: '',
+              scadenza: urg.data_segnalazione || '', statoScaduto: priLabel, oreLavoro: '', ultimoTagliando: '', km: ''
+            });
+            usedToday.add(best.id);
+            _addCap(best.id, giorno, 4);
+            urg._assigned = true;
+            break; // 1 urgenza per giorno per non saturare
+          }
+
           // A) Installazioni prioritarie
           while (instIdx < installBacklog.length) {
             const inst = installBacklog[instIdx];
@@ -5463,13 +5547,16 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             let assigned = false;
             const assignTec = tecIds.length > 0 ? [...tecIds] : [];
             if (!assignTec.length) {
-              const free = seniors2.find(t => !usedToday.has(t.id) && !_isAbsent(t.id, giorno) && !_isTrasferta(t.id, giorno) && !_isReperibilita(t.id, giorno));
+              const free = seniors2.find(t => !usedToday.has(t.id) && !_isAbsent(t.id, giorno) && !_isTrasferta(t.id, giorno) && !_isReperibilita(t.id, giorno) && _hasCap(t.id, giorno, 8));
               if (free) assignTec.push(free.id);
             }
             for (const tid of assignTec) {
               if (usedToday.has(tid)) continue;
+              // Anti-double-booking: skip se già assegnato a questa installazione oggi
+              const instKey = `${inst.id}|${tid}|${giorno}`;
+              if (instAssigned.has(instKey)) continue;
               const tec = tecAttivi2.find(t => t.id === tid);
-              if (!tec || _isAbsent(tid, giorno) || _isTrasferta(tid, giorno)) continue;
+              if (!tec || _isAbsent(tid, giorno) || _isTrasferta(tid, giorno) || !_hasCap(tid, giorno, 8)) continue;
               const cNome = _resolveClienteNome(inst.cliente_id);
               // REGOLA 8: include machine/asset info from installation record
               const instMacchine = inst.macchine_ids || '';
@@ -5485,6 +5572,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
                 scadenza: '', statoScaduto: '', oreLavoro: '', ultimoTagliando: '', km: ''
               });
               usedToday.add(tid);
+              _addCap(tid, giorno, 8);
+              instAssigned.add(instKey);
               _trackAssignment(inst.cliente_id, tid);
               assigned = true;
             }
@@ -5496,6 +5585,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           for (const tec of seniors2) {
             if (usedToday.has(tec.id)) continue;
             if (_isAbsent(tec.id, giorno) || _isTrasferta(tec.id, giorno) || _isReperibilita(tec.id, giorno)) continue;
+            if (!_hasCap(tec.id, giorno, 6)) continue; // già al limite ore
 
             const item = pickFromBacklog(tec);
             if (!item) continue;
@@ -5526,6 +5616,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               giorniDaPm: item.giorniDaPm || null,
               mungitureDaPm: item.mungitureDaPm || null
             });
+            const _durB = item.oreLavoro ? Math.min(8, Math.max(4, item.oreLavoro / 500)) : 6;
+            _addCap(tec.id, giorno, _durB);
             usedToday.add(tec.id);
             _trackAssignment(item.clienteId, tec.id);
           }
@@ -5578,6 +5670,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           for (const tec of indipendenti2) {
             if (usedToday.has(tec.id)) continue;
             if (_isAbsent(tec.id, giorno) || _isTrasferta(tec.id, giorno) || _isReperibilita(tec.id, giorno)) continue;
+            if (!_hasCap(tec.id, giorno, 6)) continue;
 
             const item = pickFromBacklog(tec);
             if (!item) continue;
@@ -5608,10 +5701,34 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               giorniDaPm: item.giorniDaPm || null,
               mungitureDaPm: item.mungitureDaPm || null
             });
+            const _durD = item.oreLavoro ? Math.min(8, Math.max(4, item.oreLavoro / 500)) : 6;
+            _addCap(tec.id, giorno, _durD);
             usedToday.add(tec.id);
             _trackAssignment(item.clienteId, tec.id);
           }
         }
+
+        // E0) INTERVENTI ARRETRATI — piano DB non completati con data passata
+        const oggi2 = workDays[0] || '';
+        for (const p of (pianoDbRows || [])) {
+          if (!p.id || !p.tecnico_id || !p.data) continue;
+          const pStato = (p.stato || '').toLowerCase();
+          // Solo interventi non completati e con data passata
+          if (pStato === 'completato' || pStato === 'annullato') continue;
+          if (p.data >= oggi2) continue; // non arretrato, è futuro
+          const tec = tecAttivi2.find(t => t.id === p.tecnico_id);
+          if (!tec) continue;
+          const cNome = _resolveClienteNome(p.cliente_id);
+          plan.push({
+            id: p.id, data: workDays[0], tecnicoId: p.tecnico_id,
+            clienteId: p.cliente_id || '', cliente: cNome, tipo: p.tipo_intervento_id || 'arretrato',
+            oraInizio: p.ora_inizio || '08:00', durataOre: 4, furgone: _furgLabel(tec.automezzo_id),
+            note: `⚠️ ARRETRATO dal ${p.data}: ${(p.note||'').substring(0,60) || cNome}`,
+            macchinaLabel: '', macchinaModello: '', machinaTipo: '', tipoFoglio: '', seriale: '',
+            scadenza: p.data, statoScaduto: 'ARRETRATO', oreLavoro: '', ultimoTagliando: '', km: ''
+          });
+        }
+
         // E) REPERIBILITÀ — aggiungi righe informative per chi è in turno
         for (const giorno of workDays) {
           for (const tec of tecAttivi2) {
@@ -5631,14 +5748,65 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           }
         }
 
-        // ── ORDINAMENTO FINALE: data → senior first → junior consecutivo al proprio senior ──
+        // F) RICHIESTE (ferie/malattia/permessi) — righe informative
+        for (const giorno of workDays) {
+          for (const tec of tecAttivi2) {
+            if (_isAbsent(tec.id, giorno) && !_isReperibilita(tec.id, giorno)) {
+              // Trova la richiesta specifica per il motivo
+              const req = (allRichieste || []).find(r => r.tecnico_id === tec.id && r.data_inizio <= giorno && (r.data_fine || r.data_inizio) >= giorno);
+              const motivo = req ? (req.tipo || 'assente') : 'assente';
+              plan.push({
+                id: null, data: giorno, tecnicoId: tec.id,
+                clienteId: '', cliente: '', tipo: 'assenza',
+                oraInizio: '', durataOre: 0, furgone: '',
+                note: `📋 ${motivo.charAt(0).toUpperCase()+motivo.slice(1)}${req?.motivo ? ': '+req.motivo.substring(0,40) : ''} — non disponibile`,
+                macchinaLabel: '', macchinaModello: '', machinaTipo: '', tipoFoglio: '', seriale: '',
+                scadenza: '', statoScaduto: '', oreLavoro: '', ultimoTagliando: '', km: '',
+                cicloPm: '', giorniDaPm: null, mungitureDaPm: null
+              });
+            }
+          }
+        }
+
+        // G) TRASFERTE — righe informative
+        for (const giorno of workDays) {
+          for (const tec of tecAttivi2) {
+            if (_isTrasferta(tec.id, giorno) && !_isAbsent(tec.id, giorno)) {
+              const tr = (allTrasferte || []).find(t => {
+                const tIds = t.tecnici_ids ? (Array.isArray(t.tecnici_ids) ? t.tecnici_ids : t.tecnici_ids.split(',')) : [];
+                return (t.tecnico_id === tec.id || tIds.includes(tec.id)) && t.data_inizio <= giorno && (t.data_fine || t.data_inizio) >= giorno;
+              });
+              const cNome = tr?.cliente_id ? _resolveClienteNome(tr.cliente_id) : '';
+              plan.push({
+                id: null, data: giorno, tecnicoId: tec.id,
+                clienteId: tr?.cliente_id || '', cliente: cNome, tipo: 'trasferta',
+                oraInizio: '08:00', durataOre: 8, furgone: _furgLabel(tec.automezzo_id),
+                note: `🚗 Trasferta${cNome ? ' presso '+cNome : ''} — non disponibile per tagliandi`,
+                macchinaLabel: '', macchinaModello: '', machinaTipo: '', tipoFoglio: '', seriale: '',
+                scadenza: '', statoScaduto: '', oreLavoro: '', ultimoTagliando: '', km: '',
+                cicloPm: '', giorniDaPm: null, mungitureDaPm: null
+              });
+            }
+          }
+        }
+
+        // ── ORDINAMENTO FINALE: data → urgenze/installazioni prima → info rows in fondo ──
+        const _infoTypes = new Set(['reperibilita','assenza','trasferta']);
         plan.sort((a, b) => {
           // 1. Per data
           if (a.data !== b.data) return (a.data || '').localeCompare(b.data || '');
-          // 2. Reperibilità in fondo
-          if (a.tipo === 'reperibilita' && b.tipo !== 'reperibilita') return 1;
-          if (b.tipo === 'reperibilita' && a.tipo !== 'reperibilita') return -1;
-          // 3. Installazioni prima dei tagliandi
+          // 2. Info rows (reperibilità, assenza, trasferta) in fondo
+          const aInfo = _infoTypes.has(a.tipo);
+          const bInfo = _infoTypes.has(b.tipo);
+          if (aInfo && !bInfo) return 1;
+          if (bInfo && !aInfo) return -1;
+          // 3. Urgenze prima di tutto
+          if (a.tipo === 'urgenza' && b.tipo !== 'urgenza') return -1;
+          if (b.tipo === 'urgenza' && a.tipo !== 'urgenza') return 1;
+          // 4. Arretrati subito dopo urgenze
+          if (a.statoScaduto === 'ARRETRATO' && b.statoScaduto !== 'ARRETRATO') return -1;
+          if (b.statoScaduto === 'ARRETRATO' && a.statoScaduto !== 'ARRETRATO') return 1;
+          // 5. Installazioni prima dei tagliandi
           if (a.tipo === 'installazione' && b.tipo !== 'installazione') return -1;
           if (b.tipo === 'installazione' && a.tipo !== 'installazione') return 1;
           // 4. Raggruppa senior+junior: senior first, poi il suo junior subito dopo
@@ -5815,7 +5983,7 @@ ${instructions}`;
           const allChunkDays = chunks.flatMap(c => c.workDays.map(wd => wd.split('(')[0]));
 
           // Build deterministic plan (con backlog filtrato)
-          const detResult = _buildDeterministicPlan(allChunkDays, tagBacklogFiltered, allInstallazioni || []);
+          const detResult = _buildDeterministicPlan(allChunkDays, tagBacklogFiltered, allInstallazioni || [], allUrgenze || [], allPianoDb || []);
           const detPlan = detResult.plan;
           const detStats = {
             righe: detPlan.length,
@@ -5901,13 +6069,51 @@ ${instructions}`;
           });
           const clientiGeoCtx = Object.entries(clientiGeo).map(([id, citta]) => `${clientiNomeMap[id]||id}|${citta}`).join('\n');
 
-          const pianoCompatto = decoded.slice(0, 150).map(p => {
+          // Piano COMPLETO per AI review (non più limitato a 150 righe)
+          const pianoCompatto = decoded.map(p => {
             const cid = p.clienteId || p.ClienteID || '';
             const tid = p.tecnicoId || p.TecnicoID || '';
             const citta = clientiGeo[cid] || '';
             const tec = tecAttivi.find(t => t.id === tid);
             const ruoloTag = tec ? (_isJunior(tec) ? '[JR]' : _isSenior(tec) ? '[SR]' : '') : '';
-            return `${p.data||p.Data}|${p.tecnico||p.TecnicoNome||tid}${ruoloTag}|${p.cliente||p.ClienteNome||cid}|${citta?'('+citta+')':''}|${p.tipo||p.Tipo}|${(p.note||p.Note||'').substring(0,40)}`;
+            const kmInfo = p.km && p.km !== '999' && p.km !== '?' ? `km:${p.km}` : '';
+            const cicloInfo = p.cicloPm || p.ciclo_pm || '';
+            const tipoFoglio = p.tipoFoglio || '';
+            return `${p.data||p.Data}|${p.tecnico||p.TecnicoNome||tid}${ruoloTag}|${p.cliente||p.ClienteNome||cid}|${citta?'('+citta+')':''}|${p.tipo||p.Tipo}|${kmInfo}|${cicloInfo?'PM:'+cicloInfo:''}|${tipoFoglio?'robot:'+tipoFoglio:''}|${(p.note||p.Note||'').substring(0,50)}`;
+          }).join('\n');
+
+          // Contesto urgenze attive nel mese
+          const urgenzeCtx = (allUrgenze || []).filter(u => {
+            const stato = (u.stato || '').toLowerCase();
+            return stato !== 'chiusa' && stato !== 'risolta';
+          }).map(u => {
+            const cNome = clientiNomeMap[u.cliente_id] || u.cliente_id || '?';
+            const priLabel = u.priorita_id === 1 ? 'CRITICA' : u.priorita_id === 2 ? 'ALTA' : 'MEDIA';
+            const assegnato = u.tecnico_id ? (allTecnici.find(t => t.id === u.tecnico_id)?.nome || u.tecnico_id) : 'NON ASSEGNATA';
+            return `${u.id}|${priLabel}|${cNome}|stato:${u.stato}|assegnato:${assegnato}|problema:${(u.problema||'').substring(0,40)}`;
+          }).join('\n') || '(Nessuna urgenza attiva)';
+
+          // Contesto arretrati (interventi passati non completati)
+          const arretratiCtx = (allPianoDb || []).filter(p => {
+            if (!p.data || !p.tecnico_id) return false;
+            const stato = (p.stato || '').toLowerCase();
+            return stato !== 'completato' && stato !== 'annullato' && p.data < meseStart;
+          }).map(p => {
+            const tNome = allTecnici.find(t => t.id === p.tecnico_id)?.nome || p.tecnico_id;
+            const cNome = clientiNomeMap[p.cliente_id] || p.cliente_id || '?';
+            return `${p.data}|${tNome}|${cNome}|stato:${p.stato}|note:${(p.note||'').substring(0,30)}`;
+          }).join('\n') || '(Nessun arretrato)';
+
+          // Contesto PM compliance: macchine con PM più scaduto
+          const pmComplianceCtx = tagBacklogFiltered.slice(0, 30).map(t => {
+            const cNome = clientiNomeMap[t.codice_m3] || t.codice_m3;
+            return `${t.nome_asset||'?'}|${t.modello||'?'}|ciclo:${t.ciclo_pm||'?'}|scad:${t.prossimo_controllo||'?'}|urgenza:${t.urgenza||'?'}|cliente:${cNome}`;
+          }).join('\n') || '(Nessun tagliando in backlog)';
+
+          // Distanze reali tecnici-basi usando CITY_COORDS (definito nel scope delle plan functions)
+          const tecBasi = tecAttivi.map(t => {
+            const base = (t.base || '').toLowerCase().trim();
+            return `${t.nome} ${t.cognome}|BASE:${t.base||'?'}`;
           }).join('\n');
 
           // Conta interventi per tecnico per verificare bilanciamento
@@ -5965,56 +6171,100 @@ ${instructions}`;
             ? `\n\n⚠️⚠️ VIOLAZIONI GIÀ RILEVATE AUTOMATICAMENTE (${preReviewIssues.length}) — DEVI includerle nei suggerimenti:\n${preReviewIssues.join('\n')}\n`
             : '';
 
-          const reviewPrompt = `Sei un esperto di ottimizzazione field service per manutenzione robot Lely (mungitrici, alimentatori, etc.).
-Analizza questo piano deterministico e suggerisci 3-8 MIGLIORAMENTI CONCRETI.
+          const reviewPrompt = `Sei un ESPERTO SENIOR di ottimizzazione field service per manutenzione robot Lely (mungitrici Astronaut, alimentatori Vector, spingiforaggio Juno, etc.).
+
+HAI A DISPOSIZIONE IL PIANO COMPLETO CON ${decoded.length} INTERVENTI. Analizzali TUTTI, riga per riga.
+Produci da 5 a 15 SUGGERIMENTI CONCRETI E AZIONABILI, ordinati per impatto.
 ${preReviewHint}
 
 ⚠️ ATTENZIONE: usa SOLO gli ID esatti dei tecnici e clienti forniti sotto. NON inventare nomi o ID.
 
-########## VINCOLI E REGOLE ATTIVE (DEVI rispettare questi vincoli nell'analisi!) ##########
+════════════════════════════════════════════
+ VINCOLI E REGOLE ATTIVE
+════════════════════════════════════════════
 ${vincoliText || '(Nessun vincolo configurato)'}
-##########
 
-REGOLE DI ANALISI:
-- VERIFICA che il piano rispetti TUTTI i vincoli sopra elencati — se non li rispetta, segnala come "critical"
-- Cerca INEFFICIENZE GEOGRAFICHE: tecnico mandato lontano dalla base quando ce n'è uno più vicino libero. INCLUDI sempre distanza stimata (es. "~60km dalla base") nella description.
-- Cerca SQUILIBRI DI CARICO: un tecnico ha troppi interventi, un altro troppo pochi. Vedi DISTRIBUZIONE CARICO sotto.
-- Cerca PRIORITÀ ERRATE: macchine SCADUTE pianificate tardi, macchine non urgenti pianificate prima
-- Cerca AFFIANCAMENTI MIGLIORABILI: junior abbinato a senior non ottimale
-- Cerca OTTIMIZZAZIONI TEMPORALI: raggruppare interventi nella stessa zona (stessa CITTÀ) nello stesso giorno
-- Cerca VIOLAZIONI VINCOLI: clienti esclusi ancora nel piano, etc.
-- ⚠️ Un CLIENTE dovrebbe essere visitato preferibilmente dallo STESSO tecnico durante il mese per continuità di servizio
+════════════════════════════════════════════
+ ANALISI RICHIESTE (TUTTE obbligatorie)
+════════════════════════════════════════════
+
+1. 🛡️ VIOLAZIONI VINCOLI [category: "constraint_violation", severity: "critical"]
+   - Verifica OGNI vincolo configurato sopra → se violato, segnala
+   - Junior da solo senza senior = SEMPRE critical
+   - Tecnico in reperibilità con tagliandi assegnati = critical
+   - Clienti esclusi ancora nel piano = critical
+
+2. 🗺️ INEFFICIENZE GEOGRAFICHE [category: "geography"]
+   - Confronta BASE tecnico con CITTÀ cliente
+   - Se tecnico mandato >50km dalla base quando ce n'è uno più vicino = warning/critical
+   - INCLUDI SEMPRE la distanza stimata in km nella description
+   - Se stessa base → NON segnalare
+
+3. ⚖️ SQUILIBRI CARICO [category: "workload"]
+   - Vedi DISTRIBUZIONE CARICO sotto
+   - Se un tecnico ha >30% in più di media → warning
+   - Se un tecnico ha <50% di media → info (sotto-utilizzo)
+
+4. ⏰ PRIORITÀ E PM COMPLIANCE [category: "priority"]
+   - Macchine SCADUTE devono essere pianificate PRIMA
+   - Verifica che il backlog PM scaduto sia coperto
+   - Se PM ciclo D (annuale) è scaduto da >2 mesi → critical
+   - Se PM ciclo A (trimestrale) è scaduto da >1 mese → warning
+
+5. 👥 AFFIANCAMENTI [category: "pairing"]
+   - ⛔ JUNIOR DA SOLO = SEMPRE severity "critical"
+   - Junior con senior non ottimale (base lontana) = info
+   - Due senior sullo stesso cliente = warning
+
+6. ⏱️ OTTIMIZZAZIONI ROUTING/TIMING [category: "timing"]
+   - Interventi nella stessa zona in giorni diversi → raggruppare
+   - Stesso CLIENTE visitato da TECNICI DIVERSI → continuità servizio
+   - Percorsi inefficienti (zig-zag tra zone lontane) → riorganizzare
+
+7. 🚨 URGENZE E ARRETRATI [category: "urgenza"]
+   - Urgenze aperte non coperte nel piano → critical
+   - Arretrati non riprogrammati → warning
+   - Urgenze critiche assegnate a fine mese → spostare prima
+
+8. 📊 ASSESSMENT GLOBALE
+   - Dai un voto al piano da 1 a 10
+   - Indica i 3 punti di forza principali
+   - Indica i 3 punti di debolezza principali
 
 NON segnalare come violazione:
-- Junior in reperibilità — I tecnici con ruolo "junior" NON FANNO MAI reperibilità, quindi NON è una violazione se appaiono nel piano durante periodi di reperibilità altrui
-- Assenze/ferie non elencate nei vincoli sopra
+- Junior in reperibilità — I junior NON FANNO MAI reperibilità
+- Righe di tipo "assenza"/"reperibilita"/"trasferta" — sono informative
 
 Per OGNI suggerimento fornisci:
 - id: "SUG_001", "SUG_002", etc.
-- category: "geography" | "workload" | "pairing" | "priority" | "timing" | "constraint_violation"
+- category: "geography" | "workload" | "pairing" | "priority" | "timing" | "constraint_violation" | "urgenza"
 - severity: "info" | "warning" | "critical"
 - title: breve (max 10 parole italiano)
-- description: cosa non va e perché (italiano). Per geography INCLUDI distanza stimata km dalla base.
-- current: { "data": "YYYY-MM-DD", "tecnicoId": "TEC_xxx", "clienteId": "CLI_xxx" } — USA gli ID ESATTI dal piano sotto
-- proposed: { "tecnicoId": "TEC_yyy" (opzionale), "data": "YYYY-MM-DD" (opzionale), "reasoning": "spiegazione con km/distanza se rilevante" }
+- description: cosa non va, perché, e IMPATTO STIMATO (italiano, dettagliato). Per geography INCLUDI distanza km.
+- current: { "data": "YYYY-MM-DD", "tecnicoId": "TEC_xxx", "clienteId": "CLI_xxx" } — ID ESATTI dal piano
+- proposed: { "tecnicoId": "TEC_yyy" (opzionale), "data": "YYYY-MM-DD" (opzionale), "reasoning": "spiegazione dettagliata" }
 - confidence: 0.0-1.0
+- impact: "high" | "medium" | "low" — impatto sulla qualità del servizio
+
+════════════════════════════════════════════
+ DATI DI CONTESTO
+════════════════════════════════════════════
 
 TECNICI DISPONIBILI (con base e ruolo):
 ${tecniciCtx}
 
-REGOLE TEAM (⚠️ CRITICHE — VIOLAZIONE = severity "critical"):
-- ⛔ JUNIOR DA SOLO = VIOLAZIONE CRITICA: se nel piano un tecnico marcato "⚠️JUNIOR" appare in un giorno/cliente SENZA un SENIOR affiancato, segnala SEMPRE come severity "critical" category "pairing". I junior sono: quelli con tag "⚠️JUNIOR(non può stare da solo!)" nella lista sopra.
-- Tecnici "SENIOR/CAPO": possono lavorare da soli.
-- Tecnici "TECNICO_INDIPENDENTE": possono lavorare da soli.
-- REPERIBILITÀ: il tecnico in reperibilità NON deve avere tagliandi/interventi programmati in quei giorni (vale solo per senior/caposquadra). Junior NON fanno MAI reperibilità — non segnalare violazioni reperibilità per junior.
-- Max 2 tecnici per cliente per giorno (1 senior + 1 junior). MAI 2 senior sullo stesso cliente.
-- Se un tagliando dura 2 giorni, lo STESSO tecnico che lo inizia deve finirlo.
+REGOLE TEAM CRITICHE:
+- ⛔ JUNIOR DA SOLO = severity "critical" category "pairing"
+- I junior sono quelli con tag "⚠️JUNIOR" nella lista sopra
+- SENIOR/CAPO e TECNICO_INDIPENDENTE possono lavorare da soli
+- REPERIBILITÀ: chi è in reperibilità NON deve avere tagliandi (solo senior)
+- Max 2 tecnici per cliente per giorno (1 senior + 1 junior)
+- Se tagliando dura 2 giorni, STESSO tecnico deve finirlo
 
-REGOLE GEOGRAFICHE (⚠️ IMPORTANTI):
-- Confronta la BASE del tecnico (campo BASE nella lista sopra) con la CITTÀ del cliente (campo in CLIENTI E LOCALITÀ sotto)
-- Se due tecnici hanno la STESSA base (es. entrambi "BASE:Bologna"), NON segnalare uno come "più vicino" dell'altro — sono equivalenti geograficamente
-- Segnala come "geography" solo se un tecnico viene mandato LONTANO dalla sua base (>50km stimati) quando c'è un tecnico disponibile con base PIÙ VICINA al cliente
-- ATTENZIONE: non confondere la base del tecnico con la località del cliente!
+REGOLE GEOGRAFICHE:
+- Confronta BASE tecnico con CITTÀ cliente
+- Stessa base = NON segnalare come "più vicino"
+- >50km con alternativa più vicina = segnala geography
 
 REPERIBILITÀ ATTIVE NEL MESE:
 ${repCtx || '(Nessuna reperibilità nel periodo)'}
@@ -6022,13 +6272,34 @@ ${repCtx || '(Nessuna reperibilità nel periodo)'}
 DISTRIBUZIONE CARICO ATTUALE:
 ${workloadCtx}
 
-CLIENTI E LOCALITÀ:
-${clientiGeoCtx.substring(0, 2000)}
+🚨 URGENZE ATTIVE (da verificare se coperte nel piano):
+${urgenzeCtx}
 
-PIANO DETERMINISTICO (${decoded.length} interventi):
+⚠️ ARRETRATI (interventi passati non completati):
+${arretratiCtx}
+
+📋 BACKLOG PM SCADUTI (macchine da pianificare per priorità):
+${pmComplianceCtx}
+
+CLIENTI E LOCALITÀ:
+${clientiGeoCtx}
+
+════════════════════════════════════════════
+ PIANO DETERMINISTICO COMPLETO (${decoded.length} interventi)
+════════════════════════════════════════════
+Formato: data|tecnico[ruolo]|cliente|città|tipo|km|cicloPM|tipoRobot|note
 ${pianoCompatto}
 
-Rispondi SOLO JSON valido: {"suggestions":[...], "overall_assessment":"valutazione breve del piano"}`;
+════════════════════════════════════════════
+
+Rispondi SOLO JSON valido:
+{
+  "suggestions": [...],
+  "overall_assessment": "Valutazione dettagliata del piano",
+  "score": 7,
+  "strengths": ["punto forte 1", "..."],
+  "weaknesses": ["punto debole 1", "..."]
+}`;
 
           // Lancia OpenAI e Claude in parallelo con timeout
           async function _reviewOpenAI() {
@@ -6040,15 +6311,15 @@ Rispondi SOLO JSON valido: {"suggestions":[...], "overall_assessment":"valutazio
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.OPENAI_KEY}` },
                 body: JSON.stringify({
-                  model: 'gpt-4o-mini',
+                  model: 'gpt-4o',
                   messages: [
-                    { role: 'system', content: 'Sei un esperto field service optimizer. Rispondi SOLO JSON valido.' },
+                    { role: 'system', content: 'Sei un esperto field service optimizer per manutenzione robot da mungitura Lely. Analizza in profondità il piano, verificando OGNI riga per violazioni vincoli, inefficienze geografiche, squilibri carico, conformità PM, urgenze non coperte. Rispondi SOLO JSON valido.' },
                     { role: 'user', content: reviewPrompt }
                   ],
-                  max_tokens: 4096, temperature: 0.3,
+                  max_tokens: 8192, temperature: 0.2,
                   response_format: { type: 'json_object' }
                 })
-              }, 50000);
+              }, 90000);
               const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
               sse({type:'reviewer_status', engine:'openai', status:'parsing', progress_pct:80, elapsed});
               if (!res.ok) { sse({type:'reviewer_status', engine:'openai', status:'error', reason:`HTTP ${res.status}`}); return null; }
@@ -6058,9 +6329,9 @@ Rispondi SOLO JSON valido: {"suggestions":[...], "overall_assessment":"valutazio
               const parsed = JSON.parse(text);
               const sugs = (parsed.suggestions || []).map(s => ({ ...s, engine: 'openai' }));
               sse({type:'reviewer_status', engine:'openai', status:'complete', count:sugs.length, elapsed, assessment: parsed.overall_assessment || ''});
-              return { suggestions: sugs, assessment: parsed.overall_assessment || '' };
+              return { suggestions: sugs, assessment: parsed.overall_assessment || '', score: parsed.score, strengths: parsed.strengths, weaknesses: parsed.weaknesses };
             } catch(e) {
-              sse({type:'reviewer_status', engine:'openai', status:'error', reason: e.name === 'AbortError' ? 'TIMEOUT 50s' : (e.message||'unknown')});
+              sse({type:'reviewer_status', engine:'openai', status:'error', reason: e.name === 'AbortError' ? 'TIMEOUT 90s' : (e.message||'unknown')});
               return null;
             }
           }
@@ -6078,12 +6349,12 @@ Rispondi SOLO JSON valido: {"suggestions":[...], "overall_assessment":"valutazio
                   'anthropic-version': '2023-06-01'
                 },
                 body: JSON.stringify({
-                  model: 'claude-haiku-4-5-20251001',
-                  max_tokens: 4096, temperature: 0.3,
-                  system: 'Sei un esperto field service optimizer. Rispondi SOLO JSON valido.',
+                  model: 'claude-sonnet-4-5-20250514',
+                  max_tokens: 8192, temperature: 0.2,
+                  system: 'Sei un esperto field service optimizer per manutenzione robot da mungitura Lely. Analizza in profondità il piano, verificando OGNI riga per violazioni vincoli, inefficienze geografiche, squilibri carico, conformità PM, urgenze non coperte. Rispondi SOLO JSON valido, senza testo extra.',
                   messages: [{ role: 'user', content: reviewPrompt }]
                 })
-              }, 50000);
+              }, 90000);
               const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
               sse({type:'reviewer_status', engine:'claude', status:'parsing', progress_pct:80, elapsed});
               if (!res.ok) { sse({type:'reviewer_status', engine:'claude', status:'error', reason:`HTTP ${res.status}`}); return null; }
@@ -6094,9 +6365,9 @@ Rispondi SOLO JSON valido: {"suggestions":[...], "overall_assessment":"valutazio
               const parsed = JSON.parse(text);
               const sugs = (parsed.suggestions || []).map(s => ({ ...s, engine: 'claude' }));
               sse({type:'reviewer_status', engine:'claude', status:'complete', count:sugs.length, elapsed, assessment: parsed.overall_assessment || ''});
-              return { suggestions: sugs, assessment: parsed.overall_assessment || '' };
+              return { suggestions: sugs, assessment: parsed.overall_assessment || '', score: parsed.score, strengths: parsed.strengths, weaknesses: parsed.weaknesses };
             } catch(e) {
-              sse({type:'reviewer_status', engine:'claude', status:'error', reason: e.name === 'AbortError' ? 'TIMEOUT 50s' : (e.message||'unknown')});
+              sse({type:'reviewer_status', engine:'claude', status:'error', reason: e.name === 'AbortError' ? 'TIMEOUT 90s' : (e.message||'unknown')});
               return null;
             }
           }
@@ -6196,14 +6467,28 @@ Rispondi SOLO JSON valido: {"suggestions":[...], "overall_assessment":"valutazio
               if (s.proposed?.reasoning) s.proposed.reasoning = _decodeAllIds(s.proposed.reasoning);
             });
 
+            // Calcola score medio e merge strengths/weaknesses
+            const scores = [oaiRes?.score, clRes?.score].filter(s => s != null);
+            const avgScore = scores.length ? Math.round(scores.reduce((a,b)=>a+b,0) / scores.length * 10) / 10 : null;
+            const allStrengths = [...(oaiRes?.strengths || []), ...(clRes?.strengths || [])];
+            const allWeaknesses = [...(oaiRes?.weaknesses || []), ...(clRes?.weaknesses || [])];
+            // Dedup strengths/weaknesses
+            const uniqStrengths = [...new Set(allStrengths.map(s => s.toLowerCase().trim()))].map(s => s.charAt(0).toUpperCase() + s.slice(1)).slice(0, 5);
+            const uniqWeaknesses = [...new Set(allWeaknesses.map(s => s.toLowerCase().trim()))].map(s => s.charAt(0).toUpperCase() + s.slice(1)).slice(0, 5);
+
             return {
               merged,
               assessments: { openai: oaiRes?.assessment, claude: clRes?.assessment },
+              score: avgScore,
+              strengths: uniqStrengths,
+              weaknesses: uniqWeaknesses,
               stats: {
                 openai_count: oaiRes?.suggestions?.length || 0,
                 claude_count: clRes?.suggestions?.length || 0,
                 merged_count: merged.length,
-                consensus_count: merged.filter(s => s.sources?.length > 1).length
+                consensus_count: merged.filter(s => s.sources?.length > 1).length,
+                critical_count: merged.filter(s => s.severity === 'critical').length,
+                warning_count: merged.filter(s => s.severity === 'warning').length
               }
             };
           }
@@ -6214,16 +6499,23 @@ Rispondi SOLO JSON valido: {"suggestions":[...], "overall_assessment":"valutazio
           sse({type:'phase_complete', phase:2, data:{
             suggestions: mergeResult.merged,
             assessments: mergeResult.assessments,
+            score: mergeResult.score,
+            strengths: mergeResult.strengths,
+            weaknesses: mergeResult.weaknesses,
             stats: mergeResult.stats
           }});
 
           // ── RESULT FINALE con piano + suggerimenti ──
           sse({type:'result', data:{
-            summary: anonDecode(`Piano ${meseTarget}: ${decoded.length} interventi — ${mergeResult.merged.length} suggerimenti AI (${mergeResult.stats?.consensus_count || 0} in consenso)`),
+            summary: anonDecode(`Piano ${meseTarget}: ${decoded.length} interventi — ${mergeResult.merged.length} suggerimenti AI (${mergeResult.stats?.critical_count || 0} critici, ${mergeResult.stats?.consensus_count || 0} in consenso) — Voto: ${mergeResult.score || '?'}/10`),
             piano: decoded,
             warnings: allWarnArr,
             suggestions: mergeResult.merged,
             assessments: mergeResult.assessments,
+            score: mergeResult.score,
+            strengths: mergeResult.strengths,
+            weaknesses: mergeResult.weaknesses,
+            stats: mergeResult.stats,
             chunks: 1,
             engine_used: 'deterministic+review'
           }}); return;
@@ -6444,13 +6736,29 @@ Rispondi SOLO con JSON valido:
         });
       }
 
-      // 2. Create new interventions
-      const created = [], applyErrors = [];
+      // 2. Create new interventions (skip info rows: reperibilita, assenza, trasferta)
+      const INFO_TYPES = new Set(['reperibilita','assenza','trasferta']);
+      const created = [], updated = [], applyErrors = [];
       const now = new Date().toISOString();
       const tenantId = env.TENANT_ID || DEFAULT_TENANT;
+
+      // Pre-load existing PM rows (macchina+data) for upsert instead of duplicate
+      const pmExisting = existing.filter(e => e.note && e.note.includes('[PM'));
+      const pmMap = {}; // macchina_id|data → existing PM row
+      for (const e of pmExisting) {
+        // Load macchina_id for PM rows
+        const fullRow = await sb(env, `piano?id=eq.${e.id}&select=id,macchina_id,data,tecnico_id`, 'GET').catch(() => []);
+        if (fullRow?.[0]?.macchina_id) {
+          pmMap[`${fullRow[0].macchina_id}|${fullRow[0].data}`] = fullRow[0];
+        }
+      }
+
       for (const item of toCreate) {
         try {
-          const id = secureId('INT_AI');
+          const tipo = (item.tipo || '').toLowerCase();
+          // Skip informational rows — they don't go to DB
+          if (INFO_TYPES.has(tipo)) continue;
+
           const tecId = item.tecnicoId || item.tecnico_id || item.TecnicoID;
           const cid = item.clienteId || item.cliente_id || item.ClienteID || null;
           const itemData = item.data || item.Data;
@@ -6458,33 +6766,77 @@ Rispondi SOLO con JSON valido:
           if (!itemData) { applyErrors.push({ item: `${item.tecnico||tecId}`, err: 'data mancante' }); continue; }
           const durata = item.durataOre || item.durata_ore || '';
           const noteParts = [item.tipo || '', item.note || '', durata ? durata+'h' : ''].filter(Boolean);
-          await sb(env, 'piano', 'POST', {
-            id,
-            tecnico_id: tecId,
-            cliente_id: cid,
-            data: itemData,
-            ora_inizio: item.oraInizio || item.ora_inizio || null,
-            automezzo_id: item.furgone || item.automezzo_id || null,
-            stato: 'pianificato',
-            origine: 'ai',
-            note: noteParts.join(' — '),
-            obsoleto: false,
-            tenant_id: tenantId,
-            created_at: now,
-            updated_at: now
-          });
-          created.push(id);
-          await wlog('piano', id, 'ai_plan_applied', operatoreId, `${item.tecnico || tecId} @ ${item.cliente || cid}`).catch(()=>{});
+          const macId = item.macchina_id || null;
+
+          // CHECK: esiste già una riga PM per questa macchina+data? → UPDATE invece di INSERT
+          const pmKey = macId ? `${macId}|${itemData}` : null;
+          const existingPM = pmKey ? pmMap[pmKey] : null;
+
+          if (existingPM && !existingPM.tecnico_id) {
+            // UPDATE existing PM row: assegna tecnico, furgone, ora
+            await sb(env, `piano?id=eq.${existingPM.id}`, 'PATCH', {
+              tecnico_id: tecId,
+              cliente_id: cid,
+              ora_inizio: item.oraInizio || item.ora_inizio || null,
+              automezzo_id: item.furgone || item.automezzo_id || null,
+              note: noteParts.join(' — '),
+              origine: 'ai',
+              updated_at: now
+            });
+            updated.push(existingPM.id);
+            await wlog('piano', existingPM.id, 'ai_plan_assigned', operatoreId, `PM aggiornato: ${item.tecnico || tecId} @ ${item.cliente || cid}`).catch(()=>{});
+          } else {
+            // CREATE new row
+            const id = item.id && !item.id.startsWith('null') ? item.id : secureId('INT_AI');
+            await sb(env, 'piano', 'POST', {
+              id,
+              tecnico_id: tecId,
+              cliente_id: cid,
+              macchina_id: macId,
+              data: itemData,
+              ora_inizio: item.oraInizio || item.ora_inizio || null,
+              automezzo_id: item.furgone || item.automezzo_id || null,
+              stato: 'pianificato',
+              origine: 'ai',
+              note: noteParts.join(' — '),
+              obsoleto: false,
+              tenant_id: tenantId,
+              created_at: now,
+              updated_at: now
+            });
+            created.push(id);
+            await wlog('piano', id, 'ai_plan_applied', operatoreId, `${item.tecnico || tecId} @ ${item.cliente || cid}`).catch(()=>{});
+          }
         } catch (e) {
           applyErrors.push({ item: `${item.data} ${item.tecnico}`, err: e.message });
         }
       }
 
+      // 3. Auto-update urgenze status when scheduled in plan
+      let urgScheduled = 0;
+      for (const item of toCreate) {
+        const tipo = (item.tipo || '').toLowerCase();
+        if (tipo !== 'urgenza') continue;
+        const urgId = item.id;
+        if (!urgId || !urgId.startsWith('URG')) continue;
+        try {
+          await sb(env, `urgenze?id=eq.${urgId}`, 'PATCH', {
+            stato: 'schedulata',
+            tecnico_id: item.tecnicoId || item.tecnico_id || null,
+            data_schedulata: item.data || null,
+            updated_at: now
+          });
+          urgScheduled++;
+        } catch (e) { /* ignore — urgenza might not exist or constraint violation */ }
+      }
+
       return ok({
         created: created.length,
+        updated_pm: updated.length,
+        urg_scheduled: urgScheduled,
         overwritten: forceOverwrite ? conflicts.length : 0,
         errors: applyErrors.length ? applyErrors : undefined,
-        ids: created,
+        ids: [...created, ...updated],
         total_received: pianoAI.length
       });
     }
@@ -9063,27 +9415,39 @@ Rispondi SOLO con JSON valido:
 
       // Se non dry_run, crea gli interventi nel piano
       if (!dry_run && scheduled.length) {
-        const tid = tid(env);
+        const pmTid = tenantId(env);
         const now = new Date().toISOString();
-        const tagId = await resolveTagliandoId(env); // risolve ID reale da tipi_intervento (o null se non trovato)
-        let created = 0, errors = [];
+        const tagId = await resolveTagliandoId(env);
+        let created = 0, errors = [], skippedDup = 0;
+
+        // Anti-duplicazione: check piano esistente per macchina+data
+        const existingPiano = await sb(env, 'piano', 'GET', null,
+          `?data=gte.${meseStart}&data=lte.${meseEnd}&stato=neq.annullato&obsoleto=eq.false&select=id,macchina_id,data&limit=500`
+        ).catch(() => []);
+        const existingKeys = new Set(existingPiano.map(p => `${p.macchina_id}|${p.data}`));
+
         for (const s of scheduled) {
           try {
+            const dupKey = `${s.macchina_id}|${s.data_suggerita}`;
+            if (existingKeys.has(dupKey)) { skippedDup++; continue; } // già pianificato
+
             const intId = secureId('PM');
             const pianoRow = {
-              id: intId, tenant_id: tid,
+              id: intId, tenant_id: pmTid,
               cliente_id: s.cliente_id, macchina_id: s.macchina_id,
               data: s.data_suggerita, stato: 'pianificato',
               note: `[PM Auto] ${s.ciclo_nome} — ${s.macchina_nome} (${s.modello || '?'})`,
+              origine: 'pm_auto',
               obsoleto: false, created_at: now
             };
-            if (tagId) pianoRow.tipo_intervento_id = tagId; // ometti se null → FK safe
+            if (tagId) pianoRow.tipo_intervento_id = tagId;
             await sb(env, 'piano', 'POST', pianoRow);
+            existingKeys.add(dupKey); // track per evitare duplicati intra-batch
             created++;
           } catch (e) { errors.push({ macchina: s.macchina_nome, err: e.message }); }
         }
-        await wlog('pm_schedule', mese_target, 'generated', body.userId || 'admin', `${created} interventi creati`);
-        return ok({ scheduled, created, errors, mese: mese_target });
+        await wlog('pm_schedule', mese_target, 'generated', body.userId || 'admin', `${created} creati, ${skippedDup} duplicati saltati`);
+        return ok({ scheduled, created, skipped_duplicates: skippedDup, errors, mese: mese_target });
       }
 
       return ok({ scheduled, count: scheduled.length, mese: mese_target, dry_run: true });

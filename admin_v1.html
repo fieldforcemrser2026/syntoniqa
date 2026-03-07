@@ -1073,6 +1073,15 @@ Ogni tagliando richiede 2 persone (senior + junior)" style="width:100%;min-heigh
 .sug-card .cat-badge.pairing{background:rgba(236,72,153,.2);color:#f472b6}
 .sug-card .cat-badge.priority{background:rgba(239,68,68,.2);color:#f87171}
 .sug-card .cat-badge.timing{background:rgba(6,182,212,.2);color:#22d3ee}
+.sug-card .cat-badge.constraint_violation{background:rgba(239,68,68,.25);color:#ef4444;border:1px solid rgba(239,68,68,.3)}
+.sug-card .cat-badge.urgenza{background:rgba(251,146,60,.25);color:#fb923c;border:1px solid rgba(251,146,60,.3)}
+.sug-card .impact-badge{font-size:.6rem;padding:2px 6px;border-radius:3px;font-weight:700;letter-spacing:.03em}
+.sug-card .impact-badge.high{background:rgba(239,68,68,.15);color:#ef4444}
+.sug-card .impact-badge.medium{background:rgba(245,158,11,.15);color:#f59e0b}
+.sug-card .impact-badge.low{background:rgba(107,114,128,.15);color:#9ca3af}
+.sug-card.severity-critical{border-left:3px solid #ef4444}
+.sug-card.severity-warning{border-left:3px solid #f59e0b}
+.sug-card.severity-info{border-left:3px solid #3b82f6}
 .sug-card .sev-badge{font-size:.65rem;padding:2px 7px;border-radius:4px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
 .sug-card .sev-badge.critical{background:rgba(239,68,68,.25);color:#ef4444;box-shadow:0 0 8px rgba(239,68,68,.2)}
 .sug-card .sev-badge.warning{background:rgba(245,158,11,.25);color:#f59e0b}
@@ -1220,15 +1229,38 @@ Ogni tagliando richiede 2 persone (senior + junior)" style="width:100%;min-heigh
 
 <!-- STEP 3: AI REVIEW (OpenAI + Claude) -->
 <div id="aiStep3" class="ai-step-content" style="display:none">
-<div style="font-size:.95rem;font-weight:700;color:#fff;margin-bottom:4px">🤖 AI Review — OpenAI + Claude analizzano il piano</div>
-<p style="font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:14px">Due AI premium analizzano il piano e suggeriscono ottimizzazioni. Accetta o rifiuta ogni suggerimento.</p>
+<div style="font-size:.95rem;font-weight:700;color:#fff;margin-bottom:4px">🧠 AI Deep Review — GPT-4o + Claude Sonnet 4.5</div>
+<p style="font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:10px">Due AI premium analizzano in profondità ogni riga del piano: vincoli, geografia, carico, PM, urgenze, arretrati. Accetta o rifiuta ogni suggerimento.</p>
+
+<!-- AI Assessment Summary Card (populated after review) -->
+<div id="aiAssessmentCard" style="display:none;background:linear-gradient(135deg,rgba(99,102,241,.1),rgba(168,85,247,.08));border:1.5px solid rgba(99,102,241,.25);border-radius:14px;padding:16px 18px;margin-bottom:16px">
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+  <div id="aiScoreCircle" style="width:56px;height:56px;border-radius:50%;border:3px solid #818CF8;display:flex;align-items:center;justify-content:center;font-size:1.4rem;font-weight:800;color:#fff;background:rgba(99,102,241,.15);flex-shrink:0">—</div>
+  <div style="flex:1">
+    <div style="font-weight:700;font-size:.88rem;color:#fff;margin-bottom:2px">Valutazione AI del Piano</div>
+    <div id="aiAssessmentText" style="font-size:.75rem;color:rgba(255,255,255,.55);line-height:1.4"></div>
+  </div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+  <div>
+    <div style="font-size:.68rem;font-weight:600;color:#10B981;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px">✅ Punti di Forza</div>
+    <ul id="aiStrengthsList" style="margin:0;padding-left:14px;font-size:.72rem;color:rgba(255,255,255,.6);line-height:1.5"></ul>
+  </div>
+  <div>
+    <div style="font-size:.68rem;font-weight:600;color:#F59E0B;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px">⚠️ Punti Deboli</div>
+    <ul id="aiWeaknessesList" style="margin:0;padding-left:14px;font-size:.72rem;color:rgba(255,255,255,.6);line-height:1.5"></ul>
+  </div>
+</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px" id="aiStatsBar">
+</div>
+</div>
 
 <!-- Reviewer status cards -->
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px" id="aiReviewerPanel">
 <div class="reviewer-lane" id="revLaneOpenai" style="--rev-color:#7C3AED;--rev-bg:rgba(124,58,237,.08)">
 <div style="display:flex;align-items:center;gap:8px">
 <div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#7C3AED,#6D28D9);display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:700;color:#fff">O</div>
-<div><div style="font-weight:700;font-size:.85rem;color:#A78BFA">OpenAI GPT-4o-mini</div>
+<div><div style="font-weight:700;font-size:.85rem;color:#A78BFA">OpenAI GPT-4o</div>
 <div style="font-size:.7rem;color:rgba(255,255,255,.4)" id="revStatusOpenai">In attesa...</div></div>
 <div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:.75rem;color:rgba(255,255,255,.3)" id="revTimeOpenai"></div>
 </div>
@@ -1237,7 +1269,7 @@ Ogni tagliando richiede 2 persone (senior + junior)" style="width:100%;min-heigh
 <div class="reviewer-lane" id="revLaneClaude" style="--rev-color:#EC4899;--rev-bg:rgba(236,72,153,.08)">
 <div style="display:flex;align-items:center;gap:8px">
 <div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#EC4899,#DB2777);display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:700;color:#fff">C</div>
-<div><div style="font-weight:700;font-size:.85rem;color:#F472B6">Claude Haiku 4.5</div>
+<div><div style="font-weight:700;font-size:.85rem;color:#F472B6">Claude Sonnet 4.5</div>
 <div style="font-size:.7rem;color:rgba(255,255,255,.4)" id="revStatusClaude">In attesa...</div></div>
 <div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:.75rem;color:rgba(255,255,255,.3)" id="revTimeClaude"></div>
 </div>
@@ -7729,6 +7761,7 @@ async function aiGenerateWithReview(){
             // Suggerimenti pronti!
             AI_SUGGESTIONS=ev.data?.suggestions||[];
             _renderSuggestions(AI_SUGGESTIONS);
+            _renderAssessmentCard(ev.data);
             clearInterval(AI_REVIEW_TIMER);
             if(AI_SUGGESTIONS.length) $('btnGoApply').disabled=false;
           }
@@ -7783,6 +7816,7 @@ async function aiGenerateWithReview(){
             if(ev.data?.suggestions?.length&&!AI_SUGGESTIONS.length){
               AI_SUGGESTIONS=ev.data.suggestions;
               _renderSuggestions(AI_SUGGESTIONS);
+              _renderAssessmentCard(ev.data);
               setTimeout(()=>aiGoToStep(3),500);
             }
             $('btnGoApply').disabled=false;
@@ -7853,7 +7887,7 @@ function _renderPlanTable(container, piano, compact){
       const cNome=p.cliente||p.ClienteNome||p.clienteNome||p.clienteId||p.ClienteID||'';
       const tipo=p.tipo||p.Tipo||p.TipoIntervento||'tagliando';
       const note=(p.note||p.Note||'').substring(0,compact?40:80);
-      const tipoIcon=tipo.includes('install')?'🏗️':tipo.includes('urgenz')?'🚨':tipo.includes('controllo')?'🔍':'🔧';
+      const tipoIcon=tipo.includes('install')?'🏗️':tipo.includes('urgenz')?'🚨':tipo==='reperibilita'?'📞':tipo==='assenza'?'🏖️':tipo==='trasferta'?'🚗':tipo==='arretrato'?'⚠️':tipo.includes('controllo')?'🔍':'🔧';
 
       const cicloBadge=p.cicloPm?`<span style="background:#818CF822;color:#818CF8;padding:1px 5px;border-radius:3px;font-size:.65rem;font-weight:600">PM ${p.cicloPm}</span>`:'';
       const tipoFoglioBadge=p.tipoFoglio?`<span style="background:#F59E0B22;color:#F59E0B;padding:1px 5px;border-radius:3px;font-size:.65rem;font-weight:600">${p.tipoFoglio}</span>`:'';
@@ -7887,16 +7921,43 @@ function _renderSuggestions(suggestions){
   }
 
   let html='';
-  suggestions.forEach((sug,i)=>{
-    const catIcons={geography:'🗺️',workload:'⚖️',pairing:'👥',priority:'🚨',timing:'⏱️'};
+  // Group by severity for visual hierarchy
+  const sevOrder=['critical','warning','info'];
+  const sorted=[...suggestions].sort((a,b)=>{
+    const ai=sevOrder.indexOf(a.severity||'info');
+    const bi=sevOrder.indexOf(b.severity||'info');
+    if(ai!==bi) return ai-bi;
+    // Then by consensus (both > single)
+    const aSrc=(a.sources?.length||1);const bSrc=(b.sources?.length||1);
+    if(bSrc!==aSrc) return bSrc-aSrc;
+    return (b.confidence||0)-(a.confidence||0);
+  });
+
+  // Critical count for header
+  const critCount=sorted.filter(s=>s.severity==='critical').length;
+  const warnCount=sorted.filter(s=>s.severity==='warning').length;
+  if(critCount>0){
+    html+=`<div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:8px">
+      <span style="font-size:1.1rem">🚨</span>
+      <span style="font-size:.78rem;color:#fca5a5;font-weight:600">${critCount} problema${critCount>1?'i':''} critic${critCount>1?'i':'o'} rilevat${critCount>1?'i':'o'}</span>
+      ${warnCount?`<span style="font-size:.72rem;color:#fbbf24;margin-left:auto">${warnCount} warning</span>`:''}
+    </div>`;
+  }
+
+  sorted.forEach((sug,i)=>{
+    const catIcons={geography:'🗺️',workload:'⚖️',pairing:'👥',priority:'🚨',timing:'⏱️',constraint_violation:'🛡️',urgenza:'🆘'};
+    const catLabels={geography:'Geografia',workload:'Carico',pairing:'Affiancamento',priority:'Priorità',timing:'Timing',constraint_violation:'Violazione',urgenza:'Urgenza'};
     const catIcon=catIcons[sug.category]||'💡';
+    const catLabel=catLabels[sug.category]||(sug.category||'altro').charAt(0).toUpperCase()+(sug.category||'altro').slice(1);
     const srcBadge=sug.sources?.length>1
-      ?'<span class="src-badge both">🤝 Entrambi</span>'
+      ?'<span class="src-badge both">🤝 Consenso</span>'
       :sug.sources?.[0]==='openai'
-        ?'<span class="src-badge openai">OpenAI</span>'
-        :'<span class="src-badge claude">Claude</span>';
+        ?'<span class="src-badge openai">GPT-4o</span>'
+        :'<span class="src-badge claude">Sonnet</span>';
+    const impactBadge=sug.impact?`<span class="impact-badge ${sug.impact}">⚡${sug.impact==='high'?'Alto':sug.impact==='medium'?'Medio':'Basso'}</span>`:'';
 
     const confPct=Math.round((sug.confidence||0.5)*100);
+    const confColor=confPct>=80?'#10B981':confPct>=60?'#f59e0b':'#ef4444';
 
     // Diff section
     let diffHtml='';
@@ -7907,25 +7968,87 @@ function _renderSuggestions(suggestions){
       if(cur.clienteId||prop.clienteId) diffHtml+=`<div class="diff-row"><span class="diff-label">Cliente</span><span class="diff-before">${cur.clienteNome||cur.clienteId||'—'}</span><span class="diff-arrow">→</span><span class="diff-after">${prop.clienteNome||prop.clienteId||'(invariato)'}</span></div>`;
     }
 
-    html+=`<div class="sug-card" data-sug-id="${sug.id}" style="animation-delay:${i*0.1}s">
+    // Auto-accept critical suggestions
+    const autoAccept=sug.severity==='critical';
+
+    html+=`<div class="sug-card severity-${sug.severity||'info'}${autoAccept?' accepted':''}" data-sug-id="${sug.id}" style="animation-delay:${i*0.08}s">
       <div class="sug-header">
-        <span class="cat-badge ${sug.category||''}">${catIcon} ${(sug.category||'altro').charAt(0).toUpperCase()+(sug.category||'altro').slice(1)}</span>
+        <span class="cat-badge ${sug.category||''}">${catIcon} ${catLabel}</span>
         <span class="sev-badge ${sug.severity||'info'}">${sug.severity||'info'}</span>
+        ${impactBadge}
         ${srcBadge}
       </div>
       <div style="font-weight:600;font-size:.85rem;color:#fff;margin-bottom:4px">${_esc(sug.title||'Suggerimento')}</div>
-      <div style="font-size:.78rem;color:rgba(255,255,255,.6);line-height:1.4;margin-bottom:8px">${_esc(sug.description||'')}</div>
+      <div style="font-size:.78rem;color:rgba(255,255,255,.6);line-height:1.5;margin-bottom:8px">${_esc(sug.description||'')}</div>
       ${diffHtml?'<div class="sug-diff">'+diffHtml+'</div>':''}
       ${sug.proposed?.reasoning?'<div class="sug-reasoning">💡 '+_esc(sug.proposed.reasoning)+'</div>':''}
-      <div class="sug-confidence"><span>${confPct}%</span><div class="conf-bar"><div class="conf-fill" style="width:${confPct}%"></div></div></div>
+      <div class="sug-confidence"><span style="color:${confColor};font-weight:600">${confPct}%</span><div class="conf-bar"><div class="conf-fill" style="width:${confPct}%;background:linear-gradient(90deg,${confColor},${confColor}88)"></div></div></div>
       <div class="sug-actions">
         <button class="btn-sug accept" onclick="aiToggleSuggestion('${sug.id}',true)">✅ Accetta</button>
         <button class="btn-sug reject" onclick="aiToggleSuggestion('${sug.id}',false)">❌ Rifiuta</button>
       </div>
     </div>`;
+
+    // Auto-accept critical
+    if(autoAccept) AI_ACCEPTED.add(sug.id);
   });
   container.innerHTML=html;
   _updateSugCounter();
+  // Enable apply button if any auto-accepted
+  if(AI_ACCEPTED.size>0 && $('btnGoApply'))$('btnGoApply').disabled=false;
+}
+
+// Render AI Assessment Summary Card
+function _renderAssessmentCard(data){
+  const card=$('aiAssessmentCard');
+  if(!card)return;
+  const score=data.score;
+  const assessments=data.assessments||{};
+  const strengths=data.strengths||[];
+  const weaknesses=data.weaknesses||[];
+  const stats=data.stats||{};
+
+  // Score circle with color based on score
+  const scoreEl=$('aiScoreCircle');
+  if(scoreEl && score!=null){
+    const scoreColor=score>=8?'#10B981':score>=6?'#f59e0b':score>=4?'#fb923c':'#ef4444';
+    scoreEl.textContent=score;
+    scoreEl.style.borderColor=scoreColor;
+    scoreEl.style.color=scoreColor;
+    scoreEl.style.background=`rgba(${score>=8?'16,185,129':score>=6?'245,158,11':score>=4?'251,146,60':'239,68,68'},.15)`;
+  }
+
+  // Assessment text (merge both AI assessments)
+  const assessEl=$('aiAssessmentText');
+  if(assessEl){
+    const texts=[];
+    if(assessments.openai)texts.push(assessments.openai);
+    if(assessments.claude && assessments.claude!==assessments.openai)texts.push(assessments.claude);
+    assessEl.textContent=texts.join(' — ')||'Analisi completata.';
+  }
+
+  // Strengths
+  const strEl=$('aiStrengthsList');
+  if(strEl) strEl.innerHTML=strengths.map(s=>`<li>${_esc(s)}</li>`).join('')||'<li style="color:rgba(255,255,255,.3)">N/A</li>';
+
+  // Weaknesses
+  const weakEl=$('aiWeaknessesList');
+  if(weakEl) weakEl.innerHTML=weaknesses.map(w=>`<li>${_esc(w)}</li>`).join('')||'<li style="color:rgba(255,255,255,.3)">N/A</li>';
+
+  // Stats bar
+  const statsBar=$('aiStatsBar');
+  if(statsBar){
+    const statItems=[];
+    if(stats.merged_count) statItems.push(`<span style="background:rgba(99,102,241,.15);color:#818CF8;padding:3px 8px;border-radius:6px;font-size:.68rem;font-weight:600">💡 ${stats.merged_count} suggerimenti</span>`);
+    if(stats.critical_count) statItems.push(`<span style="background:rgba(239,68,68,.15);color:#ef4444;padding:3px 8px;border-radius:6px;font-size:.68rem;font-weight:600">🚨 ${stats.critical_count} critici</span>`);
+    if(stats.warning_count) statItems.push(`<span style="background:rgba(245,158,11,.15);color:#f59e0b;padding:3px 8px;border-radius:6px;font-size:.68rem;font-weight:600">⚠️ ${stats.warning_count} warning</span>`);
+    if(stats.consensus_count) statItems.push(`<span style="background:rgba(251,146,60,.15);color:#fb923c;padding:3px 8px;border-radius:6px;font-size:.68rem;font-weight:600">🤝 ${stats.consensus_count} consenso</span>`);
+    if(stats.openai_count!=null) statItems.push(`<span style="background:rgba(124,58,237,.12);color:#A78BFA;padding:3px 8px;border-radius:6px;font-size:.68rem">GPT-4o: ${stats.openai_count}</span>`);
+    if(stats.claude_count!=null) statItems.push(`<span style="background:rgba(236,72,153,.12);color:#F472B6;padding:3px 8px;border-radius:6px;font-size:.68rem">Sonnet: ${stats.claude_count}</span>`);
+    statsBar.innerHTML=statItems.join('');
+  }
+
+  card.style.display='block';
 }
 
 function _esc(s){return (s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -7958,7 +8081,15 @@ function aiToggleAllSuggestions(accept){
 
 function _updateSugCounter(){
   const el=$('aiSugCounter');
-  if(el)el.textContent=`${AI_ACCEPTED.size} / ${AI_SUGGESTIONS.length} accettati`;
+  if(!el)return;
+  const total=AI_SUGGESTIONS.length;
+  const acc=AI_ACCEPTED.size;
+  const critAcc=AI_SUGGESTIONS.filter(s=>AI_ACCEPTED.has(s.id)&&s.severity==='critical').length;
+  const critTotal=AI_SUGGESTIONS.filter(s=>s.severity==='critical').length;
+  el.innerHTML=`<span style="font-weight:700;color:#10B981">${acc}</span> / ${total} accettati`;
+  if(critTotal>0) el.innerHTML+=` <span style="color:#ef4444;font-size:.65rem">(${critAcc}/${critTotal} critici)</span>`;
+  el.style.animation='countUp .3s ease';
+  setTimeout(()=>el.style.animation='',300);
 }
 
 // Applica direttamente senza passare da AI Review (skip Step 3)
@@ -8069,7 +8200,7 @@ function _renderFinalPlanTable(container, piano, modifiedRows){
       const note=(p.note||p.Note||'').substring(0,80);
       const isModified=modifiedRows.has(p._origIdx);
       const tipo=p.tipo||p.Tipo||'tagliando';
-      const tipoIcon=tipo.includes('install')?'🏗️':tipo.includes('urgenz')?'🚨':'🔧';
+      const tipoIcon=tipo.includes('install')?'🏗️':tipo.includes('urgenz')?'🚨':tipo==='reperibilita'?'📞':tipo==='assenza'?'🏖️':tipo==='trasferta'?'🚗':tipo==='arretrato'?'⚠️':'🔧';
 
       html+=`<div style="display:flex;gap:8px;align-items:center;padding:6px 10px;border-left:3px solid ${isModified?'#10B981':color};margin-bottom:3px;background:${isModified?'rgba(16,185,129,.08)':'rgba(255,255,255,.03)'};border-radius:0 6px 6px 0;font-size:.75rem${isModified?';border:1px solid rgba(16,185,129,.2)':''}">
         <span style="font-size:.9rem">${tipoIcon}</span>
