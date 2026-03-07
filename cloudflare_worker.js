@@ -2347,7 +2347,7 @@ async function handlePost(action, body, env) {
       const [allTecnici, allUrgenze, allClienti, vincoliCfg, allRep, allAutomezzi, allMacchine, allAssets, pianoExist] = await Promise.all([
         sb(env, 'utenti', 'GET', null, '?attivo=eq.true&obsoleto=eq.false&select=id,nome,cognome,base,ruolo,automezzo_id').catch(()=>[]),
         sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,schedulata)&order=priorita_id.asc&limit=20&select=id,problema,cliente_id,priorita_id,tecnico_id').catch(()=>[]),
-        sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno,citta_fatturazione&limit=200').catch(()=>[]),
+        sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno,citta_fatturazione,provincia&limit=200').catch(()=>[]),
         sb(env, 'config', 'GET', null, '?chiave=eq.vincoli_categories&limit=1').catch(()=>[]),
         sb(env, 'reperibilita', 'GET', null, `?obsoleto=eq.false${repFilter}&select=id,tecnico_id,data_inizio,data_fine,turno,tipo&order=data_inizio.asc&limit=100`).catch(()=>[]),
         sb(env, 'automezzi', 'GET', null, '?obsoleto=eq.false&select=id,targa,modello,stato&limit=20').catch(()=>[]),
@@ -2833,19 +2833,20 @@ async function handlePost(action, body, env) {
       const _psResults = await Promise.allSettled([
         sb(env, 'utenti', 'GET', null, '?attivo=eq.true&obsoleto=eq.false&select=id,nome,cognome,base,ruolo,automezzo_id'),
         sb(env, 'urgenze', 'GET', null, '?stato=in.(aperta,assegnata,schedulata)&order=data_segnalazione.desc&limit=50&select=id,problema,cliente_id,priorita_id,stato,data_segnalazione,note'),
-        sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno,citta_fatturazione&limit=150'),
+        sb(env, 'anagrafica_clienti', 'GET', null, '?select=codice_m3,nome_account,nome_interno,citta_fatturazione,provincia&limit=150'),
         sb(env, 'config', 'GET', null, '?chiave=eq.vincoli_categories&limit=1'),
         sb(env, 'reperibilita', 'GET', null, `?obsoleto=eq.false${repFilter}&select=id,tecnico_id,data_inizio,data_fine,turno,tipo&order=data_inizio.asc&limit=100`),
         sb(env, 'automezzi', 'GET', null, '?obsoleto=eq.false&select=id,targa,modello,stato&limit=20'),
         sb(env, 'macchine', 'GET', null, `?obsoleto=eq.false&prossimo_tagliando=not.is.null${meseEnd?'&prossimo_tagliando=lte.'+meseEnd:''}&select=id,seriale,note,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&order=prossimo_tagliando.asc&limit=200`),
-        sb(env, 'anagrafica_assets', 'GET', null, `?prossimo_controllo=not.is.null${meseEnd?'&prossimo_controllo=lte.'+meseEnd:''}&select=id,nome_asset,numero_serie,modello,gruppo_attrezzatura,codice_m3,nome_account,prossimo_controllo&order=prossimo_controllo.asc&limit=200`),
+        sb(env, 'anagrafica_assets', 'GET', null, `?prossimo_controllo=not.is.null${meseEnd?'&prossimo_controllo=lte.'+meseEnd:''}&select=id,nome_asset,numero_serie,modello,gruppo_attrezzatura,codice_m3,nome_account,prossimo_controllo,ciclo_pm,giorni_da_pm,mungiture_da_pm&order=prossimo_controllo.asc&limit=200`),
         meseTarget ? sb(env, 'richieste', 'GET', null, `?stato=eq.approvata&obsoleto=eq.false&data_inizio=lte.${meseEnd}&data_fine=gte.${meseStart}&select=id,tecnico_id,tipo,data_inizio,data_fine,motivo&limit=100`) : Promise.resolve([]),
         meseTarget ? sb(env, 'trasferte', 'GET', null, `?obsoleto=eq.false&data_inizio=lte.${meseEnd}&data_fine=gte.${meseStart}&select=id,tecnico_id,tecnici_ids,cliente_id,data_inizio,data_fine&limit=50`) : Promise.resolve([]),
         meseTarget ? sb(env, 'installazioni', 'GET', null, `?obsoleto=eq.false&stato=in.(pianificato,in_corso,pianificata)&data_inizio=lte.${meseEnd}&select=id,tecnici_ids,cliente_id,data_inizio,data_fine_prevista,stato,macchine_ids,note,tipo_macchina&limit=50`) : Promise.resolve([]),
         meseTarget ? sb(env, 'piano', 'GET', null, `?obsoleto=eq.false&stato=neq.annullato&data=gte.${meseStart}&data=lte.${meseEnd}&select=id,tecnico_id,tecnici_ids,cliente_id,data,ora_inizio,tipo_intervento_id,note,stato&limit=500`) : Promise.resolve([]),
-        sb(env, 'config', 'GET', null, '?chiave=eq.planner_rules&limit=1').catch(()=>[])
+        sb(env, 'config', 'GET', null, '?chiave=eq.planner_rules&limit=1').catch(()=>[]),
+        sb(env, 'config', 'GET', null, '?chiave=eq.force_junior_ids&limit=1').catch(()=>[])
       ]);
-      const [allTecnici, allUrgenze, allClienti, vincoliCfg, allRep, allAutomezzi, allMacchine, allAssets, allRichieste, allTrasferte, allInstallazioni, allPianoDb, plannerRulesCfg] = _psResults.map(_safePS);
+      const [allTecnici, allUrgenze, allClienti, vincoliCfg, allRep, allAutomezzi, allMacchine, allAssets, allRichieste, allTrasferte, allInstallazioni, allPianoDb, plannerRulesCfg, forceJuniorCfg] = _psResults.map(_safePS);
       sse({type:'init', message:'Dati caricati', n:{tecnici:allTecnici.filter(t=>t.ruolo!=='admin').length, clienti:allClienti.length, urgenze:allUrgenze.length, tagliandi:allMacchine.length+allAssets.length}});
 
       // Parse vincoli: v3 text-only + v2 + legacy
@@ -3189,8 +3190,13 @@ async function handlePost(action, body, env) {
           a.tecnico_id === autoId || a.assegnato_a === autoId
         );
         if (byTec) return byTec.targa || byTec.id;
-        // Ultimo fallback: abbrevia UUID
-        return autoId.length > 12 ? autoId.substring(0, 8) + '…' : autoId;
+        // 6. Fallback: cerca per corrispondenza parziale ID (AUT_ prefix match)
+        if (autoId.startsWith('AUT_')) {
+          const partMatch = (allAutomezzi||[]).find(a => a.id && (a.id.startsWith(autoId.substring(0, 8)) || autoId.startsWith(a.id.substring(0, 8))));
+          if (partMatch) return partMatch.targa || partMatch.modello || partMatch.id;
+        }
+        // Ultimo fallback: abbrevia UUID con nota
+        return autoId.length > 12 ? (autoId.substring(0, 10) + '…') : autoId;
       }
 
       const tagItems = [];
@@ -3321,20 +3327,43 @@ async function handlePost(action, body, env) {
         const baseCode = t.base ? (cittaMap[t.base] || t.base) : '?';
         return `${t.id}(${t.ruolo},zona:${baseCode},furgone:${furgLabel})`;
       }).join('; ');
-      // Calcola senior/junior per regola distribuzione — 100% parametrico dal DB (campo ruolo)
+      // Calcola senior/junior — dal DB (campo ruolo) + override da config force_junior_ids
       // DB usa: "caposquadra", "tecnico senior", "tecnico junior", "tecnico"
-      // NESSUN hardcode di nomi specifici — tutto dal campo `ruolo` della tabella utenti
+      // Se force_junior_ids è configurato in DB (config.force_junior_ids = "TEC_GIU,TEC_xxx,..."),
+      // quei tecnici vengono FORZATI come junior anche se il ruolo DB non contiene "junior"
+      const _forceJuniorIds = new Set();
+      if (forceJuniorCfg?.length && forceJuniorCfg[0]?.valore) {
+        forceJuniorCfg[0].valore.split(',').map(s => s.trim()).filter(Boolean).forEach(id => _forceJuniorIds.add(id));
+      }
       function _isSenior(t) {
         const r = (t.ruolo||'').toLowerCase().replace(/_/g,' ').trim();
         return r === 'caposquadra' || r === 'senior' || r.includes('senior') || r.includes('capo');
       }
       function _isJunior(t) {
+        if (_forceJuniorIds.has(t.id)) return true;
         const r = (t.ruolo||'').toLowerCase().replace(/_/g,' ').trim();
         return r === 'junior' || r.includes('junior');
       }
-      // "tecnico" senza qualifica = indipendente (né senior né junior)
       const allSeniors = allTecnici.filter(t => t.ruolo !== 'admin' && _isSenior(t));
-      const allJuniors = allTecnici.filter(t => t.ruolo !== 'admin' && _isJunior(t) && !_isSenior(t));
+      let allJuniors = allTecnici.filter(t => t.ruolo !== 'admin' && _isJunior(t) && !_isSenior(t));
+      // SAFETY NET: se 0 junior dal DB ma ci sono 4+ tecnici "tecnico" (senza qualifica),
+      // tratta TUTTI i "tecnico" puri come junior — meglio affiancati che soli
+      if (allJuniors.length === 0 && allSeniors.length > 0) {
+        const tecPuri = allTecnici.filter(t => {
+          if (t.ruolo === 'admin' || _isSenior(t)) return false;
+          const r = (t.ruolo||'').toLowerCase().trim();
+          return r === 'tecnico' || r === '' || !r;
+        });
+        if (tecPuri.length > 0) {
+          allJuniors = tecPuri;
+          sse({type:'warning', message:`⚠️ SAFETY NET: 0 junior trovati nel DB ma ${tecPuri.length} tecnici con ruolo "tecnico" → forzati come junior per garantire affiancamento. Per correggere: imposta ruolo "tecnico junior" nel DB o configura force_junior_ids in config.`});
+        }
+      }
+      // DIAGNOSTIC: mostra classificazione tecnici
+      sse({type:'team_classification', seniors: allSeniors.map(t => `${t.id}:${t.nome} ${t.cognome}(${t.ruolo})`),
+           juniors: allJuniors.map(t => `${t.id}:${t.nome} ${t.cognome}(${t.ruolo})`),
+           forceJuniorIds: [..._forceJuniorIds],
+           indipendenti: allTecnici.filter(t => t.ruolo !== 'admin' && !_isSenior(t) && !_isJunior(t)).map(t => `${t.id}:${t.nome} ${t.cognome}(${t.ruolo})`)});
       const seniorConstraint = allSeniors.length
         ? `\nREGOLA SENIOR (INVIOLABILE): i ${allSeniors.length} senior [${allSeniors.map(t=>t.id).join(',')}] sono RISORSE SCARSE. (1) MAI due senior insieme allo stesso cliente/giorno — devono essere su squadre separate. (2) Tecnici junior [${allJuniors.map(t=>t.id).join(',')}] NON vanno MAI da soli — abbinali SEMPRE a un senior diverso (1 junior per senior al massimo per giorno).`
         : '';
@@ -4953,6 +4982,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         const tecJunior = tecAttivi.filter(t => _juniorIds.includes(t.id));
         let backlogIdx = 0;
         let installIdx = 0;
+        sse({type:'fill_debug', tecNonJunior: tecNonJunior.map(t=>`${t.id}:${t.nome}`), tecJunior: tecJunior.map(t=>`${t.id}:${t.nome}`), backlogRimanente: backlogRimanente.length, allWorkDays: allWorkDaysISO.length});
 
         // _isAbsent, _isReperibilita, _isTrasferta → definiti nel parent scope
 
@@ -5004,7 +5034,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             else break;
           }
 
-          // B) Senior indipendenti — tagliandi dal backlog
+          // B) Senior indipendenti — tagliandi dal backlog (con TUTTI i campi macchina)
           for (const tec of tecNonJunior) {
             if (tecGiorno.has(tec.id)) continue;
             if (_isAbsent(tec.id, giorno)) continue;
@@ -5014,14 +5044,31 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
             const item = backlogRimanente[backlogIdx];
             const _fillLabel = item.macchinaLabel || item.macchina || '?';
+            // Resolve client name from cliMap or allClienti
+            const _cliObj = allClienti.find(c => c.codice_m3 === item.clienteId);
+            const _cliNome = _cliObj?.nome_interno || _cliObj?.nome_account || item.clienteNome || item.clienteId || '?';
+            // km info (from note or estimate)
+            const _kmNote = item._km != null ? item._km : '?';
             pianoNoDup.push({
               id: null, data: giorno, tecnicoId: tec.id,
-              clienteId: item.clienteId || '', tipo: item.tipo || 'tagliando',
+              clienteId: item.clienteId || '', cliente: _cliNome, tipo: item.tipo || 'tagliando',
               oraInizio: '08:00',
               durataOre: item.oreLavoro ? Math.min(8, Math.max(4, item.oreLavoro / 500)) : 6,
-              furgone: tec.automezzo_id || '',
-              note: `${_fillLabel} | scad:${item.data || '?'}${item.oreLavoro ? ' | ore:' + item.oreLavoro : ''}`,
-              macchina_id: item.macchina || item.macchinaId || null
+              furgone: _furgLabel(tec.automezzo_id),
+              note: `${_fillLabel}${item.seriale ? ' | S/N:'+item.seriale : ''} | scad:${item.data || '?'}${item.oreLavoro ? ' | ore:' + item.oreLavoro : ''}${item.cicloPm ? ' | ciclo:'+item.cicloPm : ''} | ~${_kmNote}km`,
+              macchina_id: item.macchina || item.macchinaId || null,
+              macchinaLabel: item.macchinaLabel || '',
+              macchinaModello: item.macchinaModello || '',
+              machinaTipo: item.machinaTipo || '',
+              seriale: item.seriale || '',
+              scadenza: item.data || '',
+              statoScaduto: item.urgenza || '',
+              oreLavoro: item.oreLavoro || '',
+              ultimoTagliando: item.ultimoTagliando || '',
+              km: _kmNote,
+              cicloPm: item.cicloPm || '',
+              giorniDaPm: item.giorniDaPm || null,
+              mungitureDaPm: item.mungitureDaPm || null
             });
             pianificateKeys.add(item.macchinaId || item.macchina || '');
             tecGiorno.add(tec.id);
@@ -5031,21 +5078,24 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             fixes++;
           }
 
-          // C) Junior — affianca a un senior dello stesso giorno
+          // C) Junior — affianca a un senior dello stesso giorno (con TUTTI i campi)
+          const _pairedSeniorsFill = new Set();
           for (const jr of tecJunior) {
             if (tecGiorno.has(jr.id)) continue;
             if (_isAbsent(jr.id, giorno)) continue;
             if (_isReperibilita(jr.id, giorno)) continue;
-            // Trova un senior che è già assegnato questo giorno
+            if (_isTrasferta(jr.id, giorno)) continue;
+            // Trova un senior assegnato oggi che NON ha già un junior
             const seniorToday = pianoNoDup.find(p =>
-              p.data === giorno && _seniorIds.includes(p.tecnicoId) && p.tipo !== 'reperibilita'
+              p.data === giorno && _seniorIds.includes(p.tecnicoId) && p.tipo !== 'reperibilita' && !_pairedSeniorsFill.has(p.tecnicoId)
             );
             if (seniorToday) {
+              _pairedSeniorsFill.add(seniorToday.tecnicoId);
               const _srTec = allTecnici.find(t => t.id === seniorToday.tecnicoId);
               const _srName = _srTec ? `${_srTec.nome} ${_srTec.cognome}`.trim() : seniorToday.tecnicoId;
               pianoNoDup.push({
                 id: null, data: giorno, tecnicoId: jr.id,
-                clienteId: seniorToday.clienteId || '', tipo: seniorToday.tipo || 'tagliando',
+                clienteId: seniorToday.clienteId || '', cliente: seniorToday.cliente || '', tipo: seniorToday.tipo || 'tagliando',
                 oraInizio: seniorToday.oraInizio || '08:00', durataOre: seniorToday.durataOre || 6,
                 furgone: _furgLabel(jr.automezzo_id || '') || seniorToday.furgone || '',
                 note: `Affiancamento con ${_srName} — ${(seniorToday.note || '').substring(0, 80)}`,
@@ -5058,7 +5108,10 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
                 statoScaduto: seniorToday.statoScaduto || '',
                 oreLavoro: seniorToday.oreLavoro || '',
                 ultimoTagliando: seniorToday.ultimoTagliando || '',
-                km: seniorToday.km || ''
+                km: seniorToday.km || '',
+                cicloPm: seniorToday.cicloPm || '',
+                giorniDaPm: seniorToday.giorniDaPm || null,
+                mungitureDaPm: seniorToday.mungitureDaPm || null
               });
               tecGiorno.add(jr.id);
               if (!tecPerGiorno[giorno]) tecPerGiorno[giorno] = new Set();
@@ -5732,8 +5785,42 @@ ${instructions}`;
             }
           });
 
+          // PRE-REVIEW: analisi deterministica per dare hint all'AI
+          const preReviewIssues = [];
+          // 1) Junior da soli
+          const planByDay = {};
+          decoded.forEach(p => {
+            const d = p.data || p.Data || '';
+            if (!planByDay[d]) planByDay[d] = [];
+            planByDay[d].push(p);
+          });
+          const juniorIdSet = new Set(allJuniors.map(t => t.id));
+          const seniorIdSet = new Set(allSeniors.map(t => t.id));
+          for (const [day, rows] of Object.entries(planByDay)) {
+            const seniorClientsToday = new Set();
+            rows.filter(r => seniorIdSet.has(r.tecnicoId || r.TecnicoID)).forEach(r => {
+              seniorClientsToday.add(`${day}_${r.clienteId || r.ClienteID}`);
+            });
+            rows.filter(r => juniorIdSet.has(r.tecnicoId || r.TecnicoID)).forEach(r => {
+              const key = `${day}_${r.clienteId || r.ClienteID}`;
+              if (!seniorClientsToday.has(key)) {
+                const tec = allTecnici.find(t => t.id === (r.tecnicoId || r.TecnicoID));
+                preReviewIssues.push(`⛔ JUNIOR DA SOLO: ${tec ? tec.nome+' '+tec.cognome : r.tecnicoId} il ${day} presso ${r.cliente || r.clienteId} SENZA senior affiancato`);
+              }
+            });
+          }
+          // 2) km >80
+          const highKmRows = decoded.filter(p => p.km && parseInt(p.km) > 80 && parseInt(p.km) !== 999);
+          if (highKmRows.length > 0) {
+            preReviewIssues.push(`⚠️ ${highKmRows.length} interventi con distanza >80km dalla base del tecnico`);
+          }
+          const preReviewHint = preReviewIssues.length > 0
+            ? `\n\n⚠️⚠️ VIOLAZIONI GIÀ RILEVATE AUTOMATICAMENTE (${preReviewIssues.length}) — DEVI includerle nei suggerimenti:\n${preReviewIssues.join('\n')}\n`
+            : '';
+
           const reviewPrompt = `Sei un esperto di ottimizzazione field service per manutenzione robot Lely (mungitrici, alimentatori, etc.).
 Analizza questo piano deterministico e suggerisci 3-8 MIGLIORAMENTI CONCRETI.
+${preReviewHint}
 
 ⚠️ ATTENZIONE: usa SOLO gli ID esatti dei tecnici e clienti forniti sotto. NON inventare nomi o ID.
 

@@ -8980,6 +8980,17 @@ async function downloadAIPlanXlsx(){
     return aid;
   }
 
+  // Helper: resolve client name from clienteId if r.cliente is empty/numeric
+  function _xlsCliente(r){
+    if(r.cliente && r.cliente.length>3 && !/^\d+$/.test(r.cliente)) return r.cliente;
+    // Fallback: lookup in DATA.clienti or AI_PLAN.piano
+    if(r.clienteId){
+      const cli=(DATA.clienti||[]).find(c=>c.ID===r.clienteId||c.CodiceM3===r.clienteId);
+      if(cli) return cli.NomeInterno||cli.NomeAccount||cli.Nome||r.clienteId;
+    }
+    return r.cliente||r.clienteId||'';
+  }
+
   const rows=AI_PLAN.piano.map(r=>{
     const d=r.data?new Date(r.data+'T00:00:00'):null;
     const giorno=d?giorni[d.getDay()]:'';
@@ -8990,7 +9001,7 @@ async function downloadAIPlanXlsx(){
       giorno,
       tecNome,
       furg,
-      r.cliente||'',
+      _xlsCliente(r),
       r.macchinaLabel||'',
       r.macchinaModello||'',
       r.machinaTipo||'',
@@ -9013,9 +9024,11 @@ async function downloadAIPlanXlsx(){
 
   // Piano completo
   const allRows=[header];
-  Object.entries(byDate).sort(([a],[b])=>a.localeCompare(b)).forEach(([data,items])=>{
+  const sortedDates=Object.entries(byDate).sort(([a],[b])=>a.localeCompare(b));
+  sortedDates.forEach(([data,items],idx)=>{
     items.forEach(r=>allRows.push(r));
-    allRows.push([]); // riga vuota separatrice
+    // Solo separatore tra gruppi (non dopo l'ultimo), e usa riga con data come separatore
+    if(idx<sortedDates.length-1) allRows.push(['───','───','───','───','───','───','───','───','───','───','───','───','───','───','───','───','───','───']);
   });
 
   const ws=XLSX.utils.aoa_to_sheet(allRows);
