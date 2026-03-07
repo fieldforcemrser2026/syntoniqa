@@ -783,7 +783,7 @@ async function handleGet(action, url, env, auth = {}) {
         sb(env, 'utenti',             'GET', null, '?select=*&obsoleto=eq.false&order=cognome'),
         sb(env, 'clienti',            'GET', null, '?select=*&obsoleto=eq.false&order=nome'),
         sb(env, 'macchine',           'GET', null, '?select=*&obsoleto=eq.false&limit=1000'),
-        sb(env, 'piano',              'GET', null, `?select=*&obsoleto=eq.false&order=data.desc&limit=500${tecFilter}`),
+        sb(env, 'piano',              'GET', null, `?select=*&obsoleto=eq.false&order=data.desc&limit=1000${tecFilter}`),
         sb(env, 'urgenze',            'GET', null, `?select=*&obsoleto=eq.false&order=data_segnalazione.desc&limit=200${tecFilterUrg}`),
         sb(env, 'ordini',             'GET', null, `?select=*&obsoleto=eq.false&order=data_richiesta.desc&limit=300${tecFilter}`),
         sb(env, 'reperibilita',       'GET', null, `?select=*&obsoleto=eq.false&order=data_inizio.desc&limit=200${tecFilter}`),
@@ -2815,7 +2815,8 @@ async function handlePost(action, body, env) {
       // Tecnici con vincoli
       const tecVincolati = new Set();
       vincAuto.forEach(v => (v.soggetti_ids||[]).forEach(id => tecVincolati.add(id)));
-      const totTec = pvTecnici.filter(u=>u.ruolo!=='admin').length;
+      const _pvNonPlan = new Set(['admin','fms','magazziniere','commerciale']);
+      const totTec = pvTecnici.filter(u=>!_pvNonPlan.has((u.ruolo||'').toLowerCase())).length;
 
       // Tagliandi in scadenza — build full list with details
       const pvOggi = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Rome' }).format(new Date());
@@ -2921,7 +2922,8 @@ async function handlePost(action, body, env) {
         sb(env, 'config', 'GET', null, '?chiave=eq.force_senior_ids&limit=1').catch(()=>[])
       ]);
       const [allTecnici, allUrgenze, allClienti, vincoliCfg, allRep, allAutomezzi, allMacchine, allAssets, allRichieste, allTrasferte, allInstallazioni, allPianoDb, plannerRulesCfg, forceJuniorCfg, forceSeniorCfg] = _psResults.map(_safePS);
-      sse({type:'init', message:'Dati caricati', n:{tecnici:allTecnici.filter(t=>t.ruolo!=='admin').length, clienti:allClienti.length, urgenze:allUrgenze.length, tagliandi:allMacchine.length+allAssets.length}});
+      const _aiNonPlan = new Set(['admin','fms','magazziniere','commerciale']);
+      sse({type:'init', message:'Dati caricati', n:{tecnici:allTecnici.filter(t=>!_aiNonPlan.has((t.ruolo||'').toLowerCase())).length, clienti:allClienti.length, urgenze:allUrgenze.length, tagliandi:allMacchine.length+allAssets.length}});
 
       // Parse vincoli: v3 text-only + v2 + legacy
       let vincoliText = '';
@@ -3194,13 +3196,14 @@ async function handlePost(action, body, env) {
         }
         nSenzaTecnico = senzaTecnico.length;
         if (senzaTecnico.length) {
-          interventiDaAssegnare = `\nINTERVENTI DA ASSEGNARE (${senzaTecnico.length} interventi generati da PM/tagliandi — DEVI assegnare tecnico, data e furgone per CIASCUNO):\n` +
+          interventiDaAssegnare = `\nINTERVENTI DA ASSEGNARE (${senzaTecnico.length} interventi generati da PM/tagliandi — DEVI assegnare tecnico, data e furgone per CIASCUNO. PRESERVA l'ID originale!):\n` +
             senzaTecnico.map(p => {
               const d = p.data || p.Data || '';
               const cli = p.cliente_id || p.ClienteID || '?';
               const note = p.note || p.Note || '';
               const tipo = p.tipo_intervento_id || p.TipoIntervento || 'tagliando';
-              return `- ID:${p.id||'?'}|data_sugg:${d}|cliente:${cli}|tipo:${tipo}|note:${anonEncode(note)} [ASSEGNA TECNICO+FURGONE]`;
+              const macId = p.macchina_id || '';
+              return `- ID:${p.id||'?'}|data_sugg:${d}|cliente:${cli}|macchina:${macId}|tipo:${tipo}|note:${anonEncode(note)} [ASSEGNA TECNICO+FURGONE, PRESERVA ID]`;
             }).join('\n');
         }
       }
@@ -3424,7 +3427,8 @@ async function handlePost(action, body, env) {
       const oggiIt = new Intl.DateTimeFormat('it-IT', { weekday:'long', year:'numeric', month:'long', day:'numeric', timeZone:'Europe/Rome' }).format(new Date());
 
       // Compact data — ANONIMIZZATO: solo codici ID, nessun nome reale
-      const tecList = allTecnici.filter(t=>t.ruolo!=='admin').map(t => {
+      const _NON_PLAN = new Set(['admin','fms','magazziniere','commerciale']);
+      const tecList = allTecnici.filter(t=>!_NON_PLAN.has((t.ruolo||'').toLowerCase())).map(t => {
         const furgLabel = t.automezzo_id ? _furgLabel(t.automezzo_id) : 'nessuno';
         const baseCode = t.base ? (cittaMap[t.base] || t.base) : '?';
         return `${t.id}(${t.ruolo},zona:${baseCode},furgone:${furgLabel})`;
@@ -3453,13 +3457,13 @@ async function handlePost(action, body, env) {
         const r = (t.ruolo||'').toLowerCase().replace(/_/g,' ').trim();
         return r === 'junior' || r.includes('junior');
       }
-      let allSeniors = allTecnici.filter(t => t.ruolo !== 'admin' && _isSenior(t));
-      let allJuniors = allTecnici.filter(t => t.ruolo !== 'admin' && _isJunior(t) && !_isSenior(t));
+      let allSeniors = allTecnici.filter(t => !_NON_PLAN.has((t.ruolo||'').toLowerCase()) && _isSenior(t));
+      let allJuniors = allTecnici.filter(t => !_NON_PLAN.has((t.ruolo||'').toLowerCase()) && _isJunior(t) && !_isSenior(t));
 
       // ── SMART FALLBACK v3: se ruoli DB insufficienti, classifica per base+furgone ──
       // Condizione: <=1 senior dal DB E 0 junior E nessun override config
       const tecPuri = allTecnici.filter(t => {
-        if (t.ruolo === 'admin' || _isSenior(t) || _isJunior(t)) return false;
+        if (_NON_PLAN.has((t.ruolo||'').toLowerCase()) || _isSenior(t) || _isJunior(t)) return false;
         const r = (t.ruolo||'').toLowerCase().trim();
         return r === 'tecnico' || r === '' || !r;
       });
@@ -3492,7 +3496,7 @@ async function handlePost(action, body, env) {
         seniors: allSeniors.map(t => `${t.id}:${t.nome} ${t.cognome}(${t.ruolo})`),
         juniors: allJuniors.map(t => `${t.id}:${t.nome} ${t.cognome}(${t.ruolo})`),
         forceJuniorIds: [..._forceJuniorIds], forceSeniorIds: [..._forceSeniorIds],
-        indipendenti: allTecnici.filter(t => t.ruolo !== 'admin' && !allSeniors.some(s=>s.id===t.id) && !allJuniors.some(j=>j.id===t.id)).map(t => `${t.id}:${t.nome} ${t.cognome}(${t.ruolo})`)});
+        indipendenti: allTecnici.filter(t => !_NON_PLAN.has((t.ruolo||'').toLowerCase()) && !allSeniors.some(s=>s.id===t.id) && !allJuniors.some(j=>j.id===t.id)).map(t => `${t.id}:${t.nome} ${t.cognome}(${t.ruolo})`)});
       const seniorConstraint = allSeniors.length
         ? `\nREGOLA SENIOR (INVIOLABILE): i ${allSeniors.length} senior [${allSeniors.map(t=>t.id).join(',')}] sono RISORSE SCARSE. (1) MAI due senior insieme allo stesso cliente/giorno — devono essere su squadre separate. (2) Tecnici junior [${allJuniors.map(t=>t.id).join(',')}] NON vanno MAI da soli — abbinali SEMPRE a un senior diverso (1 junior per senior al massimo per giorno).`
         : '';
@@ -3523,11 +3527,11 @@ async function handlePost(action, body, env) {
         installContext = `\nINSTALLAZIONI DA PIANIFICARE (${allInstallazioni.length}): inserisci nel piano come tipo "installazione".\n` + instLines.join('\n');
       }
 
-      const nTecAttivi = allTecnici.filter(t=>t.ruolo!=='admin').length;
+      const nTecAttivi = allTecnici.filter(t=>!_NON_PLAN.has((t.ruolo||'').toLowerCase())).length;
       // ─── CAPACITY MATH: calcola team effettivi e target tagliandi ───
       const _juniorIds = allJuniors.map(t => t.id);
       const _seniorIds = allSeniors.map(t => t.id);
-      const _nonJuniorTecs = allTecnici.filter(t => t.ruolo !== 'admin' && !_juniorIds.includes(t.id));
+      const _nonJuniorTecs = allTecnici.filter(t => !_NON_PLAN.has((t.ruolo||'').toLowerCase()) && !_juniorIds.includes(t.id));
       const _nCoppie = Math.min(_juniorIds.length, _seniorIds.length);
       // Team effettivi = tecnici non-junior (ognuno indipendente) perché i junior si "appoggiano" ai senior
       const nTeamEffettivi = _nonJuniorTecs.length;
@@ -3599,14 +3603,14 @@ REGOLE INVIOLABILI:
 - Distribuisci clienti per zona: ottimizza percorsi, non mandare stesso tecnico a stesso cliente per giorni consecutivi senza motivo logistico.
 - Usa SOLO codici dalla lista (TEC_xxx, codice_m3, FURG_x). NON inventare ID.
 
-JSON: {"summary":"...","piano":[{"id":"INT_xxx o INS_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza|installazione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}
-NOTA ID: se stai ASSEGNANDO un intervento esistente dalla lista INTERVENTI DA ASSEGNARE, usa il suo ID (es: INT_xxx). Per INSTALLAZIONI usa l'ID dalla lista (es: INS_xxx). Se stai CREANDO un nuovo intervento, usa null.`;
+JSON: {"summary":"...","piano":[{"id":"PM_xxx o INT_xxx o INS_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","macchina_id":"MAC_xxx o null","tipo":"tagliando|urgenza|installazione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}
+NOTA ID: se stai ASSEGNANDO un intervento esistente dalla lista INTERVENTI DA ASSEGNARE, usa il suo ID ORIGINALE (es: PM_xxx, INT_xxx). Per INSTALLAZIONI usa l'ID dalla lista (es: INS_xxx). Se stai CREANDO un nuovo intervento, usa null. NON cambiare gli ID degli interventi da assegnare!`;
 
       // ─── Debug SSE: emetti il prompt prima della chiamata AI ───
       const _senzaTec = interventiDaAssegnare ? (allPianoDb.filter(p => !p.tecnico_id || p.tecnico_id === 'null' || p.tecnico_id === '').length) : 0;
       sse({type:'debug_prompt', prompt_full: prompt, prompt_length: prompt.length,
            tagliandi_count: tagItems.length, urgenze_count: allUrgenze.length,
-           tecnici_count: allTecnici.filter(t=>t.ruolo!=='admin').length,
+           tecnici_count: allTecnici.filter(t=>!_NON_PLAN.has((t.ruolo||'').toLowerCase())).length,
            macchine_loaded: allMacchine.length, assets_loaded: allAssets.length,
            interventi_da_assegnare: _senzaTec,
            piano_assegnato: allPianoDb.length - _senzaTec,
@@ -3617,7 +3621,7 @@ NOTA ID: se stai ASSEGNANDO un intervento esistente dalla lista INTERVENTI DA AS
       if (vincoli.build_prompt_only) {
         sse({type:'prompt_ready', prompt: prompt, sys_prompt: _defaultSysPrompt,
              stats: {
-               tecnici: allTecnici.filter(t=>t.ruolo!=='admin').length,
+               tecnici: allTecnici.filter(t=>!_NON_PLAN.has((t.ruolo||'').toLowerCase())).length,
                macchine: allMacchine.length, assets: allAssets.length,
                tagliandi: tagItems.length, urgenze: allUrgenze.length,
                interventi_da_assegnare: _senzaTec,
@@ -3644,13 +3648,13 @@ REGOLE INVIOLABILI:
 5. Ogni macchina/asset UNA SOLA VOLTA nel piano. NON ripetere.
 6. Usa SOLO codici ID dalla lista. NON inventare ID.
 7. Note: scrivi NOME MACCHINA (es: "Astronaut A5 | scad:2026-03-10 | 2800h"), MAI UUID.
-8. Se ci sono INTERVENTI DA ASSEGNARE (con ID), assegna tecnico+data+furgone a ciascuno.
+8. Se ci sono INTERVENTI DA ASSEGNARE (con ID), assegna tecnico+data+furgone a ciascuno. PRESERVA l'ID originale (PM_xxx, INT_xxx) — NON cambiarlo!
 
-Formato JSON: {"summary":"...","piano":[{"id":"INT_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza|installazione|controllo","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"NomeMacchina | scad:DATA | Xh"}],"warnings":["..."]}`;
+Formato JSON: {"summary":"...","piano":[{"id":"PM_xxx o INT_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","macchina_id":"MAC_xxx o null","tipo":"tagliando|urgenza|installazione|controllo","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"NomeMacchina | scad:DATA | Xh"}],"warnings":["..."]}`;
 
       // Helper: costruisce prompt compatto per Workers AI (rimuove file e comprime dati)
       function buildCompactPrompt() {
-        const cTec = allTecnici.filter(t=>t.ruolo!=='admin').map(t=>{
+        const cTec = allTecnici.filter(t=>!_NON_PLAN.has((t.ruolo||'').toLowerCase())).map(t=>{
           const f = t.automezzo_id ? allAutomezzi.find(a=>a.id===t.automezzo_id) : null;
           const baseCode = t.base ? (cittaMap[t.base] || t.base) : '?';
           return `${t.id}(${t.ruolo},zona:${baseCode},furgone:${f?f.id:(t.automezzo_id||'?')})`;
@@ -3677,7 +3681,7 @@ ${periodoIstruzione || 'Genera piano mese intero'}
 - Tecnici assenti da vincoli: NON inserirli.
 - Usa furgone indicato nel tecnico. Usa SOLO codici dalla lista. NON inventare ID.
 
-JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA"}],"warnings":[]}`;
+JSON: {"summary":"...","piano":[{"id":"PM_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","macchina_id":"MAC_xxx o null","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA"}],"warnings":[]}`;
       }
 
       // Engine registry: ogni engine ha key env, funzione try, flag disabled
@@ -4730,13 +4734,21 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           // Tecnico: da ID a nome completo
           if (p.tecnicoId) {
             const tec = allTecnici.find(t => t.id === p.tecnicoId);
-            if (tec) p.tecnico = `${tec.nome} ${tec.cognome}`.trim();
+            if (tec) {
+              const fullName = `${tec.nome} ${tec.cognome}`.trim();
+              p.tecnico = fullName;
+              p.tecnicoNome = fullName;
+            }
           }
           // Cliente: da codice_m3 o id a nome leggibile (strip CLI_ prefix per match)
-          if (p.clienteId && (!p.cliente || p.cliente === p.clienteId || /^\d{5,}$/.test(p.cliente) || /^CLI_/.test(p.cliente))) {
+          if (p.clienteId) {
             const rawCid = String(p.clienteId).replace(/^CLI_/i, '');
             const cli = allClienti.find(c => c.codice_m3 === p.clienteId || c.codice_m3 === rawCid || c.id === p.clienteId || c.id === rawCid);
-            if (cli) p.cliente = cli.nome_interno || cli.nome_account || p.clienteId;
+            if (cli) {
+              const cliName = cli.nome_interno || cli.nome_account || p.clienteId;
+              p.cliente = cliName;
+              p.clienteNome = cliName;
+            }
           }
           // Furgone: da ID raw a label leggibile (targa/modello)
           if (p.furgone && p.furgone.length > 12) {
@@ -5118,8 +5130,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         const installInPiano = new Set(pianoNoDup.filter(p => p.tipo === 'installazione').map(p => (p.note || '').match(/INS_\w+/)?.[0]).filter(Boolean));
         const installBacklog = (allInstallazioni || []).filter(inst => !installInPiano.has(inst.id));
 
-        // Tecnici attivi (no admin)
-        const tecAttivi = allTecnici.filter(t => (t.ruolo || '').toLowerCase() !== 'admin');
+        // Tecnici attivi (escludi admin/fms/magazziniere/commerciale)
+        const tecAttivi = allTecnici.filter(t => !_NON_PLAN.has((t.ruolo || '').toLowerCase()));
         const tecNonJunior = tecAttivi.filter(t => !_juniorIds.includes(t.id));
         const tecJunior = tecAttivi.filter(t => _juniorIds.includes(t.id));
         let backlogIdx = 0;
@@ -5345,8 +5357,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         // ── INSTALLATION TRACKING: anti-double-booking ──
         const instAssigned = new Set(); // 'instId|tecId|giorno' già assegnati
 
-        // Tecnici attivi (no admin)
-        const tecAttivi2 = allTecnici.filter(t => (t.ruolo || '').toLowerCase() !== 'admin');
+        // Tecnici attivi (escludi admin/fms/magazziniere/commerciale)
+        const tecAttivi2 = allTecnici.filter(t => !_NON_PLAN.has((t.ruolo || '').toLowerCase()));
         const seniors2 = tecAttivi2.filter(t => _seniorIds.includes(t.id));
         const juniors2 = tecAttivi2.filter(t => _juniorIds.includes(t.id));
         const indipendenti2 = tecAttivi2.filter(t => !_juniorIds.includes(t.id) && !_seniorIds.includes(t.id));
@@ -5947,7 +5959,7 @@ ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}`;
 - Raggruppa per zona (stessa zona per stesso tecnico nello stesso giorno).
 - ${nTeamEffettivi} team effettivi/giorno. Genera ${nTeamEffettivi * 2} righe/giorno (2 per team: senior+junior).
 ${seniorConstraint}
-JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza|installazione|controllo","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"NomeMacchina | scad:DATA"}],"warnings":["..."]}`;
+JSON: {"summary":"...","piano":[{"id":"PM_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","macchina_id":"MAC_xxx o null","tipo":"tagliando|urgenza|installazione|controllo","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"NomeMacchina | scad:DATA"}],"warnings":["..."]}`;
 
         // ── CHUNKING SETTIMANALE: max 5 giorni per chunk = output gestibile ──
         // Sempre chunking per meseTarget (mese/vuoti/settimana)
@@ -6123,7 +6135,7 @@ ${instructions}`;
           sse({type:'phase_start', phase:2, message:'OpenAI e Claude stanno analizzando il piano...'});
 
           // Build review context: piano compatto + tecnici + vincoli + reperibilità + geo
-          const tecAttivi = allTecnici.filter(t => (t.ruolo || '').toLowerCase() !== 'admin');
+          const tecAttivi = allTecnici.filter(t => !_NON_PLAN.has((t.ruolo || '').toLowerCase()));
           const tecniciCtx = tecAttivi.map(t => {
             const ruolo = (t.ruolo || 'tecnico').toLowerCase();
             const isJunior = _isJunior(t);
@@ -6445,9 +6457,27 @@ Rispondi SOLO JSON valido:
               const d = await res.json().catch(()=>null);
               if (!d) { sse({type:'reviewer_status', engine:'claude', status:'error', reason:'invalid_json_response'}); return null; }
               const textBlock = (d.content || []).find(b => b.type === 'text');
-              const text = textBlock?.text || '';
+              let text = (textBlock?.text || '').replace(/```json\n?|\n?```/g, '').trim();
               if (!text) { sse({type:'reviewer_status', engine:'claude', status:'error', reason:'empty response'}); return null; }
-              const parsed = JSON.parse(text);
+              // Robust JSON repair: fix common LLM JSON issues
+              let parsed;
+              try { parsed = JSON.parse(text); } catch(jsonErr) {
+                // Try repair: extract JSON object, fix trailing commas, single quotes, unquoted keys
+                let repaired = text;
+                // Extract the outermost JSON object if surrounded by text
+                const jsonMatch = repaired.match(/\{[\s\S]*\}/);
+                if (jsonMatch) repaired = jsonMatch[0];
+                // Fix trailing commas before } or ]
+                repaired = repaired.replace(/,\s*([}\]])/g, '$1');
+                // Fix single-quoted strings → double quotes (careful with apostrophes)
+                repaired = repaired.replace(/(?<=[{,\[]\s*)'([^']+?)'\s*:/g, '"$1":');
+                // Fix unquoted property names
+                repaired = repaired.replace(/(?<=[{,]\s*)([a-zA-Z_]\w*)\s*:/g, '"$1":');
+                try { parsed = JSON.parse(repaired); } catch(e2) {
+                  sse({type:'reviewer_status', engine:'claude', status:'error', reason:'JSON malformato: ' + (jsonErr.message||'').substring(0,80)});
+                  return null;
+                }
+              }
               const sugs = (parsed.suggestions || []).map(s => ({ ...s, engine: 'claude' }));
               sse({type:'reviewer_status', engine:'claude', status:'complete', count:sugs.length, elapsed, assessment: parsed.overall_assessment || ''});
               return { suggestions: sugs, assessment: parsed.overall_assessment || '', score: parsed.score, strengths: parsed.strengths, weaknesses: parsed.weaknesses };
@@ -6777,7 +6807,7 @@ Rispondi SOLO con JSON valido:
         const dateMin = dates.sort()[0];
         const dateMax = dates.sort().reverse()[0];
         existing = await sb(env, 'piano', 'GET', null,
-          `?data=gte.${dateMin}&data=lte.${dateMax}&stato=neq.annullato&obsoleto=eq.false&select=id,tecnico_id,data,cliente_id,note&limit=500`
+          `?data=gte.${dateMin}&data=lte.${dateMax}&stato=neq.annullato&obsoleto=eq.false&select=id,tecnico_id,data,cliente_id,note&limit=1000`
         ).catch(() => []);
       }
 
@@ -6821,27 +6851,39 @@ Rispondi SOLO con JSON valido:
         });
       }
 
-      // 2. Create new interventions (skip info rows: reperibilita, assenza, trasferta)
+      // 2. Create/Update interventions (skip info rows: reperibilita, assenza, trasferta)
       const INFO_TYPES = new Set(['reperibilita','assenza','trasferta']);
       const created = [], updated = [], applyErrors = [];
       const now = new Date().toISOString();
       const tenantId = env.TENANT_ID || DEFAULT_TENANT;
 
-      // Pre-load existing PM rows (macchina+data) for upsert instead of duplicate
+      // ── PRE-LOAD: build maps for matching existing entries ──
+      // Strategy 1: by ID (most reliable — AI preserves PM_xxx/INT_xxx IDs)
+      const existingById = {};
+      for (const e of existing) { existingById[e.id] = e; }
+      // Strategy 2: by macchina_id|data (for PM entries)
       const pmExisting = existing.filter(e => e.note && e.note.includes('[PM'));
       const pmMap = {}; // macchina_id|data → existing PM row
       for (const e of pmExisting) {
-        // Load macchina_id for PM rows
         const fullRow = await sb(env, 'piano', 'GET', null, `?id=eq.${e.id}&select=id,macchina_id,data,tecnico_id`).catch(() => []);
         if (fullRow?.[0]?.macchina_id) {
           pmMap[`${fullRow[0].macchina_id}|${fullRow[0].data}`] = fullRow[0];
         }
       }
+      // Strategy 3: unassigned entries by cliente_id|data (fallback for PM without macchina match)
+      const unassignedByCliDate = {};
+      for (const e of existing) {
+        if (!e.tecnico_id || e.tecnico_id === 'null' || e.tecnico_id === '') {
+          const key = `${e.cliente_id}|${e.data}`;
+          if (!unassignedByCliDate[key]) unassignedByCliDate[key] = [];
+          unassignedByCliDate[key].push(e);
+        }
+      }
+      const usedIds = new Set(); // track already-updated IDs to avoid double-update
 
       for (const item of toCreate) {
         try {
           const tipo = (item.tipo || '').toLowerCase();
-          // Skip informational rows — they don't go to DB
           if (INFO_TYPES.has(tipo)) continue;
 
           const tecId = item.tecnicoId || item.tecnico_id || item.TecnicoID;
@@ -6853,26 +6895,53 @@ Rispondi SOLO con JSON valido:
           const noteParts = [item.tipo || '', item.note || '', durata ? durata+'h' : ''].filter(Boolean);
           const macId = item.macchina_id || null;
 
-          // CHECK: esiste già una riga PM per questa macchina+data? → UPDATE invece di INSERT
-          const pmKey = macId ? `${macId}|${itemData}` : null;
-          const existingPM = pmKey ? pmMap[pmKey] : null;
+          // ── MATCH existing entry to UPDATE instead of creating duplicate ──
+          let matchedRow = null;
+          const itemId = item.id || '';
 
-          if (existingPM && !existingPM.tecnico_id) {
-            // UPDATE existing PM row: assegna tecnico, furgone, ora
-            await sb(env, `piano?id=eq.${existingPM.id}`, 'PATCH', {
+          // Strategy 1: ID match (AI preserved PM_xxx/INT_xxx from "interventi da assegnare")
+          if (itemId && !itemId.startsWith('null') && existingById[itemId] && !usedIds.has(itemId)) {
+            const ex = existingById[itemId];
+            if (!ex.tecnico_id || ex.tecnico_id === 'null' || ex.tecnico_id === '') {
+              matchedRow = ex;
+            }
+          }
+          // Strategy 2: macchina_id|data match
+          if (!matchedRow && macId) {
+            const pmKey = `${macId}|${itemData}`;
+            const pm = pmMap[pmKey];
+            if (pm && !pm.tecnico_id && !usedIds.has(pm.id)) {
+              matchedRow = pm;
+            }
+          }
+          // Strategy 3: cliente_id|data match (for unassigned PM entries)
+          if (!matchedRow && cid) {
+            const cliKey = `${cid}|${itemData}`;
+            const candidates = unassignedByCliDate[cliKey] || [];
+            const free = candidates.find(c => !usedIds.has(c.id));
+            if (free) {
+              matchedRow = free;
+            }
+          }
+
+          if (matchedRow) {
+            // UPDATE existing row: assegna tecnico, furgone, ora
+            usedIds.add(matchedRow.id);
+            await sb(env, `piano?id=eq.${matchedRow.id}`, 'PATCH', {
               tecnico_id: tecId,
-              cliente_id: cid,
+              cliente_id: cid || matchedRow.cliente_id,
+              macchina_id: macId || undefined,
               ora_inizio: item.oraInizio || item.ora_inizio || null,
               automezzo_id: item.furgone || item.automezzo_id || null,
               note: noteParts.join(' — '),
               origine: 'ai',
               updated_at: now
             });
-            updated.push(existingPM.id);
-            await wlog('piano', existingPM.id, 'ai_plan_assigned', operatoreId, `PM aggiornato: ${item.tecnico || tecId} @ ${item.cliente || cid}`).catch(()=>{});
+            updated.push(matchedRow.id);
+            await wlog('piano', matchedRow.id, 'ai_plan_assigned', operatoreId, `PM aggiornato: ${item.tecnico || tecId} @ ${item.cliente || cid}`).catch(()=>{});
           } else {
-            // CREATE new row
-            const id = item.id && !item.id.startsWith('null') ? item.id : secureId('INT_AI');
+            // CREATE new row (no existing match found)
+            const id = (itemId && !itemId.startsWith('null') && !existingById[itemId]) ? itemId : secureId('INT_AI');
             await sb(env, 'piano', 'POST', {
               id,
               tecnico_id: tecId,
@@ -7329,7 +7398,8 @@ Rispondi SOLO con JSON valido:
           ].filter(Boolean))];
 
           // Include all active technicians even without interventions
-          const allActiveTec = utenti.filter(u => u.ruolo && u.ruolo !== 'admin');
+          const _pvNonPlanRoles = new Set(['admin','fms','magazziniere','commerciale']);
+          const allActiveTec = utenti.filter(u => u.ruolo && !_pvNonPlanRoles.has(u.ruolo.toLowerCase()));
           const finalTecIds = [...new Set([...tecActiveTday, ...allActiveTec.map(u => u.id)])];
 
           result.righe = finalTecIds.map(tid => {
@@ -7595,7 +7665,8 @@ Rispondi SOLO con JSON valido:
       // --- SUMMARY ---
       const assentiIds = new Set();
       auto_derived.filter(v => v.impatto === 'NON schedulare').forEach(v => (v.soggetti||[]).forEach(s => assentiIds.add(s)));
-      const tecniciNonAdmin = vdTecnici.filter(t => t.ruolo !== 'admin');
+      const _vdNonPlan = new Set(['admin','fms','magazziniere','commerciale']);
+      const tecniciNonAdmin = vdTecnici.filter(t => !_vdNonPlan.has((t.ruolo||'').toLowerCase()));
 
       return ok({
         mese: vdMese,
