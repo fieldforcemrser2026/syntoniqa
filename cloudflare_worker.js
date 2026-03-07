@@ -4984,6 +4984,42 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         let installIdx = 0;
         sse({type:'fill_debug', tecNonJunior: tecNonJunior.map(t=>`${t.id}:${t.nome}`), tecJunior: tecJunior.map(t=>`${t.id}:${t.nome}`), backlogRimanente: backlogRimanente.length, allWorkDays: allWorkDaysISO.length});
 
+        // ── FILL km estimation: lightweight geocoding from tecnico base + client city ──
+        const _FILL_CITY_COORDS = {
+          'piacenza':[44.92,9.85],'fiorenzuola':[44.93,9.92],'parma':[44.80,10.33],'fidenza':[44.87,10.06],
+          'reggio emilia':[44.70,10.63],'correggio':[44.77,10.78],'guastalla':[44.92,10.65],
+          'modena':[44.65,10.93],'carpi':[44.78,10.88],'sassuolo':[44.54,10.78],
+          'pavullo':[44.34,10.84],'pavullo nel frignano':[44.34,10.84],'vignola':[44.48,11.01],
+          'mirandola':[44.89,11.07],'palagano':[44.32,10.63],
+          'bologna':[44.49,11.34],'imola':[44.35,11.71],'san giovanni in persiceto':[44.64,11.19],
+          'ferrara':[44.84,11.62],'cento':[44.73,11.29],
+          'ravenna':[44.42,12.20],'faenza':[44.29,11.88],'lugo':[44.42,11.91],
+          'forli':[44.22,12.04],'forlì':[44.22,12.04],'cesena':[44.14,12.24],
+          'rimini':[44.06,12.57],'mantova':[45.16,10.79],'cremona':[45.13,10.02],'lodi':[45.31,9.50]
+        };
+        function _fillEstimateKm(tec, clienteId) {
+          const base = (tec.base || '').toLowerCase().trim();
+          if (!base) return '?';
+          const baseCoords = _FILL_CITY_COORDS[base];
+          const cli = allClienti.find(c => c.codice_m3 === clienteId);
+          if (!cli) return '?';
+          const cliCity = (cli.citta_fatturazione || '').toLowerCase().trim();
+          if (!cliCity) return '?';
+          if (cliCity === base || cliCity.includes(base) || base.includes(cliCity)) return 5;
+          const cliCoords = _FILL_CITY_COORDS[cliCity];
+          if (baseCoords && cliCoords) {
+            const R = 6371;
+            const dLat = (cliCoords[0] - baseCoords[0]) * Math.PI / 180;
+            const dLon = (cliCoords[1] - baseCoords[1]) * Math.PI / 180;
+            const a = Math.sin(dLat/2)**2 + Math.cos(baseCoords[0]*Math.PI/180)*Math.cos(cliCoords[0]*Math.PI/180)*Math.sin(dLon/2)**2;
+            return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+          }
+          // Fallback: same province estimate
+          const cliProv = (cli.provincia || '').toLowerCase().trim();
+          if (cliProv && base.startsWith(cliProv.substring(0,3))) return 30;
+          return '?';
+        }
+
         // _isAbsent, _isReperibilita, _isTrasferta → definiti nel parent scope
 
         for (const giorno of allWorkDaysISO) {
@@ -5047,8 +5083,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             // Resolve client name from cliMap or allClienti
             const _cliObj = allClienti.find(c => c.codice_m3 === item.clienteId);
             const _cliNome = _cliObj?.nome_interno || _cliObj?.nome_account || item.clienteNome || item.clienteId || '?';
-            // km info (from note or estimate)
-            const _kmNote = item._km != null ? item._km : '?';
+            // km info: use backlog _km if available, otherwise estimate from geocoding
+            const _kmNote = item._km != null ? item._km : _fillEstimateKm(tec, item.clienteId);
             pianoNoDup.push({
               id: null, data: giorno, tecnicoId: tec.id,
               clienteId: item.clienteId || '', cliente: _cliNome, tipo: item.tipo || 'tagliando',
