@@ -2838,7 +2838,7 @@ async function handlePost(action, body, env) {
         sb(env, 'reperibilita', 'GET', null, `?obsoleto=eq.false${repFilter}&select=id,tecnico_id,data_inizio,data_fine,turno,tipo&order=data_inizio.asc&limit=100`),
         sb(env, 'automezzi', 'GET', null, '?obsoleto=eq.false&select=id,targa,modello,stato&limit=20'),
         sb(env, 'macchine', 'GET', null, `?obsoleto=eq.false&prossimo_tagliando=not.is.null${meseEnd?'&prossimo_tagliando=lte.'+meseEnd:''}&select=id,seriale,note,modello,tipo,cliente_id,prossimo_tagliando,ultimo_tagliando,ore_lavoro&order=prossimo_tagliando.asc&limit=200`),
-        sb(env, 'anagrafica_assets', 'GET', null, `?prossimo_controllo=not.is.null${meseEnd?'&prossimo_controllo=lte.'+meseEnd:''}&select=id,nome_asset,numero_serie,modello,gruppo_attrezzatura,codice_m3,nome_account,prossimo_controllo,ciclo_pm,giorni_da_pm,mungiture_da_pm&order=prossimo_controllo.asc&limit=200`),
+        sb(env, 'anagrafica_assets', 'GET', null, `?prossimo_controllo=not.is.null${meseEnd?'&prossimo_controllo=lte.'+meseEnd:''}&select=id,nome_asset,numero_serie,modello,gruppo_attrezzatura,tipo_foglio,codice_m3,nome_account,prossimo_controllo,ciclo_pm,giorni_da_pm,mungiture_da_pm&order=prossimo_controllo.asc&limit=200`),
         meseTarget ? sb(env, 'richieste', 'GET', null, `?stato=eq.approvata&obsoleto=eq.false&data_inizio=lte.${meseEnd}&data_fine=gte.${meseStart}&select=id,tecnico_id,tipo,data_inizio,data_fine,motivo&limit=100`) : Promise.resolve([]),
         meseTarget ? sb(env, 'trasferte', 'GET', null, `?obsoleto=eq.false&data_inizio=lte.${meseEnd}&data_fine=gte.${meseStart}&select=id,tecnico_id,tecnici_ids,cliente_id,data_inizio,data_fine&limit=50`) : Promise.resolve([]),
         meseTarget ? sb(env, 'installazioni', 'GET', null, `?obsoleto=eq.false&stato=in.(pianificato,in_corso,pianificata)&data_inizio=lte.${meseEnd}&select=id,tecnici_ids,cliente_id,data_inizio,data_fine_prevista,stato,macchine_ids,note,tipo_macchina&limit=50`) : Promise.resolve([]),
@@ -3248,6 +3248,7 @@ async function handlePost(action, body, env) {
           macchinaLabel: `${a.nome_asset||a.modello||a.gruppo_attrezzatura||'?'}`,
           macchinaModello: a.modello || '',
           machinaTipo: a.gruppo_attrezzatura || '',
+          tipoFoglio: a.tipo_foglio || '',
           seriale: a.numero_serie || '',
           cliente: a.codice_m3 || '?',
           clienteId: a.codice_m3 || '',
@@ -5125,11 +5126,12 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               oraInizio: '08:00',
               durataOre: item.oreLavoro ? Math.min(8, Math.max(4, item.oreLavoro / 500)) : 6,
               furgone: _furgLabel(tec.automezzo_id),
-              note: `${_fillLabel}${item.machinaTipo && item.machinaTipo !== _fillLabel ? ' '+item.machinaTipo : ''} | ${item.urgenza==='SCADUTO'?'SCADUTO dal ':'scad: '}${item.data || '?'}${item.cicloPm ? ' | PM ciclo '+item.cicloPm : ''} | ~${_kmNote}km`,
+              note: `${_fillLabel}${item.machinaTipo && item.machinaTipo !== _fillLabel ? ' '+item.machinaTipo : ''}${item.tipoFoglio ? ' ['+item.tipoFoglio+']' : ''} | ${item.urgenza==='SCADUTO'?'SCADUTO dal ':'scad: '}${item.data || '?'}${item.cicloPm ? ' | PM ciclo '+item.cicloPm : ''} | ~${_kmNote}km`,
               macchina_id: item.macchina || item.macchinaId || null,
               macchinaLabel: item.macchinaLabel || '',
               macchinaModello: item.macchinaModello || '',
               machinaTipo: item.machinaTipo || '',
+              tipoFoglio: item.tipoFoglio || '',
               seriale: item.seriale || '',
               scadenza: item.data || '',
               statoScaduto: item.urgenza || '',
@@ -5173,6 +5175,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
                 macchinaLabel: seniorToday.macchinaLabel || '',
                 macchinaModello: seniorToday.macchinaModello || '',
                 machinaTipo: seniorToday.machinaTipo || '',
+                tipoFoglio: seniorToday.tipoFoglio || '',
                 seriale: seniorToday.seriale || '',
                 scadenza: seniorToday.scadenza || '',
                 statoScaduto: seniorToday.statoScaduto || '',
@@ -5408,15 +5411,14 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         }
 
         function makeNote(item) {
-          // Note leggibili: CLIENTE | Macchina MODELLO | scadenza | km | ciclo PM
+          // Note leggibili: Macchina (tipo_foglio) | scadenza | ciclo PM | km
           const kmVal = item._km != null ? item._km : '?';
-          const cliNome = _resolveClienteNome(item.clienteId);
-          // Modello macchina leggibile (es: "Astronaut A5 Left")
           const macLabel = item.macchinaLabel || item.macchinaModello || '?';
           const tipoRobot = item.machinaTipo && item.machinaTipo !== macLabel ? ` ${item.machinaTipo}` : '';
+          const tipoNum = item.tipoFoglio ? ` [${item.tipoFoglio}]` : '';
           const lssaInfo = item.cicloPm ? ` | PM ciclo ${item.cicloPm}` : '';
           const scadInfo = item.data ? (item.urgenza === 'SCADUTO' ? `SCADUTO dal ${item.data}` : `scad: ${item.data}`) : '';
-          return `${macLabel}${tipoRobot} | ${scadInfo}${lssaInfo} | ~${kmVal}km`;
+          return `${macLabel}${tipoRobot}${tipoNum} | ${scadInfo}${lssaInfo} | ~${kmVal}km`;
         }
 
         let totalTagUsed = 0;
@@ -5479,7 +5481,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
                 clienteId: inst.cliente_id || '', cliente: cNome, tipo: 'installazione',
                 oraInizio: '08:00', durataOre: 8, furgone: _furgLabel(tec.automezzo_id),
                 note: noteText,
-                macchinaLabel: instTipo || '', macchinaModello: '', machinaTipo: instTipo, seriale: '',
+                macchinaLabel: instTipo || '', macchinaModello: '', machinaTipo: instTipo, tipoFoglio: '', seriale: '',
                 scadenza: '', statoScaduto: '', oreLavoro: '', ultimoTagliando: '', km: ''
               });
               usedToday.add(tid);
@@ -5513,6 +5515,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               macchinaLabel: item.macchinaLabel || '',
               macchinaModello: item.macchinaModello || '',
               machinaTipo: item.machinaTipo || '',
+              tipoFoglio: item.tipoFoglio || '',
               seriale: item.seriale || '',
               scadenza: item.data || '',
               statoScaduto: item.urgenza || '',
@@ -5554,6 +5557,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
                 macchinaLabel: seniorEntry.macchinaLabel || '',
                 macchinaModello: seniorEntry.macchinaModello || '',
                 machinaTipo: seniorEntry.machinaTipo || '',
+                tipoFoglio: seniorEntry.tipoFoglio || '',
                 seriale: seniorEntry.seriale || '',
                 scadenza: seniorEntry.scadenza || '',
                 statoScaduto: seniorEntry.statoScaduto || '',
@@ -5593,6 +5597,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               macchinaLabel: item.macchinaLabel || '',
               macchinaModello: item.macchinaModello || '',
               machinaTipo: item.machinaTipo || '',
+              tipoFoglio: item.tipoFoglio || '',
               seriale: item.seriale || '',
               scadenza: item.data || '',
               statoScaduto: item.urgenza || '',
