@@ -1059,7 +1059,7 @@ async function handlePost(action, body, env) {
       if (!fields.cliente_id) return err('Campo cliente_id obbligatorio per createPiano');
       // Risolvi macchina_id: se è un seriale cerca il MAC_xxx corrispondente
       const resolvedMacPiano = await resolveSerialToMacId(env, fields.macchina_id);
-      // Writable: id,tenant_id,tecnico_id,cliente_id,macchina_id,automezzo_id,tipo_intervento_id,data,ora_inizio,ora_fine,stato,note,data_fine
+      // Writable: id,tenant_id,tecnico_id,cliente_id,macchina_id,automezzo_id,tipo_intervento_id,priorita_id,durata_ore,tecnici_ids,data,ora_inizio,ora_fine,stato,note,data_fine
       const row = {
         id,
         tenant_id: fields.tenant_id || getTid(env),
@@ -1068,6 +1068,9 @@ async function handlePost(action, body, env) {
         macchina_id: resolvedMacPiano || null,
         automezzo_id: fields.automezzo_id || null,
         tipo_intervento_id: fields.tipo_intervento_id || null,
+        priorita_id: fields.priorita_id || null,
+        durata_ore: fields.durata_ore || null,
+        tecnici_ids: fields.tecnici_ids || null,
         data: fields.data || null,
         ora_inizio: fields.ora_inizio || null,
         ora_fine: fields.ora_fine || null,
@@ -1086,7 +1089,7 @@ async function handlePost(action, body, env) {
       if (!id) return err('id piano richiesto');
       const allFields = getFields(body);
       // Only writable piano columns
-      const pianoWritable = ['tecnico_id','cliente_id','macchina_id','automezzo_id','tipo_intervento_id','priorita_id','data','ora_inizio','ora_fine','durata_ore','stato','note','data_fine','obsoleto'];
+      const pianoWritable = ['tecnico_id','cliente_id','macchina_id','automezzo_id','tipo_intervento_id','priorita_id','tecnici_ids','data','ora_inizio','ora_fine','durata_ore','stato','note','data_fine','km_percorsi','ore_lavorate','note_completamento','valutazione_cliente','obsoleto'];
       const updates = {};
       for (const k of pianoWritable) { if (allFields[k] !== undefined) updates[k] = allFields[k]; }
       // Validazione numerici
@@ -1573,7 +1576,7 @@ async function handlePost(action, body, env) {
       if (!pwd || pwd.length < 8) return err('Password richiesta (min 8 caratteri)');
       const id = secureId('TEC');
       const hashed = await hashPassword(pwd);
-      const row = { id, ...getFields(body), password_hash: hashed, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      const row = { id, tenant_id: getTid(env), ...getFields(body), password_hash: hashed, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       delete row.password;
       // Livello: salva in config (non colonna DB)
       const _livello = row.livello; delete row.livello;
@@ -1648,7 +1651,7 @@ async function handlePost(action, body, env) {
       const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = secureId('CLI');
-      const row = { id, ...getFields(body), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      const row = { id, tenant_id: getTid(env), ...getFields(body), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       const result = await sb(env, 'clienti', 'POST', row);
       await wlog('cliente', id, 'created', body.operatoreId);
       return ok({ cliente: pascalizeRecord(result[0]) });
@@ -1681,7 +1684,7 @@ async function handlePost(action, body, env) {
       const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
       const id = secureId('MAC');
-      const result = await sb(env, 'macchine', 'POST', { id, ...getFields(body), created_at: new Date().toISOString() });
+      const result = await sb(env, 'macchine', 'POST', { id, tenant_id: getTid(env), ...getFields(body), created_at: new Date().toISOString() });
       await wlog('macchina', id, 'created', body.operatoreId);
       return ok({ macchina: pascalizeRecord(result[0]) });
     }
@@ -1837,6 +1840,7 @@ async function handlePost(action, body, env) {
       const id = secureId('REP');
       const fields_rep = getFields(body);
       delete fields_rep.created_at; delete fields_rep.updated_at;
+      if (!fields_rep.tenant_id) fields_rep.tenant_id = getTid(env);
       const result = await sb(env, 'reperibilita', 'POST', { id, ...fields_rep });
       await wlog('reperibilita', id, 'created', body.operatoreId);
       return ok({ reperibilita: pascalizeRecord(result[0]) });
@@ -2032,7 +2036,7 @@ async function handlePost(action, body, env) {
 
     case 'createPagellino': {
       const id = secureId('PAG');
-      const result = await sb(env, 'pagellini', 'POST', { id, ...getFields(body), stato: 'bozza', data_creazione: new Date().toISOString() });
+      const result = await sb(env, 'pagellini', 'POST', { id, tenant_id: getTid(env), ...getFields(body), stato: 'bozza', data_creazione: new Date().toISOString() });
       return ok({ pagellino: pascalizeRecord(result[0]) });
     }
 
@@ -2046,7 +2050,7 @@ async function handlePost(action, body, env) {
 
     case 'createChecklistTemplate': {
       const id = secureId('CHK');
-      const result = await sb(env, 'checklist_template', 'POST', { id, ...getFields(body), created_at: new Date().toISOString() });
+      const result = await sb(env, 'checklist_template', 'POST', { id, tenant_id: getTid(env), ...getFields(body), created_at: new Date().toISOString() });
       return ok({ template: result[0] });
     }
 
@@ -2064,7 +2068,7 @@ async function handlePost(action, body, env) {
 
     case 'compileChecklist': {
       const id = secureId('CKC');
-      const result = await sb(env, 'checklist_compilata', 'POST', { id, ...getFields(body), data_compilazione: new Date().toISOString() });
+      const result = await sb(env, 'checklist_compilata', 'POST', { id, tenant_id: getTid(env), ...getFields(body), data_compilazione: new Date().toISOString() });
       // Aggiorna intervento con checklist_id
       if (body.intervento_id) {
         await sb(env, `piano?id=eq.${body.intervento_id}`, 'PATCH', { checklist_id: id });
@@ -2076,7 +2080,7 @@ async function handlePost(action, body, env) {
 
     case 'createDocumento': {
       const id = secureId('DOC');
-      const result = await sb(env, 'documenti', 'POST', { id, ...getFields(body), data_caricamento: new Date().toISOString() });
+      const result = await sb(env, 'documenti', 'POST', { id, tenant_id: getTid(env), ...getFields(body), data_caricamento: new Date().toISOString() });
       return ok({ documento: pascalizeRecord(result[0]) });
     }
 
@@ -2095,7 +2099,7 @@ async function handlePost(action, body, env) {
 
     case 'createAllegato': {
       const id = secureId('ALL');
-      const result = await sb(env, 'allegati', 'POST', { id, ...getFields(body), data_upload: new Date().toISOString() });
+      const result = await sb(env, 'allegati', 'POST', { id, tenant_id: getTid(env), ...getFields(body), data_upload: new Date().toISOString() });
       return ok({ allegato: pascalizeRecord(result[0]) });
     }
 

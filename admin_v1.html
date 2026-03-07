@@ -11368,7 +11368,7 @@ async function saveTelegramConfig(){
   const token = $('cfgTgToken').value.trim();
   if(!token){toast('Inserisci il bot token','err');return;}
   try {
-    await apiCall('saveConfig',{key:'telegram_bot_token',value:token},'POST');
+    await apiCall('saveConfig',{config:{telegram_bot_token:token}},'POST');
     toast('✅ Bot token salvato!','ok');
   } catch(e){ toast('❌ Errore: '+e.message,'err'); }
 
@@ -11380,10 +11380,7 @@ async function saveTelegramConfig(){
     const el=document.getElementById('tgchat_'+t.ID);
     if(el && el.value.trim()){
       try {
-        await apiCall('saveConfig',{
-          key:'telegram_chatid_'+t.ID,
-          value:el.value.trim()
-        },'POST');
+        await apiCall('saveConfig',{config:{['telegram_chatid_'+t.ID]:el.value.trim()}},'POST');
       } catch(e){ console.warn('Err save chatid '+t.ID,e); }
     }
   }
@@ -11429,7 +11426,7 @@ async function saveTelegramGroup(){
   const group=$('cfgTgGroup')?.value?.trim();
   if(!group){toast('Inserisci link/ID gruppo','warn');return}
   try{
-    await apiCall('saveConfig',{key:'telegram_group_generale',value:group},'POST');
+    await apiCall('saveConfig',{config:{telegram_group_generale:group}},'POST');
     toast('Gruppo/Canale Telegram salvato!','ok');
   }catch(e){toast(e.message,'err')}
 }
