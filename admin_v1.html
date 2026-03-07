@@ -453,6 +453,13 @@ body{font-family:var(--font);background:#F0F2F5;color:var(--dark);line-height:1.
 .wf-step.done{background:var(--ok);color:var(--white)}
 .wf-arrow{color:var(--gray3);font-size:0.75rem}
 
+/* ===== SECTION STATS BAR ===== */
+.sec-stats{display:flex;gap:10px;flex-wrap:wrap;padding:10px 16px;background:var(--gray5);border-bottom:1px solid var(--border);font-size:.78rem;align-items:center}
+.sec-stats .st{display:flex;align-items:center;gap:4px;color:var(--text3);white-space:nowrap}
+.sec-stats .st b{font-weight:700;color:var(--dark);font-size:.875rem}
+.sec-stats .sep{width:1px;height:16px;background:var(--border);margin:0 2px}
+[data-theme="dark"] .sec-stats{background:var(--gray4);border-color:var(--gray3)}
+
 /* ===== STATS BAR ===== */
 .stat-bar{display:flex;height:24px;border-radius:4px;overflow:hidden;margin:8px 0}
 .stat-bar div{display:flex;align-items:center;justify-content:center;font-size:0.625rem;font-weight:600;color:var(--white);min-width:20px}
@@ -750,8 +757,9 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <button class="btn btn-primary btn-sm" onclick="openNewPiano()">+ Nuovo Intervento</button>
 </div>
 </div>
+<div class="sec-stats" id="pianoStats"></div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
-<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('piano','tblPiano',this.checked)"></th><th>Data</th><th>Ora</th><th>Tecnico</th><th>🚐</th><th>Cliente</th><th>Macchina</th><th>Tipo</th><th>Stato</th><th>Km</th><th>Ore</th><th></th></tr></thead><tbody id="tblPiano"></tbody></table>
+<table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('piano','tblPiano',this.checked)"></th><th>Data</th><th>Ora</th><th>Tecnico</th><th>🚐</th><th>Cliente</th><th>Macchina</th><th>Tipo</th><th>Stato</th><th style="text-align:right">Km</th><th style="text-align:right">Ore</th><th></th></tr></thead><tbody id="tblPiano"></tbody></table>
 </div>
 </div>
 </section>
@@ -769,6 +777,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <button class="btn btn-err btn-sm" onclick="openNewUrgenza()">+ Nuova Urgenza</button>
 </div>
 </div>
+<div class="sec-stats" id="urgenzeStats"></div>
 <div class="card-body np" style="max-height:600px;overflow-y:auto">
 <table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('urgenze','tblUrgenze',this.checked)"></th><th>Priorità</th><th>Cliente</th><th>Macchina</th><th>Problema</th><th>Tecnico</th><th>SLA</th><th>Stato</th><th>Data</th><th></th></tr></thead><tbody id="tblUrgenze"></tbody></table>
 </div>
@@ -863,6 +872,7 @@ tr.selected-row{background:rgba(195,10,20,.1) !important}
 <button class="btn btn-ok btn-sm" onclick="openNewRichiesta()">+ Nuova Richiesta</button>
 </div>
 </div>
+<div class="sec-stats" id="richStats"></div>
 <div class="card-body np" style="max-height:500px;overflow-y:auto">
 <table class="tbl"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll('richieste','tblRich',this.checked)"></th><th>Tecnico</th><th>Tipo</th><th>Periodo</th><th>Motivo</th><th>Stato</th><th></th></tr></thead><tbody id="tblRich"></tbody></table>
 </div>
@@ -1565,6 +1575,7 @@ Ogni tagliando richiede 2 persone (senior + junior)" style="width:100%;min-heigh
 </select>
 <button class="btn btn-primary btn-sm" onclick="EDITING.documento=null;setModalTitle('modalDocumento','📄 Nuovo Documento');openModal('modalDocumento')">+ Nuovo Documento</button>
 </div></div>
+<div class="sec-stats" id="docStats"></div>
 <div class="card-body"><div id="tblDocumenti"></div></div>
 </div>
 </section>
@@ -4023,6 +4034,9 @@ function renderPiano(){
   if(dataA)items=items.filter(p=>(p.Data||'')<=dataA);
   items.sort((a,b)=>(b.Data||'').localeCompare(a.Data||''));
   _lastPianoItems=items;
+  // Stats bar
+  const pianoSt=$('pianoStats');
+  if(pianoSt){const byS={pianificato:0,in_corso:0,completato:0,annullato:0};items.forEach(p=>{if(byS[p.Stato]!==undefined)byS[p.Stato]++});const totKm=items.reduce((s,p)=>s+(parseFloat(p.KmPercorsi)||0),0);const totOre=items.reduce((s,p)=>s+(parseFloat(p.OreLavorate)||0),0);pianoSt.innerHTML='<div class="st">Totale: <b>'+items.length+'</b></div><div class="sep"></div><div class="st">📅 Pianificati: <b>'+byS.pianificato+'</b></div><div class="st">⚡ In corso: <b>'+byS.in_corso+'</b></div><div class="st">✅ Completati: <b>'+byS.completato+'</b></div><div class="st">❌ Annullati: <b>'+byS.annullato+'</b></div><div class="sep"></div><div class="st">🚗 Km: <b>'+Math.round(totKm).toLocaleString('it-IT')+'</b></div><div class="st">⏱️ Ore: <b>'+totOre.toFixed(1)+'</b></div>'}
   const {paged, page, totalPages, total} = paginateItems(items, 'piano');
   initBatchBar('piano','tblPiano',[
     {label:'Elimina',action:'deletePiano',cls:'err',icon:'🗑️'},
@@ -4039,10 +4053,11 @@ function renderPiano(){
     <td>${getName(DATA.macchine||[],p.MacchinaID,'Tipo')}</td>
     <td><span class="tag" style="background:${getColor(DATA.tipiIntervento||[],p.TipoInterventoID)}20;color:${getColor(DATA.tipiIntervento||[],p.TipoInterventoID)}">${getName(DATA.tipiIntervento||[],p.TipoInterventoID)}</span></td>
     <td>${statusTag(p.Stato)}${(p.Note||'').includes('DA CONFERMARE')?'<br><span class="tag tag-warn" style="font-size:.6rem">⏳ DA CONFERMARE</span>':''}</td>
-    <td>${p.KmPercorsi||'—'}</td>
-    <td>${p.OreLavorate||'—'}</td>
+    <td style="text-align:right;font-weight:600;color:var(--text3);font-size:.8rem">${p.KmPercorsi||'—'}</td>
+    <td style="text-align:right;font-weight:600;color:var(--text3);font-size:.8rem">${p.OreLavorate||'—'}</td>
     <td>${(p.Note||'').includes('DA CONFERMARE')?`<button class="btn btn-ok btn-xs" onclick="approvaInt('${p.ID}')">✅</button> <button class="btn btn-err btn-xs" onclick="rifiutaInt('${p.ID}')">❌</button> `:''}<button class="btn btn-ghost btn-xs" onclick="showDetail('piano','${p.ID}')">👁️</button></td>
   </tr>`).join(''):'<tr><td colspan="12" class="empty"><p>Nessun intervento trovato</p></td></tr>';
+  if(paged.length){const pgKm=paged.reduce((s,p)=>s+(parseFloat(p.KmPercorsi)||0),0);const pgOre=paged.reduce((s,p)=>s+(parseFloat(p.OreLavorate)||0),0);if(pgKm||pgOre)$('tblPiano').innerHTML+=`<tr style="background:var(--gray5);font-weight:700;font-size:.75rem"><td colspan="9" style="text-align:right;padding:6px 12px">Totale pagina:</td><td style="text-align:right">${Math.round(pgKm)}</td><td style="text-align:right">${pgOre.toFixed(1)}</td><td></td></tr>`}
   if(total>PAGE_SIZE)renderPaginationBar('piano','tblPiano',total,page,totalPages);
 }
 
@@ -4076,6 +4091,9 @@ function renderUrgenze(){
   if(dataA)items=items.filter(u=>(u.DataSegnalazione||'').substring(0,10)<=dataA);
   items.sort((a,b)=>(b.DataSegnalazione||'').localeCompare(a.DataSegnalazione||''));
   _lastUrgItems=items;
+  // Stats bar
+  const urgSt=$('urgenzeStats');
+  if(urgSt){const byS={aperta:0,assegnata:0,schedulata:0,in_corso:0,risolta:0,chiusa:0};items.forEach(u=>{if(byS[u.Stato]!==undefined)byS[u.Stato]++});const breach=items.filter(u=>u.SLAStatus==='breach'&&u.Stato!=='risolta'&&u.Stato!=='chiusa').length;urgSt.innerHTML='<div class="st">Totale: <b>'+items.length+'</b></div><div class="sep"></div><div class="st">🔴 Aperte: <b>'+byS.aperta+'</b></div><div class="st">👤 Assegnate: <b>'+byS.assegnata+'</b></div><div class="st">⚡ In corso: <b>'+byS.in_corso+'</b></div><div class="st">✅ Risolte: <b>'+byS.risolta+'</b></div><div class="st">🔒 Chiuse: <b>'+byS.chiusa+'</b></div>'+(breach?'<div class="sep"></div><div class="st" style="color:var(--err)">⚠️ SLA Breach: <b>'+breach+'</b></div>':'')}
   const {paged: pagedUrg, page: pageUrg, totalPages: totalPagesUrg, total: totalUrg} = paginateItems(items, 'urgenze');
   initBatchBar('urgenze','tblUrgenze',[
     {label:'Elimina',action:'deleteUrgenze',cls:'err',icon:'🗑️'},
@@ -4492,6 +4510,9 @@ function renderRichieste(){
   const pend=items.filter(r=>r.Stato==='in_attesa').length;
   const badge=$('badgeRich');
   if(badge){badge.textContent=pend;badge.style.display=pend?'':'none'}
+  // Stats bar
+  const richSt=$('richStats');
+  if(richSt){const allR=(DATA.richieste||[]).filter(r=>!r.Obsoleto);const byS={in_attesa:0,approvata:0,rifiutata:0};allR.forEach(r=>{if(byS[r.Stato]!==undefined)byS[r.Stato]++});richSt.innerHTML='<div class="st">Totale: <b>'+allR.length+'</b></div><div class="sep"></div><div class="st">⏳ In attesa: <b>'+byS.in_attesa+'</b></div><div class="st">✅ Approvate: <b>'+byS.approvata+'</b></div><div class="st">❌ Rifiutate: <b>'+byS.rifiutata+'</b></div>'}
 
   initBatchBar('richieste','tblRich',[
     {label:'Elimina',action:'deleteRichieste',cls:'err',icon:'🗑️'}
@@ -9974,6 +9995,10 @@ async function deleteChecklistTpl(id){
   try{await apiCall('deleteChecklistTemplate',{id},'POST');toast('Template disattivato','ok');await refreshData(true)}catch(e){toast(e.message,'err')}
 }
 
+// ============ HELPERS: FILE ICONS ============
+function fileIcon(url,name){const ext=((url||name||'').split('.').pop()||'').toLowerCase();if(ext==='pdf')return '📄';if(['jpg','jpeg','png','gif','webp','svg','bmp'].includes(ext))return '🖼️';if(['xls','xlsx','csv'].includes(ext))return '📊';if(['doc','docx'].includes(ext))return '📝';if(['zip','rar','7z','tar','gz'].includes(ext))return '📦';if(['mp4','avi','mov','mkv'].includes(ext))return '🎥';return '📎'}
+function formatFileSize(kb){if(!kb)return '';kb=parseFloat(kb);if(kb<1024)return Math.round(kb)+'KB';return (kb/1024).toFixed(1)+'MB'}
+
 // ============ FEATURE 30a: DOCUMENTI ============
 function renderDocumenti(){
   const docs=(DATA.documenti||[]).filter(d=>!d.Obsoleto&&d.Obsoleto!=='true');
@@ -9984,18 +10009,22 @@ function renderDocumenti(){
     if(cat&&d.Categoria!==cat)return false;
     return true;
   });
+  // Stats bar
+  const docSt=$('docStats');
+  if(docSt){const ec={pdf:0,img:0,xls:0,doc:0,other:0};filtered.forEach(d=>{const ext=((d.FileURL||d.Nome||'').split('.').pop()||'').toLowerCase();if(ext==='pdf')ec.pdf++;else if(['jpg','jpeg','png','gif','webp','svg'].includes(ext))ec.img++;else if(['xls','xlsx','csv'].includes(ext))ec.xls++;else if(['doc','docx'].includes(ext))ec.doc++;else ec.other++});docSt.innerHTML='<div class="st">Totale: <b>'+filtered.length+'</b></div><div class="sep"></div>'+(ec.pdf?'<div class="st">📄 PDF: <b>'+ec.pdf+'</b></div>':'')+(ec.img?'<div class="st">🖼️ Immagini: <b>'+ec.img+'</b></div>':'')+(ec.xls?'<div class="st">📊 Excel: <b>'+ec.xls+'</b></div>':'')+(ec.doc?'<div class="st">📝 Word: <b>'+ec.doc+'</b></div>':'')+(ec.other?'<div class="st">📎 Altro: <b>'+ec.other+'</b></div>':'')}
   initBatchBar('documenti','tblDocumenti',[
     {label:'Elimina',action:'deleteDocumenti',cls:'err',icon:'🗑️'}
   ]);
   let html='<table class="data-table"><thead><tr><th style="width:30px"><input type="checkbox" class="sel-chk" onchange="toggleSelectAll(\'documenti\',\'tblDocumenti\',this.checked)"></th><th>Nome</th><th>Categoria</th><th>Tags</th><th>Data</th><th>Azioni</th></tr></thead><tbody>';
   if(!filtered.length) html+='<tr><td colspan="6" style="text-align:center;color:var(--gray)">Nessun documento trovato</td></tr>';
   filtered.forEach(d=>{
-    html+=`<tr id="row_documenti_${d.ID}" data-id="${d.ID}"><td><input type="checkbox" class="sel-chk" onchange="toggleSelectRow('documenti','${d.ID}',this.checked)"></td><td><b>${d.Nome||''}</b><br><span style="font-size:.75rem;color:var(--gray)">${d.Descrizione||''}</span></td>
+    const fSize=formatFileSize(d.DimensioneKB);
+    html+=`<tr id="row_documenti_${d.ID}" data-id="${d.ID}"><td><input type="checkbox" class="sel-chk" onchange="toggleSelectRow('documenti','${d.ID}',this.checked)"></td><td>${fileIcon(d.FileURL,d.Nome)} <b>${d.Nome||''}</b><br><span style="font-size:.75rem;color:var(--gray)">${d.Descrizione||''}${fSize?' · '+fSize:''}</span></td>
     <td><span class="tag tag-info">${d.Categoria||'Altro'}</span></td>
     <td style="font-size:.75rem">${d.Tags||''}</td>
     <td style="font-size:.75rem">${(d.DataCaricamento||'').substring(0,10)}</td>
     <td>
-      ${d.FileURL?`<a href="${d.FileURL}" target="_blank" class="btn btn-outline btn-sm">🔗 Apri</a>`:''}
+      ${d.FileURL?`<a href="${d.FileURL}" target="_blank" class="btn btn-outline btn-sm">${fileIcon(d.FileURL)} Apri</a>`:''}
       <button class="btn btn-outline btn-sm" onclick="editDoc('${d.ID}')">✏️</button>
       <button class="btn btn-outline btn-sm" onclick="deleteDoc('${d.ID}')" style="color:var(--err)">🗑️</button>
     </td></tr>`;
@@ -12203,12 +12232,14 @@ function renderMonthPlan(){
   html += '</tbody></table>';
 
   // Legenda
-  html += '<div style="margin-top:10px;padding:10px 14px;background:var(--gray5);border-radius:6px;border:1px solid var(--gray3);display:flex;gap:14px;flex-wrap:wrap;font-size:.7rem">';
-  Object.entries(statoCol).forEach(([k,v]) => { html += `<span><span style="display:inline-block;width:10px;height:10px;background:${v};border-radius:2px;vertical-align:middle"></span> ${k.replace('_',' ')}</span>`; });
+  html += '<div style="margin-top:10px;padding:10px 14px;background:var(--gray5);border-radius:6px;border:1px solid var(--gray3);display:flex;gap:12px;flex-wrap:wrap;font-size:.7rem;align-items:center">';
+  html += '<span style="font-weight:700;color:var(--text3)">Legenda:</span>';
+  Object.entries(statoCol).forEach(([k,v]) => { html += `<span style="display:flex;align-items:center;gap:3px"><span style="display:inline-block;width:12px;height:12px;background:${v}20;border-left:3px solid ${v};border-radius:2px"></span> ${k.replace('_',' ')}</span>`; });
   const hasPreview = piano.some(p=>p._aiPreview);
-  html += ' · <span>🌙 Reperibilità</span> · <span>🏖️ Ferie</span> · <span>🧳 Trasferte</span> · <span>🏗️ Installazioni</span>';
-  if(hasPreview) html += ' · <span style="border-left:2px dashed #8B5CF6;padding-left:4px">🤖 Anteprima AI</span> · <button class="btn btn-xs btn-err" onclick="clearAIPreview()">✕ Rimuovi Anteprima</button>';
-  html += ' · <span>Drag & drop per spostare</span></div>';
+  html += '<span class="sep" style="width:1px;height:14px;background:var(--gray3)"></span>';
+  html += '<span>🌙 Reperibilità</span><span>🏖️ Ferie</span><span>🧳 Trasferte</span><span>🏗️ Installazioni</span>';
+  if(hasPreview) html += '<span class="sep" style="width:1px;height:14px;background:var(--gray3)"></span><span style="border-left:2px dashed #8B5CF6;padding-left:4px">🤖 Anteprima AI</span> <button class="btn btn-xs btn-err" onclick="clearAIPreview()">✕ Rimuovi</button>';
+  html += '<span class="sep" style="width:1px;height:14px;background:var(--gray3)"></span><span style="color:var(--gray)">↕️ Drag & drop</span></div>';
 
   grid.innerHTML = html;
 }
