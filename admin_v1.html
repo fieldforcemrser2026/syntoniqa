@@ -1229,7 +1229,7 @@ Ogni tagliando richiede 2 persone (senior + junior)" style="width:100%;min-heigh
 
 <!-- STEP 3: AI REVIEW (OpenAI + Claude) -->
 <div id="aiStep3" class="ai-step-content" style="display:none">
-<div style="font-size:.95rem;font-weight:700;color:#fff;margin-bottom:4px">🧠 AI Deep Review — GPT-4o + Claude Sonnet 4.5</div>
+<div style="font-size:.95rem;font-weight:700;color:#fff;margin-bottom:4px">🧠 AI Deep Review — GPT-4o + Claude Haiku 4.5</div>
 <p style="font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:10px">Due AI premium analizzano in profondità ogni riga del piano: vincoli, geografia, carico, PM, urgenze, arretrati. Accetta o rifiuta ogni suggerimento.</p>
 
 <!-- AI Assessment Summary Card (populated after review) -->
@@ -1269,7 +1269,7 @@ Ogni tagliando richiede 2 persone (senior + junior)" style="width:100%;min-heigh
 <div class="reviewer-lane" id="revLaneClaude" style="--rev-color:#EC4899;--rev-bg:rgba(236,72,153,.08)">
 <div style="display:flex;align-items:center;gap:8px">
 <div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#EC4899,#DB2777);display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:700;color:#fff">C</div>
-<div><div style="font-weight:700;font-size:.85rem;color:#F472B6">Claude Sonnet 4.5</div>
+<div><div style="font-weight:700;font-size:.85rem;color:#F472B6">Claude Haiku 4.5</div>
 <div style="font-size:.7rem;color:rgba(255,255,255,.4)" id="revStatusClaude">In attesa...</div></div>
 <div style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:.75rem;color:rgba(255,255,255,.3)" id="revTimeClaude"></div>
 </div>
@@ -2723,7 +2723,7 @@ const today=()=>new Date().toISOString().split('T')[0];
 const fmtDate=d=>{if(!d)return '—';const p=String(d).substring(0,10).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:'—'};
 const fmtDateTime=d=>{if(!d)return '—';try{return new Date(d).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}catch{return '—'}};
 function calcOraFine(oraInizio,durata){const [h,m]=(oraInizio||'08:00').split(':').map(Number);const t=h*60+m+Math.round(durata*60);return String(Math.floor(t/60)%24).padStart(2,'0')+':'+String(t%60).padStart(2,'0')}
-const getName=(list,id,field='Nome')=>{const o=list.find(x=>x.ID===id||x.CodiceM3===id);if(!o)return id||'—';if(field!=='Nome'&&o[field])return o[field];return(o.NomeInterno||o.Nome||o.Descrizione||'')+(o.Cognome?' '+o.Cognome:'');};
+const getName=(list,id,field='Nome')=>{if(!id)return '—';const rawId=String(id).replace(/^CLI_/i,'');const o=list.find(x=>x.ID===id||x.ID===rawId||x.CodiceM3===id||x.CodiceM3===rawId||String(x.CodiceM3||'')===rawId);if(!o)return id||'—';if(field!=='Nome'&&o[field])return o[field];return(o.NomeInterno||o.Nome||o.Descrizione||'')+(o.Cognome?' '+o.Cognome:'');};
 const getColor=(list,id)=>{const o=list.find(x=>x.ID===id);return o?.Colore||'#6B7280'};
 function fmtAutoId(id){if(!id)return '—';const f=(DATA.automezzi||[]).find(a=>a.ID===id);if(!f)return id;const parts=[];if(f.Nome)parts.push(f.Nome);else if(f.Descrizione)parts.push(f.Descrizione);else{const m=(id||'').match(/FURG_(\d+)/i);parts.push(m?'Furgone '+m[1]:id)}if(f.Targa)parts.push(f.Targa);return parts.join(' · ')||id}
 const statusTag=(s)=>{const m={'pianificato':['tag-info','📅'],'in_corso':['tag-warn','⚡'],'completato':['tag-ok','✅'],'chiuso':['tag-gray','🔒'],'aperta':['tag-err','🔴'],'assegnata':['tag-warn','👤'],'schedulata':['tag-info','📅'],'risolta':['tag-ok','✅'],'richiesto':['tag-info','📝'],'preso_in_carico':['tag-warn','👋'],'ordinato':['tag-purple','📦'],'in_arrivo':['tag-info','🚚'],'arrivato':['tag-ok','✅'],'attiva':['tag-ok','✅'],'pianificata':['tag-info','📅'],'completata':['tag-ok','✅'],'bozza':['tag-warn','📝'],'approvato':['tag-ok','✅'],'approvata':['tag-ok','✅'],'rifiutata':['tag-err','❌'],'in_attesa':['tag-warn','⏳']};const x=m[s]||['tag-gray',''];return `<span class="tag ${x[0]}">${x[1]} ${s||'—'}</span>`};
@@ -7883,8 +7883,9 @@ function _renderPlanTable(container, piano, compact){
       const tid=p.tecnicoId||p.TecnicoID||p.tecnico||'?';
       if(!tecColors[tid]){tecColors[tid]=palette[ci%palette.length];ci++;}
       const color=tecColors[tid];
-      const tNome=p.tecnico||p.TecnicoNome||p.tecnicoNome||tid;
-      const cNome=p.cliente||p.ClienteNome||p.clienteNome||p.clienteId||p.ClienteID||'';
+      const tNome=p.tecnico||p.TecnicoNome||p.tecnicoNome||getName(DATA.utenti||[],tid)||tid;
+      const rawCNome=p.cliente||p.ClienteNome||p.clienteNome||'';
+      const cNome=(rawCNome && !/^CLI_/i.test(rawCNome) && !/^\d{5,}$/.test(rawCNome)) ? rawCNome : _resolveClienteName(p.clienteId||p.ClienteID||rawCNome)||rawCNome||'';
       const tipo=p.tipo||p.Tipo||p.TipoIntervento||'tagliando';
       const note=(p.note||p.Note||'').substring(0,compact?40:80);
       const tipoIcon=tipo.includes('install')?'🏗️':tipo.includes('urgenz')?'🚨':tipo==='reperibilita'?'📞':tipo==='assenza'?'🏖️':tipo==='trasferta'?'🚗':tipo==='arretrato'?'⚠️':tipo.includes('controllo')?'🔍':'🔧';
@@ -7967,9 +7968,15 @@ function _renderSuggestions(suggestions){
     let diffHtml='';
     if(sug.current){
       const cur=sug.current;const prop=sug.proposed||{};
-      if(cur.tecnicoId||prop.tecnicoId) diffHtml+=`<div class="diff-row"><span class="diff-label">Tecnico</span><span class="diff-before">${cur.tecnicoNome||cur.tecnicoId||'—'}</span><span class="diff-arrow">→</span><span class="diff-after">${prop.tecnicoNome||prop.tecnicoId||'(invariato)'}</span></div>`;
+      // Resolve tecnico names
+      const curTecNome=cur.tecnicoNome||getName(DATA.utenti||[],cur.tecnicoId)||cur.tecnicoId||'—';
+      const propTecNome=prop.tecnicoNome||getName(DATA.utenti||[],prop.tecnicoId)||prop.tecnicoId||'(invariato)';
+      // Resolve client names via _resolveClienteName
+      const curCliNome=cur.clienteNome||_resolveClienteName(cur.clienteId)||'—';
+      const propCliNome=prop.clienteNome||_resolveClienteName(prop.clienteId)||'(invariato)';
+      if(cur.tecnicoId||prop.tecnicoId) diffHtml+=`<div class="diff-row"><span class="diff-label">Tecnico</span><span class="diff-before">${curTecNome}</span><span class="diff-arrow">→</span><span class="diff-after">${propTecNome}</span></div>`;
       if(cur.data||prop.data) diffHtml+=`<div class="diff-row"><span class="diff-label">Data</span><span class="diff-before">${cur.data||'—'}</span><span class="diff-arrow">→</span><span class="diff-after">${prop.data||'(invariata)'}</span></div>`;
-      if(cur.clienteId||prop.clienteId) diffHtml+=`<div class="diff-row"><span class="diff-label">Cliente</span><span class="diff-before">${cur.clienteNome||cur.clienteId||'—'}</span><span class="diff-arrow">→</span><span class="diff-after">${prop.clienteNome||prop.clienteId||'(invariato)'}</span></div>`;
+      if(cur.clienteId||prop.clienteId) diffHtml+=`<div class="diff-row"><span class="diff-label">Cliente</span><span class="diff-before">${curCliNome}</span><span class="diff-arrow">→</span><span class="diff-after">${propCliNome}</span></div>`;
     }
 
     // Auto-accept critical suggestions
@@ -8056,6 +8063,25 @@ function _renderAssessmentCard(data){
 }
 
 function _esc(s){return (s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// Risolvi codice cliente a nome leggibile usando DATA.clienti
+function _resolveClienteName(clienteId){
+  if(!clienteId)return '';
+  // Prova getName direttamente
+  const direct=getName(DATA.clienti||[],clienteId);
+  if(direct && direct!==clienteId && !/^\d{5,}$/.test(direct) && !/^CLI_/i.test(direct)) return direct;
+  // Strip CLI_ prefix e riprova
+  const raw=String(clienteId).replace(/^CLI_/i,'');
+  if(raw!==String(clienteId)){
+    const stripped=getName(DATA.clienti||[],raw);
+    if(stripped && stripped!==raw && !/^\d{5,}$/.test(stripped)) return stripped;
+  }
+  // Fallback: ricerca esaustiva
+  const clienti=DATA?.clienti||[];
+  const cli=clienti.find(c=>c.CodiceM3===raw||c.ID===raw||String(c.CodiceM3||'')==raw||String(c.ID||'')==raw);
+  if(cli) return cli.NomeInterno||cli.Nome||cli.NomeAccount||clienteId;
+  return clienteId;
+}
 
 function aiToggleSuggestion(id, accept){
   const card=document.querySelector(`[data-sug-id="${id}"]`);
@@ -8199,8 +8225,9 @@ function _renderFinalPlanTable(container, piano, modifiedRows){
       const tid=p.tecnicoId||p.TecnicoID||'?';
       if(!tecColors[tid]){tecColors[tid]=palette[ci%palette.length];ci++;}
       const color=tecColors[tid];
-      const tNome=p.tecnico||p.TecnicoNome||p.tecnicoNome||tid;
-      const cNome=p.cliente||p.ClienteNome||p.clienteNome||p.clienteId||'';
+      const tNome=p.tecnico||p.TecnicoNome||p.tecnicoNome||getName(DATA.utenti||[],tid)||tid;
+      const rawCN=p.cliente||p.ClienteNome||p.clienteNome||'';
+      const cNome=(rawCN && !/^CLI_/i.test(rawCN) && !/^\d{5,}$/.test(rawCN)) ? rawCN : _resolveClienteName(p.clienteId||p.ClienteID||rawCN)||rawCN||'';
       const note=(p.note||p.Note||'').substring(0,80);
       const isModified=modifiedRows.has(p._origIdx);
       const tipo=p.tipo||p.Tipo||'tagliando';
@@ -8250,7 +8277,7 @@ async function aiApplyToSystem(forceOverwrite){
         <div style="font-weight:700;color:#F59E0B;margin-bottom:8px">⚠️ ${n} Conflitti Trovati</div>
         <p style="font-size:.8rem;color:rgba(255,255,255,.6);margin-bottom:10px">Esistono già interventi nello stesso giorno per lo stesso tecnico. Vuoi sovrascrivere?</p>
         <div style="max-height:200px;overflow-y:auto;margin-bottom:12px;font-size:.75rem">
-        ${(result.conflicts||[]).slice(0,10).map(c=>`<div style="padding:4px 8px;margin:2px 0;background:rgba(0,0,0,.2);border-radius:4px">${c.nuovo?.data||'?'} — ${c.nuovo?.tecnico||'?'} → ${c.nuovo?.cliente||'?'}</div>`).join('')}
+        ${(result.conflicts||[]).slice(0,10).map(c=>`<div style="padding:4px 8px;margin:2px 0;background:rgba(0,0,0,.2);border-radius:4px">${c.nuovo?.data||'?'} — ${c.nuovo?.tecnico||'?'} → ${_resolveClienteName(c.nuovo?.cliente)||c.nuovo?.cliente||'?'}</div>`).join('')}
         </div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-err" onclick="aiApplyToSystem(true)">🔄 Sovrascrivi (${n} conflitti)</button>
@@ -9371,7 +9398,7 @@ async function applyAI(forceOverwrite){
         <div style="max-height:300px;overflow-y:auto;margin-bottom:16px">
         <table class="tbl" style="font-size:.8rem"><thead><tr><th>Data</th><th>Tecnico</th><th>Nuovo</th><th>Esistente</th></tr></thead><tbody>`;
       for(const c of result.conflicts.slice(0,15)){
-        html+=`<tr><td>${c.nuovo.data}</td><td>${c.nuovo.tecnico}</td><td>${c.nuovo.cliente} (${c.nuovo.tipo})</td><td>${c.esistenti.map(e=>'<span style="color:var(--gray)">'+e.id+': '+(e.note||e.cliente_id||'—').substring(0,30)+'</span>').join('<br>')}</td></tr>`;
+        html+=`<tr><td>${c.nuovo.data}</td><td>${c.nuovo.tecnico}</td><td>${_resolveClienteName(c.nuovo.cliente)||c.nuovo.cliente} (${c.nuovo.tipo})</td><td>${c.esistenti.map(e=>'<span style="color:var(--gray)">'+e.id+': '+(_resolveClienteName(e.cliente_id)||e.note||'—').substring(0,30)+'</span>').join('<br>')}</td></tr>`;
       }
       html+=`</tbody></table></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">

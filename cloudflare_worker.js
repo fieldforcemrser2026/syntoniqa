@@ -4676,9 +4676,10 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             const tec = allTecnici.find(t => t.id === p.tecnicoId);
             if (tec) p.tecnico = `${tec.nome} ${tec.cognome}`.trim();
           }
-          // Cliente: da codice_m3 o id a nome leggibile
+          // Cliente: da codice_m3 o id a nome leggibile (strip CLI_ prefix per match)
           if (p.clienteId && (!p.cliente || p.cliente === p.clienteId || /^\d{5,}$/.test(p.cliente) || /^CLI_/.test(p.cliente))) {
-            const cli = allClienti.find(c => c.codice_m3 === p.clienteId || c.id === p.clienteId);
+            const rawCid = String(p.clienteId).replace(/^CLI_/i, '');
+            const cli = allClienti.find(c => c.codice_m3 === p.clienteId || c.codice_m3 === rawCid || c.id === p.clienteId || c.id === rawCid);
             if (cli) p.cliente = cli.nome_interno || cli.nome_account || p.clienteId;
           }
           // Furgone: da ID raw a label leggibile (targa/modello)
@@ -5480,11 +5481,13 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         // Resolve clienteNome from cliMap — ALWAYS returns a name, never empty
         function _resolveClienteNome(clienteId) {
           if (!clienteId) return '?';
+          // Strip CLI_ prefix for matching (codice_m3 in DB is without prefix)
+          const rawId = String(clienteId).replace(/^CLI_/i, '');
           // 1) Check cliMap (indexed by codice_m3 AND id)
-          const c = cliMap[clienteId];
+          const c = cliMap[clienteId] || cliMap[rawId];
           if (c?.nome && !/^\d{5,}$/.test(c.nome)) return c.nome;
           // 2) Fallback: search allClienti by codice_m3, id, or nome_account
-          const cli = allClienti.find(x => x.codice_m3 === clienteId || x.id === clienteId);
+          const cli = allClienti.find(x => x.codice_m3 === clienteId || x.codice_m3 === rawId || x.id === clienteId || x.id === rawId);
           if (cli) return cli.nome_interno || cli.nome_account || clienteId;
           return clienteId; // fallback: codice raw
         }
@@ -6373,7 +6376,7 @@ Rispondi SOLO JSON valido:
                   'anthropic-version': '2023-06-01'
                 },
                 body: JSON.stringify({
-                  model: 'claude-sonnet-4-5-20250929',
+                  model: 'claude-haiku-4-5-20251001',
                   max_tokens: 8192, temperature: 0.2,
                   system: 'Sei un esperto field service optimizer per manutenzione robot da mungitura Lely. Analizza in profondità il piano, verificando OGNI riga per violazioni vincoli, inefficienze geografiche, squilibri carico, conformità PM, urgenze non coperte. Rispondi SOLO JSON valido, senza testo extra.',
                   messages: [{ role: 'user', content: reviewPrompt }]
