@@ -1445,10 +1445,11 @@ function intItem(p){
   const tipo=getName(DATA.tipiIntervento,p.TipoInterventoID);
   const tc=getColor(DATA.tipiIntervento,p.TipoInterventoID);
   const furg=getName(DATA.automezzi||[],p.AutomezzoID,'Descrizione');
+  const hasDoc=(DATA.documenti||[]).some(d=>!d.Obsoleto&&(d.RiferimentoID===p.ID||d.RiferimentoTipo==='piano'&&d.RiferimentoID===p.ID));
   return '<div class="int-item" onclick="showInt(\''+p.ID+'\')">'+
     '<div class="time-block"><div class="time">'+fmtTime(p.OraInizio)+'</div><div class="date">'+fmtDate(p.Data).substring(0,5)+'</div></div>'+
     '<div class="info"><h4>'+cli+'</h4>'+
-    '<p><span class="tag" style="background:'+tc+'20;color:'+tc+'">'+tipo+'</span>'+(furg&&furg!=='—'?' <span style="font-size:.65rem;color:var(--gray)">🚐 '+furg+'</span>':'')+'</p>'+
+    '<p><span class="tag" style="background:'+tc+'20;color:'+tc+'">'+tipo+'</span>'+(furg&&furg!=='—'?' <span style="font-size:.65rem;color:var(--gray)">🚐 '+furg+'</span>':'')+(hasDoc?' <span style="font-size:.6rem;background:var(--gray4);border-radius:10px;padding:1px 6px;color:var(--gray)">📎</span>':'')+'</p>'+
     statusTag(p.Stato)+'</div><div class="arrow">›</div></div>';
 }
 
@@ -1652,11 +1653,17 @@ function renderUrg(){
   if(aperte.length){
     h+=aperte.map(u=>{
       const pc=getColor(DATA.priorita,u.PrioritaID);
+      const cObj=(DATA.clienti||[]).find(c=>c.ID===u.ClienteID||c.CodiceM3===u.ClienteID);
       return '<div class="card" style="border-left:4px solid '+pc+'" onclick="showUrg(\''+u.ID+'\')"><div class="card-body">'+
         '<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span class="tag" style="background:'+pc+'20;color:'+pc+'">'+getName(DATA.priorita,u.PrioritaID)+'</span>'+statusTag(u.Stato)+'</div>'+
         '<div style="font-weight:600;margin-bottom:2px">'+getName(DATA.clienti,u.ClienteID)+'</div>'+
         '<div style="font-size:.8125rem;color:var(--gray);margin-bottom:4px">'+(u.Problema||'').substring(0,80)+'</div>'+
-        (u.SLAStatus&&u.SLAStatus!=='ok'?'<div style="font-size:.7rem;color:var(--err)">SLA: '+u.SLAStatus+'</div>':'')+
+        (u.SLAStatus&&u.SLAStatus!=='ok'?'<div style="font-size:.7rem;color:var(--err);margin-bottom:6px">SLA: '+u.SLAStatus+'</div>':'')+
+        '<div style="display:flex;gap:6px;margin-top:6px" onclick="event.stopPropagation()">'+
+        (u.Stato==='assegnata'||u.Stato==='schedulata'?'<button class="btn btn-xs" style="background:var(--warn);color:#fff;font-size:.7rem;padding:4px 10px;border-radius:6px" onclick="startUrg(\''+u.ID+'\')">⚡ Inizia</button>':'')+
+        (u.Stato==='in_corso'?'<button class="btn btn-xs" style="background:var(--ok);color:#fff;font-size:.7rem;padding:4px 10px;border-radius:6px" onclick="resolveUrg(\''+u.ID+'\')">✅ Risolvi</button>':'')+
+        (cObj&&cObj.Telefono?'<a href="tel:'+cObj.Telefono+'" class="btn btn-xs" style="font-size:.7rem;padding:4px 10px;border:1px solid var(--gray3);border-radius:6px;text-decoration:none;color:var(--text)">📞 Chiama</a>':'')+
+        '</div>'+
         '</div></div>';
     }).join('');
   }else{h+='<div class="empty"><div class="ico">🎉</div><p>Nessuna urgenza aperta</p></div>'}
@@ -2022,11 +2029,16 @@ function creaUrgMacchina(macId,cliId){
 }
 
 // ============ DOCUMENTI ============
+function fileIcon(url,name){const ext=((url||name||'').split('.').pop()||'').toLowerCase();if(ext==='pdf')return '📄';if(['jpg','jpeg','png','gif','webp','svg','bmp'].includes(ext))return '🖼️';if(['xls','xlsx','csv'].includes(ext))return '📊';if(['doc','docx'].includes(ext))return '📝';if(['zip','rar','7z','tar','gz'].includes(ext))return '📦';if(['mp4','avi','mov','mkv'].includes(ext))return '🎥';return '📎'}
+function formatFileSize(kb){if(!kb)return '';kb=parseFloat(kb);if(kb<1024)return Math.round(kb)+'KB';return (kb/1024).toFixed(1)+'MB'}
 function renderDocMob(){
   const docs=(DATA.documenti||[]).filter(d=>!d.Obsoleto&&(d.Pubblico===true||d.Pubblico==='true'));
   const q=($('srcDocMob')?.value||'').toLowerCase();
   const filtered=docs.filter(d=>!q||(d.Nome||'').toLowerCase().includes(q)||(d.Tags||'').toLowerCase().includes(q)).sort((a,b)=>(b.DataCaricamento||'').localeCompare(a.DataCaricamento||''));
-  $('docMobList').innerHTML=filtered.length?filtered.map(d=>'<div class="card"><div class="card-body"><div style="display:flex;justify-content:space-between;align-items:center"><div style="flex:1"><strong>'+(d.Nome||'—')+'</strong><div style="font-size:.75rem;color:var(--gray)">📅 '+fmtDate(d.DataCaricamento)+(d.DimensioneKB?' · '+d.DimensioneKB+'KB':'')+'</div></div><a href="'+(d.FileURL||'#')+'" target="_blank" style="color:var(--c1);text-decoration:none;font-size:1.25rem;padding:8px">↓</a></div></div></div>').join(''):'<div class="empty"><div class="ico">📁</div><p>Nessun documento</p></div>';
+  $('docMobList').innerHTML=filtered.length?filtered.map(d=>{
+    const ico=fileIcon(d.FileURL,d.Nome);const fSize=formatFileSize(d.DimensioneKB);const cat=d.Categoria?'<span style="font-size:.6rem;background:var(--c1);color:#fff;padding:1px 6px;border-radius:8px;margin-left:6px">'+d.Categoria+'</span>':'';
+    return '<div class="card"><div class="card-body"><div style="display:flex;justify-content:space-between;align-items:center"><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:6px"><span style="font-size:1.2rem">'+ico+'</span><strong style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(d.Nome||'—')+'</strong>'+cat+'</div><div style="font-size:.75rem;color:var(--gray);margin-top:2px">'+fmtDate(d.DataCaricamento)+(fSize?' · '+fSize:'')+(d.Descrizione?' · '+d.Descrizione.substring(0,40):'')+'</div></div><a href="'+(d.FileURL||'#')+'" target="_blank" style="color:var(--c1);text-decoration:none;font-size:1.25rem;padding:8px;flex-shrink:0">'+ico+'</a></div></div></div>';
+  }).join(''):'<div class="empty"><div class="ico">📁</div><p>Nessun documento</p></div>';
 }
 
 // ============ MAPPA GIRO VISITE (Leaflet) ============
