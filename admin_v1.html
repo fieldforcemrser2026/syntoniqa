@@ -4505,7 +4505,7 @@ function renderRichieste(){
     <td style="font-size:.8rem">${fmtDate(r.DataInizio)}${r.DataFine&&r.DataFine!==r.DataInizio?' → '+fmtDate(r.DataFine):''}</td>
     <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.8rem">${r.Motivo||'—'}</td>
     <td>${statusTag(r.Stato)}</td>
-    <td style="white-space:nowrap">${r.Stato==='in_attesa'?`<button class="btn btn-ok btn-xs" onclick="openApproveRich('${r.ID}','approvata')">✅ Approva</button><button class="btn btn-err btn-xs" onclick="openApproveRich('${r.ID}','rifiutata')" style="margin-left:4px">❌ Rifiuta</button>`:`<button class="btn btn-ghost btn-xs" onclick="showRichDetail('${r.ID}')">👁️</button>`}<button class="btn btn-ghost btn-xs" onclick="deleteRichiesta('${r.ID}')" style="color:var(--err);margin-left:4px" title="Elimina">🗑️</button></td>
+    <td style="white-space:nowrap">${r.Stato==='in_attesa'?`<button class="btn btn-ok btn-xs" onclick="openApproveRich('${r.ID}','approvata')">✅ Approva</button><button class="btn btn-err btn-xs" onclick="openApproveRich('${r.ID}','rifiutata')" style="margin-left:4px">❌ Rifiuta</button>`:`<button class="btn btn-ghost btn-xs" onclick="showRichDetail('${r.ID}')">👁️</button>`}<button class="btn btn-ghost btn-xs" onclick="openEditRichiesta('${r.ID}')" style="margin-left:4px" title="Modifica">✏️</button><button class="btn btn-ghost btn-xs" onclick="deleteRichiesta('${r.ID}')" style="color:var(--err);margin-left:4px" title="Elimina">🗑️</button></td>
   </tr>`).join(''):'<tr><td colspan="7" class="empty"><p>Nessuna richiesta</p></td></tr>';
 }
 
@@ -4591,6 +4591,45 @@ async function submitRichiesta(){
   try{
     await apiCall('createRichiesta',{tipo,tecnicoId:tecnico,dataInizio,dataFine,motivo},'POST');
     toast('Richiesta creata!','ok');closeModal('modalDetail');await refreshData(true);
+  }catch(e){toast('Errore: '+e.message,'err')}
+}
+
+function openEditRichiesta(id){
+  const r=(DATA.richieste||[]).find(x=>x.ID===id);if(!r)return;
+  const tecOpts=(DATA.utenti||[]).filter(u=>!u.Obsoleto&&u.Attivo).map(u=>`<option value="${u.ID}" ${u.ID===r.TecnicoID?'selected':''}>${u.Nome} ${u.Cognome||''}</option>`).join('');
+  const tipoIcons={ferie:'🏖️ Ferie',permesso:'🕐 Permesso',malattia:'🤒 Malattia',cambio_turno:'🔄 Cambio Turno',generico:'📝 Generico'};
+  const tipoOpts=Object.entries(tipoIcons).map(([k,v])=>`<option value="${k}" ${k===r.Tipo?'selected':''}>${v}</option>`).join('');
+  const statoOpts=['in_attesa','approvata','rifiutata'].map(s=>`<option value="${s}" ${s===r.Stato?'selected':''}>${s==='in_attesa'?'⏳ In Attesa':s==='approvata'?'✅ Approvata':'❌ Rifiutata'}</option>`).join('');
+  $('detailTitle').textContent=`✏️ Modifica Richiesta ${id}`;
+  $('detailBody').innerHTML=`<div style="display:flex;flex-direction:column;gap:12px;padding:8px">
+    <label>Tipo<select id="erTipo" class="inp">${tipoOpts}</select></label>
+    <label>Tecnico<select id="erTecnico" class="inp"><option value="">— Seleziona —</option>${tecOpts}</select></label>
+    <div style="display:flex;gap:12px">
+      <label style="flex:1">Dal<input type="date" id="erDal" class="inp" value="${r.DataInizio||''}"></label>
+      <label style="flex:1">Al<input type="date" id="erAl" class="inp" value="${r.DataFine||r.DataInizio||''}"></label>
+    </div>
+    <label>Motivo<textarea id="erMotivo" class="inp" rows="3">${r.Motivo||''}</textarea></label>
+    <label>Stato<select id="erStato" class="inp">${statoOpts}</select></label>
+    <label>Note Admin<textarea id="erNoteAdmin" class="inp" rows="2" placeholder="Note per il tecnico...">${r.NoteAdmin||''}</textarea></label>
+    <button class="btn btn-ok" onclick="submitEditRichiesta('${id}')">💾 Salva Modifiche</button>
+  </div>`;
+  $('detailFoot').innerHTML='';
+  openModal('modalDetail');
+}
+async function submitEditRichiesta(id){
+  const updates={
+    id,
+    tipo:$('erTipo')?.value||undefined,
+    tecnicoId:$('erTecnico')?.value||undefined,
+    dataInizio:$('erDal')?.value||undefined,
+    dataFine:$('erAl')?.value||undefined,
+    motivo:$('erMotivo')?.value||undefined,
+    stato:$('erStato')?.value||undefined,
+    noteAdmin:$('erNoteAdmin')?.value||undefined
+  };
+  try{
+    await apiCall('updateRichiesta',updates,'POST');
+    toast('Richiesta aggiornata!','ok');closeModal('modalDetail');await refreshData(true);
   }catch(e){toast('Errore: '+e.message,'err')}
 }
 

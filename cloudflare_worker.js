@@ -2054,6 +2054,13 @@ async function handlePost(action, body, env) {
       return ok();
     }
 
+    case 'deleteRichiesta': {
+      const { id } = body;
+      if (!id) return err('id richiesta richiesto');
+      await sb(env, `richieste?id=eq.${id}`, 'PATCH', { obsoleto: true });
+      return ok({ message: 'Richiesta eliminata' });
+    }
+
     // -------- PAGELLINI --------
 
     case 'createPagellino': {
@@ -2748,8 +2755,8 @@ async function handlePost(action, body, env) {
 
     case 'previewAIPlan': {
       // Preview: loads context data for AI planner, returns summary WITHOUT generating
-      const pvMese = body.mese_target || '';
-      if (!pvMese) return err('mese_target richiesto');
+      const pvMese = body.mese_target || (body.settimana ? body.settimana.substring(0, 7) : '');
+      if (!pvMese) return err('mese_target o settimana richiesto');
       const pvStart = `${pvMese}-01`, pvEnd = `${pvMese}-31`;
       const tid = getTid(env);
 
@@ -2878,14 +2885,15 @@ async function handlePost(action, body, env) {
       // Workers AI è solo il fallback finale — non bloccare se non configurato
 
       const vincoli = body.vincoli || {};
-      const testo = vincoli.testo || '';
-      const files = vincoli.files || [];
-      const ctx = vincoli.ctx || { vincoli: true, reperibilita: true, piano: true, urgenze: true, tagliandi: true };
-      const modalita = vincoli.modalita || 'mese';
-      const settimanaNum = parseInt(vincoli.settimana || '1', 10);
+      // Also accept top-level params as fallback
+      const testo = vincoli.testo || body.testo || '';
+      const files = vincoli.files || body.files || [];
+      const ctx = vincoli.ctx || body.ctx || { vincoli: true, reperibilita: true, piano: true, urgenze: true, tagliandi: true };
+      const modalita = vincoli.modalita || body.modalita || 'mese';
+      const settimanaNum = parseInt(vincoli.settimana || body.settimana || '1', 10);
 
       // Load data context + vincoli dinamici (lean queries to avoid timeout)
-      const meseTarget = vincoli.mese_target || '';
+      const meseTarget = vincoli.mese_target || body.mese_target || (body.settimana ? body.settimana.substring(0, 7) : '');
       const repFilter = meseTarget ? `&data_inizio=lte.${meseTarget}-31&data_fine=gte.${meseTarget}-01` : '';
       // Filtri date per mese target
       const meseStart = meseTarget ? `${meseTarget}-01` : '';
@@ -3160,6 +3168,7 @@ async function handlePost(action, body, env) {
       // Piano esistente context — SEPARATO in: già assegnati vs DA ASSEGNARE (PM senza tecnico)
       let pianoEsistente = '';
       let interventiDaAssegnare = '';
+      let nSenzaTecnico = 0;
       if (ctx.piano) {
         const pianoSrc = allPianoDb.length ? allPianoDb : (vincoli.piano_esistente || []);
         // Interventi GIÀ ASSEGNATI (hanno tecnico) — non duplicare
@@ -3181,6 +3190,7 @@ async function handlePost(action, body, env) {
               return `- ${d} ${tec}: ${cli} (${anonEncode(p.note || p.Note || '')})`;
             }).join('\n');
         }
+        nSenzaTecnico = senzaTecnico.length;
         if (senzaTecnico.length) {
           interventiDaAssegnare = `\nINTERVENTI DA ASSEGNARE (${senzaTecnico.length} interventi generati da PM/tagliandi — DEVI assegnare tecnico, data e furgone per CIASCUNO):\n` +
             senzaTecnico.map(p => {
@@ -3571,7 +3581,7 @@ CAPACITÀ MENSILE (MATEMATICA — rispetta questi numeri):
 - REGOLA CRITICA: ogni macchina/asset va pianificata UNA SOLA VOLTA (1 riga per macchina). NON ripetere la stessa macchina su più giorni o tecnici!
 
 OBIETTIVO PRINCIPALE:
-${interventiDaAssegnare ? `HAI ${senzaTecnico.length} INTERVENTI GIA CREATI DA ASSEGNARE (generati da import PM/tagliandi). Il tuo compito PRINCIPALE è ASSEGNARE tecnico, data e furgone a CIASCUNO di questi interventi. Usa la lista "INTERVENTI DA ASSEGNARE" qui sopra. Per ogni intervento, scegli il tecnico migliore in base a zona del cliente, disponibilità e vincoli. NON creare interventi nuovi per le stesse macchine — assegna SOLO quelli esistenti.` : tagItems.length > 0 ? `HAI ${tagItems.length} TAGLIANDI/SERVICE DA SCHEDULARE. Genera ESATTAMENTE 1 intervento per ciascuna macchina/asset dalla lista TAGLIANDI/SERVICE SCADENZA qui sopra. OGNI macchina = 1 sola riga. Non generare interventi extra non corrispondenti a un tagliando reale. Distribuisci i ${tagItems.length} interventi tra i tecnici disponibili in modo ottimale nel periodo target, rispettando zone e vincoli.` : `Genera piano per il periodo specificato. Devi riempire TUTTI i ${nGiorniLav} giorni lavorativi con ${nTeamEffettivi} interventi/giorno = ${capacitaMax} righe totali.`}
+${interventiDaAssegnare ? `HAI ${nSenzaTecnico} INTERVENTI GIA CREATI DA ASSEGNARE (generati da import PM/tagliandi). Il tuo compito PRINCIPALE è ASSEGNARE tecnico, data e furgone a CIASCUNO di questi interventi. Usa la lista "INTERVENTI DA ASSEGNARE" qui sopra. Per ogni intervento, scegli il tecnico migliore in base a zona del cliente, disponibilità e vincoli. NON creare interventi nuovi per le stesse macchine — assegna SOLO quelli esistenti.` : tagItems.length > 0 ? `HAI ${tagItems.length} TAGLIANDI/SERVICE DA SCHEDULARE. Genera ESATTAMENTE 1 intervento per ciascuna macchina/asset dalla lista TAGLIANDI/SERVICE SCADENZA qui sopra. OGNI macchina = 1 sola riga. Non generare interventi extra non corrispondenti a un tagliando reale. Distribuisci i ${tagItems.length} interventi tra i tecnici disponibili in modo ottimale nel periodo target, rispettando zone e vincoli.` : `Genera piano per il periodo specificato. Devi riempire TUTTI i ${nGiorniLav} giorni lavorativi con ${nTeamEffettivi} interventi/giorno = ${capacitaMax} righe totali.`}
 ${allUrgenze.length > 0 ? `
 URGENZE DA PIANIFICARE: Assegna le ${allUrgenze.length} urgenze aperte ai tecnici disponibili NEI PRIMI GIORNI del periodo (priorità massima).` : ''}
 
@@ -7381,6 +7391,12 @@ Rispondi SOLO con JSON valido:
         }
       }
       return ok({ updated, total: urgenze.length });
+    }
+
+    case 'loadConfig':
+    case 'getConfig': {
+      const rows = await sb(env, 'config', 'GET', null, '?select=chiave,valore');
+      return ok({ config: rows });
     }
 
     case 'saveConfig':
