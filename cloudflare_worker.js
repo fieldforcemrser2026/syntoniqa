@@ -2844,9 +2844,10 @@ async function handlePost(action, body, env) {
         meseTarget ? sb(env, 'installazioni', 'GET', null, `?obsoleto=eq.false&stato=in.(pianificato,in_corso,pianificata)&data_inizio=lte.${meseEnd}&select=id,tecnici_ids,cliente_id,data_inizio,data_fine_prevista,stato,macchine_ids,note,tipo_macchina&limit=50`) : Promise.resolve([]),
         meseTarget ? sb(env, 'piano', 'GET', null, `?obsoleto=eq.false&stato=neq.annullato&data=gte.${meseStart}&data=lte.${meseEnd}&select=id,tecnico_id,tecnici_ids,cliente_id,data,ora_inizio,tipo_intervento_id,note,stato&limit=500`) : Promise.resolve([]),
         sb(env, 'config', 'GET', null, '?chiave=eq.planner_rules&limit=1').catch(()=>[]),
-        sb(env, 'config', 'GET', null, '?chiave=eq.force_junior_ids&limit=1').catch(()=>[])
+        sb(env, 'config', 'GET', null, '?chiave=eq.force_junior_ids&limit=1').catch(()=>[]),
+        sb(env, 'config', 'GET', null, '?chiave=eq.force_senior_ids&limit=1').catch(()=>[])
       ]);
-      const [allTecnici, allUrgenze, allClienti, vincoliCfg, allRep, allAutomezzi, allMacchine, allAssets, allRichieste, allTrasferte, allInstallazioni, allPianoDb, plannerRulesCfg, forceJuniorCfg] = _psResults.map(_safePS);
+      const [allTecnici, allUrgenze, allClienti, vincoliCfg, allRep, allAutomezzi, allMacchine, allAssets, allRichieste, allTrasferte, allInstallazioni, allPianoDb, plannerRulesCfg, forceJuniorCfg, forceSeniorCfg] = _psResults.map(_safePS);
       sse({type:'init', message:'Dati caricati', n:{tecnici:allTecnici.filter(t=>t.ruolo!=='admin').length, clienti:allClienti.length, urgenze:allUrgenze.length, tagliandi:allMacchine.length+allAssets.length}});
 
       // Parse vincoli: v3 text-only + v2 + legacy
@@ -3176,8 +3177,14 @@ async function handlePost(action, body, env) {
         if (!autoId) return '';
         // 1. Exact match in autoMap (id → targa/modello)
         if (autoMap[autoId]) return autoMap[autoId];
-        // 2. Se è un ID leggibile tipo FURG_x, usalo così
-        if (/^FURG_\d+$/i.test(autoId)) return autoId;
+        // 2. Se è FURG_x, cerca targa nell'automezzi (Fx) o mostra shortname
+        if (/^FURG_(\d+)$/i.test(autoId)) {
+          const fNum = autoId.match(/\d+/)[0];
+          const shortId = 'F' + fNum;
+          const fMatch = (allAutomezzi||[]).find(a => a.id === shortId || a.nome === shortId || (a.targa||'').toUpperCase() === shortId.toUpperCase());
+          if (fMatch) return fMatch.targa || fMatch.id;
+          return shortId;
+        }
         // 3. Se è AUT_ corto (< 10 char), usalo
         if (autoId.startsWith('AUT_') && autoId.length < 10) return autoId;
         // 4. UUID lungo → cerca corrispondenza nella tabella automezzi per targa/nome
@@ -3236,7 +3243,7 @@ async function handlePost(action, body, env) {
         const ggDiff = Math.round((new Date(a.prossimo_controllo) - new Date(oggi)) / 86400000);
         const aCli = allClienti.find(c => c.codice_m3 === a.codice_m3) || {};
         tagItems.push({
-          tipo: 'controllo',
+          tipo: 'tagliando',
           macchina: a.id || `ASSET_${a.numero_serie||'?'}`,
           macchinaLabel: `${a.nome_asset||a.modello||a.gruppo_attrezzatura||'?'}`,
           macchinaModello: a.modello || '',
@@ -3327,15 +3334,22 @@ async function handlePost(action, body, env) {
         const baseCode = t.base ? (cittaMap[t.base] || t.base) : '?';
         return `${t.id}(${t.ruolo},zona:${baseCode},furgone:${furgLabel})`;
       }).join('; ');
-      // Calcola senior/junior — dal DB (campo ruolo) + override da config force_junior_ids
-      // DB usa: "caposquadra", "tecnico senior", "tecnico junior", "tecnico"
-      // Se force_junior_ids è configurato in DB (config.force_junior_ids = "TEC_GIU,TEC_xxx,..."),
-      // quei tecnici vengono FORZATI come junior anche se il ruolo DB non contiene "junior"
+      // ═══ TEAM CLASSIFICATION v3 — DB roles + config overrides + smart fallback ═══
+      // 3 fonti di verità (in ordine di priorità):
+      //   1. config.force_senior_ids / config.force_junior_ids (override manuale)
+      //   2. DB ruolo: "caposquadra", "tecnico_senior" / "tecnico senior", "tecnico_junior" / "tecnico junior"
+      //   3. SMART FALLBACK: se solo 1 senior (caposquadra) e tutti gli altri "tecnico",
+      //      usa base + furgone come proxy di esperienza: chi ha ENTRAMBI → senior, chi no → junior
       const _forceJuniorIds = new Set();
       if (forceJuniorCfg?.length && forceJuniorCfg[0]?.valore) {
         forceJuniorCfg[0].valore.split(',').map(s => s.trim()).filter(Boolean).forEach(id => _forceJuniorIds.add(id));
       }
+      const _forceSeniorIds = new Set();
+      if (forceSeniorCfg?.length && forceSeniorCfg[0]?.valore) {
+        forceSeniorCfg[0].valore.split(',').map(s => s.trim()).filter(Boolean).forEach(id => _forceSeniorIds.add(id));
+      }
       function _isSenior(t) {
+        if (_forceSeniorIds.has(t.id)) return true;
         const r = (t.ruolo||'').toLowerCase().replace(/_/g,' ').trim();
         return r === 'caposquadra' || r === 'senior' || r.includes('senior') || r.includes('capo');
       }
@@ -3344,26 +3358,46 @@ async function handlePost(action, body, env) {
         const r = (t.ruolo||'').toLowerCase().replace(/_/g,' ').trim();
         return r === 'junior' || r.includes('junior');
       }
-      const allSeniors = allTecnici.filter(t => t.ruolo !== 'admin' && _isSenior(t));
+      let allSeniors = allTecnici.filter(t => t.ruolo !== 'admin' && _isSenior(t));
       let allJuniors = allTecnici.filter(t => t.ruolo !== 'admin' && _isJunior(t) && !_isSenior(t));
-      // SAFETY NET: se 0 junior dal DB ma ci sono 4+ tecnici "tecnico" (senza qualifica),
-      // tratta TUTTI i "tecnico" puri come junior — meglio affiancati che soli
-      if (allJuniors.length === 0 && allSeniors.length > 0) {
-        const tecPuri = allTecnici.filter(t => {
-          if (t.ruolo === 'admin' || _isSenior(t)) return false;
-          const r = (t.ruolo||'').toLowerCase().trim();
-          return r === 'tecnico' || r === '' || !r;
-        });
-        if (tecPuri.length > 0) {
-          allJuniors = tecPuri;
-          sse({type:'warning', message:`⚠️ SAFETY NET: 0 junior trovati nel DB ma ${tecPuri.length} tecnici con ruolo "tecnico" → forzati come junior per garantire affiancamento. Per correggere: imposta ruolo "tecnico junior" nel DB o configura force_junior_ids in config.`});
+
+      // ── SMART FALLBACK v3: se ruoli DB insufficienti, classifica per base+furgone ──
+      // Condizione: <=1 senior dal DB E 0 junior E nessun override config
+      const tecPuri = allTecnici.filter(t => {
+        if (t.ruolo === 'admin' || _isSenior(t) || _isJunior(t)) return false;
+        const r = (t.ruolo||'').toLowerCase().trim();
+        return r === 'tecnico' || r === '' || !r;
+      });
+      if (allJuniors.length === 0 && tecPuri.length >= 3 && _forceJuniorIds.size === 0 && _forceSeniorIds.size === 0) {
+        // Euristica: tecnico con BASE in una città e FURGONE assegnato → probabilmente senior
+        // Tecnico senza base o senza furgone → probabilmente junior
+        const autoSeniors = [];
+        const autoJuniors = [];
+        for (const t of tecPuri) {
+          const hasBase = !!(t.base && t.base.trim().length > 2);
+          const hasFurg = !!(t.automezzo_id && t.automezzo_id.trim().length > 1);
+          if (hasBase && hasFurg) {
+            autoSeniors.push(t);
+          } else {
+            autoJuniors.push(t);
+          }
+        }
+        // Se l'euristica produce un split ragionevole (almeno 2 senior e 1 junior), usalo
+        if (autoSeniors.length >= 2 && autoJuniors.length >= 1) {
+          allSeniors.push(...autoSeniors);
+          allJuniors = autoJuniors;
+          sse({type:'warning', message:`⚠️ SMART FALLBACK: ruoli DB non differenziati. Auto-classificati ${autoSeniors.length} senior (hanno base+furgone) e ${autoJuniors.length} junior (mancano base o furgone). Per precisione: configura force_senior_ids e force_junior_ids in Config, o imposta ruoli "tecnico_senior"/"tecnico_junior" in Utenti.`});
+        } else {
+          // Euristica non conclusiva → tutti indipendenti, nessun pairing
+          sse({type:'warning', message:`⚠️ RUOLI NON CONFIGURATI: ${tecPuri.length} tecnici hanno ruolo generico "tecnico". Nessun pairing junior/senior attivo. Per attivare: (1) in Supabase SQL Editor esegui: ALTER TABLE utenti DROP CONSTRAINT utenti_ruolo_check; ALTER TABLE utenti ADD CONSTRAINT utenti_ruolo_check CHECK (ruolo IN ('admin','tecnico','caposquadra','tecnico_junior','tecnico_senior')); (2) poi imposta i ruoli corretti nella sezione Utenti dell'admin.`});
         }
       }
-      // DIAGNOSTIC: mostra classificazione tecnici
-      sse({type:'team_classification', seniors: allSeniors.map(t => `${t.id}:${t.nome} ${t.cognome}(${t.ruolo})`),
-           juniors: allJuniors.map(t => `${t.id}:${t.nome} ${t.cognome}(${t.ruolo})`),
-           forceJuniorIds: [..._forceJuniorIds],
-           indipendenti: allTecnici.filter(t => t.ruolo !== 'admin' && !_isSenior(t) && !_isJunior(t)).map(t => `${t.id}:${t.nome} ${t.cognome}(${t.ruolo})`)});
+      // DIAGNOSTIC SSE
+      sse({type:'team_classification',
+        seniors: allSeniors.map(t => `${t.id}:${t.nome} ${t.cognome}(${t.ruolo})`),
+        juniors: allJuniors.map(t => `${t.id}:${t.nome} ${t.cognome}(${t.ruolo})`),
+        forceJuniorIds: [..._forceJuniorIds], forceSeniorIds: [..._forceSeniorIds],
+        indipendenti: allTecnici.filter(t => t.ruolo !== 'admin' && !allSeniors.some(s=>s.id===t.id) && !allJuniors.some(j=>j.id===t.id)).map(t => `${t.id}:${t.nome} ${t.cognome}(${t.ruolo})`)});
       const seniorConstraint = allSeniors.length
         ? `\nREGOLA SENIOR (INVIOLABILE): i ${allSeniors.length} senior [${allSeniors.map(t=>t.id).join(',')}] sono RISORSE SCARSE. (1) MAI due senior insieme allo stesso cliente/giorno — devono essere su squadre separate. (2) Tecnici junior [${allJuniors.map(t=>t.id).join(',')}] NON vanno MAI da soli — abbinali SEMPRE a un senior diverso (1 junior per senior al massimo per giorno).`
         : '';
@@ -4998,12 +5032,12 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           'rimini':[44.06,12.57],'mantova':[45.16,10.79],'cremona':[45.13,10.02],'lodi':[45.31,9.50]
         };
         function _fillEstimateKm(tec, clienteId) {
-          const base = (tec.base || '').toLowerCase().trim();
+          const base = (tec.base || '').toLowerCase().replace(/\s*\([^)]*\)\s*/g, '').trim();
           if (!base) return '?';
-          const baseCoords = _FILL_CITY_COORDS[base];
+          const baseCoords = _FILL_CITY_COORDS[base] || Object.entries(_FILL_CITY_COORDS).find(([k])=>k.includes(base)||base.includes(k))?.[1];
           const cli = allClienti.find(c => c.codice_m3 === clienteId);
           if (!cli) return '?';
-          const cliCity = (cli.citta_fatturazione || '').toLowerCase().trim();
+          const cliCity = (cli.citta_fatturazione || '').toLowerCase().replace(/\s*\([^)]*\)\s*/g, '').trim();
           if (!cliCity) return '?';
           if (cliCity === base || cliCity.includes(base) || base.includes(cliCity)) return 5;
           const cliCoords = _FILL_CITY_COORDS[cliCity];
@@ -5091,7 +5125,7 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
               oraInizio: '08:00',
               durataOre: item.oreLavoro ? Math.min(8, Math.max(4, item.oreLavoro / 500)) : 6,
               furgone: _furgLabel(tec.automezzo_id),
-              note: `${_fillLabel}${item.seriale ? ' | S/N:'+item.seriale : ''} | scad:${item.data || '?'}${item.oreLavoro ? ' | ore:' + item.oreLavoro : ''}${item.cicloPm ? ' | ciclo:'+item.cicloPm : ''} | ~${_kmNote}km`,
+              note: `${_fillLabel}${item.machinaTipo && item.machinaTipo !== _fillLabel ? ' '+item.machinaTipo : ''} | ${item.urgenza==='SCADUTO'?'SCADUTO dal ':'scad: '}${item.data || '?'}${item.cicloPm ? ' | PM ciclo '+item.cicloPm : ''} | ~${_kmNote}km`,
               macchina_id: item.macchina || item.macchinaId || null,
               macchinaLabel: item.macchinaLabel || '',
               macchinaModello: item.macchinaModello || '',
@@ -5249,8 +5283,8 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         (allClienti || []).forEach(c => {
           const key = c.codice_m3 || c.id;
           if (!key) return;
-          const citta = (c.citta_fatturazione || c.citta || '').toLowerCase().trim();
-          const prov = (c.provincia || c.prov || '').toLowerCase().trim();
+          const citta = _cleanCity(c.citta_fatturazione || c.citta || '');
+          const prov = (c.provincia || c.prov || '').toLowerCase().replace(/\s*\([^)]*\)\s*/g, '').trim();
           // Ricava provincia dalla città se mancante
           const inferredProv = prov || CITY_TO_PROV[citta] || '';
           // Coordinate: usa lat/lng del cliente, oppure inferisci dalla città o dalla provincia
@@ -5267,9 +5301,14 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
           if (c.id && c.id !== key) cliMap[c.id] = entry;
         });
 
+        // Pulisci nome città: rimuovi provincia tra parentesi, es "Bologna (Bo)" → "bologna"
+        function _cleanCity(raw) {
+          if (!raw) return '';
+          return raw.toLowerCase().replace(/\s*\([^)]*\)\s*/g, '').trim();
+        }
         // Coordinate base tecnico
         function getTecCoords(tec) {
-          const base = (tec.base || '').toLowerCase().trim();
+          const base = _cleanCity(tec.base);
           if (!base) return null;
           if (CITY_COORDS[base]) return CITY_COORDS[base];
           // Prova match parziale
@@ -5281,8 +5320,14 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
 
         // Provincia del tecnico dalla base
         function getTecProv(tec) {
-          const base = (tec.base || '').toLowerCase().trim();
+          const base = _cleanCity(tec.base);
           if (!base) return '';
+          // Prova anche estrarre provincia dalla parentesi es "Bologna (Bo)" → "bo"
+          const provMatch = (tec.base || '').match(/\(([^)]+)\)/);
+          if (provMatch) {
+            const prov = provMatch[1].toLowerCase().trim();
+            if (PROV_COORDS[prov]) return prov;
+          }
           if (CITY_TO_PROV[base]) return CITY_TO_PROV[base];
           for (const [city, prov] of Object.entries(CITY_TO_PROV)) {
             if (city.includes(base) || base.includes(city)) return prov;
@@ -5308,15 +5353,29 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             let km = 999;
             if (tecCoords && cli && cli.lat) {
               km = distKm(tecCoords[0], tecCoords[1], cli.lat, cli.lng);
+            } else if (tecCoords && b.citta) {
+              // Fallback: coordinate tecnico note, prova geocodifica città da backlog item
+              const bCity = _cleanCity(b.citta);
+              if (bCity && CITY_COORDS[bCity]) {
+                km = distKm(tecCoords[0], tecCoords[1], CITY_COORDS[bCity][0], CITY_COORDS[bCity][1]);
+              } else if (b.provincia) {
+                const bProv = b.provincia.toLowerCase().trim();
+                if (bProv && PROV_COORDS[bProv]) km = distKm(tecCoords[0], tecCoords[1], PROV_COORDS[bProv][0], PROV_COORDS[bProv][1]);
+                else if (tecProv === bProv) km = 30;
+                else if (adjProvs.includes(bProv)) km = 60;
+                else km = 90;
+              } else km = 50;
             } else if (base && cli) {
               // Fallback: match testuale città/provincia
-              if (cli.citta && (cli.citta.includes(base) || base.includes(cli.citta))) km = 5;
+              const cleanBase = _cleanCity(base);
+              if (cli.citta && (cli.citta.includes(cleanBase) || cleanBase.includes(cli.citta))) km = 5;
               else if (tecProv && cli.prov === tecProv) km = 30;
               else if (adjProvs.includes(cli.prov)) km = 60;
+              else km = 50;
             } else if (!base) {
               km = 50; // nessuna base: distanza neutra
             } else {
-              km = 80; // base nota ma cliente senza coordinate: stima conservativa
+              km = 50; // base nota ma cliente senza coordinate: stima neutra (non 80!)
             }
             // REGOLA 5: skip clients where another senior is already assigned today
             if (_seniorIds.includes(tec.id) && !_canSeniorGoToClient(b.clienteId, tec.id)) continue;
@@ -5349,13 +5408,15 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
         }
 
         function makeNote(item) {
-          // REGOLA 7: km SEMPRE presente nella nota
+          // Note leggibili: CLIENTE | Macchina MODELLO | scadenza | km | ciclo PM
           const kmVal = item._km != null ? item._km : '?';
-          const kmInfo = ` | ~${kmVal}km`;
-          // REGOLA 9: LSSA data (ciclo PM, seriale/astronaut number)
-          const lssaInfo = item.cicloPm ? ` | ciclo:${item.cicloPm}` : '';
-          const snInfo = item.seriale ? ` | S/N:${item.seriale}` : '';
-          return `${item.macchinaLabel || '?'}${snInfo} | scad:${item.data || '?'}${item.oreLavoro ? ' | ore:' + item.oreLavoro : ''}${lssaInfo}${kmInfo}`;
+          const cliNome = _resolveClienteNome(item.clienteId);
+          // Modello macchina leggibile (es: "Astronaut A5 Left")
+          const macLabel = item.macchinaLabel || item.macchinaModello || '?';
+          const tipoRobot = item.machinaTipo && item.machinaTipo !== macLabel ? ` ${item.machinaTipo}` : '';
+          const lssaInfo = item.cicloPm ? ` | PM ciclo ${item.cicloPm}` : '';
+          const scadInfo = item.data ? (item.urgenza === 'SCADUTO' ? `SCADUTO dal ${item.data}` : `scad: ${item.data}`) : '';
+          return `${macLabel}${tipoRobot} | ${scadInfo}${lssaInfo} | ~${kmVal}km`;
         }
 
         let totalTagUsed = 0;
@@ -5546,6 +5607,51 @@ JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clie
             _trackAssignment(item.clienteId, tec.id);
           }
         }
+        // E) REPERIBILITÀ — aggiungi righe informative per chi è in turno
+        for (const giorno of workDays) {
+          for (const tec of tecAttivi2) {
+            if (_isReperibilita(tec.id, giorno)) {
+              const tecName = `${tec.nome} ${tec.cognome}`.trim();
+              plan.push({
+                id: null, data: giorno, tecnicoId: tec.id,
+                clienteId: '', cliente: '', tipo: 'reperibilita',
+                oraInizio: '', durataOre: 0,
+                furgone: _furgLabel(tec.automezzo_id),
+                note: `Turno reperibilità — non disponibile per tagliandi`,
+                macchinaLabel: '', macchinaModello: '', machinaTipo: '', seriale: '',
+                scadenza: '', statoScaduto: '', oreLavoro: '', ultimoTagliando: '', km: '',
+                cicloPm: '', giorniDaPm: null, mungitureDaPm: null
+              });
+            }
+          }
+        }
+
+        // ── ORDINAMENTO FINALE: data → senior first → junior consecutivo al proprio senior ──
+        plan.sort((a, b) => {
+          // 1. Per data
+          if (a.data !== b.data) return (a.data || '').localeCompare(b.data || '');
+          // 2. Reperibilità in fondo
+          if (a.tipo === 'reperibilita' && b.tipo !== 'reperibilita') return 1;
+          if (b.tipo === 'reperibilita' && a.tipo !== 'reperibilita') return -1;
+          // 3. Installazioni prima dei tagliandi
+          if (a.tipo === 'installazione' && b.tipo !== 'installazione') return -1;
+          if (b.tipo === 'installazione' && a.tipo !== 'installazione') return 1;
+          // 4. Raggruppa senior+junior: senior first, poi il suo junior subito dopo
+          const aIsSr = _seniorIds.includes(a.tecnicoId);
+          const bIsSr = _seniorIds.includes(b.tecnicoId);
+          const aIsJr = _juniorIds.includes(a.tecnicoId);
+          const bIsJr = _juniorIds.includes(b.tecnicoId);
+          // Se uno è senior e l'altro è il suo junior (stesso cliente), mettili vicini
+          if (aIsSr && bIsJr && a.clienteId && a.clienteId === b.clienteId) return -1;
+          if (bIsSr && aIsJr && b.clienteId && b.clienteId === a.clienteId) return 1;
+          // Senior prima di junior genericamente
+          if (aIsSr && !bIsSr) return -1;
+          if (bIsSr && !aIsSr) return 1;
+          // Stesso clienteId vicini
+          if (a.clienteId && b.clienteId && a.clienteId === b.clienteId) return 0;
+          return 0;
+        });
+
         return { plan, tagUsed: totalTagUsed, instUsed: instIdx };
       }
 
@@ -5937,7 +6043,7 @@ Rispondi SOLO JSON valido: {"suggestions":[...], "overall_assessment":"valutazio
                   max_tokens: 4096, temperature: 0.3,
                   response_format: { type: 'json_object' }
                 })
-              }, 25000);
+              }, 50000);
               const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
               sse({type:'reviewer_status', engine:'openai', status:'parsing', progress_pct:80, elapsed});
               if (!res.ok) { sse({type:'reviewer_status', engine:'openai', status:'error', reason:`HTTP ${res.status}`}); return null; }
@@ -5949,7 +6055,7 @@ Rispondi SOLO JSON valido: {"suggestions":[...], "overall_assessment":"valutazio
               sse({type:'reviewer_status', engine:'openai', status:'complete', count:sugs.length, elapsed, assessment: parsed.overall_assessment || ''});
               return { suggestions: sugs, assessment: parsed.overall_assessment || '' };
             } catch(e) {
-              sse({type:'reviewer_status', engine:'openai', status:'error', reason: e.name === 'AbortError' ? 'TIMEOUT 25s' : (e.message||'unknown')});
+              sse({type:'reviewer_status', engine:'openai', status:'error', reason: e.name === 'AbortError' ? 'TIMEOUT 50s' : (e.message||'unknown')});
               return null;
             }
           }
@@ -5972,7 +6078,7 @@ Rispondi SOLO JSON valido: {"suggestions":[...], "overall_assessment":"valutazio
                   system: 'Sei un esperto field service optimizer. Rispondi SOLO JSON valido.',
                   messages: [{ role: 'user', content: reviewPrompt }]
                 })
-              }, 25000);
+              }, 50000);
               const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
               sse({type:'reviewer_status', engine:'claude', status:'parsing', progress_pct:80, elapsed});
               if (!res.ok) { sse({type:'reviewer_status', engine:'claude', status:'error', reason:`HTTP ${res.status}`}); return null; }
@@ -5985,7 +6091,7 @@ Rispondi SOLO JSON valido: {"suggestions":[...], "overall_assessment":"valutazio
               sse({type:'reviewer_status', engine:'claude', status:'complete', count:sugs.length, elapsed, assessment: parsed.overall_assessment || ''});
               return { suggestions: sugs, assessment: parsed.overall_assessment || '' };
             } catch(e) {
-              sse({type:'reviewer_status', engine:'claude', status:'error', reason: e.name === 'AbortError' ? 'TIMEOUT 25s' : (e.message||'unknown')});
+              sse({type:'reviewer_status', engine:'claude', status:'error', reason: e.name === 'AbortError' ? 'TIMEOUT 50s' : (e.message||'unknown')});
               return null;
             }
           }
