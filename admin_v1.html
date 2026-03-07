@@ -11128,7 +11128,7 @@ async function exportPMPiano(){
     // Larghezze colonne (13 colonne)
     ws['!cols']=[{wch:15},{wch:22},{wch:18},{wch:16},{wch:28},{wch:12},{wch:13},{wch:13},{wch:12},{wch:12},{wch:10},{wch:14},{wch:12}];
     const wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,'PM Overview',ws);
+    XLSX.utils.book_append_sheet(wb,ws,'PM Overview');
     XLSX.writeFile(wb,'pm_overview_'+new Date().toISOString().slice(0,10)+'.xlsx');
     toast('XLSX esportato ('+allAssets.length+' asset)','ok');
   }catch(e){toast('Errore export PM: '+e.message,'err');console.error('[exportPMPiano]',e);}
