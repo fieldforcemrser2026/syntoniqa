@@ -6780,169 +6780,115 @@ Rispondi SOLO con JSON valido:
       const adminErr = requireRole(body, 'admin');
       if (adminErr) return err(adminErr, 403);
 
-      // Estrai array piano: supporta body.piano.piano (nested) e body.piano (flat array)
+      // ═══ EXTRACT AI PLAN ARRAY ═══
       let pianoAI = [];
       if (body.piano) {
-        if (Array.isArray(body.piano)) {
-          pianoAI = body.piano;
-        } else if (body.piano.piano && Array.isArray(body.piano.piano)) {
-          pianoAI = body.piano.piano;
-        } else if (typeof body.piano === 'object') {
-          // Potrebbe essere l'intero result object — cerca piano dentro
-          pianoAI = body.piano.piano || [];
-        }
+        if (Array.isArray(body.piano)) pianoAI = body.piano;
+        else if (body.piano.piano && Array.isArray(body.piano.piano)) pianoAI = body.piano.piano;
+        else if (typeof body.piano === 'object') pianoAI = body.piano.piano || [];
       }
       const forceOverwrite = body.force_overwrite === true;
       const operatoreId = body.operatore_id || body.userId || 'admin';
-
       if (!Array.isArray(pianoAI) || !pianoAI.length) {
         return err(`Piano vuoto (${typeof body.piano}, keys: ${body.piano ? Object.keys(body.piano).join(',') : 'null'}). Genera prima un piano.`);
       }
 
-      // 1. Load existing entries for the date range (include macchina_id to avoid individual queries)
-      const dates = [...new Set(pianoAI.map(p => p.data || p.Data).filter(Boolean))];
-      const tecIds = [...new Set(pianoAI.map(p => p.tecnicoId || p.tecnico_id || p.TecnicoID).filter(Boolean))];
-      let existing = [];
-      if (dates.length) {
-        const dateMin = dates.sort()[0];
-        const dateMax = [...dates].sort().reverse()[0];
-        existing = await sb(env, 'piano', 'GET', null,
-          `?data=gte.${dateMin}&data=lte.${dateMax}&stato=neq.annullato&obsoleto=eq.false&select=id,tecnico_id,data,cliente_id,macchina_id,note&limit=1000`
-        ).catch(() => []);
-      }
-
-      // ── PRE-LOAD: build UUID→MAC_ lookup for macchina_id resolution ──
-      const aiMacIds = [...new Set(pianoAI.map(p => p.macchina_id).filter(v => v && !String(v).startsWith('MAC_')))];
-      let uuidToMacMap = {};
-      if (aiMacIds.length) {
-        // Bulk-resolve UUID macchina_ids to MAC_xxx via anagrafica_assets or macchine table
-        try {
-          const macRows = await sb(env, 'macchine', 'GET', null,
-            `?obsoleto=eq.false&select=id,seriale&limit=1000`
-          ).catch(() => []);
-          // Also load anagrafica_assets for UUID→MAC_ mapping
-          const assetRows = await sb(env, 'anagrafica_assets', 'GET', null,
-            `?select=id,macchina_id&limit=1000`
-          ).catch(() => []);
-          // Build reverse map: UUID → MAC_xxx
-          for (const a of assetRows) {
-            if (a.id && a.macchina_id) uuidToMacMap[a.id] = a.macchina_id;
-          }
-          // Also map seriale → MAC_xxx
-          for (const m of macRows) {
-            if (m.seriale) uuidToMacMap[m.seriale] = m.id;
-          }
-        } catch(e) { /* ignore, proceed without resolution */ }
-      }
-
-      // ── PRE-LOAD: build maps for matching existing entries ──
-      const existingById = {};
-      for (const e of existing) { existingById[e.id] = e; }
-      // Map macchina_id|data → existing PM rows (no individual queries needed)
-      const pmMap = {};
-      for (const e of existing) {
-        if (e.macchina_id && e.note && e.note.includes('[PM')) {
-          const k = `${e.macchina_id}|${e.data}`;
-          if (!pmMap[k]) pmMap[k] = e;
-        }
-      }
-      // Map cliente_id|data → unassigned entries (fallback)
-      const unassignedByCliDate = {};
-      for (const e of existing) {
-        if (!e.tecnico_id || e.tecnico_id === 'null' || e.tecnico_id === '') {
-          const key = `${e.cliente_id}|${e.data}`;
-          if (!unassignedByCliDate[key]) unassignedByCliDate[key] = [];
-          unassignedByCliDate[key].push(e);
-        }
-      }
-      const usedIds = new Set();
-
-      // Build conflict map from ASSIGNED entries only (entries with real tecnico_id)
-      const conflictMap = {};
-      for (const ex of existing) {
-        if (ex.tecnico_id && ex.tecnico_id !== 'null' && ex.tecnico_id !== '') {
-          const key = `${ex.tecnico_id}|${ex.data}`;
-          if (!conflictMap[key]) conflictMap[key] = [];
-          conflictMap[key].push(ex);
-        }
-      }
-
-      // 2. Separate items into: toProcess (non-conflicting or force) and conflicts
-      const INFO_TYPES = new Set(['reperibilita','assenza','trasferta']);
-      const conflicts = [];
-      const toProcess = [];
-      const conflictItems = [];
-      for (const item of pianoAI) {
-        const tipo = (item.tipo || '').toLowerCase();
-        if (INFO_TYPES.has(tipo)) continue; // skip info rows
-
-        const tid = item.tecnicoId || item.tecnico_id || item.TecnicoID;
-        const itemData = item.data || item.Data;
-        const itemId = item.id || '';
-        if (!tid || !itemData) { toProcess.push(item); continue; } // will fail later with proper error
-
-        // Check if this item matches an EXISTING UNASSIGNED entry → always process (it's an UPDATE, not a conflict)
-        let isUpdateOfUnassigned = false;
-        if (itemId && existingById[itemId] && !existingById[itemId].tecnico_id) isUpdateOfUnassigned = true;
-        if (!isUpdateOfUnassigned && item.macchina_id) {
-          // Resolve UUID macchina_id → MAC_xxx for pmMap lookup
-          let resolvedMac = item.macchina_id;
-          if (!resolvedMac.startsWith('MAC_') && uuidToMacMap[resolvedMac]) resolvedMac = uuidToMacMap[resolvedMac];
-          const pm = pmMap[`${resolvedMac}|${itemData}`];
-          if (pm && (!pm.tecnico_id || pm.tecnico_id === 'null' || pm.tecnico_id === '')) isUpdateOfUnassigned = true;
-        }
-        if (!isUpdateOfUnassigned) {
-          const cid = item.clienteId || item.cliente_id || item.ClienteID || null;
-          if (cid) {
-            const candidates = unassignedByCliDate[`${cid}|${itemData}`] || [];
-            if (candidates.some(c => !usedIds.has(c.id))) isUpdateOfUnassigned = true;
-          }
-        }
-
-        if (isUpdateOfUnassigned) {
-          toProcess.push(item); // It's an update of an unassigned PM entry → no conflict
-          continue;
-        }
-
-        // Check real conflicts (same tecnico+date already assigned)
-        const key = `${tid}|${itemData}`;
-        if (conflictMap[key] && conflictMap[key].length > 0) {
-          conflicts.push({
-            nuovo: { data: itemData, tecnico: item.tecnico, cliente: item.cliente, tipo: item.tipo },
-            esistenti: conflictMap[key].map(e => ({ id: e.id, cliente_id: e.cliente_id, note: (e.note || '').substring(0, 50) }))
-          });
-          if (forceOverwrite) {
-            // Overwrite: annulla existing then process
-            for (const e of conflictMap[key]) {
-              await sb(env, `piano?id=eq.${e.id}`, 'PATCH', {
-                stato: 'annullato', note: (e.note || '') + ' [Sovrascritto da AI]', updated_at: new Date().toISOString()
-              }).catch(() => {});
-            }
-            toProcess.push(item);
-          } else {
-            conflictItems.push(item); // Will be skipped but reported
-          }
-        } else {
-          toProcess.push(item); // No conflict → create new
-        }
-      }
-
-      // 3. ALWAYS process non-conflicting items, even if some conflicts exist
-      const created = [], updated = [], applyErrors = [];
       const now = new Date().toISOString();
       const tenantId = env.TENANT_ID || DEFAULT_TENANT;
+      const INFO_TYPES = new Set(['reperibilita','assenza','trasferta']);
 
       // ── Helper: normalize automezzo_id (AI outputs "F3" but DB expects "FURG_3") ──
       const normFurgone = (v) => {
         if (!v) return null;
         v = String(v).trim();
-        if (/^F\d+$/i.test(v)) return 'FURG_' + v.substring(1);    // F3 → FURG_3
-        if (/^FURG[-_]\d+$/i.test(v)) return v.replace('-', '_').toUpperCase(); // normalize FURG-3 → FURG_3
-        if (/^AUT_/i.test(v)) return v.toUpperCase();                // AUT_xxx pass through
+        if (/^F\d+$/i.test(v)) return 'FURG_' + v.substring(1);
+        if (/^FURG[-_]\d+$/i.test(v)) return v.replace('-', '_').toUpperCase();
+        if (/^AUT_/i.test(v)) return v.toUpperCase();
         return v;
       };
 
-      for (const item of toProcess) {
+      // ═══ 1. LOAD ALL EXISTING ENTRIES FOR THE MONTH (not just AI date range) ═══
+      // Load the full month so we can match PM entries even if AI changed dates
+      const aiDates = pianoAI.map(p => p.data || p.Data).filter(Boolean);
+      const monthMatch = (aiDates[0] || '').match(/^(\d{4}-\d{2})/);
+      const monthPrefix = monthMatch ? monthMatch[1] : '';
+      let existing = [];
+      if (monthPrefix) {
+        // Load ALL entries for the month (not just AI date range)
+        existing = await sb(env, 'piano', 'GET', null,
+          `?data=gte.${monthPrefix}-01&data=lte.${monthPrefix}-31&stato=neq.annullato&obsoleto=eq.false&select=id,tecnico_id,data,cliente_id,macchina_id,note,automezzo_id,ora_inizio&limit=1000`
+        ).catch(() => []);
+      }
+
+      // ═══ 2. BUILD UUID→MAC LOOKUP ═══
+      let uuidToMacMap = {};
+      try {
+        const [macRows, assetRows] = await Promise.all([
+          sb(env, 'macchine', 'GET', null, `?obsoleto=eq.false&select=id,seriale&limit=1000`).catch(() => []),
+          sb(env, 'anagrafica_assets', 'GET', null, `?select=id,macchina_id&limit=1000`).catch(() => [])
+        ]);
+        for (const a of assetRows) { if (a.id && a.macchina_id) uuidToMacMap[a.id] = a.macchina_id; }
+        for (const m of macRows) { if (m.seriale) uuidToMacMap[m.seriale] = m.id; }
+      } catch(e) { /* proceed without */ }
+
+      // ═══ 3. BUILD COMPREHENSIVE MATCH POOLS ═══
+      const existingById = {};
+      const unassignedPool = []; // ALL unassigned PM entries for the month
+      const assignedByTecDate = {}; // tecnico_id|date → entries (for conflict check)
+
+      for (const e of existing) {
+        existingById[e.id] = e;
+        const hasTec = e.tecnico_id && e.tecnico_id !== 'null' && e.tecnico_id !== '';
+        if (!hasTec) {
+          unassignedPool.push(e);
+        } else {
+          const k = `${e.tecnico_id}|${e.data}`;
+          if (!assignedByTecDate[k]) assignedByTecDate[k] = [];
+          assignedByTecDate[k].push(e);
+        }
+      }
+
+      // Index unassigned by multiple keys for flexible matching
+      const unById = {};
+      const unByMacDate = {};
+      const unByCliDate = {};
+      const unByCli = {};
+      const unByMac = {};
+      for (const e of unassignedPool) {
+        unById[e.id] = e;
+        if (e.macchina_id) {
+          const k1 = `${e.macchina_id}|${e.data}`;
+          if (!unByMacDate[k1]) unByMacDate[k1] = [];
+          unByMacDate[k1].push(e);
+          if (!unByMac[e.macchina_id]) unByMac[e.macchina_id] = [];
+          unByMac[e.macchina_id].push(e);
+        }
+        if (e.cliente_id) {
+          const k2 = `${e.cliente_id}|${e.data}`;
+          if (!unByCliDate[k2]) unByCliDate[k2] = [];
+          unByCliDate[k2].push(e);
+          if (!unByCli[e.cliente_id]) unByCli[e.cliente_id] = [];
+          unByCli[e.cliente_id].push(e);
+        }
+      }
+      const usedIds = new Set();
+
+      // ═══ 4. SORT AI ITEMS: earliest deadline first (scadenza maggiore = priorità) ═══
+      const actionItems = pianoAI.filter(item => {
+        const tipo = (item.tipo || '').toLowerCase();
+        return !INFO_TYPES.has(tipo);
+      });
+      // Sort by date ASC (earliest first = most urgent deadline)
+      actionItems.sort((a, b) => {
+        const da = a.data || a.Data || '9999';
+        const db = b.data || b.Data || '9999';
+        return da.localeCompare(db);
+      });
+
+      // ═══ 5. MATCH & PROCESS ALL AI ITEMS ═══
+      const created = [], updated = [], applyErrors = [], conflicts = [], skippedDups = [];
+
+      for (const item of actionItems) {
         try {
           const tecId = item.tecnicoId || item.tecnico_id || item.TecnicoID;
           const cid = item.clienteId || item.cliente_id || item.ClienteID || null;
@@ -6951,121 +6897,146 @@ Rispondi SOLO con JSON valido:
           if (!itemData) { applyErrors.push({ item: `${item.tecnico||tecId}`, err: 'data mancante' }); continue; }
           const durata = item.durataOre || item.durata_ore || '';
           const noteParts = [item.tipo || '', item.note || '', durata ? durata+'h' : ''].filter(Boolean);
-          // Resolve macchina_id: if AI sent UUID, convert to MAC_xxx
           let macId = item.macchina_id || null;
-          if (macId && !macId.startsWith('MAC_') && uuidToMacMap[macId]) {
-            macId = uuidToMacMap[macId];
+          if (macId && !macId.startsWith('MAC_')) {
+            if (uuidToMacMap[macId]) macId = uuidToMacMap[macId];
+            else macId = null; // UUID not resolvable → null to avoid FK violation
           }
           const furgoneNorm = normFurgone(item.furgone || item.automezzo_id);
-
-          // ── MATCH existing entry to UPDATE instead of creating duplicate ──
-          let matchedRow = null;
           const itemId = item.id || '';
 
-          // Strategy 1: ID match (AI preserved PM_xxx/INT_xxx from "interventi da assegnare")
-          if (itemId && !itemId.startsWith('null') && existingById[itemId] && !usedIds.has(itemId)) {
-            const ex = existingById[itemId];
-            if (!ex.tecnico_id || ex.tecnico_id === 'null' || ex.tecnico_id === '') {
-              matchedRow = ex;
-            }
+          // ── AGGRESSIVE 5-LEVEL MATCHING: find best existing PM entry to update ──
+          let matchedRow = null;
+
+          // Level 1: exact ID match (AI preserved PM_xxx)
+          if (itemId && !itemId.startsWith('null') && unById[itemId] && !usedIds.has(itemId)) {
+            matchedRow = unById[itemId];
           }
-          // Strategy 2: macchina_id|data match
+          // Level 2: macchina_id + exact date
           if (!matchedRow && macId) {
-            const pmKey = `${macId}|${itemData}`;
-            const pm = pmMap[pmKey];
-            if (pm && (!pm.tecnico_id || pm.tecnico_id === 'null' || pm.tecnico_id === '') && !usedIds.has(pm.id)) {
-              matchedRow = pm;
-            }
+            const candidates = unByMacDate[`${macId}|${itemData}`] || [];
+            matchedRow = candidates.find(c => !usedIds.has(c.id)) || null;
           }
-          // Strategy 3: cliente_id|data match (for unassigned PM entries)
+          // Level 3: cliente_id + exact date
           if (!matchedRow && cid) {
-            const cliKey = `${cid}|${itemData}`;
-            const candidates = unassignedByCliDate[cliKey] || [];
-            const free = candidates.find(c => !usedIds.has(c.id));
-            if (free) {
-              matchedRow = free;
+            const candidates = unByCliDate[`${cid}|${itemData}`] || [];
+            matchedRow = candidates.find(c => !usedIds.has(c.id)) || null;
+          }
+          // Level 4: macchina_id + nearby date (±14 days) — AI may have rescheduled
+          if (!matchedRow && macId && unByMac[macId]) {
+            const nearby = unByMac[macId]
+              .filter(c => !usedIds.has(c.id))
+              .map(c => ({ ...c, _dist: Math.abs(new Date(c.data) - new Date(itemData)) / 86400000 }))
+              .filter(c => c._dist <= 14)
+              .sort((a, b) => a._dist - b._dist);
+            if (nearby.length) matchedRow = existingById[nearby[0].id]; // get original ref
+          }
+          // Level 5: cliente_id + nearby date (±14 days) — broadest match
+          if (!matchedRow && cid && unByCli[cid]) {
+            const nearby = unByCli[cid]
+              .filter(c => !usedIds.has(c.id))
+              .map(c => ({ ...c, _dist: Math.abs(new Date(c.data) - new Date(itemData)) / 86400000 }))
+              .filter(c => c._dist <= 14)
+              .sort((a, b) => a._dist - b._dist);
+            if (nearby.length) matchedRow = existingById[nearby[0].id];
+          }
+
+          // ── CONFLICT CHECK: only if no PM match found (i.e., creating new) ──
+          if (!matchedRow) {
+            const confKey = `${tecId}|${itemData}`;
+            if (assignedByTecDate[confKey] && !forceOverwrite) {
+              conflicts.push({
+                nuovo: { data: itemData, tecnico: item.tecnico || tecId, cliente: item.cliente || cid, tipo: item.tipo },
+                esistenti: assignedByTecDate[confKey].map(e => ({ id: e.id, cliente_id: e.cliente_id }))
+              });
+              continue; // skip this one, it conflicts
+            }
+            if (assignedByTecDate[confKey] && forceOverwrite) {
+              for (const e of assignedByTecDate[confKey]) {
+                await sb(env, `piano?id=eq.${e.id}`, 'PATCH', {
+                  stato: 'annullato', note: (e.note || '') + ' [Sovrascritto da AI]', updated_at: now
+                }).catch(() => {});
+              }
             }
           }
 
+          // ── WRITE: UPDATE matched PM entry or CREATE new ──
           if (matchedRow) {
-            // UPDATE existing row: assegna tecnico, furgone, ora
             usedIds.add(matchedRow.id);
             const patchData = {
               tecnico_id: tecId,
               cliente_id: cid || matchedRow.cliente_id,
-              ora_inizio: item.oraInizio || item.ora_inizio || null,
+              data: itemData, // AI may have rescheduled the date
+              ora_inizio: item.oraInizio || item.ora_inizio || matchedRow.ora_inizio || null,
               automezzo_id: furgoneNorm,
-              note: noteParts.join(' — '),
+              note: matchedRow.note
+                ? matchedRow.note + ' — [AI] ' + noteParts.join(' ')
+                : noteParts.join(' — '),
               origine: 'ai',
               updated_at: now
             };
-            if (macId) patchData.macchina_id = macId;
+            if (macId && macId.startsWith('MAC_')) patchData.macchina_id = macId;
             await sb(env, `piano?id=eq.${matchedRow.id}`, 'PATCH', patchData);
             updated.push(matchedRow.id);
-            await wlog('piano', matchedRow.id, 'ai_plan_assigned', operatoreId, `PM aggiornato: ${tecId} @ ${cid || matchedRow.cliente_id}`).catch(()=>{});
           } else {
-            // CREATE new row (no existing match found)
+            // Dedup: don't create if same tecnico+date+cliente already created in this batch
+            const dupKey = `${tecId}|${itemData}|${cid}`;
+            if (created.some(cid2 => cid2._dk === dupKey)) { skippedDups.push(dupKey); continue; }
             const id = (itemId && !itemId.startsWith('null') && !existingById[itemId]) ? itemId : secureId('INT_AI');
+            const safeMacId = (macId && macId.startsWith('MAC_')) ? macId : null;
             await sb(env, 'piano', 'POST', {
-              id,
-              tecnico_id: tecId,
-              cliente_id: cid,
-              macchina_id: macId,
-              data: itemData,
+              id, tecnico_id: tecId, cliente_id: cid, macchina_id: safeMacId, data: itemData,
               ora_inizio: item.oraInizio || item.ora_inizio || null,
-              automezzo_id: furgoneNorm,
-              stato: 'pianificato',
-              origine: 'ai',
-              note: noteParts.join(' — '),
-              obsoleto: false,
-              tenant_id: tenantId,
-              created_at: now,
-              updated_at: now
+              automezzo_id: furgoneNorm, stato: 'pianificato', origine: 'ai',
+              note: noteParts.join(' — '), obsoleto: false,
+              tenant_id: tenantId, created_at: now, updated_at: now
             });
-            created.push(id);
-            await wlog('piano', id, 'ai_plan_applied', operatoreId, `${tecId} @ ${cid}`).catch(()=>{});
+            created.push({ id, _dk: dupKey });
           }
         } catch (e) {
           applyErrors.push({ item: `${item.data||'?'} ${item.tecnico||'?'}`, err: e.message });
         }
       }
 
-      // 4. Auto-update urgenze status when scheduled in plan
+      // ═══ 6. AUTO-UPDATE URGENZE STATUS ═══
       let urgScheduled = 0;
-      for (const item of toProcess) {
-        const tipo = (item.tipo || '').toLowerCase();
-        if (tipo !== 'urgenza') continue;
+      for (const item of actionItems) {
+        if ((item.tipo || '').toLowerCase() !== 'urgenza') continue;
         const urgId = item.id;
         if (!urgId || !urgId.startsWith('URG')) continue;
         try {
           await sb(env, `urgenze?id=eq.${urgId}`, 'PATCH', {
             stato: 'schedulata',
             tecnico_id: item.tecnicoId || item.tecnico_id || null,
-            data_schedulata: item.data || null,
-            updated_at: now
+            data_schedulata: item.data || null, updated_at: now
           });
           urgScheduled++;
         } catch (e) { /* ignore */ }
       }
 
-      // 5. Return results — include conflicts if any exist (but items were still processed)
+      // ═══ 7. REPORT: remaining unassigned PM entries ═══
+      const stillUnassigned = unassignedPool.filter(e => !usedIds.has(e.id));
+
+      const createdIds = created.map(c => typeof c === 'string' ? c : c.id);
+      // 8. Return results
       const result = {
-        created: created.length,
+        created: createdIds.length,
         updated_pm: updated.length,
         urg_scheduled: urgScheduled,
         overwritten: forceOverwrite ? conflicts.length : 0,
         errors: applyErrors.length ? applyErrors.slice(0, 20) : undefined,
         error_count: applyErrors.length,
-        ids: [...created, ...updated],
+        ids: [...createdIds, ...updated],
         total_received: pianoAI.length,
-        total_processed: toProcess.length
+        total_processed: createdIds.length + updated.length,
+        still_unassigned: stillUnassigned.length,
+        skipped_duplicates: skippedDups.length
       };
       if (conflicts.length && !forceOverwrite) {
         result.has_conflicts = true;
         result.conflicts_count = conflicts.length;
         result.conflicts = conflicts.slice(0, 20);
-        result.skipped = conflictItems.length;
-        result.message = `${created.length + updated.length} interventi applicati. ${conflicts.length} conflitti (stesso tecnico+data) — invia force_overwrite per sovrascriverli.`;
+        result.message = `${createdIds.length + updated.length} interventi applicati. ${conflicts.length} conflitti — invia force_overwrite per sovrascriverli. ${stillUnassigned.length} PM ancora senza tecnico.`;
       }
       return ok(result);
     }
