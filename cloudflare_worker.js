@@ -6811,6 +6811,30 @@ Rispondi SOLO con JSON valido:
         ).catch(() => []);
       }
 
+      // ── PRE-LOAD: build UUID→MAC_ lookup for macchina_id resolution ──
+      const aiMacIds = [...new Set(pianoAI.map(p => p.macchina_id).filter(v => v && !String(v).startsWith('MAC_')))];
+      let uuidToMacMap = {};
+      if (aiMacIds.length) {
+        // Bulk-resolve UUID macchina_ids to MAC_xxx via anagrafica_assets or macchine table
+        try {
+          const macRows = await sb(env, 'macchine', 'GET', null,
+            `?obsoleto=eq.false&select=id,seriale&limit=1000`
+          ).catch(() => []);
+          // Also load anagrafica_assets for UUID→MAC_ mapping
+          const assetRows = await sb(env, 'anagrafica_assets', 'GET', null,
+            `?select=id,macchina_id&limit=1000`
+          ).catch(() => []);
+          // Build reverse map: UUID → MAC_xxx
+          for (const a of assetRows) {
+            if (a.id && a.macchina_id) uuidToMacMap[a.id] = a.macchina_id;
+          }
+          // Also map seriale → MAC_xxx
+          for (const m of macRows) {
+            if (m.seriale) uuidToMacMap[m.seriale] = m.id;
+          }
+        } catch(e) { /* ignore, proceed without resolution */ }
+      }
+
       // ── PRE-LOAD: build maps for matching existing entries ──
       const existingById = {};
       for (const e of existing) { existingById[e.id] = e; }
@@ -6860,9 +6884,12 @@ Rispondi SOLO con JSON valido:
         // Check if this item matches an EXISTING UNASSIGNED entry → always process (it's an UPDATE, not a conflict)
         let isUpdateOfUnassigned = false;
         if (itemId && existingById[itemId] && !existingById[itemId].tecnico_id) isUpdateOfUnassigned = true;
-        if (!isUpdateOfUnassigned && item.macchina_id && pmMap[`${item.macchina_id}|${itemData}`]) {
-          const pm = pmMap[`${item.macchina_id}|${itemData}`];
-          if (!pm.tecnico_id || pm.tecnico_id === 'null' || pm.tecnico_id === '') isUpdateOfUnassigned = true;
+        if (!isUpdateOfUnassigned && item.macchina_id) {
+          // Resolve UUID macchina_id → MAC_xxx for pmMap lookup
+          let resolvedMac = item.macchina_id;
+          if (!resolvedMac.startsWith('MAC_') && uuidToMacMap[resolvedMac]) resolvedMac = uuidToMacMap[resolvedMac];
+          const pm = pmMap[`${resolvedMac}|${itemData}`];
+          if (pm && (!pm.tecnico_id || pm.tecnico_id === 'null' || pm.tecnico_id === '')) isUpdateOfUnassigned = true;
         }
         if (!isUpdateOfUnassigned) {
           const cid = item.clienteId || item.cliente_id || item.ClienteID || null;
@@ -6905,6 +6932,16 @@ Rispondi SOLO con JSON valido:
       const now = new Date().toISOString();
       const tenantId = env.TENANT_ID || DEFAULT_TENANT;
 
+      // ── Helper: normalize automezzo_id (AI outputs "F3" but DB expects "FURG_3") ──
+      const normFurgone = (v) => {
+        if (!v) return null;
+        v = String(v).trim();
+        if (/^F\d+$/i.test(v)) return 'FURG_' + v.substring(1);    // F3 → FURG_3
+        if (/^FURG[-_]\d+$/i.test(v)) return v.replace('-', '_').toUpperCase(); // normalize FURG-3 → FURG_3
+        if (/^AUT_/i.test(v)) return v.toUpperCase();                // AUT_xxx pass through
+        return v;
+      };
+
       for (const item of toProcess) {
         try {
           const tecId = item.tecnicoId || item.tecnico_id || item.TecnicoID;
@@ -6914,7 +6951,12 @@ Rispondi SOLO con JSON valido:
           if (!itemData) { applyErrors.push({ item: `${item.tecnico||tecId}`, err: 'data mancante' }); continue; }
           const durata = item.durataOre || item.durata_ore || '';
           const noteParts = [item.tipo || '', item.note || '', durata ? durata+'h' : ''].filter(Boolean);
-          const macId = item.macchina_id || null;
+          // Resolve macchina_id: if AI sent UUID, convert to MAC_xxx
+          let macId = item.macchina_id || null;
+          if (macId && !macId.startsWith('MAC_') && uuidToMacMap[macId]) {
+            macId = uuidToMacMap[macId];
+          }
+          const furgoneNorm = normFurgone(item.furgone || item.automezzo_id);
 
           // ── MATCH existing entry to UPDATE instead of creating duplicate ──
           let matchedRow = null;
@@ -6952,7 +6994,7 @@ Rispondi SOLO con JSON valido:
               tecnico_id: tecId,
               cliente_id: cid || matchedRow.cliente_id,
               ora_inizio: item.oraInizio || item.ora_inizio || null,
-              automezzo_id: item.furgone || item.automezzo_id || null,
+              automezzo_id: furgoneNorm,
               note: noteParts.join(' — '),
               origine: 'ai',
               updated_at: now
@@ -6971,7 +7013,7 @@ Rispondi SOLO con JSON valido:
               macchina_id: macId,
               data: itemData,
               ora_inizio: item.oraInizio || item.ora_inizio || null,
-              automezzo_id: item.furgone || item.automezzo_id || null,
+              automezzo_id: furgoneNorm,
               stato: 'pianificato',
               origine: 'ai',
               note: noteParts.join(' — '),
