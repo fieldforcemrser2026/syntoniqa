@@ -3196,13 +3196,14 @@ async function handlePost(action, body, env) {
         }
         nSenzaTecnico = senzaTecnico.length;
         if (senzaTecnico.length) {
-          interventiDaAssegnare = `\nINTERVENTI DA ASSEGNARE (${senzaTecnico.length} interventi generati da PM/tagliandi — DEVI assegnare tecnico, data e furgone per CIASCUNO):\n` +
+          interventiDaAssegnare = `\nINTERVENTI DA ASSEGNARE (${senzaTecnico.length} interventi generati da PM/tagliandi — DEVI assegnare tecnico, data e furgone per CIASCUNO. PRESERVA l'ID originale!):\n` +
             senzaTecnico.map(p => {
               const d = p.data || p.Data || '';
               const cli = p.cliente_id || p.ClienteID || '?';
               const note = p.note || p.Note || '';
               const tipo = p.tipo_intervento_id || p.TipoIntervento || 'tagliando';
-              return `- ID:${p.id||'?'}|data_sugg:${d}|cliente:${cli}|tipo:${tipo}|note:${anonEncode(note)} [ASSEGNA TECNICO+FURGONE]`;
+              const macId = p.macchina_id || '';
+              return `- ID:${p.id||'?'}|data_sugg:${d}|cliente:${cli}|macchina:${macId}|tipo:${tipo}|note:${anonEncode(note)} [ASSEGNA TECNICO+FURGONE, PRESERVA ID]`;
             }).join('\n');
         }
       }
@@ -3602,8 +3603,8 @@ REGOLE INVIOLABILI:
 - Distribuisci clienti per zona: ottimizza percorsi, non mandare stesso tecnico a stesso cliente per giorni consecutivi senza motivo logistico.
 - Usa SOLO codici dalla lista (TEC_xxx, codice_m3, FURG_x). NON inventare ID.
 
-JSON: {"summary":"...","piano":[{"id":"INT_xxx o INS_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza|installazione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}
-NOTA ID: se stai ASSEGNANDO un intervento esistente dalla lista INTERVENTI DA ASSEGNARE, usa il suo ID (es: INT_xxx). Per INSTALLAZIONI usa l'ID dalla lista (es: INS_xxx). Se stai CREANDO un nuovo intervento, usa null.`;
+JSON: {"summary":"...","piano":[{"id":"PM_xxx o INT_xxx o INS_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","macchina_id":"MAC_xxx o null","tipo":"tagliando|urgenza|installazione","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA | Xh"}],"warnings":["..."]}
+NOTA ID: se stai ASSEGNANDO un intervento esistente dalla lista INTERVENTI DA ASSEGNARE, usa il suo ID ORIGINALE (es: PM_xxx, INT_xxx). Per INSTALLAZIONI usa l'ID dalla lista (es: INS_xxx). Se stai CREANDO un nuovo intervento, usa null. NON cambiare gli ID degli interventi da assegnare!`;
 
       // ─── Debug SSE: emetti il prompt prima della chiamata AI ───
       const _senzaTec = interventiDaAssegnare ? (allPianoDb.filter(p => !p.tecnico_id || p.tecnico_id === 'null' || p.tecnico_id === '').length) : 0;
@@ -3647,9 +3648,9 @@ REGOLE INVIOLABILI:
 5. Ogni macchina/asset UNA SOLA VOLTA nel piano. NON ripetere.
 6. Usa SOLO codici ID dalla lista. NON inventare ID.
 7. Note: scrivi NOME MACCHINA (es: "Astronaut A5 | scad:2026-03-10 | 2800h"), MAI UUID.
-8. Se ci sono INTERVENTI DA ASSEGNARE (con ID), assegna tecnico+data+furgone a ciascuno.
+8. Se ci sono INTERVENTI DA ASSEGNARE (con ID), assegna tecnico+data+furgone a ciascuno. PRESERVA l'ID originale (PM_xxx, INT_xxx) — NON cambiarlo!
 
-Formato JSON: {"summary":"...","piano":[{"id":"INT_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza|installazione|controllo","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"NomeMacchina | scad:DATA | Xh"}],"warnings":["..."]}`;
+Formato JSON: {"summary":"...","piano":[{"id":"PM_xxx o INT_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","macchina_id":"MAC_xxx o null","tipo":"tagliando|urgenza|installazione|controllo","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"NomeMacchina | scad:DATA | Xh"}],"warnings":["..."]}`;
 
       // Helper: costruisce prompt compatto per Workers AI (rimuove file e comprime dati)
       function buildCompactPrompt() {
@@ -3680,7 +3681,7 @@ ${periodoIstruzione || 'Genera piano mese intero'}
 - Tecnici assenti da vincoli: NON inserirli.
 - Usa furgone indicato nel tecnico. Usa SOLO codici dalla lista. NON inventare ID.
 
-JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA"}],"warnings":[]}`;
+JSON: {"summary":"...","piano":[{"id":"PM_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","macchina_id":"MAC_xxx o null","tipo":"tagliando|urgenza","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"modello | scad:DATA"}],"warnings":[]}`;
       }
 
       // Engine registry: ogni engine ha key env, funzione try, flag disabled
@@ -5958,7 +5959,7 @@ ${fileContext ? '\nFILE ALLEGATI:\n' + fileContext : ''}`;
 - Raggruppa per zona (stessa zona per stesso tecnico nello stesso giorno).
 - ${nTeamEffettivi} team effettivi/giorno. Genera ${nTeamEffettivi * 2} righe/giorno (2 per team: senior+junior).
 ${seniorConstraint}
-JSON: {"summary":"...","piano":[{"data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","tipo":"tagliando|urgenza|installazione|controllo","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"NomeMacchina | scad:DATA"}],"warnings":["..."]}`;
+JSON: {"summary":"...","piano":[{"id":"PM_xxx o null","data":"YYYY-MM-DD","tecnicoId":"TEC_xxx","clienteId":"codice_m3","macchina_id":"MAC_xxx o null","tipo":"tagliando|urgenza|installazione|controllo","oraInizio":"HH:MM","durataOre":N,"furgone":"FURG_x","note":"NomeMacchina | scad:DATA"}],"warnings":["..."]}`;
 
         // ── CHUNKING SETTIMANALE: max 5 giorni per chunk = output gestibile ──
         // Sempre chunking per meseTarget (mese/vuoti/settimana)
@@ -6798,81 +6799,151 @@ Rispondi SOLO con JSON valido:
         return err(`Piano vuoto (${typeof body.piano}, keys: ${body.piano ? Object.keys(body.piano).join(',') : 'null'}). Genera prima un piano.`);
       }
 
-      // 1. Check for conflicts (existing interventions same tecnico+data)
+      // 1. Load existing entries for the date range (include macchina_id to avoid individual queries)
       const dates = [...new Set(pianoAI.map(p => p.data || p.Data).filter(Boolean))];
       const tecIds = [...new Set(pianoAI.map(p => p.tecnicoId || p.tecnico_id || p.TecnicoID).filter(Boolean))];
       let existing = [];
-      if (dates.length && tecIds.length) {
+      if (dates.length) {
         const dateMin = dates.sort()[0];
-        const dateMax = dates.sort().reverse()[0];
+        const dateMax = [...dates].sort().reverse()[0];
         existing = await sb(env, 'piano', 'GET', null,
-          `?data=gte.${dateMin}&data=lte.${dateMax}&stato=neq.annullato&obsoleto=eq.false&select=id,tecnico_id,data,cliente_id,note&limit=500`
+          `?data=gte.${dateMin}&data=lte.${dateMax}&stato=neq.annullato&obsoleto=eq.false&select=id,tecnico_id,data,cliente_id,macchina_id,note&limit=1000`
         ).catch(() => []);
       }
 
-      // Build conflict map: tecnico+data → existing items
+      // ── PRE-LOAD: build UUID→MAC_ lookup for macchina_id resolution ──
+      const aiMacIds = [...new Set(pianoAI.map(p => p.macchina_id).filter(v => v && !String(v).startsWith('MAC_')))];
+      let uuidToMacMap = {};
+      if (aiMacIds.length) {
+        // Bulk-resolve UUID macchina_ids to MAC_xxx via anagrafica_assets or macchine table
+        try {
+          const macRows = await sb(env, 'macchine', 'GET', null,
+            `?obsoleto=eq.false&select=id,seriale&limit=1000`
+          ).catch(() => []);
+          // Also load anagrafica_assets for UUID→MAC_ mapping
+          const assetRows = await sb(env, 'anagrafica_assets', 'GET', null,
+            `?select=id,macchina_id&limit=1000`
+          ).catch(() => []);
+          // Build reverse map: UUID → MAC_xxx
+          for (const a of assetRows) {
+            if (a.id && a.macchina_id) uuidToMacMap[a.id] = a.macchina_id;
+          }
+          // Also map seriale → MAC_xxx
+          for (const m of macRows) {
+            if (m.seriale) uuidToMacMap[m.seriale] = m.id;
+          }
+        } catch(e) { /* ignore, proceed without resolution */ }
+      }
+
+      // ── PRE-LOAD: build maps for matching existing entries ──
+      const existingById = {};
+      for (const e of existing) { existingById[e.id] = e; }
+      // Map macchina_id|data → existing PM rows (no individual queries needed)
+      const pmMap = {};
+      for (const e of existing) {
+        if (e.macchina_id && e.note && e.note.includes('[PM')) {
+          const k = `${e.macchina_id}|${e.data}`;
+          if (!pmMap[k]) pmMap[k] = e;
+        }
+      }
+      // Map cliente_id|data → unassigned entries (fallback)
+      const unassignedByCliDate = {};
+      for (const e of existing) {
+        if (!e.tecnico_id || e.tecnico_id === 'null' || e.tecnico_id === '') {
+          const key = `${e.cliente_id}|${e.data}`;
+          if (!unassignedByCliDate[key]) unassignedByCliDate[key] = [];
+          unassignedByCliDate[key].push(e);
+        }
+      }
+      const usedIds = new Set();
+
+      // Build conflict map from ASSIGNED entries only (entries with real tecnico_id)
       const conflictMap = {};
       for (const ex of existing) {
-        const key = `${ex.tecnico_id}|${ex.data}`;
-        if (!conflictMap[key]) conflictMap[key] = [];
-        conflictMap[key].push(ex);
+        if (ex.tecnico_id && ex.tecnico_id !== 'null' && ex.tecnico_id !== '') {
+          const key = `${ex.tecnico_id}|${ex.data}`;
+          if (!conflictMap[key]) conflictMap[key] = [];
+          conflictMap[key].push(ex);
+        }
       }
 
+      // 2. Separate items into: toProcess (non-conflicting or force) and conflicts
+      const INFO_TYPES = new Set(['reperibilita','assenza','trasferta']);
       const conflicts = [];
-      const toCreate = [];
+      const toProcess = [];
+      const conflictItems = [];
       for (const item of pianoAI) {
+        const tipo = (item.tipo || '').toLowerCase();
+        if (INFO_TYPES.has(tipo)) continue; // skip info rows
+
         const tid = item.tecnicoId || item.tecnico_id || item.TecnicoID;
-        const key = `${tid}|${item.data || item.Data}`;
-        if (conflictMap[key] && conflictMap[key].length > 0) {
-          conflicts.push({
-            nuovo: { data: item.data, tecnico: item.tecnico, cliente: item.cliente, tipo: item.tipo },
-            esistenti: conflictMap[key].map(e => ({ id: e.id, cliente_id: e.cliente_id, note: (e.note || '').substring(0, 50) }))
-          });
-          if (!forceOverwrite) continue; // Skip conflicts unless forced
-          // Overwrite: annulla existing
-          for (const e of conflictMap[key]) {
-            await sb(env, `piano?id=eq.${e.id}`, 'PATCH', {
-              stato: 'annullato', note: (e.note || '') + ' [Sovrascritto da AI]', updated_at: new Date().toISOString()
-            }).catch(() => {});
+        const itemData = item.data || item.Data;
+        const itemId = item.id || '';
+        if (!tid || !itemData) { toProcess.push(item); continue; } // will fail later with proper error
+
+        // Check if this item matches an EXISTING UNASSIGNED entry → always process (it's an UPDATE, not a conflict)
+        let isUpdateOfUnassigned = false;
+        if (itemId && existingById[itemId] && !existingById[itemId].tecnico_id) isUpdateOfUnassigned = true;
+        if (!isUpdateOfUnassigned && item.macchina_id) {
+          // Resolve UUID macchina_id → MAC_xxx for pmMap lookup
+          let resolvedMac = item.macchina_id;
+          if (!resolvedMac.startsWith('MAC_') && uuidToMacMap[resolvedMac]) resolvedMac = uuidToMacMap[resolvedMac];
+          const pm = pmMap[`${resolvedMac}|${itemData}`];
+          if (pm && (!pm.tecnico_id || pm.tecnico_id === 'null' || pm.tecnico_id === '')) isUpdateOfUnassigned = true;
+        }
+        if (!isUpdateOfUnassigned) {
+          const cid = item.clienteId || item.cliente_id || item.ClienteID || null;
+          if (cid) {
+            const candidates = unassignedByCliDate[`${cid}|${itemData}`] || [];
+            if (candidates.some(c => !usedIds.has(c.id))) isUpdateOfUnassigned = true;
           }
         }
-        toCreate.push(item);
+
+        if (isUpdateOfUnassigned) {
+          toProcess.push(item); // It's an update of an unassigned PM entry → no conflict
+          continue;
+        }
+
+        // Check real conflicts (same tecnico+date already assigned)
+        const key = `${tid}|${itemData}`;
+        if (conflictMap[key] && conflictMap[key].length > 0) {
+          conflicts.push({
+            nuovo: { data: itemData, tecnico: item.tecnico, cliente: item.cliente, tipo: item.tipo },
+            esistenti: conflictMap[key].map(e => ({ id: e.id, cliente_id: e.cliente_id, note: (e.note || '').substring(0, 50) }))
+          });
+          if (forceOverwrite) {
+            // Overwrite: annulla existing then process
+            for (const e of conflictMap[key]) {
+              await sb(env, `piano?id=eq.${e.id}`, 'PATCH', {
+                stato: 'annullato', note: (e.note || '') + ' [Sovrascritto da AI]', updated_at: new Date().toISOString()
+              }).catch(() => {});
+            }
+            toProcess.push(item);
+          } else {
+            conflictItems.push(item); // Will be skipped but reported
+          }
+        } else {
+          toProcess.push(item); // No conflict → create new
+        }
       }
 
-      // If there are conflicts and not forcing, return them for user confirmation
-      if (conflicts.length && !forceOverwrite) {
-        return ok({
-          has_conflicts: true,
-          conflicts_count: conflicts.length,
-          conflicts: conflicts.slice(0, 20),
-          skipped: conflicts.length,
-          message: `${conflicts.length} conflitti trovati (stesso tecnico+data). Invia force_overwrite:true per sovrascrivere.`
-        });
-      }
-
-      // 2. Create new interventions (skip info rows: reperibilita, assenza, trasferta)
-      const INFO_TYPES = new Set(['reperibilita','assenza','trasferta']);
+      // 3. ALWAYS process non-conflicting items, even if some conflicts exist
       const created = [], updated = [], applyErrors = [];
       const now = new Date().toISOString();
       const tenantId = env.TENANT_ID || DEFAULT_TENANT;
 
-      // Pre-load existing PM rows (macchina+data) for upsert instead of duplicate
-      const pmExisting = existing.filter(e => e.note && e.note.includes('[PM'));
-      const pmMap = {}; // macchina_id|data → existing PM row
-      for (const e of pmExisting) {
-        // Load macchina_id for PM rows
-        const fullRow = await sb(env, 'piano', 'GET', null, `?id=eq.${e.id}&select=id,macchina_id,data,tecnico_id`).catch(() => []);
-        if (fullRow?.[0]?.macchina_id) {
-          pmMap[`${fullRow[0].macchina_id}|${fullRow[0].data}`] = fullRow[0];
-        }
-      }
+      // ── Helper: normalize automezzo_id (AI outputs "F3" but DB expects "FURG_3") ──
+      const normFurgone = (v) => {
+        if (!v) return null;
+        v = String(v).trim();
+        if (/^F\d+$/i.test(v)) return 'FURG_' + v.substring(1);    // F3 → FURG_3
+        if (/^FURG[-_]\d+$/i.test(v)) return v.replace('-', '_').toUpperCase(); // normalize FURG-3 → FURG_3
+        if (/^AUT_/i.test(v)) return v.toUpperCase();                // AUT_xxx pass through
+        return v;
+      };
 
-      for (const item of toCreate) {
+      for (const item of toProcess) {
         try {
-          const tipo = (item.tipo || '').toLowerCase();
-          // Skip informational rows — they don't go to DB
-          if (INFO_TYPES.has(tipo)) continue;
-
           const tecId = item.tecnicoId || item.tecnico_id || item.TecnicoID;
           const cid = item.clienteId || item.cliente_id || item.ClienteID || null;
           const itemData = item.data || item.Data;
@@ -6880,28 +6951,61 @@ Rispondi SOLO con JSON valido:
           if (!itemData) { applyErrors.push({ item: `${item.tecnico||tecId}`, err: 'data mancante' }); continue; }
           const durata = item.durataOre || item.durata_ore || '';
           const noteParts = [item.tipo || '', item.note || '', durata ? durata+'h' : ''].filter(Boolean);
-          const macId = item.macchina_id || null;
+          // Resolve macchina_id: if AI sent UUID, convert to MAC_xxx
+          let macId = item.macchina_id || null;
+          if (macId && !macId.startsWith('MAC_') && uuidToMacMap[macId]) {
+            macId = uuidToMacMap[macId];
+          }
+          const furgoneNorm = normFurgone(item.furgone || item.automezzo_id);
 
-          // CHECK: esiste già una riga PM per questa macchina+data? → UPDATE invece di INSERT
-          const pmKey = macId ? `${macId}|${itemData}` : null;
-          const existingPM = pmKey ? pmMap[pmKey] : null;
+          // ── MATCH existing entry to UPDATE instead of creating duplicate ──
+          let matchedRow = null;
+          const itemId = item.id || '';
 
-          if (existingPM && !existingPM.tecnico_id) {
-            // UPDATE existing PM row: assegna tecnico, furgone, ora
-            await sb(env, `piano?id=eq.${existingPM.id}`, 'PATCH', {
+          // Strategy 1: ID match (AI preserved PM_xxx/INT_xxx from "interventi da assegnare")
+          if (itemId && !itemId.startsWith('null') && existingById[itemId] && !usedIds.has(itemId)) {
+            const ex = existingById[itemId];
+            if (!ex.tecnico_id || ex.tecnico_id === 'null' || ex.tecnico_id === '') {
+              matchedRow = ex;
+            }
+          }
+          // Strategy 2: macchina_id|data match
+          if (!matchedRow && macId) {
+            const pmKey = `${macId}|${itemData}`;
+            const pm = pmMap[pmKey];
+            if (pm && (!pm.tecnico_id || pm.tecnico_id === 'null' || pm.tecnico_id === '') && !usedIds.has(pm.id)) {
+              matchedRow = pm;
+            }
+          }
+          // Strategy 3: cliente_id|data match (for unassigned PM entries)
+          if (!matchedRow && cid) {
+            const cliKey = `${cid}|${itemData}`;
+            const candidates = unassignedByCliDate[cliKey] || [];
+            const free = candidates.find(c => !usedIds.has(c.id));
+            if (free) {
+              matchedRow = free;
+            }
+          }
+
+          if (matchedRow) {
+            // UPDATE existing row: assegna tecnico, furgone, ora
+            usedIds.add(matchedRow.id);
+            const patchData = {
               tecnico_id: tecId,
-              cliente_id: cid,
+              cliente_id: cid || matchedRow.cliente_id,
               ora_inizio: item.oraInizio || item.ora_inizio || null,
-              automezzo_id: item.furgone || item.automezzo_id || null,
+              automezzo_id: furgoneNorm,
               note: noteParts.join(' — '),
               origine: 'ai',
               updated_at: now
-            });
-            updated.push(existingPM.id);
-            await wlog('piano', existingPM.id, 'ai_plan_assigned', operatoreId, `PM aggiornato: ${item.tecnico || tecId} @ ${item.cliente || cid}`).catch(()=>{});
+            };
+            if (macId) patchData.macchina_id = macId;
+            await sb(env, `piano?id=eq.${matchedRow.id}`, 'PATCH', patchData);
+            updated.push(matchedRow.id);
+            await wlog('piano', matchedRow.id, 'ai_plan_assigned', operatoreId, `PM aggiornato: ${tecId} @ ${cid || matchedRow.cliente_id}`).catch(()=>{});
           } else {
-            // CREATE new row
-            const id = item.id && !item.id.startsWith('null') ? item.id : secureId('INT_AI');
+            // CREATE new row (no existing match found)
+            const id = (itemId && !itemId.startsWith('null') && !existingById[itemId]) ? itemId : secureId('INT_AI');
             await sb(env, 'piano', 'POST', {
               id,
               tecnico_id: tecId,
@@ -6909,7 +7013,7 @@ Rispondi SOLO con JSON valido:
               macchina_id: macId,
               data: itemData,
               ora_inizio: item.oraInizio || item.ora_inizio || null,
-              automezzo_id: item.furgone || item.automezzo_id || null,
+              automezzo_id: furgoneNorm,
               stato: 'pianificato',
               origine: 'ai',
               note: noteParts.join(' — '),
@@ -6919,16 +7023,16 @@ Rispondi SOLO con JSON valido:
               updated_at: now
             });
             created.push(id);
-            await wlog('piano', id, 'ai_plan_applied', operatoreId, `${item.tecnico || tecId} @ ${item.cliente || cid}`).catch(()=>{});
+            await wlog('piano', id, 'ai_plan_applied', operatoreId, `${tecId} @ ${cid}`).catch(()=>{});
           }
         } catch (e) {
-          applyErrors.push({ item: `${item.data} ${item.tecnico}`, err: e.message });
+          applyErrors.push({ item: `${item.data||'?'} ${item.tecnico||'?'}`, err: e.message });
         }
       }
 
-      // 3. Auto-update urgenze status when scheduled in plan
+      // 4. Auto-update urgenze status when scheduled in plan
       let urgScheduled = 0;
-      for (const item of toCreate) {
+      for (const item of toProcess) {
         const tipo = (item.tipo || '').toLowerCase();
         if (tipo !== 'urgenza') continue;
         const urgId = item.id;
@@ -6941,18 +7045,29 @@ Rispondi SOLO con JSON valido:
             updated_at: now
           });
           urgScheduled++;
-        } catch (e) { /* ignore — urgenza might not exist or constraint violation */ }
+        } catch (e) { /* ignore */ }
       }
 
-      return ok({
+      // 5. Return results — include conflicts if any exist (but items were still processed)
+      const result = {
         created: created.length,
         updated_pm: updated.length,
         urg_scheduled: urgScheduled,
         overwritten: forceOverwrite ? conflicts.length : 0,
-        errors: applyErrors.length ? applyErrors : undefined,
+        errors: applyErrors.length ? applyErrors.slice(0, 20) : undefined,
+        error_count: applyErrors.length,
         ids: [...created, ...updated],
-        total_received: pianoAI.length
-      });
+        total_received: pianoAI.length,
+        total_processed: toProcess.length
+      };
+      if (conflicts.length && !forceOverwrite) {
+        result.has_conflicts = true;
+        result.conflicts_count = conflicts.length;
+        result.conflicts = conflicts.slice(0, 20);
+        result.skipped = conflictItems.length;
+        result.message = `${created.length + updated.length} interventi applicati. ${conflicts.length} conflitti (stesso tecnico+data) — invia force_overwrite per sovrascriverli.`;
+      }
+      return ok(result);
     }
 
     case 'importExcelPlan': {

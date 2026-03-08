@@ -8494,37 +8494,54 @@ async function aiApplyToSystem(forceOverwrite){
     if(!j.success)throw new Error(j.error||'Errore applicazione');
     const result=j.data||j;
 
-    // Handle conflicts
+    const created=result.created||0;
+    const updatedPm=result.updated_pm||0;
+    const overwritten=result.overwritten||0;
+    const errCount=result.error_count||0;
+    const totalDone=created+updatedPm+overwritten;
+
+    // Show results toast
+    const parts=[];
+    if(updatedPm)parts.push(`${updatedPm} PM aggiornati`);
+    if(created)parts.push(`${created} nuovi creati`);
+    if(overwritten)parts.push(`${overwritten} sovrascritti`);
+    if(errCount)parts.push(`${errCount} errori`);
+    const msg=parts.length?parts.join(', '):'nessun intervento applicato';
+    toast(`✅ Piano applicato: ${msg}`,totalDone?'ok':'warn');
+    console.log('[aiApplyToSystem] Result detail:', JSON.stringify(result));
+
+    // Show conflicts if any (items were still processed though)
     if(result.has_conflicts && !forceOverwrite){
       const n=result.conflicts_count||0;
       const conflHtml=`<div style="background:rgba(245,158,11,.1);border:1.5px solid rgba(245,158,11,.4);border-radius:12px;padding:16px;margin:12px 0">
-        <div style="font-weight:700;color:#F59E0B;margin-bottom:8px">⚠️ ${n} Conflitti Trovati</div>
-        <p style="font-size:.8rem;color:rgba(255,255,255,.6);margin-bottom:10px">Esistono già interventi nello stesso giorno per lo stesso tecnico. Vuoi sovrascrivere?</p>
+        <div style="font-weight:700;color:#F59E0B;margin-bottom:8px">⚠️ ${n} Conflitti Rimanenti (${totalDone} già applicati)</div>
+        <p style="font-size:.8rem;color:rgba(255,255,255,.6);margin-bottom:10px">Alcuni interventi avevano stesso tecnico+data di interventi esistenti. Vuoi sovrascriverli?</p>
         <div style="max-height:200px;overflow-y:auto;margin-bottom:12px;font-size:.75rem">
         ${(result.conflicts||[]).slice(0,10).map(c=>`<div style="padding:4px 8px;margin:2px 0;background:rgba(0,0,0,.2);border-radius:4px">${c.nuovo?.data||'?'} — ${c.nuovo?.tecnico||'?'} → ${_resolveClienteName(c.nuovo?.cliente)||c.nuovo?.cliente||'?'}</div>`).join('')}
         </div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-err" onclick="aiApplyToSystem(true)">🔄 Sovrascrivi (${n} conflitti)</button>
-          <button class="btn btn-ghost-light" onclick="this.closest('div[style]').remove();toast('Annullato','info')">❌ Annulla</button>
+          <button class="btn btn-ghost-light" onclick="this.closest('div[style]').remove()">❌ Ignora</button>
         </div>
       </div>`;
       const container=$('aiFinalTable');
       if(container) container.insertAdjacentHTML('afterend', conflHtml);
-      toast(`${n} conflitti — scegli azione`,'warn');
-      if(btn){btn.disabled=false;btn.textContent='✅ Applica al Sistema';}
-      return;
     }
 
-    const created=result.created||0;
-    const overwritten=result.overwritten||0;
-    toast(`✅ Piano applicato: ${created} interventi creati${overwritten?' + '+overwritten+' sovrascritti':''}!`,'ok');
+    // Show errors if any
+    if(result.errors?.length){
+      console.warn('[aiApplyToSystem] Errors:', result.errors);
+    }
 
     // Refresh data
     if(typeof refreshData==='function')await refreshData(true);
     else if(typeof loadAll==='function')await loadAll();
     if(typeof renderMonthPlan==='function')setTimeout(()=>renderMonthPlan(),500);
 
-    if(btn){btn.textContent='✅ Applicato!';btn.style.background='var(--ok)';}
+    if(btn){
+      btn.textContent=totalDone?`✅ Applicato! (${totalDone})`:'⚠️ Nessun intervento applicato';
+      if(totalDone)btn.style.background='var(--ok)';
+    }
   }catch(e){
     console.error('[aiApplyToSystem] error:',e);
     toast('Errore applicazione: '+e.message,'err');
